@@ -1,0 +1,21 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# The 96 MB puzzle CSV is sourced from the Laravel repo at build time; do not commit it here.
+Goldens/*.tmp
+
+# Generated puzzle DB (regenerate via tools/puzzlebank/build_puzzles.py)
+DemoApp/Sources/DemoApp/puzzles.sqlite
+Goldens/

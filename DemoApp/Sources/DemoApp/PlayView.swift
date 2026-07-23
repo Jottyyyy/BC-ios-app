@@ -1,0 +1,409 @@
+import SwiftUI
+import BiyaherongCoachCore
+
+struct BoardPiece: Identifiable, Equatable {
+    let id: UUID
+    var square: Int
+    var piece: Piece
+}
+
+@MainActor
+final class ChessGameVM: ObservableObject {
+    @Published var position = ChessPosition.start()
+    @Published var pieces: [BoardPiece] = []
+    @Published var selected: Int? = nil
+    @Published var legalTargets: Set<Int> = []
+    @Published var lastMove: Move? = nil
+    @Published var history: [String] = []
+    @Published var flipped = false
+    @Published var pendingPromotion: (from: Int, to: Int)? = nil
+    @Published var captured: [Piece] = []
+    @Published var thinking = false
+
+    // Opponent config
+    @Published var coach: CoachPersona? = Coaches.all[1]   // default: Pretty Jade
+    @Published var humanColor: PieceColor = .white
+
+    private var undoStack: [(ChessPosition, [BoardPiece], [String], [Piece])] = []
+    private var rng = SystemRandomNumberGenerator()
+
+    init() { rebuildPieces() }
+
+    var status: ChessPosition.Status { position.status() }
+    var gameOver: Bool { status == .checkmate || status == .stalemate }
+    var statusText: String {
+        switch status {
+        case .checkmate: return "Checkmate — \(position.sideToMove == .white ? "Black" : "White") wins"
+        case .stalemate: return "Stalemate — draw"
+        case .check: return "\(turnName) to move — Check!"
+        case .ongoing: return "\(turnName) to move"
+        }
+    }
+    var turnName: String { position.sideToMove == .white ? "White" : "Black" }
+    var botToMove: Bool { coach != nil && position.sideToMove != humanColor && !gameOver }
+    var interactionLocked: Bool { thinking || botToMove || pendingPromotion != nil }
+    var checkKingSquare: Int? {
+        (status == .check || status == .checkmate) ? position.kingSquare(position.sideToMove) : nil
+    }
+
+    func rebuildPieces() {
+        pieces = (0..<64).compactMap { sq in position.squares[sq].map { BoardPiece(id: UUID(), square: sq, piece: $0) } }
+    }
+
+    func newGame() {
+        position = .start(); undoStack = []; history = []; captured = []; lastMove = nil
+        selected = nil; legalTargets = []; pendingPromotion = nil; thinking = false
+        rebuildPieces()
+        maybeBotMove()
+    }
+
+    func tap(_ sq: Int) {
+        guard !interactionLocked else { return }
+        if let sel = selected {
+            if sq == sel { deselect(); return }
+            let moves = position.legalMoves(from: sel).filter { $0.to == sq }
+            if moves.count > 1 { pendingPromotion = (sel, sq); return }
+            if let m = moves.first { perform(m); return }
+            selectPiece(sq); return
+        }
+        selectPiece(sq)
+    }
+
+    private func selectPiece(_ sq: Int) {
+        guard let p = position.squares[sq], p.color == position.sideToMove else { deselect(); return }
+        selected = sq
+        legalTargets = Set(position.legalMoves(from: sq).map { $0.to })
+    }
+    private func deselect() { selected = nil; legalTargets = [] }
+
+    func choosePromotion(_ kind: PieceKind) {
+        guard let pp = pendingPromotion else { return }
+        pendingPromotion = nil
+        perform(Move(from: pp.from, to: pp.to, promotion: kind))
+    }
+
+    private func perform(_ m: Move) {
+        undoStack.append((position, pieces, history, captured))
+        let moving = position.squares[m.from]!
+        let isEP = moving.kind == .pawn && m.to == position.enPassant && position.squares[m.to] == nil
+        let capSq = isEP ? Square.make(file: Square.file(m.to), rank: Square.rank(m.from))
+                         : (position.squares[m.to] != nil ? m.to : nil)
+        if let cs = capSq, let cp = position.squares[cs] { captured.append(cp) }
+        let san = position.san(for: m)
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+            if let cs = capSq { pieces.removeAll { $0.square == cs } }
+            if let idx = pieces.firstIndex(where: { $0.square == m.from }) {
+                if let promo = m.promotion { pieces[idx].piece = Piece(moving.color, promo) }
+                pieces[idx].square = m.to
+            }
+            if moving.kind == .king, abs(Square.file(m.to) - Square.file(m.from)) == 2 {
+                let rank = Square.rank(m.from)
+                let (rf, rt) = Square.file(m.to) == 6
+                    ? (Square.make(file: 7, rank: rank), Square.make(file: 5, rank: rank))
+                    : (Square.make(file: 0, rank: rank), Square.make(file: 3, rank: rank))
+                if let ri = pieces.firstIndex(where: { $0.square == rf }) { pieces[ri].square = rt }
+            }
+        }
+
+        position = position.makeMove(m)
+        history.append(san)
+        lastMove = m
+        deselect()
+        maybeBotMove()
+    }
+
+    private func maybeBotMove() {
+        guard let coach, position.sideToMove != humanColor, !gameOver else { return }
+        thinking = true
+        let snapshot = position
+        let persona = coach
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var g = SystemRandomNumberGenerator()
+            let move = ChessAI.bestMove(snapshot, persona: persona, using: &g)
+            try? await Task.sleep(nanoseconds: 380_000_000)   // brief pause so it feels natural
+            await MainActor.run {
+                guard let self else { return }
+                self.thinking = false
+                if let move, self.position == snapshot { self.perform(move) }
+            }
+        }
+    }
+
+    func undo() {
+        // Undo the last full ply pair back to the human's turn where possible.
+        guard let (pos, pcs, hist, cap) = undoStack.popLast() else { return }
+        position = pos; pieces = pcs; history = hist; captured = cap
+        lastMove = nil; deselect(); thinking = false
+        // if we landed on the bot's move, undo one more so it's the human's turn
+        if coach != nil, position.sideToMove != humanColor, let (p2, pc2, h2, c2) = undoStack.popLast() {
+            position = p2; pieces = pc2; history = h2; captured = c2
+        }
+    }
+
+    var materialDiff: Int {
+        func val(_ k: PieceKind) -> Int { [PieceKind.pawn: 1, .knight: 3, .bishop: 3, .rook: 5, .queen: 9, .king: 0][k]! }
+        var white = 0, black = 0
+        for sq in 0..<64 { if let p = position.squares[sq] { if p.color == .white { white += val(p.kind) } else { black += val(p.kind) } } }
+        return white - black
+    }
+}
+
+struct PlayView: View {
+    @StateObject private var vm = ChessGameVM()
+    private let boardSize: CGFloat = 480
+    private var square: CGFloat { boardSize / 8 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            HStack(alignment: .top, spacing: 22) {
+                VStack(spacing: 10) {
+                    capturedBar(for: vm.humanColor.opponent)   // pieces the human captured
+                    boardWithCoords
+                    capturedBar(for: vm.humanColor)
+                    controls
+                }
+                sidePanel.frame(width: 210)
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // Header: title + opponent chooser + status ------------------------------
+
+    private var header: some View {
+        HStack(spacing: 16) {
+            Text("Play").font(.largeTitle.weight(.bold))
+            Picker("", selection: Binding(
+                get: { vm.coach?.id ?? "2p" },
+                set: { id in vm.coach = Coaches.all.first { $0.id == id } })) {
+                Text("2 Players").tag("2p")
+                ForEach(Coaches.all) { c in Text(c.name).tag(c.id) }
+            }.frame(width: 160)
+            Picker("", selection: $vm.humanColor) {
+                Text("Play White").tag(PieceColor.white)
+                Text("Play Black").tag(PieceColor.black)
+            }.pickerStyle(.segmented).frame(width: 200).disabled(vm.coach == nil)
+            Spacer()
+            statusPill
+        }
+    }
+
+    private var statusPill: some View {
+        HStack(spacing: 8) {
+            if vm.thinking {
+                ProgressView().controlSize(.small)
+                Text("\(vm.coach?.name ?? "Coach") is thinking…").foregroundStyle(.secondary)
+            } else {
+                Circle().fill(vm.position.sideToMove == .white ? Color.white : Color.black)
+                    .frame(width: 12, height: 12).overlay(Circle().stroke(.secondary))
+                Text(vm.statusText)
+                    .foregroundStyle(vm.status == .checkmate ? Theme.negative : (vm.status == .check ? Theme.warning : Theme.foreground))
+                    .fontWeight(.medium)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(.quaternary.opacity(0.5), in: Capsule())
+    }
+
+    // Board + coordinate strips ----------------------------------------------
+
+    private var boardWithCoords: some View {
+        HStack(spacing: 4) {
+            VStack(spacing: 0) {
+                ForEach(ranks(), id: \.self) { r in
+                    Text("\(r + 1)").font(.caption2).foregroundStyle(.secondary)
+                        .frame(width: 14, height: square)
+                }
+            }
+            VStack(spacing: 4) {
+                BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
+                          lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
+                          boardSize: boardSize, onTap: { vm.tap($0) })
+                    .frame(width: boardSize, height: boardSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.black.opacity(0.25), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                    .overlay(alignment: .center) { promotionOverlay }
+                HStack(spacing: 0) {
+                    ForEach(files(), id: \.self) { f in
+                        Text(String(UnicodeScalar(UInt8(97 + f)))).font(.caption2).foregroundStyle(.secondary)
+                            .frame(width: square)
+                    }
+                }
+            }
+        }
+    }
+
+    private func ranks() -> [Int] { vm.flipped ? Array(0...7) : Array(0...7).reversed() }
+    private func files() -> [Int] { vm.flipped ? Array(0...7).reversed() : Array(0...7) }
+
+    private var controls: some View {
+        HStack {
+            Button("New game") { vm.newGame() }.buttonStyle(.borderedProminent)
+            Button("Undo") { vm.undo() }.disabled(vm.history.isEmpty || vm.thinking)
+            Button(vm.flipped ? "White view" : "Black view") { withAnimation { vm.flipped.toggle() } }
+            Spacer()
+            Text("Material: \(vm.materialDiff > 0 ? "+" : "")\(vm.materialDiff)")
+                .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+        }.frame(width: boardSize)
+    }
+
+    private func capturedBar(for color: PieceColor) -> some View {
+        let taken = vm.captured.filter { $0.color == color }
+            .sorted { pieceWeight($0.kind) > pieceWeight($1.kind) }
+        return HStack(spacing: 1) {
+            ForEach(Array(taken.enumerated()), id: \.offset) { _, p in
+                Text(BoardView.glyph(p)).font(.system(size: 18)).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .frame(width: boardSize, height: 22, alignment: .leading)
+    }
+    private func pieceWeight(_ k: PieceKind) -> Int { [PieceKind.queen: 5, .rook: 4, .bishop: 3, .knight: 2, .pawn: 1, .king: 6][k]! }
+
+    private var sidePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let c = vm.coach {
+                Card(title: "Opponent") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(c.name).font(.headline)
+                        Text(c.blurb).font(.caption).foregroundStyle(.secondary)
+                        Text("Search depth \(c.depth)").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            Card(title: "Moves") {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if vm.history.isEmpty {
+                            Text("Legal moves enforced by the perft-verified engine.").font(.caption).foregroundStyle(.secondary)
+                        }
+                        ForEach(Array(stride(from: 0, to: vm.history.count, by: 2)), id: \.self) { i in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("\(i / 2 + 1).").foregroundStyle(.secondary).frame(width: 26, alignment: .trailing)
+                                Text(vm.history[i]).frame(width: 58, alignment: .leading)
+                                if i + 1 < vm.history.count { Text(vm.history[i + 1]).frame(width: 58, alignment: .leading) }
+                            }.font(.system(.callout, design: .monospaced))
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 380)
+            }
+        }
+    }
+
+    @ViewBuilder private var promotionOverlay: some View {
+        if vm.pendingPromotion != nil {
+            let color = vm.position.sideToMove
+            VStack(spacing: 8) {
+                Text("Promote to").font(.headline)
+                HStack(spacing: 10) {
+                    ForEach([PieceKind.queen, .rook, .bishop, .knight], id: \.self) { k in
+                        Button { vm.choosePromotion(k) } label: {
+                            Text(BoardView.glyph(Piece(color, k))).font(.system(size: 38))
+                                .foregroundStyle(color == .white ? .white : .black)
+                                .frame(width: 52, height: 52)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(18)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .shadow(radius: 20)
+        }
+    }
+}
+
+struct BoardView: View {
+    let pieces: [BoardPiece]
+    let selected: Int?
+    let legalTargets: Set<Int>
+    let lastMove: Move?
+    let flipped: Bool
+    let checkSquare: Int?
+    let boardSize: CGFloat
+    let onTap: (Int) -> Void
+
+    private var square: CGFloat { boardSize / 8 }
+    private let light = Theme.boardLight
+    private let dark = Theme.boardDark
+    private var occupied: Set<Int> { Set(pieces.map { $0.square }) }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            squares
+            pieceLayer.allowsHitTesting(false)
+        }
+        .frame(width: boardSize, height: boardSize)
+    }
+
+    private var squares: some View {
+        VStack(spacing: 0) {
+            ForEach(rowRanks(), id: \.self) { rank in
+                HStack(spacing: 0) {
+                    ForEach(colFiles(), id: \.self) { file in
+                        cell(Square.make(file: file, rank: rank))
+                    }
+                }
+            }
+        }
+    }
+
+    private func cell(_ sq: Int) -> some View {
+        let isLight = (Square.file(sq) + Square.rank(sq)) % 2 == 1
+        let isSelected = selected == sq
+        let isLast = lastMove.map { $0.from == sq || $0.to == sq } ?? false
+        let isTarget = legalTargets.contains(sq)
+        let hasPiece = occupied.contains(sq)
+        let isCheck = checkSquare == sq
+        return ZStack {
+            Rectangle().fill(isLight ? light : dark)
+            if isLast { Rectangle().fill(Theme.chart4.opacity(0.35)) }
+            if isSelected { Rectangle().fill(Theme.chart4.opacity(0.55)) }
+            if isCheck { Rectangle().fill(Theme.negative.opacity(0.5)) }
+            if isTarget {
+                if hasPiece { Circle().stroke(Theme.foreground.opacity(0.3), lineWidth: 4).padding(3) }
+                else { Circle().fill(Theme.foreground.opacity(0.22)).frame(width: square * 0.32, height: square * 0.32) }
+            }
+        }
+        .frame(width: square, height: square)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap(sq) }
+    }
+
+    private var pieceLayer: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(pieces) { bp in
+                Text(BoardView.glyph(bp.piece))
+                    .font(.system(size: square * 0.74))
+                    .foregroundStyle(bp.piece.color == .white ? Color(white: 0.98) : Color(white: 0.12))
+                    .shadow(color: bp.piece.color == .white ? .black.opacity(0.6) : .white.opacity(0.55), radius: 1)
+                    .frame(width: square, height: square)
+                    .position(center(bp.square))
+                    .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    .zIndex(lastMove?.to == bp.square ? 1 : 0)
+            }
+        }
+        .frame(width: boardSize, height: boardSize, alignment: .topLeading)
+    }
+
+    private func center(_ sq: Int) -> CGPoint {
+        let f = Square.file(sq), r = Square.rank(sq)
+        let col = flipped ? 7 - f : f
+        let row = flipped ? r : 7 - r
+        return CGPoint(x: (CGFloat(col) + 0.5) * square, y: (CGFloat(row) + 0.5) * square)
+    }
+
+    private func rowRanks() -> [Int] { flipped ? Array(0...7) : Array(0...7).reversed() }
+    private func colFiles() -> [Int] { flipped ? Array(0...7).reversed() : Array(0...7) }
+
+    static func glyph(_ p: Piece) -> String {
+        switch p.kind {
+        case .king: return "\u{265A}"; case .queen: return "\u{265B}"; case .rook: return "\u{265C}"
+        case .bishop: return "\u{265D}"; case .knight: return "\u{265E}"; case .pawn: return "\u{265F}"
+        }
+    }
+}
