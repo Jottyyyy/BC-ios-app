@@ -1,18 +1,29 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// Native macOS demo app that wraps the verified BiyaherongCoachCore engines so a human can
-// interactively test the real logic. (No iOS simulator is available in this environment; this
-// runs the exact same domain code the parity suite covers, on macOS.)
+// BiyaherongUI — the SwiftUI app UI + bundled resources (fonts, sounds, coach art,
+// the 550k-puzzle SQLite DB), built on top of the verified BiyaherongCoachCore engine.
+//
+//  • The macOS `DemoApp` executable links it to run the engine-demo shell on a Mac
+//    (no iOS simulator is available in this environment).
+//  • The iOS/iPadOS Xcode app links the SAME `BiyaherongUI` library product so the
+//    resources resolve via `Bundle.module`. See ios/BUILD-iOS.md.
 let package = Package(
-    name: "DemoApp",
-    platforms: [.macOS(.v14)],
+    name: "BiyaherongUI",
+    platforms: [.macOS(.v14), .iOS(.v17)],
+    products: [
+        .library(name: "BiyaherongUI", targets: ["BiyaherongUI"]),
+    ],
     dependencies: [.package(path: "..")],
     targets: [
+        .target(
+            name: "BiyaherongUI",
+            dependencies: [.product(name: "BiyaherongCoachCore", package: "BC-ios-app")],
+            resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds")]
+        ),
         .executableTarget(
             name: "DemoApp",
-            dependencies: [.product(name: "BiyaherongCoachCore", package: "BC-ios-app")],
-            resources: [.copy("puzzles.sqlite")]
-        )
+            dependencies: ["BiyaherongUI"]
+        ),
     ]
 )

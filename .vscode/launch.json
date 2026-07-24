@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:BC-ios-app}",
+            "name": "Debug ParityRunner",
+            "target": "ParityRunner",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ParityRunner"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:BC-ios-app}",
+            "name": "Release ParityRunner",
+            "target": "ParityRunner",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ParityRunner"
+        }
+    ]
+}

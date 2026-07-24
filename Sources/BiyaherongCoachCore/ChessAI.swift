@@ -6,12 +6,17 @@ public struct CoachPersona: Sendable, Identifiable, Equatable {
     public let id: String
     public let name: String
     public let blurb: String
+    public let title: String            // Beginner … Master (display rank)
+    public let favoriteOpening: String
+    public let rating: Int              // approximate playing strength (Elo-ish), for display
     public let depth: Int
-    public let blunderChance: Double   // 0…1 probability of playing a random legal move
-    public let randomness: Int         // ± centipawn noise added to root move scores
+    public let blunderChance: Double    // 0…1 probability of playing a random legal move
+    public let randomness: Int          // ± centipawn noise added to root move scores
 
-    public init(id: String, name: String, blurb: String, depth: Int, blunderChance: Double, randomness: Int) {
+    public init(id: String, name: String, blurb: String, title: String, favoriteOpening: String,
+                rating: Int, depth: Int, blunderChance: Double, randomness: Int) {
         self.id = id; self.name = name; self.blurb = blurb
+        self.title = title; self.favoriteOpening = favoriteOpening; self.rating = rating
         self.depth = depth; self.blunderChance = blunderChance; self.randomness = randomness
     }
 }
@@ -19,12 +24,20 @@ public struct CoachPersona: Sendable, Identifiable, Equatable {
 public enum Coaches {
     /// The 5 coach characters (names from the current app), weakest → strongest.
     public static let all: [CoachPersona] = [
-        .init(id: "jaden",  name: "Jaden Pogi",     blurb: "Beginner-friendly · plays for fun", depth: 1, blunderChance: 0.35, randomness: 90),
-        .init(id: "jade",   name: "Pretty Jade",    blurb: "Solid club player",                 depth: 2, blunderChance: 0.16, randomness: 55),
-        .init(id: "jude",   name: "Handsome Jude",  blurb: "Sharp tactician",                   depth: 2, blunderChance: 0.06, randomness: 30),
-        .init(id: "julie",  name: "Mommy Julie",    blurb: "Patient · positional",              depth: 3, blunderChance: 0.03, randomness: 15),
-        .init(id: "pogi",   name: "Coach Pogi",     blurb: "Master strength",                   depth: 3, blunderChance: 0.0,  randomness: 0),
+        .init(id: "jaden", name: "Jaden Pogi", blurb: "Learning the ropes — plays fast and loose.",
+              title: "Beginner", favoriteOpening: "Italian Game", rating: 650, depth: 1, blunderChance: 0.35, randomness: 90),
+        .init(id: "jade", name: "Pretty Jade", blurb: "Tidy club player who keeps the position clean.",
+              title: "Casual", favoriteOpening: "Scandinavian Defense", rating: 1150, depth: 2, blunderChance: 0.16, randomness: 55),
+        .init(id: "jude", name: "Handsome Jude", blurb: "Sharp tactician — always hunting a combination.",
+              title: "Club", favoriteOpening: "Sicilian Najdorf", rating: 1550, depth: 2, blunderChance: 0.06, randomness: 30),
+        .init(id: "julie", name: "Mommy Julie", blurb: "Patient and positional. Squeezes you slowly.",
+              title: "Expert", favoriteOpening: "Queen's Gambit", rating: 1850, depth: 3, blunderChance: 0.03, randomness: 15),
+        .init(id: "pogi", name: "Coach Pogi", blurb: "Master strength. Punishes every mistake.",
+              title: "Master", favoriteOpening: "Ruy López", rating: 2250, depth: 3, blunderChance: 0.0, randomness: 0),
     ]
+    /// Lowest and highest coach ratings (for strength-bar scaling).
+    public static let ratingFloor = 500
+    public static let ratingCeiling = 2400
 }
 
 /// A small but correct negamax + alpha-beta engine with material + piece-square evaluation.

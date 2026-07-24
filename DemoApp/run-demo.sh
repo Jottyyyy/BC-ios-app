@@ -12,12 +12,14 @@ BINDIR="$(swift build -c release --show-bin-path)"
 APP="$PWD/BiyaherongCoachDemo.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/BiyaherongCoachDemo"
-# Bundle.module resource bundles (e.g. the 80 MB puzzles.sqlite) live next to the SPM executable;
-# copy them where Bundle.module will find them inside the .app.
+# Bundle.module resource bundles (e.g. the 80 MB puzzles.sqlite, fonts, sounds, coach art) live next
+# to the SPM executable. This toolchain's generated Bundle.module accessor resolves the bundle via
+# `Bundle.main.bundleURL/<name>.bundle` — i.e. the TOP LEVEL of the .app — so it MUST be copied there,
+# otherwise the app silently falls back to the (transient) .build path and breaks once .build is gone.
 for b in "$BINDIR"/*.bundle; do
     [ -e "$b" ] || continue
-    cp -R "$b" "$APP/Contents/Resources/"
-    cp -R "$b" "$APP/Contents/MacOS/"
+    cp -R "$b" "$APP/"                     # <-- where Bundle.module actually looks (self-contained)
+    cp -R "$b" "$APP/Contents/Resources/"  # belt-and-suspenders for other lookups
 done
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

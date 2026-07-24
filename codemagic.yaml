@@ -1,0 +1,93 @@
+# Codemagic CI — builds the native SwiftUI iOS app in the cloud (no local Mac / no Xcode on your machine).
+# Everything below runs on Codemagic's hosted macOS worker; Prince only edits code + pushes from Windows.
+#
+# TWO workflows:
+#   • ios-free-unsigned  → 100% FREE. No Apple account. Produces an UNSIGNED .ipa you sign+install on
+#                          Windows with Sideloadly / AltStore using a FREE Apple ID (7-day expiry).
+#   • ios-testflight     → needs the $99/yr Apple Developer account. Signs + ships to TestFlight so
+#                          anyone installs via a link (no cable). Use this once you're ready to pay.
+#
+# Codemagic's free tier gives ~500 macOS build-minutes/month — enough for the free path below.
+
+workflows:
+
+  # ========================================================================================
+  # FREE PATH — no Apple Developer account needed. Build here, sign on Windows with Sideloadly.
+  # ========================================================================================
+  ios-free-unsigned:
+    name: Biyaherong iOS — FREE unsigned .ipa (for Sideloadly / AltStore)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "ios/Biyaherong.xcodeproj"
+        XCODE_SCHEME: "Biyaherong"
+    scripts:
+      - name: Install XcodeGen & generate the Xcode project
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Archive WITHOUT code signing
+        script: |
+          xcodebuild -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$CM_BUILD_DIR/Biyaherong.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER=""
+      - name: Package unsigned .app into an .ipa
+        script: |
+          cd "$CM_BUILD_DIR/Biyaherong.xcarchive/Products/Applications"
+          mkdir -p Payload && mv *.app Payload/
+          zip -qr "$CM_BUILD_DIR/Biyaherong-unsigned.ipa" Payload
+    artifacts:
+      - Biyaherong-unsigned.ipa                 # download this, then sign+install with Sideloadly on Windows
+      - /tmp/xcodebuild_logs/*.log
+    # No `publishing:` — the unsigned .ipa is just an artifact you download.
+
+  # ========================================================================================
+  # PAID PATH — $99/yr Apple Developer account, ships to TestFlight (install via a link).
+  # ONE-TIME SETUP (all in a browser, no Mac):
+  #   1. App Store Connect ▸ Users and Access ▸ Integrations ▸ create an App Store Connect API key
+  #      (download the .p8, note Issuer ID + Key ID).
+  #   2. Codemagic ▸ Settings ▸ Integrations ▸ App Store Connect ▸ add that key, NAME it `CodemagicASCKey`.
+  #   3. Run this workflow.
+  # ========================================================================================
+  ios-testflight:
+    name: Biyaherong iOS — TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: CodemagicASCKey      # <-- must match the API key name you set in the Codemagic UI
+    environment:
+      ios_signing:
+        distribution_type: app_store           # use `ad_hoc` instead to install on specific registered UDIDs
+        bundle_identifier: com.biyaherong.coach # must match ios/project.yml PRODUCT_BUNDLE_IDENTIFIER
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "ios/Biyaherong.xcodeproj"
+        XCODE_SCHEME: "Biyaherong"
+    scripts:
+      - name: Install XcodeGen & generate the Xcode project
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Fetch signing profiles (managed by the App Store Connect key)
+        script: xcode-project use-profiles
+      - name: Build & export signed .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa                     # the installable file, downloadable from the Codemagic build page
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true              # testers get it via the TestFlight app + your invite link
+
+  # Optional variant: produce an .ipa for specific phones (registered UDIDs) instead of TestFlight.
+  # Duplicate the workflow above, set distribution_type: ad_hoc, and drop the `publishing` block —
+  # the .ipa appears under Artifacts to download and share.
