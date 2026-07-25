@@ -274,9 +274,17 @@ struct PlayView: View {
     private func capturedBar(for color: PieceColor) -> some View {
         let taken = vm.captured.filter { $0.color == color }
             .sorted { pieceWeight($0.kind) > pieceWeight($1.kind) }
-        return HStack(spacing: 1) {
-            ForEach(Array(taken.enumerated()), id: \.offset) { _, p in
-                Text(BoardView.glyph(p)).font(Theme.nunito(18, .regular)).foregroundStyle(Theme.mutedForeground)
+        return HStack(spacing: 0) {
+            if !taken.isEmpty {
+                HStack(spacing: -2) {
+                    ForEach(Array(taken.enumerated()), id: \.offset) { _, p in
+                        PieceImage(piece: p, size: 20, shadow: false)
+                    }
+                }
+                // A board-tinted strip: the artwork is drawn in its real colours, so the
+                // black pieces need something other than the dark navy chrome behind them.
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Theme.boardDark, in: Capsule())
             }
             Spacer()
         }
@@ -322,10 +330,9 @@ struct PlayView: View {
                 HStack(spacing: 10) {
                     ForEach([PieceKind.queen, .rook, .bishop, .knight], id: \.self) { k in
                         Button { vm.choosePromotion(k) } label: {
-                            Text(BoardView.glyph(Piece(color, k))).font(Theme.nunito(38, .regular))
-                                .foregroundStyle(color == .white ? .white : .black)
+                            PieceImage(piece: Piece(color, k), size: 46, shadow: false)
                                 .frame(width: 52, height: 52)
-                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                .background(Theme.boardLight, in: RoundedRectangle(cornerRadius: 8))
                         }.buttonStyle(.plain)
                     }
                 }
@@ -397,11 +404,7 @@ struct BoardView: View {
     private var pieceLayer: some View {
         ZStack(alignment: .topLeading) {
             ForEach(pieces) { bp in
-                Text(BoardView.glyph(bp.piece))
-                    .font(.system(size: square * 0.74))
-                    .foregroundStyle(bp.piece.color == .white ? Color(white: 0.98) : Color(white: 0.12))
-                    .shadow(color: bp.piece.color == .white ? .black.opacity(0.6) : .white.opacity(0.55), radius: 1)
-                    .frame(width: square, height: square)
+                PieceImage(piece: bp.piece, size: square)
                     .position(center(bp.square))
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
                     .zIndex(lastMove?.to == bp.square ? 1 : 0)
@@ -419,11 +422,4 @@ struct BoardView: View {
 
     private func rowRanks() -> [Int] { flipped ? Array(0...7) : Array(0...7).reversed() }
     private func colFiles() -> [Int] { flipped ? Array(0...7).reversed() : Array(0...7) }
-
-    static func glyph(_ p: Piece) -> String {
-        switch p.kind {
-        case .king: return "\u{265A}"; case .queen: return "\u{265B}"; case .rook: return "\u{265C}"
-        case .bishop: return "\u{265D}"; case .knight: return "\u{265E}"; case .pawn: return "\u{265F}"
-        }
-    }
 }

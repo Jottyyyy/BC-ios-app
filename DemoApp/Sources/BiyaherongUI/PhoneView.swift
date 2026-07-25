@@ -108,9 +108,8 @@ struct PromotionOverlay: View {
         HStack(spacing: 8) {
             ForEach([PieceKind.queen, .rook, .bishop, .knight], id: \.self) { k in
                 Button { onChoose(k) } label: {
-                    Text(BoardView.glyph(Piece(color, k))).font(Theme.nunito(30, .regular))
-                        .foregroundStyle(color == .white ? Color(white: 0.98) : Color(white: 0.12))
-                        .frame(width: 46, height: 46).background(Theme.muted, in: RoundedRectangle(cornerRadius: 8))
+                    PieceImage(piece: Piece(color, k), size: 40, shadow: false)
+                        .frame(width: 46, height: 46).background(Theme.boardLight, in: RoundedRectangle(cornerRadius: 8))
                 }.buttonStyle(.plain)
             }
         }

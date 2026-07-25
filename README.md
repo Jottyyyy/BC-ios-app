@@ -73,6 +73,28 @@ The dev toolchain here is a bare Swift 6.3 CLI with no `XCTest`/`Testing` module
 self-contained harness that loads the golden JSON and asserts. When the project is opened in Xcode,
 wrap the same `Goldens/*.json` in XCTest/swift-testing targets — no logic changes needed.
 
+### Piece artwork
+Boards draw the SVG piece set in `assets/images/chess-pieces/` (mirrored into
+`DemoApp/Sources/BiyaherongUI/Pieces/` so SwiftPM bundles it, the same way `assets/sounds` is
+mirrored into `Sources/BiyaherongUI/Sounds`). `SVGVector.swift` is a small SVG-subset renderer —
+the art stays vector, so one file serves a 41 pt phone square, a 60 pt desktop square and a
+promotion button with no `@2x`/`@3x` rasters. Dropping a differently-styled set into
+`Pieces/` with the same `<kind>-<w|b>.svg` names swaps the whole board.
+
+Parsing is deliberately all-or-nothing: anything the renderer can't reproduce faithfully
+(a malformed path, `fill="currentColor"`, an unknown `transform`, truncated XML) fails the whole
+file so the board falls back to a complete Unicode glyph. Half-parsed art — a headless king — or
+silently wrong art — a white piece painted black — are both worse than an honest fallback.
+
+```bash
+cd DemoApp && swift run PieceArtCheck   # 99 assertions: the 12 files + grammar/arc/transform/paint edges
+```
+
+## Third-party assets
+- **Piece artwork** — Uray M. János (2013–2018), derived from the Wikipedia chess set,
+  **CC BY-SA**. Files: `assets/images/chess-pieces/*.svg`.
+- **Nunito** — SIL Open Font License. Files: `DemoApp/Sources/BiyaherongUI/Fonts/*.ttf`.
+
 ## Decisions locked (see PORTING_NOTES.md)
 - **Puzzle bank:** full **550,000** puzzles (~100 MB) → build-time `puzzles.sqlite` (later phase).
 - **Engine:** **Stockfish (GPL)** + publish the app source openly (later `Engine/` phase).

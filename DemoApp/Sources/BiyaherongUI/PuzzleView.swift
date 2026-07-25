@@ -302,9 +302,8 @@ struct PuzzleView: View {
             HStack(spacing: 10) {
                 ForEach([PieceKind.queen, .rook, .bishop, .knight], id: \.self) { k in
                     Button { vm.choosePromotion(k) } label: {
-                        Text(BoardView.glyph(Piece(color, k))).font(Theme.nunito(34, .regular))
-                            .foregroundStyle(color == .white ? .white : .black)
-                            .frame(width: 48, height: 48).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                        PieceImage(piece: Piece(color, k), size: 42, shadow: false)
+                            .frame(width: 48, height: 48).background(Theme.boardLight, in: RoundedRectangle(cornerRadius: 8))
                     }.buttonStyle(.plain)
                 }
             }

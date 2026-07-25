@@ -19,10 +19,15 @@ let package = Package(
         .target(
             name: "BiyaherongUI",
             dependencies: [.product(name: "BiyaherongCoachCore", package: "BC-ios-app")],
-            resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds")]
+            resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds"), .copy("Pieces")]
         ),
         .executableTarget(
             name: "DemoApp",
+            dependencies: ["BiyaherongUI"]
+        ),
+        // Runnable self-check for the SVG piece renderer (no XCTest in this toolchain).
+        .executableTarget(
+            name: "PieceArtCheck",
             dependencies: ["BiyaherongUI"]
         ),
     ]

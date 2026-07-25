@@ -22,6 +22,8 @@ public func biyaherongDiagnostics() -> String {
     let ttf = Bundle.module.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts")?.count ?? -1
     let webp = Bundle.module.urls(forResourcesWithExtension: "webp", subdirectory: "Characters")?.count ?? -1
     let mp3 = Bundle.module.urls(forResourcesWithExtension: "mp3", subdirectory: "Sounds")?.count ?? -1
-    out += "Fonts(ttf)=\(ttf)  Characters(webp)=\(webp)  Sounds(mp3)=\(mp3)\n"
+    let svg = Bundle.module.urls(forResourcesWithExtension: "svg", subdirectory: "Pieces")?.count ?? -1
+    out += "Fonts(ttf)=\(ttf)  Characters(webp)=\(webp)  Sounds(mp3)=\(mp3)  Pieces(svg)=\(svg)\n"
+    if svg != 12 { out += "WARNING: expected 12 piece SVGs — boards will fall back to Unicode glyphs\n" }
     return out
 }
