@@ -32,18 +32,65 @@ targets:
         product: BiyaherongUI
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.biyaherong.coach   # must be unique — change if App Store rejects it
+        # MUST match the existing App Store Connect record exactly (Apple ID 6762338466,
+        # "Biyaherong Chess Coach", team Deniel Causo). This is the bundle ID the earlier
+        # Expo/React-Native build shipped under, so uploading with it updates that app
+        # instead of silently creating a second one. Do not "tidy" this string.
+        PRODUCT_BUNDLE_IDENTIFIER: com.prince24pogi.biyaherongchessapp
         PRODUCT_NAME: Biyaherong
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
-        TARGETED_DEVICE_FAMILY: "1,2"                     # 1 = iPhone, 2 = iPad
+        # This app ships into the EXISTING "Biyaherong Chess Coach" App Store Connect record,
+        # replacing the earlier Expo/React-Native build. App Store Connect refuses any version
+        # at or below one it already has, and that record is already at 1.0.4 — hence 1.0.5.
+        MARKETING_VERSION: "1.0.5"
+        # Build number, unique per version string. Version 1.0.4 already reached build 37 in
+        # App Store Connect, so continuing at 38 keeps the sequence monotonic across the whole
+        # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
+        # CI overwrites it with $BUILD_NUMBER (see codemagic.yaml).
+        CURRENT_PROJECT_VERSION: "38"
+        # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
+        # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
+        # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone
+        # layout (App/BiyaherongApp.swift hosts BiyaherongPhoneRoot), so claiming iPad support
+        # would be a lie. iPhone-only apps still install on iPad in compatibility mode.
+        # To genuinely support iPad later: build an iPad layout, then set "1,2" AND list all
+        # four orientations — do not reach for UIRequiresFullScreen, which Apple is retiring.
+        TARGETED_DEVICE_FAMILY: "1"
+        # Required, or App Store Connect rejects the upload for a missing CFBundleIconName.
+        # The catalog itself MUST be committed to git — a build with this setting but no
+        # catalog on disk still succeeds and silently ships with no icon keys at all.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
+        # The app is 100% offline (no URLSession/Network anywhere), so it uses no non-exempt
+        # encryption. Declaring this up front stops App Store Connect halting every single
+        # upload on the manual export-compliance question.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_CFBundleDisplayName: Biyaherong
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
+        # (An INFOPLIST_KEY_..._~ipad line used to live here. Xcode's INFOPLIST_KEY_ mechanism
+        # uses an _iPad suffix, not the plist-style ~ipad, so it was silently dropped — verified
+        # absent from the real archive's Info.plist. Moot now that the app is iPhone-only.)
         SWIFT_VERSION: "6.0"
         CODE_SIGN_STYLE: Automatic
         # DEVELOPMENT_TEAM: ABCDE12345   # optional: put your 10-char Team ID here to skip the Xcode UI step
+
+# A SHARED scheme must exist on disk. Xcode silently auto-creates one when you open the
+# project locally, but a headless `xcodebuild -scheme Biyaherong` (Codemagic) fails with
+# "scheme not found" without this block.
+schemes:
+  Biyaherong:
+    build:
+      targets:
+        Biyaherong: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

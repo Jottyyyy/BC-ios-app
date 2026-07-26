@@ -14,11 +14,15 @@ let package = Package(
     products: [
         .library(name: "BiyaherongUI", targets: ["BiyaherongUI"]),
     ],
-    dependencies: [.package(path: "..")],
+    // NOTE: `name:` is required. Without it, SwiftPM derives the dependency's identity from the
+    // checkout DIRECTORY name, so the product reference below only resolves when the repo happens
+    // to sit in a folder called "BC-ios-app". CI clones into /Users/builder/clone and the build
+    // dies at package resolution. Naming it pins the identity to the root manifest's package name.
+    dependencies: [.package(name: "BiyaherongCoachCore", path: "..")],
     targets: [
         .target(
             name: "BiyaherongUI",
-            dependencies: [.product(name: "BiyaherongCoachCore", package: "BC-ios-app")],
+            dependencies: [.product(name: "BiyaherongCoachCore", package: "BiyaherongCoachCore")],
             resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds"), .copy("Pieces")]
         ),
         .executableTarget(
