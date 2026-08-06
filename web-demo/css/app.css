@@ -1,0 +1,300 @@
+/* =============================================================================
+ * app.css — App shell + UI components (phone app look: navy + gold)
+ * Mirrors the SwiftUI PhoneView / CoachSelect / Graphics styling.
+ * ========================================================================== */
+
+/* ---- Site chrome (website showcase) --------------------------------------- */
+body { min-height: 100dvh; }
+
+/* Hide scrollbars everywhere for an app-like look (scrolling still works). */
+html, body { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
+
+.site-banner {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 13px;
+  padding: 11px clamp(16px, 4vw, 40px);
+  background: rgba(10, 18, 32, .74);
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid var(--hairline);
+}
+.site-banner .logo { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; box-shadow: 0 0 0 1.5px rgba(253, 176, 34, .5); flex: none; }
+.site-banner .brand { font-weight: 800; font-size: clamp(16px, 2.6vw, 21px); letter-spacing: -.3px; line-height: 1.15; }
+.site-banner .brand .accent { color: var(--gold); }
+.site-banner .tag { font-size: 12px; color: var(--muted-fg); margin-top: 1px; }
+.site-banner .grow { flex: 1; }
+.site-banner .chip-web { font-size: 11px; font-weight: 700; color: var(--gold); background: rgba(253, 176, 34, .14); border: 1px solid rgba(253, 176, 34, .3); padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+@media (max-width: 520px) { .site-banner .tag, .site-banner .chip-web { display: none; } }
+
+.hero {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  padding: clamp(18px, 3.5vw, 44px) 16px clamp(10px, 2vw, 22px);
+}
+.hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(70px); opacity: .5; pointer-events: none; z-index: 0; }
+.hero::before { width: 420px; height: 420px; background: rgba(74, 144, 226, .22); top: -130px; left: -80px; }
+.hero::after { width: 380px; height: 380px; background: rgba(253, 176, 34, .15); bottom: -150px; right: -70px; }
+.hero-cap { position: relative; z-index: 1; text-align: center; margin-bottom: clamp(12px, 2vw, 20px); max-width: 560px; }
+.hero-cap h2 { font-size: clamp(19px, 3vw, 26px); font-weight: 800; margin: 0 0 6px; letter-spacing: -.4px; }
+.hero-cap p { margin: 0; color: var(--muted-fg); font-size: 14px; }
+@media (max-height: 760px) { .hero-cap { display: none; } }
+
+/* device picker */
+.device-bar { position: relative; z-index: 1; display: flex; align-items: center; gap: 9px; margin-bottom: clamp(12px, 2vw, 18px); }
+.device-bar .device-label { font-size: 12px; color: var(--muted-fg); font-weight: 600; }
+.select-wrap { position: relative; }
+.select-wrap::after { content: "▾"; position: absolute; right: 13px; top: 50%; transform: translateY(-50%); color: var(--muted-fg); pointer-events: none; font-size: 12px; }
+.select-wrap select {
+  appearance: none; -webkit-appearance: none;
+  color: var(--fg); font-family: inherit; font-weight: 700; font-size: 13px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+  padding: 8px 32px 8px 15px; cursor: pointer;
+}
+.select-wrap select:hover { border-color: rgba(253, 176, 34, .4); }
+.select-wrap select:focus-visible { outline: 2px solid rgba(253, 176, 34, .5); outline-offset: 1px; }
+
+/* the app, framed as a realistic iPhone. Real per-model screen dimensions are
+   applied by js/device.js (--sar = screen width/height, --pmm = body width mm). */
+.phone {
+  position: relative; z-index: 1;
+  --bz-t: 12px; --bz-b: 12px; --bz-s: 12px;      /* bezel: top / bottom / sides */
+  --body-radius: 48px; --screen-radius: 38px;
+  padding: var(--bz-t) var(--bz-s) var(--bz-b);
+  background: #0a0b0f; border-radius: var(--body-radius);
+  box-shadow: 0 34px 80px rgba(0, 0, 0, .6), 0 0 0 2px rgba(255, 255, 255, .05),
+    inset 0 0 0 2px rgba(255, 255, 255, .04);
+}
+/* iPhone SE style: home button, thick top/bottom bezels, squarer screen */
+.phone.s-home { --bz-t: 46px; --bz-b: 60px; --bz-s: 13px; --body-radius: 42px; --screen-radius: 6px; }
+
+.app-card {                    /* the screen — real per-model aspect ratio */
+  position: relative;
+  aspect-ratio: var(--sar, .4621);
+  /* Width is driven by the device's real body size (via --pmm), capped to the
+     viewport width. NOT clamped by viewport HEIGHT — on short screens the page
+     scrolls instead of squeezing the phone into an unusably narrow strip. */
+  width: min(calc(94vw - 2 * var(--bz-s)), calc(var(--pmm, 71.6) * 5.1px));
+  display: flex; flex-direction: column; overflow: hidden;
+  background: linear-gradient(180deg, #12203a 0%, var(--bg) 44%);
+  border-radius: var(--screen-radius);
+}
+.app-card::after {             /* iOS home indicator (hidden on the SE) */
+  content: ""; position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%);
+  width: 40%; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, .4);
+  z-index: 30; pointer-events: none;
+}
+.phone.s-home .app-card::after { display: none; }
+
+.home-button {                 /* physical home button on the bottom bezel (SE) */
+  display: none; position: absolute; left: 50%; bottom: calc((var(--bz-b) - 34px) / 2);
+  transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .22);
+}
+.phone.s-home .home-button { display: block; }
+
+.statusbar {
+  flex: none; height: 34px; position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; font-size: 12.5px; font-weight: 700; color: var(--fg);
+}
+.statusbar .sb-right { display: flex; align-items: center; gap: 6px; }
+.statusbar .sb-right svg { display: block; }
+.statusbar .notch {            /* Dynamic Island (default / .s-island) */
+  position: absolute; left: 50%; top: 7px; transform: translateX(-50%);
+  width: 92px; height: 25px; background: #000; border-radius: 999px;
+}
+.phone.s-notch .statusbar .notch { top: 0; width: 148px; height: 24px; border-radius: 0 0 16px 16px; } /* X–14 cut-out */
+.phone.s-home .statusbar .notch { display: none; }
+@media (max-width: 400px) { .statusbar { height: 31px; font-size: 12px; padding: 0 16px; } }
+
+.site-footer {
+  position: relative; z-index: 1; text-align: center;
+  color: var(--text-muted); font-size: 12.5px; line-height: 1.6;
+  padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--hairline);
+}
+.site-footer .strong { color: var(--muted-fg); font-weight: 700; }
+
+.view { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px 0 22px; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+.view::-webkit-scrollbar { width: 0; height: 0; }
+.wrap-x { padding-inline: 18px; }          /* standard horizontal gutter */
+.stack > * + * { margin-top: 14px; }
+
+.screen-title { font-weight: 800; font-size: 27px; letter-spacing: -.4px; margin: 6px 18px 12px; }
+.screen-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 18px 12px; }
+.screen-head .screen-title { margin: 0; }
+
+/* ---- Bottom tab bar ------------------------------------------------------- */
+.tabbar {
+  position: sticky; bottom: 0; z-index: 20; display: flex;
+  padding: 10px 8px calc(20px + env(safe-area-inset-bottom, 0px));
+  background: rgba(15, 26, 46, .82); backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3); border-top: 1px solid var(--hairline);
+}
+.tab {
+  flex: 1; background: none; border: 0; cursor: pointer; color: var(--muted-fg);
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0;
+  transition: color .15s ease;
+}
+.tab .ico { font-size: 19px; line-height: 1; }
+.tab .lbl { font-size: 10px; font-weight: 500; letter-spacing: .2px; }
+.tab.active { color: var(--gold); }
+
+/* ---- Cards ---------------------------------------------------------------- */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+.card-label { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: .7px; color: var(--muted-fg); margin-bottom: 8px; }
+.muted { color: var(--muted-fg); }
+.mono { font-family: var(--mono); }
+.hint { color: var(--text-muted); font-size: 12.5px; }
+
+/* ---- Buttons -------------------------------------------------------------- */
+.btn { border: 0; border-radius: var(--radius-btn); padding: 13px 16px; font-weight: 700; font-size: 15px; cursor: pointer; transition: filter .15s ease, transform .05s ease; }
+.btn:active { transform: translateY(1px); }
+.btn-gold { background: linear-gradient(180deg, #FEC24A, var(--gold)); color: var(--on-gold); box-shadow: 0 6px 16px rgba(253, 176, 34, .28); }
+.btn-gold:hover { filter: brightness(1.05); }
+.btn-muted { background: var(--card-alt); color: var(--fg); border: 1px solid var(--border); }
+.btn-ghost { background: transparent; color: var(--muted-fg); border: 1px solid var(--border); }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+.icon-btn { width: 48px; height: 48px; border-radius: var(--radius-btn); background: var(--card-alt); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.icon-btn:disabled, .btn:disabled { opacity: .4; cursor: default; }
+.link-btn { background: none; border: 0; color: var(--gold); font-weight: 700; cursor: pointer; font-size: 14px; }
+
+/* ---- Segmented control ---------------------------------------------------- */
+.segmented { display: inline-flex; background: var(--input); border-radius: 12px; padding: 3px; gap: 3px; }
+.segmented button { border: 0; background: none; color: var(--muted-fg); font-weight: 700; font-size: 13px; padding: 7px 16px; border-radius: 9px; cursor: pointer; }
+.segmented button.active { background: var(--gold); color: var(--on-gold); }
+
+/* ---- Badges / chips ------------------------------------------------------- */
+.title-badge { display: inline-block; text-transform: uppercase; font-size: 10px; font-weight: 800; letter-spacing: .6px; color: var(--gold); background: rgba(253, 176, 34, .15); padding: 3px 8px; border-radius: 999px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted-fg); background: rgba(255, 255, 255, .05); padding: 4px 9px; border-radius: 999px; }
+
+/* ---- Coach avatar + strength --------------------------------------------- */
+.avatar { --size: 40px; width: var(--size); height: var(--size); border-radius: 50%; background: var(--card-alt); overflow: hidden; flex: none; box-shadow: 0 0 0 1.5px rgba(253, 176, 34, .55) inset; display: grid; place-items: center; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.avatar .mono-init { font-weight: 800; color: var(--gold); }
+.strength-dots { display: inline-flex; gap: 4px; }
+.strength-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, .16); }
+.strength-dots i.on { background: var(--gold); }
+.strength-bar { height: 7px; border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.strength-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
+
+/* ---- Coach header (game view) -------------------------------------------- */
+.coach-header { display: flex; align-items: center; gap: 12px; }
+.coach-header .avatar { --size: 44px; }
+.coach-header .name { font-weight: 800; font-size: 16px; }
+.coach-header .sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+.coach-header .rating { margin-left: auto; text-align: right; }
+.coach-header .rating b { font-family: var(--mono); font-size: 17px; }
+.coach-header .rating span { display: block; font-size: 10px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .5px; }
+
+/* ---- Coach select --------------------------------------------------------- */
+.coach-list { display: flex; flex-direction: column; gap: 12px; }
+.coach-card { display: flex; gap: 14px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; cursor: pointer; transition: border-color .15s ease, transform .05s ease; text-align: left; width: 100%; }
+.coach-card:hover { border-color: rgba(253, 176, 34, .4); }
+.coach-card.sel { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.coach-card:active { transform: scale(.995); }
+.coach-card .avatar { --size: 66px; }
+.coach-card .body { flex: 1; min-width: 0; }
+.coach-card .row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.coach-card .cname { font-weight: 800; font-size: 16px; }
+.coach-card .blurb { color: var(--muted-fg); font-size: 13px; margin: 5px 0 8px; }
+.coach-card .rating-big { text-align: right; }
+.coach-card .rating-big b { font-family: var(--mono); font-size: 20px; font-weight: 800; }
+.coach-card .rating-big span { display: block; font-size: 10px; color: var(--muted-fg); text-transform: uppercase; }
+
+/* ---- Board + eval --------------------------------------------------------- */
+/* chessboard sits flush against the phone's screen edges (edge-to-edge) */
+.board-row { display: flex; gap: 8px; align-items: stretch; padding-inline: 0; margin: 6px 0 10px; }
+.board-row chess-board { flex: 1; min-width: 0; }
+.board-row chess-board, .board-solo chess-board { --board-radius: 0; }
+.eval-bar { position: relative; width: 14px; flex: none; border-radius: 6px; overflow: hidden; background: #242424; border: 1px solid rgba(0, 0, 0, .3); }
+.eval-bar .fill { position: absolute; left: 0; right: 0; bottom: 0; background: #f2f2f2; transition: height .4s ease; }
+.eval-bar .mid { position: absolute; left: 0; right: 0; top: 50%; height: 1.5px; background: rgba(253, 176, 34, .9); transform: translateY(-.75px); }
+
+/* full-width board (no eval bar) — flush to both screen edges */
+.board-solo { padding-inline: 0; margin: 6px 0 10px; }
+
+/* ---- Status + material ---------------------------------------------------- */
+.status-line { text-align: center; font-weight: 700; font-size: 14.5px; min-height: 20px; padding: 2px 18px; }
+.status-line.good { color: var(--green); }
+.status-line.bad { color: var(--red); }
+.status-line.warn { color: var(--gold); }
+.material { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--mono); font-size: 13px; color: var(--muted-fg); min-height: 18px; }
+.material .adv { color: var(--fg); font-weight: 700; }
+
+/* ---- Move ribbon ---------------------------------------------------------- */
+.move-ribbon { display: flex; gap: 6px; overflow-x: auto; padding: 6px 18px; scrollbar-width: none; -ms-overflow-style: none; }
+.move-ribbon::-webkit-scrollbar { width: 0; height: 0; }
+.move-chip { flex: none; font-family: var(--mono); font-size: 13px; padding: 5px 9px; border-radius: 8px; background: rgba(255, 255, 255, .05); color: var(--fg); white-space: nowrap; }
+.move-chip .num { color: var(--text-muted); margin-right: 4px; }
+.move-chip.latest { background: rgba(253, 176, 34, .18); color: var(--gold); }
+.move-ribbon .empty { color: var(--text-muted); font-size: 13px; padding: 5px 0; }
+
+/* ---- Thinking pill -------------------------------------------------------- */
+.pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, .06); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted-fg); }
+.pill .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(253, 176, 34, .35); border-top-color: var(--gold); animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.center { display: flex; justify-content: center; }
+
+/* ---- Stat tiles ----------------------------------------------------------- */
+.stat-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat-tile { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px; text-align: center; }
+.stat-tile .v { font-size: 20px; font-weight: 800; }
+.stat-tile .l { font-size: 11px; color: var(--muted-fg); margin-top: 2px; }
+.stat-tile .ico { font-size: 15px; }
+
+/* ---- Rating card / ring / sparkline --------------------------------------- */
+.rating-row { display: flex; gap: 14px; align-items: center; }
+.rating-card { flex: 1; }
+.rating-big { font-family: var(--mono); font-size: 30px; font-weight: 800; color: var(--gold); line-height: 1; }
+.ring-gauge { --size: 74px; width: var(--size); height: var(--size); flex: none; position: relative; }
+.ring-gauge .lbl { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+.spark { width: 100%; height: 40px; display: block; }
+
+/* ---- Puzzles: compact layout that fills the screen (never scrolls) -------- */
+.puzzle-view { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.puzzle-view .screen-head { margin: 4px 18px 8px; }
+.puz-rating { display: flex; align-items: center; gap: 12px; margin: 0 18px 8px; padding: 12px 14px; }
+.puz-rating .ring-gauge .lbl { font-size: 13px; }
+.puz-rating .rating-card { flex: 1; min-width: 0; }
+.puz-rating .rating-big { font-size: 25px; }
+.puz-rating .hint { margin-top: 1px; }
+.puz-rating .puz-theme { flex: none; max-width: 42%; text-align: right; }
+.puz-rating .puz-theme .theme { font-weight: 700; font-size: 13px; line-height: 1.2; }
+.puz-rating .puz-theme .chip { margin-top: 6px; font-size: 11px; }
+/* the board flexes to fill the leftover space; container-query units make it
+   the largest square that fits (min of the region's width/height). */
+.puz-board { flex: 1 1 0; min-height: 0; container-type: size; display: grid; place-items: center; margin: 2px 0; }
+.puz-board chess-board { width: min(100cqw, 100cqh); --board-radius: 0; }
+.puzzle-view .status-line { margin: 3px 0; }
+.puz-ctrl { margin-top: 6px; }
+
+/* ---- Profile -------------------------------------------------------------- */
+.profile-card { border-radius: var(--radius-card); padding: 18px; color: var(--on-gold); background: linear-gradient(135deg, #FEC24A, var(--gold)); display: flex; align-items: center; gap: 14px; box-shadow: 0 10px 26px rgba(253, 176, 34, .28); }
+.profile-card .mono-badge { width: 58px; height: 58px; border-radius: 16px; background: rgba(15, 26, 46, .18); display: grid; place-items: center; font-size: 26px; font-weight: 800; }
+.profile-card .pname { font-size: 20px; font-weight: 800; }
+.profile-card .ptier { font-size: 13px; opacity: .85; }
+.profile-card .prating { margin-left: auto; text-align: right; font-family: var(--mono); font-weight: 800; font-size: 20px; }
+
+.tier-card .tier-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hairline); }
+.tier-card .tier-row:first-of-type { border-top: 0; }
+.tier-row .tname { font-weight: 700; font-size: 14px; }
+.tier-row .tfloor { margin-left: auto; font-family: var(--mono); color: var(--muted-fg); font-size: 13px; }
+.tier-row.cur .tname { color: var(--gold); }
+.tier-row .dot-cur { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+.tier-row .dot-off { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, .14); }
+.progress { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, .1); overflow: hidden; margin: 4px 0 12px; }
+.progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
+.coach-avatars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.coach-avatars .avatar { --size: auto; width: 100%; height: auto; aspect-ratio: 1 / 1; }
+
+/* ---- Misc ----------------------------------------------------------------- */
+.spacer { height: 6px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; }
+.tiny { font-size: 12px; }
+.center-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.puzzle-meta { display: flex; align-items: center; justify-content: space-between; padding: 0 18px 6px; }
+.puzzle-meta .theme { font-weight: 700; }

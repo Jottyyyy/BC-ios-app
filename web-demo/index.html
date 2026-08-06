@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Biyaherong Chess App iOS — Web Demo</title>
+  <meta name="theme-color" content="#0F1A2E" />
+  <link rel="icon" href="assets/brand/favicon.png" />
+  <link rel="stylesheet" href="css/theme.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+  <!-- Site banner (branding lives here, outside the app) -->
+  <header class="site-banner">
+    <img class="logo" src="assets/brand/byaherong-banner.webp" alt="Biyaherong"
+      onerror="this.onerror=null;this.src='assets/brand/icon.png'" />
+    <div class="titles">
+      <div class="brand">Biyaherong Chess App <span class="accent">iOS</span></div>
+      <div class="tag">Offline chess coach — browser preview</div>
+    </div>
+    <span class="grow"></span>
+    <span class="chip-web">Web preview</span>
+  </header>
+
+  <!-- Hero: the app inside a realistic, selectable iPhone frame -->
+  <main class="hero">
+    <div class="hero-cap">
+      <h2>Play, solve, and train — right in your browser</h2>
+      <p>The Biyaherong Chess Coach app, rebuilt for the web: 5 AI coaches, puzzles, and your rating.</p>
+    </div>
+
+    <div class="device-bar">
+      <span class="device-label">Device</span>
+      <div class="select-wrap"><select id="device-select" aria-label="iPhone model"></select></div>
+    </div>
+
+    <div class="phone s-island">
+      <div class="app-card">
+        <div class="statusbar">
+          <span class="sb-time">9:41</span>
+          <span class="notch"></span>
+          <span class="sb-right">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="4.5" y="5.5" width="3" height="6.5" rx="1"/><rect x="9" y="3" width="3" height="9" rx="1"/><rect x="13.5" y="0.5" width="3" height="11.5" rx="1" opacity=".4"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor" aria-hidden="true"><path d="M8.5 2.2c2.6 0 5 .98 6.8 2.6l-1.4 1.5A7.7 7.7 0 0 0 8.5 4.3 7.7 7.7 0 0 0 3.1 6.4L1.7 4.8A9.8 9.8 0 0 1 8.5 2.2Z"/><path d="M8.5 6c1.5 0 2.9.56 3.9 1.5L10.9 9A3.4 3.4 0 0 0 8.5 8.1c-.9 0-1.7.36-2.4.98L4.6 7.5A5.5 5.5 0 0 1 8.5 6Z"/><circle cx="8.5" cy="10.3" r="1.3"/></svg>
+            <svg width="26" height="13" viewBox="0 0 26 13" fill="none" aria-hidden="true"><rect x="1" y="1.5" width="21" height="10" rx="2.6" stroke="currentColor" stroke-width="1" opacity=".5"/><rect x="2.6" y="3.1" width="16" height="6.8" rx="1.3" fill="currentColor"/><rect x="23.2" y="4.2" width="1.8" height="4.6" rx=".9" fill="currentColor" opacity=".5"/></svg>
+          </span>
+        </div>
+        <div id="view" class="view"></div>
+        <nav id="tabbar" class="tabbar"></nav>
+      </div>
+      <span class="home-button"></span>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div><span class="strong">Biyaherong Chess Coach</span> — web preview.
+      Piece art © Uray M. János / Cburnett (CC BY-SA) · Nunito (SIL OFL).</div>
+    <div>The parity-tested engine is the Swift in <span class="strong">Sources/</span>.
+      Tip: append <span class="strong">?selftest</span> to the URL for the engine perft check.</div>
+  </footer>
+
+  <!-- Load order matters: engine → ai/rating → sound → board component → puzzles → app → device.
+       All are classic scripts (no ES modules) so this runs from file:// on Windows. -->
+  <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/rating.js"></script>
+  <script src="js/sound.js"></script>
+  <script src="js/chess-board.js"></script>
+  <script src="js/puzzles.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/device.js"></script>
+</body>
+
+</html>
