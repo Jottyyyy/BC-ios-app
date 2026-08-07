@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Ported from the React Native app (assets/images/opening_book.svg).
+       DEVIATION FROM THE SOURCE FILE, deliberate: the original expresses transparency with
+       opacity / fill-opacity / stroke-opacity attributes. SVGVector.swift only reads
+       fill, stroke, stroke-width, stroke-linecap and stroke-linejoin (SVGState.inheritable),
+       so those attributes are silently dropped — a verbatim copy parses "successfully" but
+       paints a solid-black knight and harsh solid page lines. 8-digit #RRGGBBAA hex IS
+       supported (SVGColor.parse, case 8), so each alpha is folded into its colour instead:
+         opacity 0.95 -> F2   opacity 0.50 -> 80   0.25 -> 40   0.65 -> A6
+       Keep it that way if this art is ever re-synced from the RN repo. -->
+
+  <!-- Open book base -->
+  <path d="M6 14 L30 18 L30 56 L6 52 Z" fill="#FFFFFFF2"/>
+  <path d="M58 14 L34 18 L34 56 L58 52 Z" fill="#FFFFFFF2"/>
+  <!-- Spine -->
+  <path d="M30 18 L34 18 L34 56 L30 56 Z" fill="#FFFFFF80"/>
+  <!-- Page lines (left page) -->
+  <line x1="11" y1="24" x2="27" y2="26" stroke="#00000040" stroke-width="1"/>
+  <line x1="11" y1="29" x2="27" y2="31" stroke="#00000040" stroke-width="1"/>
+  <line x1="11" y1="34" x2="27" y2="36" stroke="#00000040" stroke-width="1"/>
+  <!-- Knight silhouette on right page -->
+  <path d="M44 24 C42 24 40 26 40 28 L40 32 L38 36 L40 40 L40 48 L52 48 L52 40 C54 38 54 34 52 32 L50 28 C50 25 47 24 45 24 Z" fill="#000000A6"/>
+  <circle cx="46" cy="28" r="1.5" fill="#FFFFFF"/>
+</svg>

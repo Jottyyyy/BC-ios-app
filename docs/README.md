@@ -21,5 +21,7 @@ Feature- and subsystem-level documentation for this repo.
 ## Feature docs
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
+- [`home-screen.md`](home-screen.md) — the landing dashboard: four bands, a never-scrolling 3×2 grid of six
+  equal cards, the Sky/Colorful themes, and the hourly Taglish quote.
 
 _More docs get added here as features are built._

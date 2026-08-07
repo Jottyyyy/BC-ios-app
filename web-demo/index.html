@@ -34,6 +34,22 @@
     <div class="device-bar">
       <span class="device-label">Device</span>
       <div class="select-wrap"><select id="device-select" aria-label="iPhone model"></select></div>
+      <!-- Demo chrome, deliberately OUTSIDE the phone: `isColorful` is a plain view input with no
+           persistence, so this exists purely to make both home themes visible without editing code. -->
+      <span class="device-label">Home theme</span>
+      <div class="select-wrap">
+        <select id="home-theme-select" aria-label="Home card style">
+          <option value="sky">Sky</option>
+          <option value="colorful">Colorful</option>
+        </select>
+      </div>
+      <span class="device-label">Membership</span>
+      <div class="select-wrap">
+        <select id="home-premium-select" aria-label="Membership state">
+          <option value="free">Free</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
     </div>
 
     <div class="phone s-island">
@@ -61,14 +77,15 @@
       Tip: append <span class="strong">?selftest</span> to the URL for the engine perft check.</div>
   </footer>
 
-  <!-- Load order matters: engine → ai/rating → sound → board component → puzzles → app → device.
-       All are classic scripts (no ES modules) so this runs from file:// on Windows. -->
+  <!-- Load order matters: engine → ai/rating → sound → board component → puzzles → home → app →
+       device. All are classic scripts (no ES modules) so this runs from file:// on Windows. -->
   <script src="js/engine.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/rating.js"></script>
   <script src="js/sound.js"></script>
   <script src="js/chess-board.js"></script>
   <script src="js/puzzles.js"></script>
+  <script src="js/home.js"></script>
   <script src="js/app.js"></script>
   <script src="js/device.js"></script>
 </body>

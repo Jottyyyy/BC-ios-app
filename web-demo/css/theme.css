@@ -41,6 +41,27 @@
   --purple: #9B6DD6;
   --teal: #00BFA5;
 
+  /* home screen — "Colorful" theme, per-card saturated fills.
+     Mirrors HomePalette in DemoApp/Sources/BiyaherongUI/HomeMetrics.swift. */
+  --home-puzzles: #4CAF50;
+  --home-analysis: #FF9800;
+  --home-videos: #E91E63;
+  --home-opening: #00BFA5;
+  --home-coach: #1B1050;
+  --home-pairing: #0D2137;
+  --home-sponsor: #00838F;
+  --home-membership: #5E35B1;
+  --home-swiss-icon: #00BFA5;
+  --home-colorful-sub: rgba(255, 255, 255, .88);
+  --home-quote-fill: rgba(74, 159, 232, .08);
+  --home-quote-text: rgba(255, 255, 255, .78);
+  --home-quote-attrib: rgba(253, 176, 34, .60);
+  --home-search-fill: rgba(255, 255, 255, .06);
+  --home-banner-fill: #1A2942;
+  --home-banner-border: rgba(74, 159, 232, .20);
+  --home-premium-border: rgba(253, 176, 34, .35);
+  --home-premium-fill: rgba(253, 176, 34, .06);
+
   /* board */
   --board-light: #5BA3F5;
   --board-dark: #2C4A73;

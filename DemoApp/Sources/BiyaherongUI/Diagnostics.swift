@@ -23,7 +23,17 @@ public func biyaherongDiagnostics() -> String {
     let webp = Bundle.module.urls(forResourcesWithExtension: "webp", subdirectory: "Characters")?.count ?? -1
     let mp3 = Bundle.module.urls(forResourcesWithExtension: "mp3", subdirectory: "Sounds")?.count ?? -1
     let svg = Bundle.module.urls(forResourcesWithExtension: "svg", subdirectory: "Pieces")?.count ?? -1
-    out += "Fonts(ttf)=\(ttf)  Characters(webp)=\(webp)  Sounds(mp3)=\(mp3)  Pieces(svg)=\(svg)\n"
+    let png = Bundle.module.urls(forResourcesWithExtension: "png", subdirectory: "Images")?.count ?? -1
+    let isvg = Bundle.module.urls(forResourcesWithExtension: "svg", subdirectory: "Images")?.count ?? -1
+    out += "Fonts(ttf)=\(ttf)  Characters(webp)=\(webp)  Sounds(mp3)=\(mp3)  Pieces(svg)=\(svg)"
+    out += "  Images(png)=\(png)  Images(svg)=\(isvg)\n"
     if svg != 12 { out += "WARNING: expected 12 piece SVGs — boards will fall back to Unicode glyphs\n" }
+    // The home screen's card art. A missing `.copy("Images")` in Package.swift fails silently at
+    // runtime (blank cards) and only inside a packaged app — this is what catches it.
+    if png != 5 || isvg != 1 {
+        out += "WARNING: expected 5 PNGs + 1 SVG in Images/ — home screen cards will render blank\n"
+    }
+
+    out += "HomeArt: " + HomeArt.diagnosticsSummary() + "\n"
     return out
 }

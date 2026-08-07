@@ -38,6 +38,23 @@ enum Theme {
         fontsReady ? .custom(weight.psName, fixedSize: size) : .system(size: size, weight: weight.systemWeight, design: .rounded)
     }
 
+    /// Nunito ships **no italic face** (only Regular…ExtraBold), and SwiftUI's `.italic()` is a
+    /// silent no-op on a family without one — it requests the italic symbolic trait, CoreText finds
+    /// no match, and the text renders upright with no warning. The home screen's quote is specified
+    /// italic, so shear the real face instead.
+    ///
+    /// CoreText's text space is y-up, so a positive `c` leans the top of each glyph to the right.
+    static func nunitoItalic(_ size: CGFloat, _ weight: NunitoWeight = .regular,
+                             degrees: CGFloat = 12) -> Font {
+        guard fontsReady else {
+            return .system(size: size, weight: weight.systemWeight, design: .rounded).italic()
+        }
+        let base = CTFontCreateWithName(weight.psName as CFString, size, nil)
+        let descriptor = CTFontCopyFontDescriptor(base)
+        var slant = CGAffineTransform(a: 1, b: 0, c: tan(degrees * .pi / 180), d: 1, tx: 0, ty: 0)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, &slant))
+    }
+
     // MARK: Shape
 
     static let radius: CGFloat = 20         // cards
@@ -46,7 +63,9 @@ enum Theme {
 
     // MARK: Palette (fixed dark)
 
-    private static func c(_ hex: UInt, _ a: Double = 1) -> Color {
+    /// Internal (not private) so the rest of the module builds its own tokens the same way —
+    /// see `HomePalette`. One hex helper, one colour space, no drift.
+    static func c(_ hex: UInt, _ a: Double = 1) -> Color {
         Color(.sRGB, red: Double((hex >> 16) & 0xff) / 255, green: Double((hex >> 8) & 0xff) / 255,
               blue: Double(hex & 0xff) / 255, opacity: a)
     }

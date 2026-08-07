@@ -23,7 +23,11 @@ let package = Package(
         .target(
             name: "BiyaherongUI",
             dependencies: [.product(name: "BiyaherongCoachCore", package: "BiyaherongCoachCore")],
-            resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds"), .copy("Pieces")]
+            // All `.copy` (never `.process`): the folder structure is preserved verbatim, so every
+            // Bundle.module lookup MUST pass `subdirectory:`. `.process` would flatten these and
+            // silently break PieceArt / Sound / Theme.fontsReady / HomeArt.
+            resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds"),
+                        .copy("Pieces"), .copy("Images")]
         ),
         .executableTarget(
             name: "DemoApp",
@@ -32,6 +36,12 @@ let package = Package(
         // Runnable self-check for the SVG piece renderer (no XCTest in this toolchain).
         .executableTarget(
             name: "PieceArtCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
+        // Runnable self-check for the home screen's pure layer — responsive metrics, the hourly
+        // quote index, expiry formatting and banner-style precedence (no XCTest in this toolchain).
+        .executableTarget(
+            name: "HomeMetricsCheck",
             dependencies: ["BiyaherongUI"]
         ),
     ]

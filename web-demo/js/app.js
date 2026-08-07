@@ -52,6 +52,7 @@
     puzzles: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M10 3.5c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5V5h2a1 1 0 0 1 1 1v2h1.5c.8 0 1.5.7 1.5 1.5s-.7 1.5-1.5 1.5H17v3a1 1 0 0 1-1 1h-3v1.5c0 .8-.7 1.5-1.5 1.5S9 17.8 9 17v-1.5H6a1 1 0 0 1-1-1v-3H3.5C2.7 10.5 2 9.8 2 9s.7-1.5 1.5-1.5H5V6a1 1 0 0 1 1-1h4V3.5Z"/></svg>',
     play: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke-width="1.2" opacity=".8"/></svg>',
     profile: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8.5" r="3.7"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    home: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>',
     undo: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/></svg>',
     flip: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h13a3 3 0 0 1 3 3v1"/><path d="M16 21l4-4-4-4"/><path d="M20 17H7a3 3 0 0 1-3-3v-1"/></svg>'
   };
@@ -86,8 +87,8 @@
   // ------------------------------------------------------------------- tabs --
   var view = document.getElementById('view');
   var tabbarEl = document.getElementById('tabbar');
-  var TABS = [{ id: 'puzzles', ico: ICON.puzzles, lbl: 'Puzzles' }, { id: 'play', ico: ICON.play, lbl: 'Play' }, { id: 'profile', ico: ICON.profile, lbl: 'Profile' }];
-  var current = 'play';
+  var TABS = [{ id: 'home', ico: ICON.home, lbl: 'Home' }, { id: 'puzzles', ico: ICON.puzzles, lbl: 'Puzzles' }, { id: 'play', ico: ICON.play, lbl: 'Play' }, { id: 'profile', ico: ICON.profile, lbl: 'Profile' }];
+  var current = 'home';
   function renderTabbar() {
     tabbarEl.innerHTML = '';
     TABS.forEach(function (t) {
@@ -99,9 +100,28 @@
   }
   function render() {
     view.scrollTop = 0; view.innerHTML = '';
-    if (current === 'play') renderPlay();
+    // Home is the one screen that owns the whole box with no gutter or scroll; every other screen
+    // wants .view's default padding back. Cleared here because this is the only place the tab
+    // changes — the leaf renderers reached directly (renderGame, renderCoachSelect) are all
+    // non-home and always follow a render().
+    view.classList.remove('flush');
+    if (current === 'home') renderHome();
+    else if (current === 'play') renderPlay();
     else if (current === 'profile') renderProfile();
     else renderPuzzles();
+  }
+
+  /* ======================================================================== *
+   *  HOME TAB — see js/home.js
+   * ======================================================================== */
+  function renderHome() {
+    BiyaHome.render(view, function (action) {
+      // Only the actions with a real destination in this demo are wired; the rest are the empty
+      // callbacks the screen is designed around (§12).
+      if (action === 'puzzles') { current = 'puzzles'; renderTabbar(); render(); }
+      else if (action === 'playCoach') { current = 'play'; renderTabbar(); render(); }
+      else if (action === 'avatar') { current = 'profile'; renderTabbar(); render(); }
+    });
   }
 
   /* ======================================================================== *
@@ -536,6 +556,12 @@
     ck('kiwipete perft(3)', E.perft(E.fromFEN('r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1'), 3), 97862);
     ck('en-passant perft(4)', E.perft(E.fromFEN('8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1'), 4), 43238);
     ck('promotion+castle perft(3)', E.perft(E.fromFEN('rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8'), 3), 62379);
+    // The home screen's pure layer — the responsive scale, the tile identity behind the six equal
+    // cards, the hourly quote rotation, expiry formatting and the premium-outranks-colorful rule.
+    var home = BiyaHome.selfTest();
+    ck('home pure layer (' + home.passed + ' assertions)', home.failures.length, 0);
+    home.failures.forEach(function (f) { console.log('FAIL home: ' + f); });
+
     var fails = results.filter(function (r) { return !r.ok; });
     results.forEach(function (r) { console.log((r.ok ? 'PASS ' : 'FAIL ') + r.label + '  got=' + r.got + (r.ok ? '' : '  want=' + r.want)); });
     console.log(fails.length === 0 ? '✅ engine self-test: ALL ' + results.length + ' PASSED' : '❌ ' + fails.length + ' FAILED');
@@ -548,6 +574,19 @@
   }
 
   // ------------------------------------------------------------------- boot --
+  // Home demo chrome (lives in the hero, outside the phone — not part of the app).
+  var themeSel = document.getElementById('home-theme-select');
+  if (themeSel) themeSel.onchange = function () {
+    BiyaHome.setColorful(themeSel.value === 'colorful');
+    if (current === 'home') render();
+  };
+  var premiumSel = document.getElementById('home-premium-select');
+  if (premiumSel) premiumSel.onchange = function () {
+    // A fixed date so the expiry string is stable to look at, not a moving target.
+    BiyaHome.setPremium(premiumSel.value === 'premium', new Date(2026, 8, 12));
+    if (current === 'home') render();
+  };
+
   renderTabbar();
   render();
   if (/(\?|&)selftest\b/.test(location.search)) runSelfTest();

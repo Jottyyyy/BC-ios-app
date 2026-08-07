@@ -289,6 +289,99 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .coach-avatars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .coach-avatars .avatar { --size: auto; width: 100%; height: auto; aspect-ratio: 1 / 1; }
 
+/* ---- Home: four bands, never scrolls -------------------------------------- */
+/* Mirrors DemoApp/Sources/BiyaherongUI/HomeScreen.swift. The header, quote strip and banner row
+   hug their content; the grid is the ONLY flexible band and splits its leftover into three equal
+   rows of two equal tiles. Same idea as .puzzle-view, one band deeper.
+   The per-scale sizes (--h-*) are set inline by js/home.js from the device screen size. */
+.view.flush { padding: 0; overflow: hidden; }   /* home owns the full box; no scroll, no gutter */
+
+.home-view { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+/* Header */
+.home-header { display: flex; align-items: center; gap: 0; padding: 6px 18px; min-height: 70px; flex: none; }
+.home-avatar { position: relative; width: 38px; height: 38px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: var(--gold); display: grid; place-items: center; flex: none; }
+.home-avatar:active { opacity: .7; }
+.home-avatar .ha-initial { font-weight: 800; font-size: 18px; color: var(--on-gold); line-height: 1; }
+.home-avatar .ha-badge { position: absolute; bottom: -2px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-size: 10px; line-height: 1; }
+.home-logo-wrap { flex: 1; display: flex; justify-content: center; }
+.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: 50%; border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
+.home-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-search { width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; background: var(--home-search-fill); font-size: 17px; line-height: 1; flex: none; }
+.home-search:active { opacity: .7; }
+
+/* Grid — `min-height: 0` / `min-width: 0` are load-bearing: without them a flex child refuses to
+   shrink below its content size, the rows stop being exact thirds, and the screen overflows. */
+.home-grid { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: var(--h-gap); padding: 4px 14px 6px; }
+.home-row { flex: 1 1 0; min-height: 0; display: flex; gap: var(--h-gap); }
+.home-card {
+  flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  /* The gap is the second thing to give way, after the icon slot. `8%` resolves against the tile's
+     own height, so on every device with room this is a no-op (8% of a 132px tile > the 10px gap)
+     and it only bites on a very short tile, where the alternative is clipping a label.
+     Mirrored by HomeScreenMetrics.cardGap(rowHeight:). */
+  gap: min(var(--h-gap), 8%);
+  padding: var(--h-pad); border-radius: 20px; text-align: center;
+  background: var(--card-alt); border: 1px solid var(--border);
+  box-shadow: 0 2px 3.84px rgba(0, 0, 0, .25);
+}
+.home-card:active { opacity: .8; }
+/* Colorful: saturated fill, and the hairline is REMOVED — on a saturated fill it reads as a dirty
+   edge. `border-color: transparent` rather than `border: 0` so the box geometry never shifts. */
+.home-card.colorful { border-color: transparent; }
+.home-card.colorful.c-puzzles { background: var(--home-puzzles); }
+.home-card.colorful.c-analysis { background: var(--home-analysis); }
+.home-card.colorful.c-videos { background: var(--home-videos); }
+.home-card.colorful.c-openingTrainer { background: var(--home-opening); }
+.home-card.colorful.c-playCoach { background: var(--home-coach); }
+.home-card.colorful.c-pairing { background: var(--home-pairing); }
+
+/* The icon slot is the SAME size in both themes, so swapping them shifts nothing below it.
+   It is also the ONLY element in the card allowed to shrink: the band budget is over-constrained
+   on a 4.7" phone (inside the tab-bar shell an SE gives each row ~74–93px while the full design
+   wants ~115), so `flex: 0 1` lets the artwork give way and keeps the title and subtitle intact.
+   Clipping a label is strictly worse than a smaller icon. Mirrors HomeScreenMetrics.iconBox —
+   on every device with room it is a no-op and the icon renders at its full --h-icon size. */
+.hc-icon { flex: 0 1 var(--h-icon); aspect-ratio: 1; min-height: 0; display: grid; place-items: center; position: relative; }
+.hc-icon .hc-circle { position: absolute; width: var(--h-circle-pct); height: var(--h-circle-pct); border-radius: 50%; background: var(--icon-chip); }
+.hc-icon img { position: relative; width: var(--h-inner-pct); height: var(--h-inner-pct); object-fit: contain; }
+.hc-icon.bare img { width: 100%; height: 100%; }
+.hc-title, .hc-sub, .hc-cta { flex: none; }
+.hc-title { font-weight: 800; font-size: var(--h-title); letter-spacing: .2px; color: var(--fg); line-height: 1.2; }
+.hc-sub { font-weight: 600; font-size: var(--h-sub); letter-spacing: .1px; color: var(--muted-fg); line-height: 1.45; }
+.home-view.colorful .hc-sub { color: var(--home-colorful-sub); }
+
+/* Play with Coach — the only squircle, the only gold glow in the grid, the only CTA pill. */
+.hc-ring { width: var(--h-circle-pct); height: var(--h-circle-pct); border-radius: var(--h-ring-radius); border: 2px solid var(--gold); overflow: hidden; box-shadow: 0 0 10px rgba(253, 176, 34, .8); }
+.hc-ring img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hc-cta { background: var(--gold); color: var(--on-gold); font-weight: 800; font-size: var(--h-cta-size); letter-spacing: .5px; padding: var(--h-cta-pv) var(--h-cta-ph); border-radius: 20px; line-height: 1.2; }
+
+/* Quote strip — left-aligned on purpose, against the rigidly centred grid above it. No border. */
+/* Pinned to its two-line height rather than hugging. Load-bearing: the quote rotates hourly and
+   the lines differ in length, so a hugging strip would be one line tall for some quotes and two
+   for others — which changes the grid's leftover and silently resizes all six tiles at the top of
+   an hour. HomeScreenMetrics.quoteHeight pins the same two lines on the Swift side.
+   79px = 10+10 padding + 2x20 text + 5 margin + ~14 attribution line. The content is centred, so a
+   one-line quote sits balanced instead of leaving all the slack at the bottom. */
+.home-quote { flex: none; margin: 0 14px 8px; padding: 10px 16px; border-radius: 12px; background: var(--home-quote-fill); min-height: 79px; display: flex; flex-direction: column; justify-content: center; }
+.hq-text { font-size: 13px; font-weight: 600; font-style: italic; color: var(--home-quote-text); line-height: 20px; letter-spacing: .15px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.hq-attrib { font-size: 10px; font-weight: 700; color: var(--home-quote-attrib); letter-spacing: .4px; margin-top: 5px; }
+
+/* Bottom banners — quieter than the cards; secondary utilities, not competing features. */
+.home-banners { flex: none; display: flex; gap: 8px; margin: 0 14px 10px; align-items: stretch; }
+.home-banner { flex: 1 1 0; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 8px; border-radius: 12px; text-align: center; background: var(--home-banner-fill); border: 1px solid var(--home-banner-border); }
+.home-banner:active { opacity: .85; }
+.home-banner.sponsor { background: var(--home-sponsor); border-color: transparent; }
+.home-banner.membership { background: var(--home-membership); border-color: transparent; }
+/* Premium's gold wash ALWAYS outranks the colorful purple — the gold state is the reward. */
+.home-banner.premium { background: var(--home-premium-fill); border-color: var(--home-premium-border); }
+.home-banner.premium .hb-title { color: var(--gold); }
+.hb-emoji { font-size: 18px; line-height: 1.2; }
+.hb-title { font-weight: 800; font-size: 11px; letter-spacing: .1px; color: var(--fg); }
+.hb-sub { font-weight: 600; font-size: 9px; color: var(--muted-fg); line-height: 1.3; }
+.home-view.colorful .hb-sub { color: var(--home-colorful-sub); }
+
 /* ---- Misc ----------------------------------------------------------------- */
 .spacer { height: 6px; }
 .row { display: flex; align-items: center; gap: 10px; }

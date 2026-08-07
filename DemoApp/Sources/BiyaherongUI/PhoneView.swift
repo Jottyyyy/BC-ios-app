@@ -4,14 +4,29 @@ import BiyaherongCoachCore
 // ── Panel wrapper: a scaled iPhone frame on a soft violet backdrop ───────────
 
 struct PhoneView: View {
+    /// Demo chrome only — it lives OUTSIDE the phone frame because it is not part of the app.
+    /// `isColorful` is a plain view input on HomeScreen with no persistence (§12); this picker
+    /// exists so both themes are visible on a desktop without editing code.
+    @State private var homeColorful = false
+
     var body: some View {
         GeometryReader { geo in
             let scale = min(1.05, max(0.5, (geo.size.height - 20) / 824))
             ZStack {
                 LinearGradient(colors: [Theme.card, Theme.background], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-                PhoneFrame { PhoneApp() }.scaleEffect(scale)
+                PhoneFrame { PhoneApp(homeColorful: homeColorful) }.scaleEffect(scale)
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .overlay(alignment: .top) {
+                Picker("Home theme", selection: $homeColorful) {
+                    Text("Sky").tag(false)
+                    Text("Colorful").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                .padding(.top, 8)
+            }
         }
     }
 }
@@ -33,25 +48,54 @@ struct PhoneFrame<Content: View>: View {
 }
 
 struct PhoneApp: View {
+    /// Passed straight through to `HomeScreen`. Defaulted, so existing call sites are unaffected.
+    var homeColorful: Bool = false
+
     @StateObject private var puzzleVM = PuzzleVM()
     @StateObject private var gameVM = ChessGameVM()
     @State private var tab = 0
 
+    // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
+    // make the memberwise initializer private, so only the file-local no-argument form would be
+    // reachable from Roots.swift. Spelling it out keeps both call sites obviously valid.
+    init(homeColorful: Bool = false) { self.homeColorful = homeColorful }
+
     var body: some View {
-        VStack(spacing: 0) {
-            #if os(macOS)
-            statusBar   // simulated status bar for the desktop phone-frame preview only
-            #endif
-            Group {
-                switch tab {
-                case 0: PuzzlesPhone(vm: puzzleVM)
-                case 1: PlayPhone(vm: gameVM)
-                default: ProfilePhone(vm: puzzleVM)
+        // The home screen's responsive scalar is derived from the whole phone screen, matching the
+        // original's `Dimensions.get('window')`. Adding the safe-area insets back reconstructs that
+        // window height; inside the macOS PhoneFrame there are no insets and this is a clean
+        // 392 × 812, which is exactly the design baseline.
+        GeometryReader { shell in
+            let basis = CGSize(width: shell.size.width,
+                               height: shell.size.height
+                                   + shell.safeAreaInsets.top + shell.safeAreaInsets.bottom)
+            VStack(spacing: 0) {
+                #if os(macOS)
+                statusBar   // simulated status bar for the desktop phone-frame preview only
+                #endif
+                Group {
+                    switch tab {
+                    case 0: home(basis: basis)
+                    case 1: PuzzlesPhone(vm: puzzleVM)
+                    case 2: PlayPhone(vm: gameVM)
+                    default: ProfilePhone(vm: puzzleVM)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PhoneTabBar(tab: $tab)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            PhoneTabBar(tab: $tab)
+            .frame(width: shell.size.width, height: shell.size.height)
         }
+    }
+
+    /// Only the three callbacks with a real destination today are wired; the other seven are the
+    /// empty closures the screen is designed around and stay that way until those screens exist.
+    private func home(basis: CGSize) -> some View {
+        HomeScreen(isColorful: homeColorful,
+                   scaleBasis: basis,
+                   onAvatar: { tab = 3 },
+                   onPuzzles: { tab = 1 },
+                   onPlayCoach: { tab = 2 })
     }
 
     private var statusBar: some View {
@@ -68,8 +112,8 @@ struct PhoneApp: View {
 
 struct PhoneTabBar: View {
     @Binding var tab: Int
-    private let items = [("Puzzles", "puzzlepiece.fill"), ("Play", "checkerboard.rectangle"),
-                         ("Profile", "person.crop.circle")]
+    private let items = [("Home", "square.grid.2x2.fill"), ("Puzzles", "puzzlepiece.fill"),
+                         ("Play", "checkerboard.rectangle"), ("Profile", "person.crop.circle")]
     var body: some View {
         HStack(spacing: 0) {
             ForEach(items.indices, id: \.self) { i in
