@@ -18,6 +18,12 @@ Mas maganda ang experience (siguradong mag-load ang Nunito fonts, walgang `file:
 1. Sa VS Code, i-install ang **"Live Server"** extension (Ritwick Dey).
 2. Right-click ang `web-demo/index.html` → **"Open with Live Server"**.
 
+> **Bakit mas maganda ang Live Server:** kapag naka-serve ang page, tumatakbo ang chess engine sa
+> sarili nitong **Worker thread**, kaya hindi kailanman humihinto ang animation habang nag-iisip ito.
+> Sa double-click (`file://`) ay hindi kayang gumawa ng Worker ang browser, kaya sa main thread pa
+> rin ito — pero hinati-hati na sa 80ms na piraso, kaya wala nang malaking freeze. Mababaw lang ang
+> iisipin ng engine doon.
+
 > Kung sa double-click ay mukhang ibang font (Segoe UI imbes na Nunito), normal lang 'yan — hina-harang
 > ng ilang browser ang font files sa `file://`. Gamitin ang Live Server para maayos ito. Gumagana pa rin
 > ang buong app kahit alin.
@@ -194,6 +200,8 @@ web-demo/
   js/analysis-metrics.js  lahat ng numero ng Analysis Board  (port ng AnalysisMetrics.swift)
   js/analysis-store.js  ang library ng naka-save na laro  (port ng AnalysisStore.swift)
   js/position-editor.js Setup Position: paglalagay ng piyesa + validation  (port ng PositionEditor.swift)
+  js/engine-host.js     kung saan tumatakbo ang engine: Worker kung naka-serve, in-thread kung file://
+  js/analysis-worker.js ang engine sa sariling thread — kaya hindi na nagla-lag ang paggalaw
   js/analysis.js        ⭐ ang Analysis Board: pure session layer + ang buong screen
                           (port ng AnalysisSession.swift + AnalysisBoardScreen.swift)
   js/app.js             4-tab app shell + ang Analysis Board (galing sa Home tile)

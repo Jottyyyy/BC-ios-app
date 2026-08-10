@@ -226,6 +226,12 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(AnalysisTiming.doubleTapWindowMs == 350, "double-tap window is 350ms")
     expect(AnalysisTiming.longPressDelayMs == 400, "long-press delay is 400ms")
     expect(AnalysisTiming.draftTTLHours == 24, "drafts expire after 24 hours")
+    expect(AnalysisTiming.pieceAnimationMs == 170, "a piece slides in 170ms")
+    expect(AnalysisTiming.pieceAnimationMs < AnalysisTiming.analysisDebounceMs,
+           "and lands before the engine is even scheduled, so a search can never start mid-slide")
+    expect(AnalysisTiming.inlineSearchBudgetMs == 80, "one in-thread search chunk is capped at 80ms")
+    expect(AnalysisTiming.inlineSearchBudgetMs * 2 < AnalysisTiming.engineDeadlineMs,
+           "the per-chunk slice is well under the whole-search deadline, or slicing would do nothing")
     expect(AnalysisTiming.uiCoalesceMs == 100, "engine progress coalesces to 100ms")
     expect(AnalysisTiming.engineDeadlineMs == 1200, "one interactive search gets 1200ms")
     expect(AnalysisEngineLimits.multiPV == 3, "the board shows three engine lines")

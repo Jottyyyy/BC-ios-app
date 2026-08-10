@@ -130,7 +130,7 @@ final class PuzzleVM: ObservableObject {
     private func apply(_ m: Move) {
         let before = position
         sanHistory.append(before.san(for: m))
-        withAnimation(.spring(response: 0.33, dampingFraction: 0.82)) {
+        withAnimation(AnalysisTiming.pieceMove) {
             mutatePieces(&pieces, move: m, positionBefore: before)
         }
         position = position.makeMove(m)

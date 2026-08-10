@@ -34,6 +34,9 @@ var BiyaAnalysisBoard = (function () {
   // Setup Position. Only the view half uses it, but it is declared here with the rest so a missing
   // <script> tag fails loudly at load instead of silently inside a click handler.
   var PE = isNode ? require('./position-editor.js') : BiyaPositionEditor;
+  // Where the search actually runs. `AN` is still used for its pure helpers; the host owns the
+  // threading decision so no screen has to know about it.
+  var HOST = isNode ? require('./engine-host.js') : BiyaEngineHost;
   // Saving serialises the tree to a full PGN — headers included, unlike the source's movetext-only
   // `generatePgn()`, which is why a custom start position survives a round trip here.
   var P = isNode ? require('./pgn.js') : BiyaPGN;
@@ -1174,6 +1177,8 @@ var BiyaAnalysisBoard = (function () {
     set('--an-micro-h', MET.EVAL_BAR.microHeight + 'px');
     set('--an-micro-r', MET.EVAL_BAR.microRadius + 'px');
     set('--an-eval-anim', MET.TIMINGS.evalBarAnimation + 'ms');
+    // The board component ships its own default; this is the app's value, asserted like the rest.
+    set('--piece-anim', MET.TIMINGS.pieceAnimation + 'ms cubic-bezier(.22,.61,.36,1)');
     // Typography — the real StyleSheet sizes, asserted against board_styles.json.
     var T2 = MET.TYPE;
     set('--an-fs-title', T2.headerTitle + 'px'); set('--an-fs-hbtn', T2.headerBtn + 'px');
@@ -1539,7 +1544,11 @@ var BiyaAnalysisBoard = (function () {
     engineToken += 1;                       // invalidates any running search
     session.analyzing = false;
     if (!wantsAnalysis(session)) { paintStatus(); paintEngine(); return; }
-    debounceTimer = setTimeout(runAnalysis, MET.TIMINGS.analysisDebounce);
+    // Never start a search while a piece is still sliding. On the worker path this is belt and
+    // braces; from file:// the search runs in-thread and a chunk landing mid-slide is exactly the
+    // stutter this whole change is about.
+    debounceTimer = setTimeout(runAnalysis,
+      Math.max(MET.TIMINGS.analysisDebounce, MET.TIMINGS.pieceAnimation));
   }
 
   /**
@@ -1557,7 +1566,9 @@ var BiyaAnalysisBoard = (function () {
     var deadline = Date.now() + MET.TIMINGS.engineDeadline;
     session.analyzing = true;
     paintStatus(); paintEngine();
-    AN.analyzeProgressive(pos, {
+    // Through the host: a Worker when the page is served, sliced in-thread from file://. Same
+    // options, same onDepth, same resolved snapshot — see web-demo/js/engine-host.js.
+    HOST.analyzeProgressive(pos, {
       maxDepth: MET.ENGINE_LIMITS.maxDepth,
       multiPV: MET.ENGINE_LIMITS.multiPV,
       historyKeys: keys,

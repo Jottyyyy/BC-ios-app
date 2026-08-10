@@ -414,6 +414,50 @@ last hand-transcribed set of constants in this feature.
   reaches the card from a separate `varManageBtn`; folding it into the same gesture is an addition, and it
   is the useful action on a chip.
 
+### Where the engine runs (web-demo — REVERSES the Phase 4 "no Web Workers" decision)
+
+**RESOLVED DECISION, CHANGED.** Phase 4 ruled Web Workers out entirely: on `file://` a document has
+an opaque origin, `new Worker` throws, and the blob-URL and `data:` workarounds inherit the same
+origin and fail identically. That reasoning was correct and still is. Treating it as a *blanket* rule
+was not, and a user reported the cost: the search ran on the main thread one whole depth per
+uninterrupted block — measured at **624 ms (depth 3) and 2,885 ms (depth 4)** on a midgame position,
+during which no piece could slide, no drag could track and no click could register.
+
+`web-demo/js/engine-host.js` now picks per page: a real Worker when the page is served (the path the
+README recommends first), the in-thread engine when `new Worker` throws. The `file://` promise is
+kept exactly as Phase 4 wanted; what changed is that a served page is no longer punished for it.
+
+- **The in-thread path is sliced.** Each depth gets its own deadline (`inlineSearchBudgetMs = 80`),
+  passed to the search's `shouldCancel`, which the engine polls every 2048 nodes — so the block is
+  cut from the INSIDE and cannot overrun. Worst measured chunk: **94 ms**, still reaching depth 2 in
+  a sharp midgame and depth 5 in a quiet endgame. `analyzeProgressive` could not do this: it builds
+  its cancel closure once, so `engine-host` drives `analyzeSteps` directly to reset the deadline.
+- **No engine file was modified.** `engine.js` closes over
+  `typeof window !== 'undefined' ? window : globalThis` — the worker's `self` — and `ai.js` and
+  `analysis-engine.js` declare bare globals. `importScripts` therefore just works, and the worker
+  thread runs code byte-identical to what the golden suite proves. `worker_protocol_check.js`
+  asserts the two paths return the same ranked moves, so they cannot drift into a split brain.
+- **Import ORDER is load-bearing:** `analysis-engine.js` reads `CoachAI` at load, so `ai.js` must
+  come first. Getting it wrong throws at worker startup, `engine-host` degrades silently, and the
+  page keeps the slow path with no visible error. That is exactly the bug
+  `worker_protocol_check.js` caught on its first run, and why that check exists.
+- **Play goes through the host too.** `CoachAI.bestMoveAsync` was `setTimeout(0)` plus a fully
+  synchronous search, so its "async" bought nothing.
+
+### Piece animation (web-demo + Swift — no server counterpart)
+
+**DELIBERATE DEVIATION.** The RN board animates with a Reanimated spring, which has no extractable
+duration, so there is nothing to port and the number is invented: **170 ms, ease-out, no overshoot**
+— between lichess (~200) and chess.com (~150). This rebuild had `.33s cubic-bezier(.34,1.15,.64,1)`,
+a springy third of a second, and the bounce was most of what read as sluggish. Exposed as
+`--piece-anim` so `<chess-board>` stays a themeable drop-in; Swift shares one
+`AnalysisTiming.pieceMove` across the three boards that previously each had their own spring.
+
+**A drop lands where it was released.** The board used to snap the piece home on `pointerup` and then
+slide it to the target once the app repainted, so a drag ended with the piece jumping back and
+travelling. chess.com and lichess leave it. Ported as behaviour, not as a source detail — the RN
+board's drag is `DragDropChessBoard`, which we replaced wholesale.
+
 ### The status line's own row (Analysis Board — deviation from `statusToolbarRow`)
 
 **DELIBERATE DEVIATION.** The source puts the status text and the toolbar on one row

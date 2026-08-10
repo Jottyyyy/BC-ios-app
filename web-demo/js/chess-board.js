@@ -99,8 +99,12 @@
     // Only while drag is enabled: "manipulation" still lets the browser claim a vertical swipe
     // as a scroll and fire pointercancel mid-drag. Boards without drag keep scrolling normally.
     '.board.draggable{touch-action:none;}',
+    // The slide. 170ms ease-out with NO overshoot — between lichess (~200) and chess.com (~150).
+    // It was `.33s cubic-bezier(.34,1.15,.64,1)`, a springy third of a second, which read as
+    // sluggish. Overridable per board via --piece-anim; the Analysis Board sets it from the
+    // metrics layer so the app's value is asserted like every other number.
     '.piece{position:absolute;left:0;top:0;width:12.5%;height:12.5%;will-change:transform;',
-    'transition:transform .33s cubic-bezier(.34,1.15,.64,1);}',
+    'transition:transform var(--piece-anim,170ms cubic-bezier(.22,.61,.36,1));}',
     '.piece .inner{width:100%;height:100%;transition:transform .2s ease,opacity .2s ease;filter:drop-shadow(0 2px 2px rgba(0,0,0,.34));}',
     '.piece .inner img,.piece .inner svg{width:100%;height:100%;display:block;}',
     '.piece.spawn .inner,.piece.dying .inner{transform:scale(.4);opacity:0;}',
@@ -146,6 +150,15 @@
       this._drag = null;              // {from, el, pointerId, x0, y0, moved, targets}
       this._dragHandlers = null;
       this._suppressClick = false;
+      // Cached for the duration of a drag. `getBoundingClientRect` is a forced layout, and it was
+      // being called TWICE per pointermove (once here, once inside _squareAtPoint) at up to 120Hz.
+      this._rect = null;
+      this._hoverSq = null;           // so a move touches 2 cells, not all 64
+      this._dragRaf = 0;              // pointermove coalesced to one write per frame
+      this._dragPoint = null;
+      // Set by a drop: the piece is already where the user let go, so the render that follows must
+      // not slide it there from its origin. chess.com and lichess both land it instantly.
+      this._justDropped = false;
     }
 
     // ---- lifecycle ----------------------------------------------------------
@@ -313,7 +326,12 @@
       this.clearSelection(true);        // stale after a position change
       if (!this._built) return;         // set before connection — connectedCallback re-runs this
       var animate = opts.animate !== false && this._hasRendered;
-      this._render(this._board, animate, this._lastMove);
+      // A piece the user just dropped is already under their finger on the target square. Sliding
+      // it there from its origin would mean snapping it back first — which is exactly what this
+      // board used to do, and what made a drag feel like it lagged.
+      var dropped = this._justDropped;
+      this._justDropped = false;
+      this._render(this._board, animate, this._lastMove, dropped);
       this._applyMarks();
       this._hasRendered = true;
     }
@@ -322,7 +340,7 @@
     // appeared pieces are matched to vanished ones of the same identity (this
     // makes the castling rook slide too); leftovers fade in/out. Handles
     // captures, en passant, castling and promotion generically.
-    _render(newBoard, animate, lastMove) {
+    _render(newBoard, animate, lastMove, justDropped) {
       var oldEls = this._els;
       var newMap = new Map();
       for (var sq = 0; sq < 64; sq++) if (newBoard[sq]) newMap.set(sq, newBoard[sq]);
@@ -357,7 +375,13 @@
         }
       });
       vanished.forEach(function (v) { if (animate) self._fadeOut(v.el); else if (v.el.parentNode) v.el.parentNode.removeChild(v.el); });
-      slides.forEach(function (s) { s.el.style.zIndex = '2'; self._placePiece(s.el, s.to, animate); });
+      // Captures still fade; only the SLIDE is suppressed for a drop, and only for the piece the
+      // pointer was carrying — a castling rook moving alongside it still animates.
+      slides.forEach(function (s) {
+        s.el.style.zIndex = '2';
+        var dragged = justDropped && lastMove && s.to === lastMove.to;
+        self._placePiece(s.el, s.to, animate && !dragged);
+      });
 
       this._els = nextEls;
     }
@@ -530,7 +554,9 @@
 
     /** Client point -> logical square, or null outside the board. */
     _squareAtPoint(clientX, clientY) {
-      var r = this._boardEl.getBoundingClientRect();
+      // During a drag the rect is cached — this is on the pointermove path, where a forced layout
+      // per event is the difference between smooth and not.
+      var r = this._rect || this._boardEl.getBoundingClientRect();
       if (r.width <= 0) return null;
       var s = r.width / 8;
       var vcol = Math.floor((clientX - r.left) / s), vrow = Math.floor((clientY - r.top) / s);
@@ -542,12 +568,15 @@
 
     _onPointerDown(e) {
       if (!this._interactive || this._pendingPromo || this._drag) return;
+      // Read the rect ONCE and hold it for the whole drag. A board does not move or resize while a
+      // finger is down on it, and this is the only place the read is affordable.
+      this._rect = this._boardEl.getBoundingClientRect();
       var sq = this._squareAtPoint(e.clientX, e.clientY);
-      if (sq == null) return;
+      if (sq == null) { this._rect = null; return; }
       var targets = this._targetsFrom(sq);
-      if (!targets.length) return;                 // nothing draggable here — let the tap path run
+      if (!targets.length) { this._rect = null; return; }  // not draggable — let the tap path run
       var rec = this._els.get(sq);
-      if (!rec) return;
+      if (!rec) { this._rect = null; return; }
       this._drag = {
         from: sq, el: rec.el, pointerId: e.pointerId, moved: false, targets: targets,
         x0: e.clientX, y0: e.clientY
@@ -561,8 +590,6 @@
     _onPointerMove(e) {
       var d = this._drag;
       if (!d || e.pointerId !== d.pointerId) return;
-      var r = this._boardEl.getBoundingClientRect();
-      var s = r.width / 8;
       if (!d.moved) {
         // Below the threshold this is still a tap; do not hijack it.
         var dx0 = e.clientX - d.x0, dy0 = e.clientY - d.y0;
@@ -572,16 +599,46 @@
         this._select(d.from, d.targets);
       }
       e.preventDefault();
-      // Lift the piece clear of the fingertip (spec 3.5) and follow the pointer.
-      var x = (e.clientX - r.left) / s - 0.5;
-      var y = (e.clientY - r.top) / s - 0.5 - 0.35;
-      d.el.style.transform = 'translate(' + (x * 100) + '%,' + (y * 100) + '%)';
-      var over = this._squareAtPoint(e.clientX, e.clientY);
-      this._cells.forEach(function (c) { c.classList.remove('drophover'); });
-      if (over != null) {
-        var cell = this._cellBySq.get(over);
-        if (cell) cell.classList.add('drophover');
+      // Record and coalesce. A pointer can fire several events per frame (120Hz displays, and
+      // coalesced events on trackpads), and writing a transform more than once per frame is work
+      // the compositor throws away. The write happens in _dragFrame, on the next rAF.
+      this._dragPoint = { x: e.clientX, y: e.clientY };
+      if (!this._dragRaf) {
+        var self = this;
+        this._dragRaf = requestAnimationFrame(function () { self._dragRaf = 0; self._dragFrame(); });
       }
+    }
+
+    /** The one write per frame: move the ghost, and repaint at most two squares. */
+    _dragFrame() {
+      var d = this._drag, p = this._dragPoint, r = this._rect;
+      if (!d || !p || !r || !d.moved) return;
+      var s = r.width / 8;
+      // Lift the piece clear of the fingertip (spec 3.5) and follow the pointer.
+      var x = (p.x - r.left) / s - 0.5;
+      var y = (p.y - r.top) / s - 0.5 - 0.35;
+      d.el.style.transform = 'translate(' + (x * 100) + '%,' + (y * 100) + '%)';
+      // Only the two squares that changed. Sweeping all 64 every event was 64 class writes per
+      // pointermove, and the browser has to re-style each one.
+      var over = this._squareAtPoint(p.x, p.y);
+      if (over === this._hoverSq) return;
+      var prev = this._hoverSq == null ? null : this._cellBySq.get(this._hoverSq);
+      if (prev) prev.classList.remove('drophover');
+      var cell = over == null ? null : this._cellBySq.get(over);
+      if (cell) cell.classList.add('drophover');
+      this._hoverSq = over;
+    }
+
+    /** Everything a finished or abandoned drag has to put back. */
+    _endDrag() {
+      if (this._dragRaf) { cancelAnimationFrame(this._dragRaf); this._dragRaf = 0; }
+      this._dragPoint = null;
+      if (this._hoverSq != null) {
+        var prev = this._cellBySq.get(this._hoverSq);
+        if (prev) prev.classList.remove('drophover');
+        this._hoverSq = null;
+      }
+      this._rect = null;
     }
 
     _onPointerUp(e) {
@@ -591,20 +648,36 @@
       if (this._boardEl.releasePointerCapture) {
         try { this._boardEl.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
       }
-      this._cells.forEach(function (c) { c.classList.remove('drophover'); });
+      var to = d.moved ? this._squareAtPoint(e.clientX, e.clientY) : null;
+      this._endDrag();
       d.el.classList.remove('dragging');
       if (!d.moved) return;                        // never became a drag; the click handler has it
       this._suppressClick = true;
-      this._placePiece(d.el, d.from, false);       // snap home; the caller repaints on a real move
-      var to = this._squareAtPoint(e.clientX, e.clientY);
-      if (to == null || to === d.from) { this.clearSelection(); return; }
-      var hit = d.targets.filter(function (x) { return x.to === to; });
-      if (!hit.length) { this.clearSelection(); return; }
+      var hit = (to == null || to === d.from)
+        ? [] : d.targets.filter(function (x) { return x.to === to; });
+      if (!hit.length) {
+        // Not a legal drop: THIS is where the piece goes home, and only here.
+        this._placePiece(d.el, d.from, false);
+        this.clearSelection();
+        return;
+      }
+      // A legal drop lands where the finger let go. It used to snap back to the origin and then
+      // slide to the target over 330ms once the app repainted — you saw the piece jump home and
+      // travel back. chess.com and lichess just leave it there; `_justDropped` tells the render
+      // that follows to place it without a slide.
+      this._justDropped = true;
       var promo = hit.filter(function (x) { return x.promotion != null; });
       // Funnel through the same paths the tap route uses, so `move` events stay identical and
       // app.js's handlers keep working untouched.
-      if (promo.length) this._askPromotion(d.from, to);
-      else this._commit(d.from, to, null);
+      if (promo.length) {
+        // The promotion sheet is a round trip through the UI; the piece cannot just sit under the
+        // dialog waiting, so it goes home and the eventual move animates normally.
+        this._justDropped = false;
+        this._placePiece(d.el, d.from, false);
+        this._askPromotion(d.from, to);
+      } else {
+        this._commit(d.from, to, null);
+      }
     }
 
     // ---- promotion overlay --------------------------------------------------

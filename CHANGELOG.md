@@ -9,6 +9,91 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-10 (fix) — piece movement, made smooth
+
+Reported: moving a piece feels delayed and not smooth, "gusto ko kasing smooth ng chess.com at
+lichess". Three independent causes, measured rather than guessed. The animation was the smallest of
+them.
+
+- **Fixed** — **the engine froze the whole page.** The search ran on the main thread, one whole DEPTH
+  per uninterrupted block. Measured on `r1bqkb1r/pp2pppp/2np1n2/8/3NP3/2N1B3/PPP2PPP/R2QKB1R w KQkq`:
+
+  | depth | block | dropped frames |
+  |---|---|---|
+  | 1 | 58 ms | 3 |
+  | 2 | 112 ms | 7 |
+  | 3 | **624 ms** | 37 |
+  | 4 | **2,885 ms** | 173 |
+
+  The 1,200 ms deadline capped a chunk but did not slice it, so up to **1.2 s of frozen UI in one
+  go** — no animation, no drag, no clicks. With a 300 ms debounce against a 330 ms slide, the freeze
+  routinely landed *on top of* the piece still moving. `Play` had the same bug: `bestMoveAsync` was
+  `setTimeout(0)` followed by a fully synchronous search, so the "async" bought nothing.
+
+  Now **`web-demo/js/engine-host.js`** owns the decision and both screens call it:
+  - **served over http** → **`web-demo/js/analysis-worker.js`**, a real Worker. The main thread never
+    runs a search at all. Both the analysis engine and the coach go through it.
+  - **`file://`** → in-thread, but each depth gets **its own slice deadline**, which the engine polls
+    every 2048 nodes, so the chunk is cut from the *inside* and cannot overrun. Measured: worst chunk
+    **94 ms**, still reaching depth 2 in a sharp midgame and depth 5 in a quiet endgame.
+
+  **Neither engine file needed changing.** `engine.js` closes over
+  `typeof window !== 'undefined' ? window : globalThis` — the worker's `self` — and `ai.js` and
+  `analysis-engine.js` declare bare globals, so `importScripts` just works and the code on the worker
+  thread is byte-identical to the code the golden suite proves.
+  _(web-demo: this IS the web-demo fix.)_
+- **Fixed** — **the drag did layout work on every pointer event.** `_onPointerMove` called
+  `getBoundingClientRect()`, `_squareAtPoint()` called it *again*, and then all **64 cells** had
+  `drophover` removed: two forced layouts and 65 class mutations per event, at up to 120 Hz. The rect
+  is now read once on `pointerdown` and cached for the drag, only the two cells that changed are
+  touched, and pointer events are coalesced into **one transform write per frame**.
+- **Fixed** — **a drop teleported.** On `pointerup` the piece was snapped back to its origin and only
+  then slid to the target over 330 ms, so a drag ended with the piece jumping home and travelling
+  back. It now lands where you let go: `_justDropped` tells the next render to place that one piece
+  without a slide. A tap-move still animates, and a drop that needs the promotion sheet still goes
+  home, because the piece cannot sit under a dialog waiting.
+- **Changed** — **the slide is 170 ms ease-out, was 330 ms with an overshoot**
+  (`cubic-bezier(.34,1.15,.64,1)`). Between lichess (~200) and chess.com (~150), and without the
+  bounce, which was most of what read as sluggish. Exposed as `--piece-anim` so the component stays a
+  themeable drop-in; the Analysis Board sets it from the metrics layer. Mirrored in Swift as
+  `AnalysisTiming.pieceMove`, replacing three separate `.spring(response: 0.34)` calls in
+  `AnalysisVM`, `PlayView` and `PuzzleView`.
+- **Changed** — a search can no longer start while a piece is moving: the debounce is
+  `max(analysisDebounce, pieceAnimation)`. Belt and braces on the worker path; load-bearing on
+  `file://`.
+- **Added** — **`tools/qa/engine_budget_check.js`**: no single synchronous chunk may exceed
+  `inlineSearchBudget`, over six positions of different character. It times
+  `BiyaEngineHost.slicedSteps` — the very stepper the browser pumps, not a copy — and reports a
+  breach in dropped frames. Verified by removing the per-depth slice reset: five positions fail with
+  584–1,073 ms chunks.
+- **Added** — **`tools/qa/worker_protocol_check.js`**, which drives `analysis-worker.js` for real in
+  a fake worker scope (`importScripts` / `self.onmessage` / `postMessage`). This was not optional:
+  the worker only runs when the page is *served*, so a bug in it would never appear from `file://`
+  or in Node, and `engine-host` cannot catch a logic error — construction succeeds, so the fallback
+  never fires and the board silently gets no snapshots. **It found one immediately:**
+  `importScripts('engine.js', 'analysis-engine.js', 'ai.js')` was the wrong order —
+  `analysis-engine.js` reads `CoachAI` at load — so the worker would have thrown on startup, degraded
+  silently, and the whole fix would have looked like it did nothing.
+  It also pins that the worker's ranked moves match the in-thread engine's exactly, that a coach is
+  structured-cloneable, that a bad FEN reports rather than throws, and that a cancel is honoured.
+- **Changed** — `tools/qa/js_goldens.js` now awaits async suites, running them **after** every
+  synchronous one. Started at require time, the worker check measured the harness rather than the
+  worker: the gate blocks the event loop for seconds, and the worker's deadline expired before its
+  pump got a turn.
+- **Added** — `board_component_test.js` grew to 133 assertions covering all three drag fixes: no rect
+  read on the pointermove path, one transform per frame however many events arrive, at most two cells
+  touched per move, a drop that lands without a slide, and the 170 ms curve. All five regressions are
+  mutation-tested.
+- **Added** — `pieceAnimationMs` (170) and `inlineSearchBudgetMs` (80) to both metrics layers, as
+  invented constants recorded in `PORTING_NOTES.md`.
+
+**Swift side unverified by compilation** — `swift` is not on PATH here. Swift never had the freeze
+(`Task.detached` already), so it took only the animation change. **The browser pass is outstanding**:
+the Chrome connected to this session runs on a different machine from the local server, so the served
+page could not be reached. The worker is proven through its real protocol and the frame budget is
+proven in milliseconds, but `BiyaEngineHost.mode === 'worker'` in an actual browser still wants
+confirming.
+
 ### 2026-08-10 (fix) — the board now fills the screen and stops moving
 
 Reported from a screenshot: the board did not fill the phone, and it grew and shrank on every move.
