@@ -4,20 +4,24 @@ import CoreText
 /// Nunito weights (real TTFs bundled under Fonts/). The fontsource files carry a
 /// "NunitoExtraLight-" PostScript prefix but the actual weights are correct (Regular…ExtraBold).
 enum NunitoWeight {
-    case regular, medium, semiBold, bold, extraBold
+    case regular, medium, semiBold, bold, extraBold, heavy, black
     var psName: String {
         switch self {
         case .regular: return "NunitoExtraLight-Regular"
         case .medium: return "NunitoExtraLight-Medium"
         case .semiBold: return "NunitoExtraLight-SemiBold"
         case .bold: return "NunitoExtraLight-Bold"
-        case .extraBold: return "NunitoExtraLight-ExtraBold"
+        // Nothing heavier than ExtraBold ships, and an invented psName resolves to nothing and
+        // renders in the wrong face with no warning — so heavy/black take the heaviest real one
+        // and differ only in the SF fallback below.
+        case .extraBold, .heavy, .black: return "NunitoExtraLight-ExtraBold"
         }
     }
     var systemWeight: Font.Weight {
         switch self {
         case .regular: return .regular; case .medium: return .medium
         case .semiBold: return .semibold; case .bold: return .bold; case .extraBold: return .heavy
+        case .heavy: return .heavy; case .black: return .black
         }
     }
 }

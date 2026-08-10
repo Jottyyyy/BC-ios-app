@@ -54,7 +54,7 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
     expectNear(HomeScreenMetrics.scale(for: CGSize(width: 1024, height: 1366)), 1.6823, "scale on a 12.9\" iPad is below the ceiling")
     // GeometryReader legitimately reports .zero on the first pass; a NaN would poison every frame.
     expectNear(HomeScreenMetrics.scale(for: .zero), 1.0, "scale falls back to baseline on a zero container")
-    expect(HomeScreenMetrics.scale(for: CGSize(width: .nan, height: .nan)).isFinite, "scale is finite for a NaN container")
+    expect(HomeScreenMetrics.scale(for: CGSize(width: CGFloat.nan, height: CGFloat.nan)).isFinite, "scale is finite for a NaN container")
 
     // ── 2. Every derived metric at the three reference scales ────────────────
     // The half-point cases are the ones that earn their keep: .rounded() rounds half away from

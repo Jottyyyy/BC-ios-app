@@ -30,7 +30,7 @@ struct AnalysisEditPanel: View {
             castlingSection
             if let issue = editor.firstIssueText {
                 Text("⚠ " + issue)
-                    .font(Theme.nunito(AnalysisEdit.errorSize, .semibold))
+                    .font(Theme.nunito(AnalysisEdit.errorSize, .semiBold))
                     .foregroundStyle(AnalysisEdit.errorColor)
                     .padding(.bottom, AnalysisEdit.titleRowGap)
             }

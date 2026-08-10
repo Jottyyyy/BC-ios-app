@@ -237,7 +237,7 @@ struct HomeBanner: View {
         // Both banners take the SAME explicit height. An HStack sizes to its tallest child but does
         // not stretch the shorter one, so without this the one-line "Unlock everything" banner
         // would render visibly shorter than the two-line Donate banner.
-        .frame(maxWidth: .infinity, height: height)
+        .frame(maxWidth: .infinity).frame(height: height)
         .background(fill, in: RoundedRectangle(cornerRadius: HomeLayout.bannerRadius, style: .continuous))
         .overlay {
             if let border {

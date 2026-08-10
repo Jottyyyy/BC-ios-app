@@ -63,31 +63,45 @@ struct AnalysisAnnotationPicker: View {
                                      spacing: AnalysisModals.gridGap)],
                   spacing: AnalysisModals.gridGap) {
             ForEach(options, id: \.symbol) { option in
-                let nag = AnalysisSession.nag(forSymbol: option.symbol)
+                let nag: Int = AnalysisSession.nag(forSymbol: option.symbol)
                 Button { onPick(nag) } label: {
-                    VStack(spacing: 0) {
-                        Text(option.symbol)
-                            .font(Theme.nunito(AnalysisType.annotationSymbol, .black))
-                            .foregroundStyle(option.color)
-                        Text(option.label)
-                            .font(Theme.nunito(AnalysisType.annotationLabel, .semibold))
-                            .foregroundStyle(AnalysisModals.labelColor)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, AnalysisModals.labelGap)
-                    }
-                    .frame(width: AnalysisModals.btnW, height: AnalysisModals.btnH)
-                    .background(AnalysisModals.btnBg,
-                                in: RoundedRectangle(cornerRadius: AnalysisModals.btnRadius))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: AnalysisModals.btnRadius)
-                            .strokeBorder(nag == currentNAG ? AnalysisPalette.gold : .clear,
-                                          lineWidth: AnalysisEdit.activeBorder)
-                    }
+                    AnnotationOptionTile(option: option, selected: nag == currentNAG)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.bottom, AnalysisModals.gridMarginBottom)
+    }
+}
+
+/// One option tile, lifted out of `grid` purely to keep the type-checker inside its budget: inline,
+/// the two `Text`s plus the sized `.background(_:in:)` and the ternary-stroked `.overlay` are ONE
+/// expression, and the solver gives up on it ("unable to type-check in reasonable time"). The
+/// annotated `border` below is the other half of the anchor — the bare `.clear` branch is what makes
+/// the ternary expensive. Layout is byte-for-byte what it was inline.
+private struct AnnotationOptionTile: View {
+    let option: AnalysisTables.Annotation
+    let selected: Bool
+
+    var body: some View {
+        let border: Color = selected ? AnalysisPalette.gold : .clear
+        VStack(spacing: 0) {
+            Text(option.symbol)
+                .font(Theme.nunito(AnalysisType.annotationSymbol, .black))
+                .foregroundStyle(option.color)
+            Text(option.label)
+                .font(Theme.nunito(AnalysisType.annotationLabel, .semiBold))
+                .foregroundStyle(AnalysisModals.labelColor)
+                .multilineTextAlignment(.center)
+                .padding(.top, AnalysisModals.labelGap)
+        }
+        .frame(width: AnalysisModals.btnW, height: AnalysisModals.btnH)
+        .background(AnalysisModals.btnBg,
+                    in: RoundedRectangle(cornerRadius: AnalysisModals.btnRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: AnalysisModals.btnRadius)
+                .strokeBorder(border, lineWidth: AnalysisEdit.activeBorder)
+        }
     }
 }
 

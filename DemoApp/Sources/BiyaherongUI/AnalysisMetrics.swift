@@ -1,4 +1,5 @@
 import SwiftUI
+import BiyaherongCoachCore
 
 // The Analysis Board's PURE layer: board geometry, the seven bands, the palette, the arrow and badge
 // geometry, the eval bar and graph, the display tables, and the timings.

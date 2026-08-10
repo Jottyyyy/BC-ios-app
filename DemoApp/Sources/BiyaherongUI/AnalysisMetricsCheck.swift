@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import BiyaherongCoachCore
 
 // Executable self-check for the Analysis Board's pure layer, in the same spirit as ParityRunner,
 // PieceArtCheck and HomeMetricsCheck: this toolchain has no XCTest, so the assertions live in a
@@ -315,19 +316,19 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(AnalysisLibraryStyle.resultLabel("*") == "No Result (*)", "the star gets a label")
     expect(AnalysisLibraryStyle.resultLabel("1-0") == "1-0", "the others render as themselves")
 
-    // The two derived strings the library row shows.
-    let withPlayers = AnalysisSessionRecord(
-        id: 1, folderID: nil, title: "T", notes: nil, pgn: "", initialFEN: "",
-        result: nil, whitePlayer: "Ana", blackPlayer: "Bo", whiteRating: 1850, blackRating: nil,
-        eventName: nil, gameDate: nil, timeControl: nil, location: nil, roundInfo: nil, eco: nil,
-        createdAt: 0, updatedAt: 0)
-    expect(AnalysisLibraryStyle.primaryLine(withPlayers) == "Ana (1850) vs Bo",
+    // The two derived strings the library row shows. The fixture comes back from `save` because
+    // AnalysisSessionRecord's memberwise init is internal to BiyaherongCoachCore; a nil record
+    // (impossible here — the PGN is non-empty) simply fails both assertions.
+    var library = AnalysisLibrary()
+    var record = AnalysisStore.save(&library, AnalysisStore.SaveFields(
+        pgn: "1. e4 c5 *", title: "T", whitePlayer: "Ana", blackPlayer: "Bo",
+        whiteRating: "1850"), now: 0)
+    expect(record.map(AnalysisLibraryStyle.primaryLine) == "Ana (1850) vs Bo",
            "the headline names both players and any rating")
-    var titleOnly = withPlayers
-    titleOnly.whitePlayer = nil
-    titleOnly.blackPlayer = nil
-    titleOnly.whiteRating = nil
-    expect(AnalysisLibraryStyle.primaryLine(titleOnly) == "T",
+    record?.whitePlayer = nil
+    record?.blackPlayer = nil
+    record?.whiteRating = nil
+    expect(record.map(AnalysisLibraryStyle.primaryLine) == "T",
            "with no players it falls back to the title")
     expect(AnalysisLibraryStyle.pgnPreview("[Event \"X\"]\n[Site \"?\"]\n\n1. e4 c5 *")
            == "1. e4 c5 *", "the preview strips headers and squashes whitespace")

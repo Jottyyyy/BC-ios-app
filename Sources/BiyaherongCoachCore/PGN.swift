@@ -45,7 +45,7 @@ public enum PGN {
         public var movetext: String
     }
 
-    public struct ParseError: Equatable {
+    public struct ParseError: Equatable, Sendable {
         public let ply: Int
         public let token: String
         public let message: String
@@ -303,7 +303,7 @@ public enum PGN {
             }
             guard let tree = candidate else { continue }
 
-            var game = Game(headers: headers, tree: tree, result: "*", errors: [],
+            var game = Game(tree: tree, headers: headers, result: "*", errors: [],
                             moveCount: 0, preComment: "", initialFEN: tree.initialFEN)
             if fenWasBad {
                 game.errors.append(ParseError(ply: 0, token: headers["FEN"] ?? "",
