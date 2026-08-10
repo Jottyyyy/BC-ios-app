@@ -1,0 +1,565 @@
+# analysis-board — the offline analysis screen
+
+The app's most complex screen: a board you can play moves on, a live engine with ranked lines and arrows, a
+move tree with variations, game review with accuracy and an eval graph, a position editor, a bundled ECO
+opening book, and PGN import/export. **It makes no network requests at all** — the original React Native
+screen did HTTP analysis, HTTP game review and a Lichess masters lookup; all three are replaced by code and
+data that ship inside the app.
+
+Ported from `app/(app)/user/analysis-board/board.tsx` (6,865 lines) in the sibling
+`../BYAHERONG-COACH-FRONTEND` repo — **from its real StyleSheet numbers, not from prose** (see *Extract,
+don't transcribe* below).
+
+> **Status: complete.** Every part of the screen is built. What remains is the compile — `swift` is not
+> on PATH on the Windows checkout, so the Swift half is verified by the JS twin, the extracted-source
+> assertions and the lint, and `swift build` runs on a Mac.
+>
+> Move tree · PGN · search engine · ECO book · metrics layer · board arrows + drag · the seven-band
+> screen with live engine, branching and the ECO panel · game review · persistence (save form, library,
+> folders, drafts) · **Setup Position · PGN import/export · the ☰ menu · the annotation picker · the
+> variation card · haptics**.
+
+## How to run the checks
+
+```bash
+node tools/qa/js_goldens.js            # the whole JS gate: metrics, session, board component, oracles
+node tools/qa/board_component_test.js  # just <chess-board>: arrow geometry, drag, tap-to-move regression
+node tools/qa/swift_lint.js            # brackets + public-exposes-internal, for Swift that cannot compile here
+node tools/qa/metrics_key_check.js     # every MET.<BLOCK>.<key> and AnalysisEdit.foo resolves, JS + Swift
+node tools/qa/swift_source_keys.js     # every StyleSheet lookup AnalysisMetricsCheck makes has a value
+node tools/qa/board_layout_check.js    # the board is width-sized and does not flex — the CSS-level gate
+node tools/qa/replay_position_editor.js  # the blind-written Swift tables, replayed through the proven JS
+node tools/metrics/extract_board_styles.js   # regenerate board_styles.json from the RN source
+
+# macOS, with a toolchain:
+swift run ParityRunner                       # domain layer, incl. the `analysis_session` group
+cd DemoApp && swift run AnalysisMetricsCheck # the metrics layer
+```
+
+Visually: open `web-demo/index.html`, then the **Analysis Board** tile on Home. `?selftest` runs every
+suite, including the session layer and a real hit-test check of the board component.
+
+## Key files
+
+| File | Role |
+|---|---|
+| `Sources/BiyaherongCoachCore/AnalysisSession.swift` | **the screen's behaviour, with no screen attached** — see below |
+| `…/PositionEditor.swift` | Setup Position as a pure value type: placement, castling normalisation, and the validation chess.js used to do |
+| `Sources/BiyaherongCoachCore/MoveTree.swift` | the tree, navigation, promote/delete, and the pure `flatten() -> [TreeRow]` render model |
+| `…/PGN.swift` | parse + serialize with recursive variations, NAGs and comments — **the persistence format** |
+| `…/AnalysisEngine.swift`, `…/LocalEngine.swift` | the engine protocol and the in-repo search behind it |
+| `…/OpeningBook.swift` | ECO lookup over the bundled 7,854-row book |
+| `…/ReviewAnnotator.swift` | drives the engine over a game, then layers the `book` tier on top of `GameReview` |
+| `DemoApp/…/AnalysisBoardScreen.swift` | the seven bands, the move strip, the ECO panel, the engine panel, the branch picker |
+| `DemoApp/…/AnalysisVM.swift` | threading, sound and republishing — nothing else |
+| `DemoApp/…/CancelToken.swift` | lock-guarded cancel flag the background search reads |
+| `DemoApp/…/OpeningBookLoader.swift` | the `Bundle.module` read Core deliberately cannot do |
+| `DemoApp/…/AnalysisMetrics.swift` | **the pure layer** — geometry, bands, palette, typography, tables, timings. No view code |
+| `DemoApp/…/AnalysisMetricsCheck.swift` | its assertions, runnable as `swift run AnalysisMetricsCheck` |
+| `DemoApp/…/BoardArrows.swift` | the SwiftUI arrow overlay, composed at the call site |
+| `DemoApp/…/AnalysisMenuSidebar.swift` | the ☰ sidebar: four sections, ten items, width as a ratio |
+| `DemoApp/…/AnalysisEditPanel.swift` | Setup Position's palette, castling chips, validation banner and FEN row |
+| `DemoApp/…/AnalysisPgnModals.swift` | Import (paste + `.fileImporter`) and Export (copy + `.fileExporter`) |
+| `DemoApp/…/AnalysisAnnotationPicker.swift` | the two-section picker, and the badge overlay that draws its glyph |
+| `DemoApp/…/AnalysisVariationModal.swift` | the variation card, its delete confirmation, and the autoplay-speed picker |
+| `DemoApp/…/Haptics.swift` | four named feedbacks; `#if canImport(UIKit)`, macOS no-op |
+| `DemoApp/…/PlayView.swift` | `BoardView`, extended (not forked) with `style` / `customHighlights` / `onDragMove` |
+| `tools/metrics/extract_board_styles.js` | TypeScript AST walk over `board.tsx` → `board_styles.json` |
+| `tools/metrics/board_styles.json` | **committed** — 328 style keys, 1,355 property values, zero unresolved |
+| `web-demo/js/analysis-metrics.js` | the JS twin of the metrics layer |
+| `web-demo/js/analysis.js` | `BiyaAnalysisBoard` — the JS twin of the session layer, plus the whole screen |
+| `web-demo/js/position-editor.js` | the JS twin of `PositionEditor` |
+| `web-demo/js/chess-board.js` | `<chess-board>`, extended with the arrow overlay, pointer-drag and the `tap` event |
+| `tools/qa/metrics_key_check.js` | every metrics reference resolves — in **both** languages |
+| `tools/qa/swift_source_keys.js` | every StyleSheet lookup the Swift check makes has a value to find |
+| `tools/qa/replay_position_editor.js` | the Swift tables, replayed through the JS that has actually run |
+| `tools/qa/board_layout_check.js` | the layout invariants the CSS must keep: board fixed and width-sized, panels flexible |
+
+## Extract, don't transcribe
+
+`tools/metrics/extract_board_styles.js` parses the real React Native source with the `typescript` compiler
+already present in the frontend repo's `node_modules` and emits every `StyleSheet.create` value. It
+pre-seeds the six module constants (`SQUARE_SIZE`, `BOARD_SIZE`, …), folds arithmetic, expands
+`...StyleSheet.absoluteFillObject` and resolves `Platform.OS`, so **nothing is left unresolved**.
+
+That is not neatness, it is coverage. The written spec says "eval bar height 3". The source has **two** eval
+bars — `evalBarTrack.height = 8` (the main bar under the board) and `engineEvalBarTrack.height = 3` (the
+per-line micro bar). Transcribing by hand would have sized the main bar wrong and nothing downstream would
+have caught it.
+
+Both `AnalysisMetricsCheck` (Swift) and the `analysis-metrics` suite (JS) assert their encoded constants
+**against `board_styles.json`**. That shared oracle is the twin mechanism: it catches transcription errors
+from the source, not merely drift between two hand-typed copies. Deliberate deviations — the flexible band
+heights, the ⩲/⩱ correction, the ECO panel replacing the masters explorer — are listed in
+[`../PORTING_NOTES.md`](../PORTING_NOTES.md) and excluded from that comparison.
+
+It earns its keep. Adding the typography block, the header title was transcribed as **20** — the value a
+merged lookup returns, because `sidebarStyles` declares its own `headerTitle`. The board's own `styles`
+block says **16**, the check failed on exactly that, and every key is now pinned to `styles`. Nothing else
+in the pipeline would have noticed a header four points too big.
+
+### Two traps the extraction itself sets
+
+**Folded screen dimensions.** Anything the source computed from `Dimensions.get()` is evaluated
+against a 390×844 reference before it reaches the JSON, so `screenHeight * 0.80` arrives as the
+literal `675.2` — right on one phone, wrong on every other, and indistinguishable from an ordinary
+number. The extractor emits a **`_deviceDerived`** section listing every value that is a tidy
+multiple of the reference; there are three, and the metrics layers encode the **ratio**, asserted by
+reproducing the literal:
+
+| key | literal | really |
+|---|---|---|
+| `accModalStyles.card.maxHeight` | 675.2 | H × 0.8 |
+| `styles.menuContainer.width` | 253.5 | W × 0.65 *(Phase 11)* |
+| `sidebarStyles.container.width` | 265.2 | W × 0.68 *(not this screen)* |
+
+**Values outside a StyleSheet.** `components/EvalGraph.tsx` draws its own SVG, so its colours live in
+JSX attributes and the AST walk never saw them. A mutation test proved the gap: changing the graph's
+background to the wrapper's colour survived every assertion. The graph paints `#1A2740` *inside* a
+wrapper the modal has already painted `#0F1A2E` — conflating them is exactly the silent
+wrong-shade bug this machinery exists to prevent. The extractor now scans that file too.
+
+`board_styles.json` is **committed** (unlike `Goldens/`) because it derives from a sibling repo the reader
+may not have — the same reasoning that commits `eco.tsv`.
+
+## The seven bands
+
+`board.tsx:4565-4712` is the real top-level JSX, and it — not the written spec — is the band order:
+
+| # | Band | Height |
+|---|---|---|
+| 1 | Header — `←` · Analysis Board · `☰` | fixed |
+| 2 | Board + arrows, then the **8pt** eval bar directly under it | **fixed — a square derived from the WIDTH** |
+| 3a | Status line — its own row here, not the source's shared one | fixed |
+| 3b | Toolbar — 📂 · ✏️ · 💡 · 🔄 · ▶ · `⏮ ◀ ▶ ⏭` | fixed |
+| 4 | Autoplay speed bar — only while autoplaying | fixed |
+| 5 | Move strip — main line as tokens, branches inline as chips | fixed |
+| 6 | Panels — the **ECO explorer**, where the Lichess masters panel used to be | **flexible, ≤230 — the only one** |
+| 7 | Engine lines — **3pt** micro bar · ≤3 rows · depth + eval symbol + opening | fixed |
+
+Two things reading the source corrected:
+
+- **The RN render has no eval bar at all** — `renderEvalBar:2741` is dead code. The 8pt bar under the
+  board is the spec's addition; the **3pt** one is real and belongs to the *engine panel*.
+- **The opening name lives in the engine panel's info row** (`board.tsx:2836-2841`), beside the depth
+  chip — not in the status bar.
+
+### Which band flexes, and why the board must not
+
+**The board is a fixed square derived from the screen's WIDTH, and band 6 absorbs all the slack.**
+Get this backwards and the screen visibly breaks — it did.
+
+The browser used to size the board `min(100cqw, calc(100cqh - …))` inside a `flex: 1 1 auto` band, so
+its **width tracked the leftover height**. Bands 6 and 7 both have content-driven heights that change
+on *every move* — one ECO row per book continuation, and 0→3 engine rows as the search lands — so the
+board grew and shrank as you played. Height being the binding constraint, it never filled the card
+either. One cause, two very visible symptoms, and it was reported from a screenshot rather than caught
+by a suite. The Swift screen had a milder form of the same mistake: the board band claimed
+`maxHeight: .infinity` while `AnalysisOpeningPanel` was the one capped.
+
+The right answer was already in the repo and already asserted — `bandLayout(viewportHeight, boardEdge)`
+in the metrics layer, with `boardEdge = boardSize(width, pixelRatio)`:
+
+```
+board  = min(boardEdge, viewport - fixed)   // capped only by a SHORT SCREEN, never by content
+panels = min(panelsMaxHeight, viewport - fixed - board)
+```
+
+`fixed` is a constant, so nothing here depends on what the panels contain. Neither renderer was
+calling it; both do now. `sizeBands()` publishes `--an-board-edge` and `--an-panels-h`, and
+`tools/qa/board_layout_check.js` asserts the CSS keeps its side of the bargain — `.an-board` is
+`flex: none` with no `container-type`, no `cq` unit survives in the section, and `.an-panels` is
+`flex: 1 1 auto; min-height: 0`.
+
+On a 375×667 SE the board *is* capped — and the assertions pin that the **panels** band is what gave
+way, not the board.
+
+### The status line has its own row
+
+Band 3 is split. The source puts the status text and the toolbar on one `statusToolbarRow`, which
+works because RN's icon glyphs are narrow; with emoji, nine buttons measure **346 pt in a 365 pt
+card** and the status gets ~19 pt — it vanishes entirely.
+
+The values are not invented: `styles.statusLine` is a block the source **declares for exactly this
+standalone row** (`minHeight: 36`, `paddingHorizontal: 12`) **and then never renders** — dead, like
+`renderEvalBar` and `menuContainer`. So this is the layout the original had and abandoned, restored
+with its own numbers, and pinned to the extracted source like everything else.
+
+## The session layer — behaviour without a screen
+
+Everything the board *does* is a pure function of state, so it lives in **Core**, not the view model:
+
+| Member | Ported from |
+|---|---|
+| `statusText` | `board.tsx:2853-2871` |
+| `openingEntry` / `openingText` | walks root→cursor through `nameFor(_:lastKnown:)` |
+| `arrows` · `engineRows` | `board.tsx:2591-2664` · `:2807-2831` |
+| `stripTokens` | `board.tsx:3049-3120` |
+| `isStale` · `wantsAnalysis` | the restart policy (see below) |
+| `evalParts` | the raw score; the UI maps it through the metrics tables |
+
+That split is the point. `ParityRunner`'s `analysis_session` group (95 assertions) and
+`analysis.js`'s self-test (91) assert the same behaviour in both languages, so the only thing left
+unverifiable is SwiftUI's rendering. Without it, phase 8 would have been "browser only".
+
+`evalParts` marks the boundary: turning a score into a bar fraction or a ⩲ symbol needs the metrics
+tables, which live in the UI module and are unreachable from a Foundation-only Core. The session
+publishes numbers; each platform maps them with the same table.
+
+`AnalysisSession` is **not `Sendable`** — it owns a `MoveTree`, a reference graph. It stays
+`@MainActor`, and only `ChessPosition` / `SearchLimits` / `AnalysisSnapshot` cross to the background.
+
+## Threading and the engine budget
+
+The engine is synchronous and never yields, so it runs in `Task.detached(priority: .userInitiated)`
+with `await MainActor.run` hops — the shape `ChessGameVM.maybeBotMove` already uses
+(`PlayView.swift:139-148`), including its stale guard. `CancelToken` is an `NSLock`-guarded flag
+because `shouldCancel` is a plain synchronous closure called on the search thread.
+
+**A deadline bounds the search, not a depth cap.** Measured in the browser, cost is ~6× per ply and
+varies **15× by position type** — endgame depth 4 is 173 ms, midgame depth 4 is 2794 ms. Any fixed
+depth is therefore too slow somewhere or too shallow everywhere. A 1200 ms budget inside
+`shouldCancel` reaches depth 4+ in quiet positions, stops at 3 in sharp ones, and holds total wall
+time to within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth` is only a ceiling.
+
+In JavaScript there are no Web Workers (`file://` gives an opaque origin), so `analyzeProgressive`
+runs **one depth per macrotask**: lines appear as they are found and a cancel lands immediately.
+Its synchronous core, `analyzeSteps`, is what keeps a Promise-shaped API inside the assertions.
+
+### The stale-search bug we do not reproduce
+
+`analyzePosition` guarded with `if (isAnalyzing || fen === lastAnalyzedFen) return;`
+(`board.tsx:885`). Because its fetch could not be cancelled, a position change *during* a request was
+**silently dropped** and the panel kept showing the previous position's lines forever. Our engine is
+cancellable, so staleness means cancel-and-restart. This is asserted (`isStale`, `wantsAnalysis`) and
+was checked by hand in Chrome: after moving mid-search, every arrow is legal in the *new* position.
+
+## Game review
+
+🔬 in the toolbar evaluates every position on the **main line**, classifies each move, scores both
+accuracies, and shows the result in one modal — accuracy pair, eval graph, and a count table with
+all-zero tiers dropped. The move strip then carries each move's tier symbol.
+
+The classification and accuracy maths is `GameReview.swift`, untouched and pinned by 303 golden
+cases; `ReviewAnnotator` layers the `book` tier on top without ever recomputing accuracy.
+
+### The runner, and why it steps
+
+A review is expensive: measured on a 40-move game (41 positions), a fixed depth 3 costs **28 s**. So
+`ReviewAnnotator.Evaluator` (and `BiyaReview.reviewSteps`) evaluate **one position per call**, which
+buys two things a single blocking loop cannot:
+
+- each position gets its own **200 ms wall-clock budget**, passed through `shouldCancel`, so a sharp
+  position stops at depth 2 instead of grinding to depth 3;
+- the caller yields between steps, so the screen paints and **Cancel lands immediately**.
+
+| budget | 41 positions | depths |
+|---|---|---|
+| 100 ms | 5.0 s | mostly d2 |
+| **200 ms** | **~9 s** | d2–d3 |
+| 400 ms | 17.4 s | mostly d3 |
+
+In the browser the stepper measures 207–232 ms per position — on budget. A 40-move game takes ~18 s,
+inside the original's own "This may take 20–30 seconds" promise (`board.tsx:3831`), but with a real
+progress bar rather than a static string.
+
+**Depth 2–3 classification is coarse.** The thresholds in `classifyMove` were written for a depth-12
+Stockfish; at depth 2 the evals are noisy, so "mistake" versus "blunder" is not trustworthy. That is
+a property of the interim engine, not of the port, and it goes away when Stockfish lands.
+
+`evaluate(_:engine:limits:)` is deliberately **left in place** — it is right for a headless harness,
+and `review_book` and `tools/qa/review_demo.js` still use it.
+
+### The index rule
+
+`moveEvaluations[].moveIndex` is **1-based** (0 is the starting position) while the plan's nodes are
+0-based, so the node for an evaluation is `nodes[moveIndex - 1]` — the same `- 1` the source does at
+`applyClassificationsToTree:1827`. Both parity suites assert this with a **hand-built** result rather
+than an engine's, so the mapping is proved independently of what any search happens to return.
+
+A cancelled run leaves the evaluations **short**. `isComplete` is the guard: a short array means
+*cancelled*, never a truncated game, and nothing is stamped.
+
+### Deviations
+
+- **One action does both halves.** The original splits review across two incomplete paths:
+  `runAccuracyAnalysis:2254` shows the modal but discards `move_evaluations` (so the strip stays
+  blank), and `handleAnalyzeGame:1854` stamps the strip but shows only an `Alert` — no modal, no
+  graph, no cancel.
+- **No classification badge on the board.** `renderAnnotationOverlay:2661` draws the *manual* PGN
+  glyph for the selected move and never reads `reviewClassification`. `AnalysisBadge` waits for
+  Phase 11's annotation picker.
+- **Book appears in the table.** The source's `CLASSIFICATION_ORDER` has 9 entries against a 10-key
+  table, so a Book row could never display.
+- The third modal state is **"Not enough moves"**; offline, the engine cannot be unreachable, so the
+  429/503/network branches have no counterpart.
+
+## Persistence
+
+💾 saves the current game with its metadata; 📂 opens the library. Games live in folders, and an
+autosaved draft means closing the screen mid-analysis is not destructive.
+
+**PGN is the source of truth.** A saved record stores the full PGN — headers included, unlike the
+original's movetext-only `generatePgn()` — plus a denormalised index of the fields the library list
+shows, so drawing it does not mean parsing fifty PGNs. Only `title` and `notes` have no PGN tag of
+their own; the other eleven round-trip through the header block.
+
+### The store
+
+Records mirror the Laravel schema (`analysis_sessions`, `analysis_folders`) so a future sync stays
+possible, and the field limits are the **controller's `validate()` rules** — tighter than the columns,
+so they are the real contract. `AnalysisStore` is pure: no filesystem, no clock. **Time is an injected
+parameter**, the same way `PuzzleServing` injects its picker, which is what makes the draft TTL
+testable at all. `AnalysisLibraryFile` is ten lines of atomic I/O around it.
+
+It is plain `Codable` JSON rather than SwiftData. That is deliberate — see below.
+
+Rules worth knowing:
+
+- **Deleting a folder unfiles its games, never deletes them** (the FK is `nullOnDelete`, and the
+  controller nulls them explicitly first). Default folders refuse both rename and delete (403).
+- Three folders are seeded lazily on first use, with the server's exact names, colours and order:
+  *Opening Repertoire*, *Setup Position*, *My Games*.
+- Ids are never reused. Saving with an id that no longer exists **inserts with a fresh id**.
+- Search is a plain substring across title, notes and both players — `ilike '%term%'`, so it matches
+  mid-word.
+- Drafts: **800 ms** debounce, **24-hour** TTL, silent restore, and reading a stale draft **prunes**
+  it. All four are the source's own behaviour.
+
+### One canonical document
+
+Because both stores are JSON, the same canonical library string is hardcoded in
+`web-demo/js/analysis-store.js` and in ParityRunner's `analysis_store` group, and each language
+asserts it decodes to the same records. That is a genuine cross-language contract rather than two
+implementations agreeing with themselves — and it is only possible because this is JSON and not a
+`ModelContainer`, which no harness in this repo can reach.
+
+`tools/qa/canonical_library_check.js` guards it: it reads the literal out of `main.swift` and
+compares byte for byte. Without that, a drift would be invisible — each side would keep asserting
+against its own copy and both suites would stay green while the contract quietly evaporated.
+
+Byte-identical *re-encoding* across languages is deliberately **not** claimed: `JSONEncoder(.sortedKeys)`
+orders keys alphabetically and `JSON.stringify` uses insertion order. Each side asserts its own round
+trip is a fixpoint; the shared claim is the decoded values.
+
+### Deviations
+
+Three of them are source bugs:
+
+- **`initial_fen` is never sent on save** (board.tsx:1026-1043), and `generatePgn()` emits no `[FEN]`
+  header, so a custom-setup game does not survive a save/load round trip there. Ours persists it.
+- **`@biyaherong_openfile_draft` is write-only** — written at :840, read nowhere. Unsaved edits to an
+  opened game are silently lost. Ours reads it back.
+- **The save modal has no Title field**, though the column is NOT NULL and the library shows the
+  title. Ours has one.
+
+And three are consequences of being offline: no free-session cap (no accounts), no
+`share_token`/`is_shared` (nothing to share through), and no `move_annotations` — the server needs
+that column because its client serialises movetext only, while ours emits NAG suffixes inline.
+
+## Setup Position (edit mode)
+
+`PositionEditor` is a plain value type holding 64 squares, a side to move and four castling flags. Place
+a piece, erase one, clear the board, flip the turn, paste a FEN — and `validate()`.
+
+**Reach it from ☰ → Edit Board.** While it is open the board becomes a fixed `BOARD_SIZE` square and the
+status row, move strip, autoplay bar and engine lines all disappear. That is the source's own behaviour
+(`board.tsx:4616`, "to maximise board space"), and it is also what makes the panel fit: the board band is
+`flex: 1` and would otherwise push the Apply button off the bottom of a phone.
+
+**Double-tap an occupied square to remove the piece** — the source's gesture, at its own 350 ms window.
+
+### What the validator refuses, and why it has to
+
+The original checks only two things itself (`validateKingPositions:334`) and hands the rest to chess.js:
+`toggleEditMode:2448` builds the FEN, calls `new Chess(fen)`, and catches the throw. Offline there is no
+chess.js, so what that constructor refused had to be written down:
+
+| Issue | Message |
+|---|---|
+| `whiteKingMissing` / `blackKingMissing` | *"White king is missing."* — the source's own string |
+| `tooManyWhiteKings` / `tooManyBlackKings` | more than one king of a colour |
+| `kingsAdjacent` | *"Kings cannot be adjacent — illegal position."* — also verbatim |
+| `pawnOnBackRank` | a pawn on rank 1 or rank 8 |
+| `sideNotToMoveInCheck` | you cannot be about to be captured |
+
+They come back in that fixed order so the banner does not flicker between renders, and the adjacency test
+walks **every** king pair — on a board that already has a duplicate king, checking only the first of each
+colour would let a genuine adjacency hide behind the count error.
+
+One deliberate softening: **castling rights whose king or rook is not on its home square are dropped
+silently** (the X-FEN convention) rather than reported. Ticking `⬜K` on a board with no h1 rook is a
+statement of intent, not an error, and refusing would be a dead end with no obvious fix.
+
+The editor never emits an en-passant square and always emits fresh clocks — neither does the original,
+because chess.js produces `-` and `0 1` for any position it did not reach by playing moves.
+
+## PGN in and out
+
+- **Import** (☰ → Import PGN) takes pasted text or a file. Variations, NAGs and comments all survive,
+  because `PGN.parse` has handled them since Phase 3; what Phase 11 added is the screen.
+  The headers **pre-fill the save form**, but only where a field is still empty (`handleImportPgn:2333`),
+  so an import never overwrites something you typed. A multi-game file loads the **first** game and says
+  how many it found.
+- **Export** (☰ → Copy PGN / Export PGN) serialises the whole tree — headers, variations, NAGs and all —
+  and the round trip is exact: importing an export and exporting again is byte-identical, asserted in
+  both languages. A custom start position survives it too, via `[SetUp]`/`[FEN]`, which the source's
+  `generatePgn()` does not emit.
+
+`PGN.parse` is deliberately tolerant: hand it a paragraph and it returns a zero-move game full of parse
+errors rather than refusing. That is right for a parser and wrong for an import — wiping the board because
+someone pasted prose is destructive — so `importPGN` counts a game only if it produced **at least one
+move, or a custom start position**. A setup-only PGN is a legitimate import; a paragraph is not, and the
+board is left exactly as it was.
+
+## Annotations, and the badge that was in the wrong corner
+
+Annotations are stored as **NAG codes** on the node, not as symbol strings. `MoveNode.nag` already existed
+and `PGN` already round-trips `$n`, so a symbol string would have been a second encoding of the same fact.
+`AnalysisSession.nagSymbols` is the one table, and `nag(forSymbol:)` is derived from it so the two cannot
+disagree.
+
+Long-press a move token for the picker; long-press a **branch chip** and you get the variation card
+instead, because that is the useful action there. Both at 400 ms — the source's `delayLongPress`.
+
+Two details ported exactly as they are:
+
+- The badge draws for **move-quality annotations only**. `renderAnnotationOverlay:2670` looks the symbol
+  up in `MOVE_ANNOTATIONS` alone, so `±` shows in the move strip and draws nothing on the board.
+- It reads the **manual** annotation, never the review classification — those appear only as the 9pt
+  symbol after the SAN in the strip.
+
+### The corner, and why no suite caught it
+
+`squareToPixel` (`board.tsx:320-329`) returns the square's **centre**, and `renderAnnotationOverlay`
+adds `+ SQUARE_SIZE * 0.29` to **both** axes — bottom-right. This rebuild subtracted on y, in Swift *and*
+in JavaScript, and each asserted the other's answer. Two hand-typed copies agreeing is not verification.
+
+The reason it was possible: `board_styles.json` covered StyleSheet blocks and module constants, and the
+badge multipliers live inside a render function, so they were on the plan's explicit hand-transcribe list.
+`extract_board_styles.js` now has a **`renderConstants`** section that walks `squareToPixel`,
+`renderArrowsOverlay`, `renderAnnotationOverlay` and `renderEditSquare`, flattening every
+`const NAME = <expr>` and every braced JSX attribute into signed additive terms:
+
+```json
+"cy": { "text": "pos.y + SQUARE_SIZE * 0.29",
+        "terms": [ { "sign": 1, "ref": "pos.y", "ratio": 1 },
+                   { "sign": 1, "ref": "SQUARE_SIZE", "ratio": 0.29 } ] }
+```
+
+Both harnesses now assert the **direction** of an offset, not only its size — and the anchor function is
+extracted too, so "centre or corner?" is answered by data rather than by reading. That retires the last
+hand-transcribed set.
+
+One consequence worth knowing when editing the overlay: unlike the arrows, the badge **cannot** be drawn
+in a one-unit-per-square viewBox. Its geometry mixes ratios of a square (radius 0.21, offset 0.29) with
+**absolute point** offsets (the 1.5pt shadow and the 1.5pt ring). In a unit box those 1.5s become one and
+a half squares. It draws in the board's real pixel space instead.
+
+## Haptics
+
+`board.tsx` has none. But it renders `DragDropChessBoard`, and that component fires
+`Haptics.impactAsync(Light)` on **drag pickup** (`DragDropChessBoard.tsx:351`), after its piece-exists and
+correct-colour guards — so the analysis board does have exactly one, by inheritance.
+
+`Haptics.swift` ports that and adds three, chosen with the user and recorded in `PORTING_NOTES.md`:
+
+| Kind | When | Source? |
+|---|---|---|
+| `.pickUp` | a piece is picked up | ported |
+| `.move` | a quiet move lands | added |
+| `.capture` | a capture or a check | added |
+| `.success` | a game review finishes | added |
+
+Nothing else vibrates — navigation, menu items and modals are deliberately silent. macOS is a no-op, which
+is why this lives in the UI layer and not in Core.
+
+## The ☰ menu
+
+Four sections, matching `renderMenu:4489`: **Game** (New Game · Edit Board · Import PGN · Analyze Game),
+**File** (Save · Load), **Share** (Copy PGN · Export PGN), **Settings** (Engine Arrows · Autoplay Speed ·
+Board Theme).
+
+Two notes for anyone touching its metrics. The live block is **`sidebarStyles`**, width `W × 0.68`;
+`styles.menuContainer` (`W × 0.65`) belongs to a **dead** earlier menu, and both are flagged in
+`board_styles.json`'s `_deviceDerived` for exactly that reason — the check asserts that the two really are
+different widths, so encoding the wrong one fails. Board Theme is the one row the source's menu does not
+have: offline there is no Master DB item to sit there, and the theme picker had nowhere else to live once
+☰ stopped being its Phase-8 stand-in.
+
+**The toolbar is the source's nine buttons**, not eleven. Phases 9 and 10 put 💾 🔬 📂 there because there
+was no ☰ yet; measured, eleven came to 437pt inside a 365pt card and squeezed the status text into three
+lines that collided with them. Save, Load and Analyze Game live in ☰ where the source keeps them, and the
+toolbar's ✏️ is what it is in the source — the **annotation picker for the current move**
+(`board.tsx:4626`), disabled at the root — not Edit Board.
+
+## The metrics layer
+
+`AnalysisMetrics.swift` and `web-demo/js/analysis-metrics.js` are line-for-line mirrors holding every number
+the screen uses:
+
+- `AnalysisBoard` — `size(screenWidth:pixelRatio:)`, the original's
+  `floor(width * ratio / 8) * 8 / ratio`, so a square is always a whole number of device pixels.
+- `AnalysisLayout` — the seven bands. **They are (fixed, flexible) pairs, not seven literals:** seven fixed
+  heights overflow a 375×667 SE, so the panels band flexes down from its 230 max and the board band absorbs
+  the slack. "The bands sum to the viewport at 375×667, 390×844 and 430×932" is an assertion, not a hope.
+- `AnalysisPalette`, `BoardTheme`, `BoardStyle`, `AnalysisIndicator` — colours and square fills.
+- `AnalysisArrow`, `AnalysisBadge` — pure geometry, returning points a renderer just draws.
+- `AnalysisEval`, `AnalysisGraph`, `AnalysisTables` — the eval bar/graph and the classification,
+  annotation, eval-symbol and autoplay-speed tables.
+- `AnalysisTiming` — debounce 300 ms, autosave 800 ms, animation 400 ms, double-tap 350 ms. (`400` appears
+  six more times in the source as `delayLongPress`; a bare grep would conflate the two.)
+
+**No numeric literal or arithmetic belongs in a view body.** Every number is a stored property or a pure
+function here. That rule is the only reason the layout can be asserted without a renderer — break it and
+coverage drains out silently. It is why `BoardStyle` has `dotSize(square:)` rather than the view writing
+`square * style.dotRatio`.
+
+## Board upgrades
+
+`BoardView` is **extended, not forked** — Play, Puzzles and the two `PhoneView` call sites use the same
+board, and duplicating its sliding-piece identity logic would drift. Three defaulted stored properties were
+appended **after** `onTap`:
+
+| Property | Default | Effect when defaulted |
+|---|---|---|
+| `style: BoardStyle` | `BoardStyle()` | reproduces today's exact inline colours |
+| `customHighlights: [Int: Color]` | `[:]` | nothing drawn |
+| `onDragMove: ((Int, Int) -> Void)?` | `nil` | the drag gesture is masked off entirely |
+
+Two things about that are load-bearing and easy to get wrong:
+
+- **New stored properties are never `private`.** `private let x = <value>` is omitted from the memberwise
+  initializer (SE-0242) and so does not downgrade its access — which is why the two colour constants could be
+  private before. A **`private var`** *is* included, would make the init private, and would break the
+  cross-file call sites in `PhoneView.swift` and `PuzzleView.swift`.
+- **Drag attaches to the board-level `ZStack`, never to pieces** — `pieceLayer` is
+  `allowsHitTesting(false)`, so a gesture on a piece would never fire. It is disabled with
+  `.gesture(dragGesture, including: onDragMove == nil ? .subviews : .all)`; a plain `if` would change the
+  body's return type.
+
+`BoardStyle` carries a **fill mode**, not just colours: the spec's highlights *replace* the square fill,
+while today's board *overlays* translucent rectangles. That is a structural difference, so `replacesFill`
+picks between two models rather than pretending a palette swap is enough.
+
+Arrows are an `.overlay` at the call site (`BoardArrows.swift`) rather than a member of `BoardView`, matching
+how `PromotionOverlay` is already applied — it keeps the shared board free of anything analysis-specific.
+
+The JavaScript half is documented in [`web-demo.md`](web-demo.md#arrows-and-drag-added-for-the-analysis-board),
+including the three hazards that make drag able to silently break tap-to-move in Play and Puzzles.
+
+## Testing notes
+
+- `tools/qa/board_component_test.js` runs `chess-board.js` inside a `vm` context with a purpose-built fake
+  DOM. It is **not** a browser: it cannot prove layout or real hit-testing, and it stubs the rules adapter.
+  What it does prove is the arrow geometry (cross-checked against `analysis-metrics.js`, which is an
+  independently written implementation), the drag state machine, and that tap-to-move still completes with
+  drag enabled.
+- Real hit-testing is checked in the browser, by `?selftest`, using `elementFromPoint` through the Shadow
+  DOM. That is the assertion that catches the overlay stealing the tap target.
+- The engine's mate expectations came from an independent brute-force checker, not from reading the board —
+  eyeballing them produced four wrong entries.
+
+After any change here, log it in [`../CHANGELOG.md`](../CHANGELOG.md), record deviations in
+[`../PORTING_NOTES.md`](../PORTING_NOTES.md), and keep the JS twin in lockstep — a divergence between the two
+pure layers is exactly what the mirror exists to catch.

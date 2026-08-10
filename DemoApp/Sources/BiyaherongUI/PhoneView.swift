@@ -54,6 +54,9 @@ struct PhoneApp: View {
     @StateObject private var puzzleVM = PuzzleVM()
     @StateObject private var gameVM = ChessGameVM()
     @State private var tab = 0
+    /// The Analysis Board is a pushed route in the original, with no tab bar — its seven bands
+    /// cannot spare the height. It therefore covers the whole phone rather than living in a tab.
+    @State private var showAnalysis = false
 
     // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
     // make the memberwise initializer private, so only the file-local no-argument form would be
@@ -69,32 +72,55 @@ struct PhoneApp: View {
             let basis = CGSize(width: shell.size.width,
                                height: shell.size.height
                                    + shell.safeAreaInsets.top + shell.safeAreaInsets.bottom)
-            VStack(spacing: 0) {
-                #if os(macOS)
-                statusBar   // simulated status bar for the desktop phone-frame preview only
-                #endif
-                Group {
-                    switch tab {
-                    case 0: home(basis: basis)
-                    case 1: PuzzlesPhone(vm: puzzleVM)
-                    case 2: PlayPhone(vm: gameVM)
-                    default: ProfilePhone(vm: puzzleVM)
+            // A ZStack sibling rather than `.fullScreenCover`, which does not exist on macOS — and
+            // this view renders inside the macOS demo (AppShell.swift:46). It also has to cover
+            // `PhoneTabBar`, which is a plain VStack sibling and not a real TabView.
+            ZStack {
+                VStack(spacing: 0) {
+                    #if os(macOS)
+                    statusBar   // simulated status bar for the desktop phone-frame preview only
+                    #endif
+                    Group {
+                        switch tab {
+                        case 0: home(basis: basis)
+                        case 1: PuzzlesPhone(vm: puzzleVM)
+                        case 2: PlayPhone(vm: gameVM)
+                        default: ProfilePhone(vm: puzzleVM)
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    PhoneTabBar(tab: $tab)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                PhoneTabBar(tab: $tab)
+                if showAnalysis {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        AnalysisBoardScreen(onClose: { showAnalysis = false })
+                    }
+                    .background(AnalysisPalette.screenBg)
+                    .transition(.move(edge: .bottom))
+                }
             }
             .frame(width: shell.size.width, height: shell.size.height)
         }
     }
 
-    /// Only the three callbacks with a real destination today are wired; the other seven are the
-    /// empty closures the screen is designed around and stay that way until those screens exist.
+    /// Only the callbacks with a real destination today are wired; the rest are the empty closures
+    /// the screen is designed around and stay that way until those screens exist.
+    ///
+    /// Arguments must follow `HomeScreen.init`'s declaration order — `onAnalysis` sits between
+    /// `onPuzzles` and `onPlayCoach`.
     private func home(basis: CGSize) -> some View {
         HomeScreen(isColorful: homeColorful,
                    scaleBasis: basis,
                    onAvatar: { tab = 3 },
                    onPuzzles: { tab = 1 },
+                   onAnalysis: {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showAnalysis = true
+                       }
+                   },
                    onPlayCoach: { tab = 2 })
     }
 

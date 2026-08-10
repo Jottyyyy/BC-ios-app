@@ -13,7 +13,10 @@
  * ========================================================================== */
 (function (global) {
   'use strict';
-  var E = global.Engine;
+  // Under Node, require the engine explicitly rather than trusting that some earlier script already
+  // set the global — the same pattern movetree.js and pgn.js use. In the browser this is just the
+  // global, exactly as before.
+  var E = (typeof module !== 'undefined' && module.exports) ? require('./engine.js') : global.Engine;
 
   var MATE = 1000000;
   var WIN = 1000000000; // search window bound; comfortably wider than MATE
@@ -182,9 +185,13 @@
 
   global.Coaches = { all: COACHES, ratingFloor: RATING_FLOOR, ratingCeiling: RATING_CEILING };
   global.CoachAI = {
-    MATE: MATE,
+    MATE: MATE, WIN: WIN,
     material: material, evaluate: evaluate, negamax: negamax,
     ordered: ordered, captureScore: captureScore,
     bestMove: bestMove, bestMoveAsync: bestMoveAsync, mulberry32: mulberry32
   };
+
+  /* Makes the coach AI requireable headlessly under Node without changing the browser behaviour.
+     Like engine.js, this file has no named binding, so the branch lives inside the IIFE. */
+  if (typeof module !== 'undefined' && module.exports) { module.exports = global.CoachAI; }
 })(typeof window !== 'undefined' ? window : globalThis);

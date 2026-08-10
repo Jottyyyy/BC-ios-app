@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Native, **100% offline** Swift rebuild of **Biyaherong Chess Coach** (originally Laravel 12 + React/Inertia
-+ a Sanctum mobile API). The current state is the **Parity Core** — a pure-Swift domain layer pinned to the
-original backend by a golden-vector parity harness.
++ a Sanctum mobile API). The state is a **Parity Core** — a pure-Swift domain layer pinned to the original
+backend by a golden-vector parity harness — plus two user-facing screens built on it: the **Home dashboard**
+and the **Analysis Board** (the app's most complex screen, and complete).
 
 **Ground truth for every ported algorithm is the real Laravel backend at `../BYAHERONG-COACH-LARAVEL`**
 (a sibling repo, *not* in this tree) — the actual PHP controller behavior, not prose. The proposal
@@ -41,6 +42,11 @@ swift run ParityRunner                        # run the parity suite; exit 0 = a
 tools/oracle/run.sh                           # regenerate goldens from PHP, THEN run the suite
 php tools/oracle/generate_goldens.php         # goldens only -> Goldens/*.json  (Goldens/ is gitignored)
 python3 tools/qa/mutation_test.py             # mutation testing (proves the suite catches regressions)
+
+# --- the JavaScript gate: the ONE full suite that runs on this Windows checkout ---
+node tools/qa/js_goldens.js                   # every JS suite + the oracle replays + the Swift cross-checks
+node tools/qa/swift_lint.js                   # brackets + public-exposes-internal, for uncompilable Swift
+node tools/metrics/extract_board_styles.js    # re-derive board_styles.json from the RN source (committed)
 
 # --- macOS demo app (BiyaherongUI package) ---
 DemoApp/run-demo.sh                           # build (release) + bundle + launch BiyaherongCoachDemo.app
@@ -80,7 +86,10 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   UIKit/SwiftUI/SwiftData). Engines: `ChessBoard` (FEN + legal moves + SAN, perft-verified), `ChessAI`
   (negamax + PST eval + 5 coach personas), `Rating` (ELO K=32/floor 400 + tiers), `Streak`,
   `PuzzleServing`, `DailyLimits`, `DailyGoal`, `PuzzleRush`, `GameReview`, `Tournament` (Swiss/Round-Robin
-  + Buchholz/SB/direct-encounter tiebreaks), `PHPCompat`.
+  + Buchholz/SB/direct-encounter tiebreaks), `PHPCompat`. The Analysis Board adds `ChessNotation`
+  (SAN/UCI *parsing*), `ChessRules`, `MoveTree`, `PGN`, `AnalysisEngine` + `LocalEngine`, `OpeningBook`,
+  `ReviewAnnotator`, `AnalysisSession`, `AnalysisStore` and `PositionEditor` — all Foundation-only, all
+  asserted; see `docs/analysis-board.md`.
 - **`Sources/ParityRunner/main.swift`** — the in-house assertion harness (no XCTest); hosts
   `requireMinCounts` (per-group assertion floors).
 - **`DemoApp/`** — its own SwiftPM package: `BiyaherongUI` (SwiftUI + `SVGVector.swift` renderer +
@@ -88,9 +97,12 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   and the puzzle DB ship **inside** this package and load via `Bundle.module`.
 - **`ios/`** — XcodeGen-driven app shell (`project.yml` → `Biyaherong.xcodeproj`); portrait-only; depends on
   `DemoApp` for `BiyaherongUI`. Build/signing runbook: `ios/BUILD-iOS.md`.
-- **`tools/`** — `oracle` (PHP → golden JSON), `qa` (mutation testing), `puzzlebank` (CSV → SQLite).
+- **`tools/`** — `oracle` (PHP → golden JSON), `eco` (CC0 TSVs → the bundled opening book), `metrics`
+  (TypeScript AST walk over the RN source → the committed `board_styles.json`), `qa` (the JS gate, mutation
+  testing, and the checks that stand in for a Swift compiler), `puzzlebank` (CSV → SQLite).
 - **`web-demo/`** — browser rebuild for Windows (`js/engine.js`, `js/ai.js`, `js/rating.js`, a reusable
-  `<chess-board>` Web Component, etc.). **Preview only — NOT parity-tested.**
+  `<chess-board>` Web Component, etc.). **Preview only — NOT parity-tested** — but its self-tests *are* the
+  gate for anything Swift cannot compile here.
 
 ## The parity contract (rules that cause real breakage if ignored)
 
@@ -117,13 +129,24 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   or the renderer. A drop-in set uses the same `<kind>-<w|b>.svg` names in `Pieces/`.
 - **Mutation suite:** 40/41 killed, 1 documented-equivalent survivor (`dailygoal_gap_branch`). A surviving
   *non-equivalent* mutant is a coverage hole — close it with a new golden.
+- **EXTRACT, DON'T TRANSCRIBE — and that includes signs.** Every number the Analysis Board draws comes from
+  `tools/metrics/board_styles.json`, re-derived from the RN source on every run. Two hand-typed copies
+  agreeing with each other is *not* verification: the annotation badge shipped in the wrong corner in both
+  languages because a `+` had been transcribed as a `-`. Render-function geometry is now extracted as
+  **signed terms** (`renderConstants`), and `tools/qa/metrics_key_check.js` + `swift_source_keys.js` check
+  that every constant reference and every source lookup resolves — in Swift as well as JS, because there is
+  no compiler here to do it.
 - **Licensing:** piece art is CC BY-SA, Nunito is SIL OFL, and the Stockfish decision makes the whole app
   **GPL** — keep attributions intact.
 
 ## Notes
 
-- Assertion counts differ across docs (README "30,275 / 28 groups" vs PORTING_NOTES "30,258 / 27"). Treat the
-  exact count as informational — the real invariants are **exit 0** and the `requireMinCounts` floors in
-  `Sources/ParityRunner/main.swift`.
+- **Assertion counts in prose are informational.** They drift; the real invariants are **exit 0** and the
+  `requireMinCounts` floors in `Sources/ParityRunner/main.swift`, plus a green `node tools/qa/js_goldens.js`.
+- **`swift` is not on PATH on the Windows checkout.** Everything in `Sources/` since the notation core has
+  been written blind and is verified three ways instead: the JS twin runs the same algorithm, the
+  hand-authored Swift tables are replayed through that twin
+  (`tools/qa/replay_position_editor.js`), and `swift_lint.js` catches the structural errors. `swift build`
+  remains the last gate, on a Mac.
 - Locked decisions: the full **550,000-puzzle** bank (~100 MB) is built to `puzzles.sqlite` at build time;
   the engine will be **Stockfish (GPL)** with the app source published openly.

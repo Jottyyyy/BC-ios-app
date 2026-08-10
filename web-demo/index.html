@@ -77,8 +77,13 @@
       Tip: append <span class="strong">?selftest</span> to the URL for the engine perft check.</div>
   </footer>
 
-  <!-- Load order matters: engine → ai/rating → sound → board component → puzzles → home → app →
-       device. All are classic scripts (no ES modules) so this runs from file:// on Windows. -->
+  <!-- Load order matters. Roughly: engine → ai/rating → sound → board component → puzzles → home
+       → eco-data → the analysis stack → app → device. Each analysis file reads the ones above it:
+       movetree and pgn read the engine (and pgn reads movetree); analysis-engine reads ai;
+       opening-book reads eco-data; analysis.js reads all of them plus analysis-metrics. All are
+       classic scripts (no ES modules) so this runs from file:// on Windows. eco-data.js is ~740 KB
+       of generated book; it is loaded eagerly because fetch() is blocked on file:// and it parses
+       in a few tens of milliseconds anyway. -->
   <script src="js/engine.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/rating.js"></script>
@@ -86,6 +91,16 @@
   <script src="js/chess-board.js"></script>
   <script src="js/puzzles.js"></script>
   <script src="js/home.js"></script>
+  <script src="js/eco-data.js"></script>
+  <script src="js/movetree.js"></script>
+  <script src="js/pgn.js"></script>
+  <script src="js/analysis-engine.js"></script>
+  <script src="js/review.js"></script>
+  <script src="js/opening-book.js"></script>
+  <script src="js/analysis-metrics.js"></script>
+  <script src="js/analysis-store.js"></script>
+  <script src="js/position-editor.js"></script>
+  <script src="js/analysis.js"></script>
   <script src="js/app.js"></script>
   <script src="js/device.js"></script>
 </body>

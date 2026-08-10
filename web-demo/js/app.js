@@ -105,10 +105,27 @@
     // changes — the leaf renderers reached directly (renderGame, renderCoachSelect) are all
     // non-home and always follow a render().
     view.classList.remove('flush');
+    // The Analysis Board also hides the tab bar: it is a pushed route in the original, and its
+    // seven bands cannot spare the height. Cleared here for the same reason .flush is.
+    appCard().classList.remove('an-mode');
     if (current === 'home') renderHome();
     else if (current === 'play') renderPlay();
     else if (current === 'profile') renderProfile();
+    else if (current === 'analysis') renderAnalysis();
+    // NOTE: this trailing else silently renders Puzzles for any unknown id — a new screen MUST get
+    // its own branch above, or it will look like Puzzles with no error anywhere.
     else renderPuzzles();
+  }
+  function appCard() { return view.closest ? view.closest('.app-card') : view.parentNode; }
+
+  /* ======================================================================== *
+   *  ANALYSIS BOARD — see js/analysis.js
+   * ======================================================================== */
+  function renderAnalysis() {
+    appCard().classList.add('an-mode');
+    BiyaAnalysisBoard.render(view, function () {
+      current = 'home'; renderTabbar(); render();
+    });
   }
 
   /* ======================================================================== *
@@ -120,6 +137,7 @@
       // callbacks the screen is designed around (§12).
       if (action === 'puzzles') { current = 'puzzles'; renderTabbar(); render(); }
       else if (action === 'playCoach') { current = 'play'; renderTabbar(); render(); }
+      else if (action === 'analysis') { current = 'analysis'; renderTabbar(); render(); }
       else if (action === 'avatar') { current = 'profile'; renderTabbar(); render(); }
     });
   }
@@ -545,6 +563,50 @@
   /* ======================================================================== *
    *  SELF-TEST (?selftest) — engine move-generation sanity in the browser
    * ======================================================================== */
+  // Mount a real <chess-board> off-screen, draw an arrow over it, and ask the browser what is
+  // actually under the middle of a square. The answer must be a `.sq` — if the overlay or the
+  // piece layer ever becomes hit-testable, this is what catches it.
+  function boardOverlayCheck(ck) {
+    var host = el('div');
+    // On-screen on purpose. `elementFromPoint` returns null outside the viewport, so the usual
+    // left:-9999px trick would make every assertion below vacuous. Nearly transparent and on top
+    // for the few milliseconds this runs, then removed.
+    host.style.cssText = 'position:fixed;left:0;top:0;width:256px;height:256px;z-index:99999;opacity:.01';
+    var b = document.createElement('chess-board');
+    b.rules = { legalMovesFrom: function (fen, sq) { return sq === 12 ? [{ to: 28, promotion: null }] : []; } };
+    b.draggablePieces = true;
+    b.arrows = [{ from: 12, to: 28, rank: 0 }];
+    host.appendChild(b);
+    document.body.appendChild(host);
+    b.setPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', { animate: false });
+    try {
+      var sh = b.shadowRoot;
+      var boardEl = sh.querySelector('.board');
+      var overlay = sh.querySelector('.overlay');
+      ck('board overlay drawn', !!overlay && overlay.childNodes.length === 2, true);
+      var r = boardEl.getBoundingClientRect();
+      ck('board laid out', r.width > 0, true);
+      ck('overlay is pointer-events:none', getComputedStyle(overlay).pointerEvents, 'none');
+      ck('piece layer is pointer-events:none', getComputedStyle(sh.querySelector('.pieces')).pointerEvents, 'none');
+      ck('draggable board disables touch-action', getComputedStyle(boardEl).touchAction, 'none');
+      // e2: file 4, rank 1 -> visual col 4, row 6, white at the bottom.
+      var hit = sh.elementFromPoint(r.left + r.width / 8 * 4.5, r.top + r.width / 8 * 6.5);
+      var cell = hit && hit.closest ? hit.closest('.sq') : null;
+      ck('the overlay does not steal the tap target', !!cell, true);
+      ck('and it is the right square', cell ? Number(cell.dataset.sq) : -1, 12);
+      var moved = null;
+      b.addEventListener('move', function (e) { moved = e.detail.uci; });
+      if (cell) {
+        cell.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+        sh.querySelector('[data-sq="28"]').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      }
+      ck('tap-to-move still fires with drag + arrows on', moved, 'e2e4');
+    } catch (err) {
+      ck('board overlay check threw: ' + err.message, false, true);
+    }
+    document.body.removeChild(host);
+  }
+
   function runSelfTest() {
     var results = [];
     function ck(label, got, want) { results.push({ ok: got === want, label: label, got: got, want: want }); }
@@ -561,11 +623,58 @@
     var home = BiyaHome.selfTest();
     ck('home pure layer (' + home.passed + ' assertions)', home.failures.length, 0);
     home.failures.forEach(function (f) { console.log('FAIL home: ' + f); });
+    // The analysis notation core: SAN/UCI parsing, the position key, the draw rules, the move tree
+    // and PGN. The full 3,105-case replay against the PHP oracle needs the goldens on disk and so
+    // lives in `node tools/qa/js_goldens.js`; these are the self-contained halves.
+    var eng = E.selfTest();
+    ck('engine notation (' + eng.passed + ' assertions)', eng.failures.length, 0);
+    eng.failures.forEach(function (f) { console.log('FAIL engine: ' + f); });
+    var tree = BiyaMoveTree.selfTest();
+    ck('move tree (' + tree.passed + ' assertions)', tree.failures.length, 0);
+    tree.failures.forEach(function (f) { console.log('FAIL movetree: ' + f); });
+    var pgn = BiyaPGN.selfTest();
+    ck('pgn (' + pgn.passed + ' assertions)', pgn.failures.length, 0);
+    pgn.failures.forEach(function (f) { console.log('FAIL pgn: ' + f); });
+    // The analysis search: forced mates, PV legality, MultiPV, determinism, and the terminal
+    // short-circuit that keeps eval_mate:0 (the server's bug) from ever being produced.
+    var srch = BiyaAnalysis.selfTest();
+    ck('analysis engine (' + srch.passed + ' assertions)', srch.failures.length, 0);
+    srch.failures.forEach(function (f) { console.log('FAIL analysis-engine: ' + f); });
+    // Game review (classification + accuracy, PHP-parity) and the bundled ECO book. The full
+    // 303-case replay against the oracle's goldens needs them on disk, so it lives in
+    // `node tools/qa/js_goldens.js`; these are the self-contained halves.
+    var rev = BiyaReview.selfTest();
+    ck('game review (' + rev.passed + ' assertions)', rev.failures.length, 0);
+    rev.failures.forEach(function (f) { console.log('FAIL review: ' + f); });
+    var book = BiyaOpeningBook.selfTest();
+    ck('opening book (' + book.passed + ' assertions)', book.failures.length, 0);
+    book.failures.forEach(function (f) { console.log('FAIL opening-book: ' + f); });
+    // The Analysis Board's pure layer. The comparison against the extracted RN StyleSheet needs
+    // board_styles.json on disk, so that half lives in `node tools/qa/js_goldens.js`.
+    var met = BiyaAnalysisMetrics.selfTest();
+    ck('analysis metrics (' + met.passed + ' assertions)', met.failures.length, 0);
+    met.failures.forEach(function (f) { console.log('FAIL analysis-metrics: ' + f); });
+    // The Analysis Board's pure session layer: status line, opening tracking, arrows, engine rows,
+    // the move strip's tokens, and the staleness rule that drives cancel-and-restart.
+    var ab = BiyaAnalysisBoard.selfTest();
+    ck('analysis board (' + ab.passed + ' assertions)', ab.failures.length, 0);
+    ab.failures.forEach(function (f) { console.log('FAIL analysis-board: ' + f); });
+    // Setup Position: placement, castling normalisation, and the validation chess.js used to do.
+    var ped = BiyaPositionEditor.selfTest();
+    ck('position editor (' + ped.passed + ' assertions)', ped.failures.length, 0);
+    ped.failures.forEach(function (f) { console.log('FAIL position-editor: ' + f); });
+    // The bundled ECO book must actually be on the page — a missing script tag is silent otherwise.
+    ck('eco book loaded', typeof ECO_DATA === 'object' && Object.keys(ECO_DATA).length > 7000, true);
+    // The <chess-board> arrow overlay, checked with REAL hit-testing. The Node suite
+    // (tools/qa/board_component_test.js) covers the geometry and the drag state machine against a
+    // fake DOM; what only a browser can answer is whether the overlay actually sits on top of the
+    // squares and steals the click that drives tap-to-move in Play and Puzzles.
+    boardOverlayCheck(ck);
 
     var fails = results.filter(function (r) { return !r.ok; });
     results.forEach(function (r) { console.log((r.ok ? 'PASS ' : 'FAIL ') + r.label + '  got=' + r.got + (r.ok ? '' : '  want=' + r.want)); });
     console.log(fails.length === 0 ? '✅ engine self-test: ALL ' + results.length + ' PASSED' : '❌ ' + fails.length + ' FAILED');
-    var toast = el('div', null, (fails.length === 0 ? '✅ Engine self-test: all ' + results.length + ' perft checks passed' : '❌ ' + fails.length + ' perft checks FAILED — see console'));
+    var toast = el('div', null, (fails.length === 0 ? '✅ Self-test: all ' + results.length + ' checks passed' : '❌ ' + fails.length + ' checks FAILED — see console'));
     toast.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:999;background:' +
       (fails.length === 0 ? 'rgba(92,194,100,.95)' : 'rgba(255,107,107,.95)') +
       ';color:#06101f;font-weight:800;padding:10px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);font-size:13px';

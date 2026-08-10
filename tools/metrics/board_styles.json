@@ -1,0 +1,3368 @@
+{
+  "_generated": "tools/metrics/extract_board_styles.js — do not hand-edit",
+  "_source": "BYAHERONG-COACH-FRONTEND/app/(app)/user/analysis-board/board.tsx",
+  "_note": "Values are the REAL StyleSheet numbers. The spec prose is secondary; where they disagree, the deviation is recorded in PORTING_NOTES.md.",
+  "geometry": {
+    "_formula": "BOARD_SIZE = floor(screenWidthPx / 8) * 8 / pixelRatio;  SQUARE_SIZE = BOARD_SIZE / 8",
+    "_source": "BYAHERONG-COACH-FRONTEND/components/DragDropChessBoard.tsx",
+    "_sourceLines": [
+      "52: const _ratio = PixelRatio.get();",
+      "54: const _physicalBoardSize = Math.floor(_physicalWidth / 8) * 8; // divisible by 8",
+      "55: export const BOARD_SIZE = _physicalBoardSize / _ratio;",
+      "56: export const SQUARE_SIZE = BOARD_SIZE / 8; // each square = _physicalBoardSize/8 exact device pixels"
+    ],
+    "referenceDevice": {
+      "width": 390,
+      "height": 844,
+      "pixelRatio": 3
+    },
+    "BOARD_SIZE": 389.3333333333333,
+    "SQUARE_SIZE": 48.666666666666664
+  },
+  "_deviceDerived": {
+    "_note": "Values folded from Dimensions.get() against the reference device. Encode the RATIO, never the literal — it is wrong on every other screen size.",
+    "values": {
+      "styles.menuContainer.width": {
+        "value": 253.5,
+        "widthRatio": 0.65
+      },
+      "sidebarStyles.container.width": {
+        "value": 265.20000000000005,
+        "widthRatio": 0.68
+      },
+      "accModalStyles.card.maxHeight": {
+        "value": 675.2,
+        "heightRatio": 0.8
+      }
+    }
+  },
+  "evalGraph": {
+    "_source": "BYAHERONG-COACH-FRONTEND/components/EvalGraph.tsx",
+    "_note": "Scanned from the SVG element attributes; this file has no StyleSheet for them.",
+    "clamp": 500,
+    "background": "#1A2740",
+    "backgroundRadius": 6,
+    "whiteFill": "rgba(255,255,255,0.25)",
+    "blackFill": "rgba(0,0,0,0.35)",
+    "midLine": "rgba(255,255,255,0.15)",
+    "midLineWidth": 1,
+    "curve": "#FDB022",
+    "curveWidth": 1.5,
+    "containerRadius": 6
+  },
+  "renderConstants": {
+    "_note": "Geometry that lives inside a render function, where no StyleSheet can hold it. Each expression is flattened into signed additive terms so a consumer asserts the DIRECTION of an offset, not only its size. `squareToPixel` is included because it defines the anchor every one of these offsets is measured from — it returns the square CENTRE.",
+    "squareToPixel": {
+      "col": {
+        "text": "square.charCodeAt(0) - 97",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "square.charCodeAt(0)"
+          },
+          {
+            "sign": -1,
+            "text": "97",
+            "value": 97
+          }
+        ]
+      },
+      "row": {
+        "text": "8 - parseInt(square[1])",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "8",
+            "value": 8
+          },
+          {
+            "sign": -1,
+            "text": "parseInt(square[1])"
+          }
+        ]
+      },
+      "displayCol": {
+        "text": "flipped ? 7 - col : col",
+        "condition": "flipped",
+        "whenTrue": {
+          "text": "7 - col",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "7",
+              "value": 7
+            },
+            {
+              "sign": -1,
+              "text": "col",
+              "ref": "col",
+              "ratio": 1
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "col",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "col",
+              "ref": "col",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "displayRow": {
+        "text": "flipped ? 7 - row : row",
+        "condition": "flipped",
+        "whenTrue": {
+          "text": "7 - row",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "7",
+              "value": 7
+            },
+            {
+              "sign": -1,
+              "text": "row",
+              "ref": "row",
+              "ratio": 1
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "row",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "row",
+              "ref": "row",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "return.x": {
+        "text": "displayCol * SQUARE_SIZE + SQUARE_SIZE / 2",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "displayCol * SQUARE_SIZE"
+          },
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE / 2",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.5
+          }
+        ]
+      },
+      "return.y": {
+        "text": "displayRow * SQUARE_SIZE + SQUARE_SIZE / 2",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "displayRow * SQUARE_SIZE"
+          },
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE / 2",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.5
+          }
+        ]
+      }
+    },
+    "renderArrowsOverlay": {
+      "arrowWidth": {
+        "text": "SQUARE_SIZE * 0.18",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE * 0.18",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.18
+          }
+        ]
+      },
+      "headSize": {
+        "text": "SQUARE_SIZE * 0.35",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE * 0.35",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.35
+          }
+        ]
+      },
+      "View[0].style": {
+        "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', }",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', }"
+          }
+        ]
+      },
+      "View[0].pointerEvents": {
+        "text": "none",
+        "literal": "none"
+      },
+      "Svg[0].width": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "Svg[0].height": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "fromSq": {
+        "text": "move.move_uci.substring(0, 2)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "move.move_uci.substring(0, 2)"
+          }
+        ]
+      },
+      "toSq": {
+        "text": "move.move_uci.substring(2, 4)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "move.move_uci.substring(2, 4)"
+          }
+        ]
+      },
+      "from": {
+        "text": "squareToPixel(fromSq, isFlipped)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "squareToPixel(fromSq, isFlipped)"
+          }
+        ]
+      },
+      "to": {
+        "text": "squareToPixel(toSq, isFlipped)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "squareToPixel(toSq, isFlipped)"
+          }
+        ]
+      },
+      "color": {
+        "text": "ARROW_COLORS[index] || ARROW_COLORS[2]",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "ARROW_COLORS[index] || ARROW_COLORS[2]"
+          }
+        ]
+      },
+      "dx": {
+        "text": "to.x - from.x",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.x",
+            "ref": "to.x",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "from.x",
+            "ref": "from.x",
+            "ratio": 1
+          }
+        ]
+      },
+      "dy": {
+        "text": "to.y - from.y",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.y",
+            "ref": "to.y",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "from.y",
+            "ref": "from.y",
+            "ratio": 1
+          }
+        ]
+      },
+      "len": {
+        "text": "Math.sqrt(dx * dx + dy * dy)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "Math.sqrt(dx * dx + dy * dy)"
+          }
+        ]
+      },
+      "ux": {
+        "text": "dx / len",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "dx / len"
+          }
+        ]
+      },
+      "uy": {
+        "text": "dy / len",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "dy / len"
+          }
+        ]
+      },
+      "shortenEnd": {
+        "text": "headSize * 0.7",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "headSize * 0.7",
+            "ref": "headSize",
+            "ratio": 0.7
+          }
+        ]
+      },
+      "lineEndX": {
+        "text": "to.x - ux * shortenEnd",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.x",
+            "ref": "to.x",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "ux * shortenEnd"
+          }
+        ]
+      },
+      "lineEndY": {
+        "text": "to.y - uy * shortenEnd",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.y",
+            "ref": "to.y",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "uy * shortenEnd"
+          }
+        ]
+      },
+      "tipX": {
+        "text": "to.x",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.x",
+            "ref": "to.x",
+            "ratio": 1
+          }
+        ]
+      },
+      "tipY": {
+        "text": "to.y",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "to.y",
+            "ref": "to.y",
+            "ratio": 1
+          }
+        ]
+      },
+      "leftX": {
+        "text": "tipX - ux * headSize - (-uy) * headSize * 0.6",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "tipX",
+            "ref": "tipX",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "ux * headSize"
+          },
+          {
+            "sign": -1,
+            "text": "(-uy) * headSize * 0.6"
+          }
+        ]
+      },
+      "leftY": {
+        "text": "tipY - uy * headSize - (ux) * headSize * 0.6",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "tipY",
+            "ref": "tipY",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "uy * headSize"
+          },
+          {
+            "sign": -1,
+            "text": "(ux) * headSize * 0.6"
+          }
+        ]
+      },
+      "rightX": {
+        "text": "tipX - ux * headSize + (-uy) * headSize * 0.6",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "tipX",
+            "ref": "tipX",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "ux * headSize"
+          },
+          {
+            "sign": 1,
+            "text": "(-uy) * headSize * 0.6"
+          }
+        ]
+      },
+      "rightY": {
+        "text": "tipY - uy * headSize + (ux) * headSize * 0.6",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "tipY",
+            "ref": "tipY",
+            "ratio": 1
+          },
+          {
+            "sign": -1,
+            "text": "uy * headSize"
+          },
+          {
+            "sign": 1,
+            "text": "(ux) * headSize * 0.6"
+          }
+        ]
+      },
+      "React.Fragment[0].key": {
+        "text": "index",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "index",
+            "ref": "index",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].x1": {
+        "text": "from.x",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "from.x",
+            "ref": "from.x",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].y1": {
+        "text": "from.y",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "from.y",
+            "ref": "from.y",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].x2": {
+        "text": "lineEndX",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "lineEndX",
+            "ref": "lineEndX",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].y2": {
+        "text": "lineEndY",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "lineEndY",
+            "ref": "lineEndY",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].stroke": {
+        "text": "color",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "color",
+            "ref": "color",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].strokeWidth": {
+        "text": "arrowWidth",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "arrowWidth",
+            "ref": "arrowWidth",
+            "ratio": 1
+          }
+        ]
+      },
+      "Line[0].strokeLinecap": {
+        "text": "round",
+        "literal": "round"
+      },
+      "Polygon[0].points": {
+        "text": "`${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "`${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`"
+          }
+        ]
+      },
+      "Polygon[0].fill": {
+        "text": "color",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "color",
+            "ref": "color",
+            "ratio": 1
+          }
+        ]
+      }
+    },
+    "renderAnnotationOverlay": {
+      "anno": {
+        "text": "MOVE_ANNOTATIONS.find((a) => a.symbol === currentNode.annotation)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "MOVE_ANNOTATIONS.find((a) => a.symbol === currentNode.annotation)"
+          }
+        ]
+      },
+      "pos": {
+        "text": "squareToPixel(currentNode.to, isFlipped)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "squareToPixel(currentNode.to, isFlipped)"
+          }
+        ]
+      },
+      "r": {
+        "text": "SQUARE_SIZE * 0.21",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE * 0.21",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.21
+          }
+        ]
+      },
+      "cx": {
+        "text": "pos.x + SQUARE_SIZE * 0.29",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "pos.x",
+            "ref": "pos.x",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE * 0.29",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.29
+          }
+        ]
+      },
+      "cy": {
+        "text": "pos.y + SQUARE_SIZE * 0.29",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "pos.y",
+            "ref": "pos.y",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "SQUARE_SIZE * 0.29",
+            "ref": "SQUARE_SIZE",
+            "ratio": 0.29
+          }
+        ]
+      },
+      "fontSize": {
+        "text": "currentNode.annotation.length > 1 ? r * 0.88 : r * 1.1",
+        "condition": "currentNode.annotation.length > 1",
+        "whenTrue": {
+          "text": "r * 0.88",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "r * 0.88",
+              "ref": "r",
+              "ratio": 0.88
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "r * 1.1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "r * 1.1",
+              "ref": "r",
+              "ratio": 1.1
+            }
+          ]
+        }
+      },
+      "View[0].style": {
+        "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' }",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' }"
+          }
+        ]
+      },
+      "View[0].pointerEvents": {
+        "text": "none",
+        "literal": "none"
+      },
+      "Svg[0].width": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "Svg[0].height": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[0].cx": {
+        "text": "cx + 1.5",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cx",
+            "ref": "cx",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "1.5",
+            "value": 1.5
+          }
+        ]
+      },
+      "Circle[0].cy": {
+        "text": "cy + 1.5",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cy",
+            "ref": "cy",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "1.5",
+            "value": 1.5
+          }
+        ]
+      },
+      "Circle[0].r": {
+        "text": "r",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "r",
+            "ref": "r",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[0].fill": {
+        "text": "rgba(0,0,0,0.45)",
+        "literal": "rgba(0,0,0,0.45)"
+      },
+      "Circle[1].cx": {
+        "text": "cx",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cx",
+            "ref": "cx",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[1].cy": {
+        "text": "cy",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cy",
+            "ref": "cy",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[1].r": {
+        "text": "r + 1.5",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "r",
+            "ref": "r",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "1.5",
+            "value": 1.5
+          }
+        ]
+      },
+      "Circle[1].fill": {
+        "text": "white",
+        "literal": "white"
+      },
+      "Circle[1].opacity": {
+        "text": "0.9",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "0.9",
+            "value": 0.9
+          }
+        ]
+      },
+      "Circle[2].cx": {
+        "text": "cx",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cx",
+            "ref": "cx",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[2].cy": {
+        "text": "cy",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cy",
+            "ref": "cy",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[2].r": {
+        "text": "r",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "r",
+            "ref": "r",
+            "ratio": 1
+          }
+        ]
+      },
+      "Circle[2].fill": {
+        "text": "anno.color",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "anno.color",
+            "ref": "anno.color",
+            "ratio": 1
+          }
+        ]
+      },
+      "SvgText[0].x": {
+        "text": "cx",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cx",
+            "ref": "cx",
+            "ratio": 1
+          }
+        ]
+      },
+      "SvgText[0].y": {
+        "text": "cy + fontSize * 0.37",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "cy",
+            "ref": "cy",
+            "ratio": 1
+          },
+          {
+            "sign": 1,
+            "text": "fontSize * 0.37",
+            "ref": "fontSize",
+            "ratio": 0.37
+          }
+        ]
+      },
+      "SvgText[0].textAnchor": {
+        "text": "middle",
+        "literal": "middle"
+      },
+      "SvgText[0].fill": {
+        "text": "white",
+        "literal": "white"
+      },
+      "SvgText[0].fontSize": {
+        "text": "fontSize",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "fontSize",
+            "ref": "fontSize",
+            "ratio": 1
+          }
+        ]
+      },
+      "SvgText[0].fontWeight": {
+        "text": "bold",
+        "literal": "bold"
+      }
+    },
+    "renderEditSquare": {
+      "displayRow": {
+        "text": "isFlipped ? 7 - row : row",
+        "condition": "isFlipped",
+        "whenTrue": {
+          "text": "7 - row",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "7",
+              "value": 7
+            },
+            {
+              "sign": -1,
+              "text": "row",
+              "ref": "row",
+              "ratio": 1
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "row",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "row",
+              "ref": "row",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "displayCol": {
+        "text": "isFlipped ? 7 - col : col",
+        "condition": "isFlipped",
+        "whenTrue": {
+          "text": "7 - col",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "7",
+              "value": 7
+            },
+            {
+              "sign": -1,
+              "text": "col",
+              "ref": "col",
+              "ratio": 1
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "col",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "col",
+              "ref": "col",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "piece": {
+        "text": "board[displayRow]?.[displayCol]",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "board[displayRow]?.[displayCol]"
+          }
+        ]
+      },
+      "isLight": {
+        "text": "(displayRow + displayCol) % 2 === 0",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "(displayRow + displayCol) % 2 === 0"
+          }
+        ]
+      },
+      "square": {
+        "text": "String.fromCharCode(97 + displayCol) + (8 - displayRow)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "String.fromCharCode(97 + displayCol)"
+          },
+          {
+            "sign": 1,
+            "text": "8",
+            "value": 8
+          },
+          {
+            "sign": -1,
+            "text": "displayRow",
+            "ref": "displayRow",
+            "ratio": 1
+          }
+        ]
+      },
+      "pieceKey": {
+        "text": "piece ? (piece.color === 'w' ? piece.type.toUpperCase() : piece.type) : null",
+        "condition": "piece",
+        "whenTrue": {
+          "text": "piece.color === 'w' ? piece.type.toUpperCase() : piece.type",
+          "condition": "piece.color === 'w'",
+          "whenTrue": {
+            "text": "piece.type.toUpperCase()",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "piece.type.toUpperCase()"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "piece.type",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "piece.type",
+                "ref": "piece.type",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "whenFalse": {
+          "text": "null",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "null"
+            }
+          ]
+        }
+      },
+      "PieceComponent": {
+        "text": "pieceKey ? PIECE_COMPONENTS[pieceKey] : null",
+        "condition": "pieceKey",
+        "whenTrue": {
+          "text": "PIECE_COMPONENTS[pieceKey]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "PIECE_COMPONENTS[pieceKey]"
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "null",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "null"
+            }
+          ]
+        }
+      },
+      "pieceSize": {
+        "text": "EDIT_SQUARE_SIZE * 0.8",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "EDIT_SQUARE_SIZE * 0.8",
+            "ref": "EDIT_SQUARE_SIZE",
+            "ratio": 0.8
+          }
+        ]
+      },
+      "bgColor": {
+        "text": "isLight ? '#E8D5B0' : '#A87E5A'",
+        "condition": "isLight",
+        "whenTrue": {
+          "text": "'#E8D5B0'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#E8D5B0'"
+            }
+          ]
+        },
+        "whenFalse": {
+          "text": "'#A87E5A'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#A87E5A'"
+            }
+          ]
+        }
+      },
+      "TouchableOpacity[0].key": {
+        "text": "`${row}-${col}`",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "`${row}-${col}`"
+          }
+        ]
+      },
+      "TouchableOpacity[0].style": {
+        "text": "[styles.square, { backgroundColor: bgColor, width: EDIT_SQUARE_SIZE, height: EDIT_SQUARE_SIZE }]",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "[styles.square, { backgroundColor: bgColor, width: EDIT_SQUARE_SIZE, height: EDIT_SQUARE_SIZE }]"
+          }
+        ]
+      },
+      "TouchableOpacity[0].onPress": {
+        "text": "() => handleEditSquarePress(square)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "() => handleEditSquarePress(square)"
+          }
+        ]
+      },
+      "TouchableOpacity[0].activeOpacity": {
+        "text": "0.7",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "0.7",
+            "value": 0.7
+          }
+        ]
+      },
+      "PieceComponent[0].width": {
+        "text": "pieceSize",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "pieceSize",
+            "ref": "pieceSize",
+            "ratio": 1
+          }
+        ]
+      },
+      "PieceComponent[0].height": {
+        "text": "pieceSize",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "pieceSize",
+            "ref": "pieceSize",
+            "ratio": 1
+          }
+        ]
+      }
+    }
+  },
+  "moduleConstants": {
+    "DRAFT_KEY": "@biyaherong_analysis_draft",
+    "SETUP_DRAFT_KEY": "@biyaherong_setup_draft",
+    "OPENFILE_DRAFT_KEY": "@biyaherong_openfile_draft",
+    "SETUP_FEN_KEY": "@biyaherong_setup_fen",
+    "STANDARD_FEN": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "REVIEW_PGN_KEY": "@biyaherong_review_pgn",
+    "LICHESS_EXPLORER": "https://explorer.lichess.ovh",
+    "ARROW_COLORS": [
+      "rgba(76, 175, 80, 0.85)",
+      "rgba(68, 138, 255, 0.80)",
+      "rgba(255, 152, 0, 0.80)"
+    ],
+    "MOVE_ANNOTATIONS": [
+      {
+        "symbol": "!!",
+        "label": "Brilliant",
+        "color": "#00BCD4"
+      },
+      {
+        "symbol": "!",
+        "label": "Good",
+        "color": "#4CAF50"
+      },
+      {
+        "symbol": "!?",
+        "label": "Interesting",
+        "color": "#8BC34A"
+      },
+      {
+        "symbol": "?!",
+        "label": "Dubious",
+        "color": "#FF9800"
+      },
+      {
+        "symbol": "?",
+        "label": "Mistake",
+        "color": "#F44336"
+      },
+      {
+        "symbol": "??",
+        "label": "Blunder",
+        "color": "#D32F2F"
+      }
+    ],
+    "EVAL_SYMBOLS": [
+      {
+        "symbol": "⩱",
+        "label": "Slight advantage White",
+        "minCp": 50,
+        "maxCp": 150
+      },
+      {
+        "symbol": "⩲",
+        "label": "Slight advantage Black",
+        "minCp": -150,
+        "maxCp": -50
+      },
+      {
+        "symbol": "±",
+        "label": "Clear advantage White",
+        "minCp": 150,
+        "maxCp": 300
+      },
+      {
+        "symbol": "∓",
+        "label": "Clear advantage Black",
+        "minCp": -300,
+        "maxCp": -150
+      },
+      {
+        "symbol": "+-",
+        "label": "Decisive advantage White",
+        "minCp": 300,
+        "maxCp": 9999
+      },
+      {
+        "symbol": "-+",
+        "label": "Decisive advantage Black",
+        "minCp": -9999,
+        "maxCp": -300
+      },
+      {
+        "symbol": "=",
+        "label": "Equal",
+        "minCp": -50,
+        "maxCp": 50
+      }
+    ],
+    "POSITION_ANNOTATIONS": [
+      {
+        "symbol": "+-",
+        "label": "White is winning",
+        "color": "#FFFFFF"
+      },
+      {
+        "symbol": "±",
+        "label": "White is better",
+        "color": "#E0E0E0"
+      },
+      {
+        "symbol": "⩱",
+        "label": "Slight edge White",
+        "color": "#B0BEC5"
+      },
+      {
+        "symbol": "=",
+        "label": "Equal",
+        "color": "#8BA3C7"
+      },
+      {
+        "symbol": "⩲",
+        "label": "Slight edge Black",
+        "color": "#B0BEC5"
+      },
+      {
+        "symbol": "∓",
+        "label": "Black is better",
+        "color": "#E0E0E0"
+      },
+      {
+        "symbol": "-+",
+        "label": "Black is winning",
+        "color": "#FFFFFF"
+      }
+    ],
+    "WHITE_PIECE_KEYS": [
+      "K",
+      "Q",
+      "R",
+      "B",
+      "N",
+      "P"
+    ],
+    "BLACK_PIECE_KEYS": [
+      "k",
+      "q",
+      "r",
+      "b",
+      "n",
+      "p"
+    ],
+    "EDIT_PALETTE_BTN_SIZE": 36,
+    "EDIT_PALETTE_PIECE_SIZE": 26,
+    "AUTOPLAY_SPEEDS": [
+      {
+        "label": "0.5s",
+        "value": 500
+      },
+      {
+        "label": "1s",
+        "value": 1000
+      },
+      {
+        "label": "1.5s",
+        "value": 1500
+      },
+      {
+        "label": "2s",
+        "value": 2000
+      },
+      {
+        "label": "3s",
+        "value": 3000
+      }
+    ]
+  },
+  "stylesheets": {
+    "styles": {
+      "container": {
+        "flex": 1,
+        "backgroundColor": "#263238"
+      },
+      "header": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "paddingHorizontal": 8,
+        "paddingVertical": 6,
+        "backgroundColor": "#1B2631",
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#37474F"
+      },
+      "headerBtn": {
+        "width": 40,
+        "height": 36,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "headerBtnText": {
+        "fontSize": 22,
+        "color": "#ECEFF1"
+      },
+      "headerCenter": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 12
+      },
+      "boardSection": {
+        "backgroundColor": "#263238",
+        "paddingTop": 4
+      },
+      "boardWrapper": {
+        "alignItems": "center",
+        "marginBottom": 4
+      },
+      "editBoard": {
+        "width": 389.3333333333333,
+        "height": 389.3333333333333,
+        "borderWidth": 1,
+        "borderColor": "#37474F",
+        "overflow": "hidden"
+      },
+      "row": {
+        "flexDirection": "row"
+      },
+      "square": {
+        "width": 48.666666666666664,
+        "height": 48.666666666666664,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "statusToolbarRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "backgroundColor": "#1B2631",
+        "borderTopWidth": 1,
+        "borderTopColor": "#37474F",
+        "minHeight": 38,
+        "paddingLeft": 8
+      },
+      "statusSection": {
+        "flex": 1,
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 4
+      },
+      "toolbarSection": {
+        "flexDirection": "row",
+        "alignItems": "center"
+      },
+      "statusLine": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingHorizontal": 12,
+        "paddingVertical": 6,
+        "backgroundColor": "#1B2631",
+        "borderTopWidth": 1,
+        "borderTopColor": "#37474F",
+        "minHeight": 36
+      },
+      "statusText": {
+        "fontSize": 12,
+        "color": "#B0BEC5",
+        "fontFamily": "Menlo",
+        "flexShrink": 1
+      },
+      "gameInfoBanner": {
+        "backgroundColor": "#1A2942",
+        "borderLeftWidth": 3,
+        "borderLeftColor": "#FDB022",
+        "paddingHorizontal": 12,
+        "paddingVertical": 8,
+        "marginHorizontal": 8,
+        "marginBottom": 6,
+        "borderRadius": 4
+      },
+      "gameInfoRow": {
+        "flexDirection": "row",
+        "alignItems": "center"
+      },
+      "gameInfoText": {
+        "fontSize": 13,
+        "fontWeight": "600",
+        "color": "#E0E0E0",
+        "fontFamily": "Menlo"
+      },
+      "gameInfoSubText": {
+        "fontSize": 11,
+        "color": "#8BA3C7",
+        "marginTop": 2,
+        "fontFamily": "Menlo"
+      },
+      "backToAnalysisBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 8,
+        "paddingHorizontal": 12,
+        "paddingVertical": 6,
+        "marginLeft": 10
+      },
+      "backToAnalysisBtnText": {
+        "color": "#0F1A2E",
+        "fontSize": 12,
+        "fontWeight": "800"
+      },
+      "evalBarContainer": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingHorizontal": 6,
+        "paddingVertical": 2,
+        "gap": 5,
+        "backgroundColor": "#263238"
+      },
+      "evalBarTrack": {
+        "flex": 1,
+        "height": 8,
+        "backgroundColor": "#333333",
+        "borderRadius": 4,
+        "overflow": "hidden",
+        "position": "relative"
+      },
+      "evalBarBlack": {
+        "position": "absolute",
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "backgroundColor": "#333333"
+      },
+      "evalBarWhite": {
+        "position": "absolute",
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "backgroundColor": "#F5F5F5",
+        "borderRadius": 4
+      },
+      "evalBarText": {
+        "fontSize": 11,
+        "fontWeight": "800",
+        "minWidth": 32,
+        "textAlign": "center",
+        "fontFamily": "Menlo"
+      },
+      "evalSymbolText": {
+        "fontSize": 11,
+        "fontWeight": "800"
+      },
+      "toolbar": {
+        "flexDirection": "row",
+        "justifyContent": "space-evenly",
+        "alignItems": "center",
+        "paddingVertical": 4,
+        "paddingHorizontal": 4,
+        "backgroundColor": "#1B2631",
+        "borderTopWidth": 1,
+        "borderTopColor": "#37474F",
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#37474F"
+      },
+      "toolBtn": {
+        "paddingHorizontal": 8,
+        "paddingVertical": 6,
+        "borderRadius": 6,
+        "minWidth": 36,
+        "alignItems": "center"
+      },
+      "navBtn": {
+        "paddingHorizontal": 5,
+        "paddingVertical": 6,
+        "borderRadius": 6,
+        "minWidth": 30,
+        "alignItems": "center"
+      },
+      "navBtnText": {
+        "fontSize": 18,
+        "color": "#ECEFF1"
+      },
+      "toolBtnActive": {
+        "backgroundColor": "#4CAF50",
+        "borderRadius": 6
+      },
+      "toolBtnText": {
+        "fontSize": 20,
+        "color": "#ECEFF1"
+      },
+      "autoplayBar": {
+        "backgroundColor": "#37474F",
+        "paddingVertical": 6,
+        "alignItems": "center"
+      },
+      "autoplayBarText": {
+        "color": "#FDB022",
+        "fontSize": 12,
+        "fontWeight": "600",
+        "fontFamily": "Menlo"
+      },
+      "panelsScroll": {
+        "backgroundColor": "#263238",
+        "paddingHorizontal": 8,
+        "maxHeight": 230
+      },
+      "moveTreeContainer": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 8,
+        "marginBottom": 8,
+        "overflow": "hidden",
+        "maxHeight": 160,
+        "minHeight": 40
+      },
+      "moveTreeRow": {
+        "flexDirection": "row",
+        "alignItems": "stretch",
+        "borderBottomWidth": 0.5,
+        "borderBottomColor": "#37474F",
+        "minHeight": 32
+      },
+      "moveNumCell": {
+        "width": 28,
+        "justifyContent": "center",
+        "alignItems": "center",
+        "backgroundColor": "#1B2631",
+        "paddingVertical": 6
+      },
+      "moveNumText": {
+        "fontSize": 11,
+        "color": "#546E7A",
+        "fontWeight": "600"
+      },
+      "moveSanCell": {
+        "flex": 1,
+        "paddingHorizontal": 8,
+        "paddingVertical": 6,
+        "justifyContent": "center",
+        "borderLeftWidth": 0.5,
+        "borderLeftColor": "#37474F"
+      },
+      "moveSanCellActive": {
+        "backgroundColor": "#FDB022"
+      },
+      "moveSanText": {
+        "fontSize": 13,
+        "color": "#ECEFF1",
+        "fontWeight": "600"
+      },
+      "moveSanTextActive": {
+        "color": "#0F1A2E",
+        "fontWeight": "800"
+      },
+      "moveAnnoText": {
+        "fontSize": 11,
+        "color": "#FF9800",
+        "fontWeight": "700",
+        "marginLeft": 2
+      },
+      "moveEvalText": {
+        "fontSize": 11,
+        "fontWeight": "700",
+        "marginLeft": 2
+      },
+      "altRow": {
+        "flexDirection": "row",
+        "flexWrap": "wrap",
+        "paddingHorizontal": 8,
+        "paddingVertical": 4,
+        "gap": 6,
+        "backgroundColor": "#162028"
+      },
+      "altChip": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 6,
+        "paddingHorizontal": 8,
+        "paddingVertical": 4,
+        "borderLeftWidth": 2,
+        "borderLeftColor": "#FDB022"
+      },
+      "altChipActive": {
+        "backgroundColor": "rgba(253,176,34,0.18)"
+      },
+      "altChipText": {
+        "fontSize": 12,
+        "color": "#90A4AE",
+        "fontFamily": "Menlo",
+        "fontWeight": "600"
+      },
+      "altChipTextActive": {
+        "color": "#FDB022"
+      },
+      "variationBanner": {
+        "backgroundColor": "#1B2631",
+        "borderLeftWidth": 3,
+        "borderLeftColor": "#FDB022",
+        "paddingHorizontal": 10,
+        "paddingVertical": 6,
+        "marginTop": 2
+      },
+      "variationBannerGm": {
+        "borderLeftColor": "#26C6DA",
+        "backgroundColor": "#0D1F2A"
+      },
+      "variationBannerRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "marginBottom": 2
+      },
+      "variationBannerLabel": {
+        "fontSize": 10,
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "textTransform": "uppercase",
+        "letterSpacing": 0.5
+      },
+      "variationBannerLabelGm": {
+        "color": "#26C6DA"
+      },
+      "variationBannerMoves": {
+        "fontSize": 13,
+        "color": "#ECEFF1",
+        "fontWeight": "600"
+      },
+      "varManageBtn": {
+        "paddingHorizontal": 8,
+        "paddingVertical": 3,
+        "borderRadius": 5,
+        "backgroundColor": "#263040"
+      },
+      "varManageBtnText": {
+        "fontSize": 11,
+        "color": "#8BA3C7",
+        "fontWeight": "600"
+      },
+      "headerTitle": {
+        "fontSize": 16,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "engineLinesContainer": {
+        "backgroundColor": "#1B2631",
+        "paddingHorizontal": 6,
+        "paddingTop": 3,
+        "paddingBottom": 4,
+        "borderTopWidth": 1,
+        "borderTopColor": "#37474F"
+      },
+      "engineEvalBarTrack": {
+        "height": 3,
+        "backgroundColor": "#2A3540",
+        "borderRadius": 1,
+        "overflow": "hidden",
+        "position": "relative",
+        "marginBottom": 4
+      },
+      "engineEvalBarBlack": {
+        "position": "absolute",
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "backgroundColor": "#2A3540"
+      },
+      "engineEvalBarWhite": {
+        "position": "absolute",
+        "top": 0,
+        "left": 0,
+        "bottom": 0,
+        "backgroundColor": "#DEDEDE",
+        "borderRadius": 1
+      },
+      "engineLineRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 1,
+        "paddingHorizontal": 2,
+        "borderRadius": 3,
+        "gap": 4
+      },
+      "engineLinePv": {
+        "flex": 1,
+        "color": "#546E7A",
+        "fontSize": 9,
+        "fontFamily": "Menlo"
+      },
+      "engineInfoRow": {
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "alignItems": "center",
+        "marginTop": 2
+      },
+      "engineMovesRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 5
+      },
+      "engineDepthChip": {
+        "color": "#4A6070",
+        "fontSize": 8,
+        "fontFamily": "Menlo"
+      },
+      "engineMoveChip": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 3,
+        "paddingHorizontal": 5,
+        "paddingVertical": 2,
+        "borderRadius": 3,
+        "backgroundColor": "rgba(55, 71, 79, 0.6)"
+      },
+      "engineMoveChipActive": {
+        "backgroundColor": "rgba(253, 176, 34, 0.15)",
+        "borderWidth": 1,
+        "borderColor": "rgba(253, 176, 34, 0.35)"
+      },
+      "engineChipEval": {
+        "fontSize": 9,
+        "fontWeight": "700",
+        "fontFamily": "Menlo",
+        "width": 36,
+        "textAlign": "right"
+      },
+      "engineChipSan": {
+        "fontSize": 10,
+        "fontWeight": "800",
+        "fontFamily": "Menlo",
+        "marginRight": 1
+      },
+      "engineLineText": {
+        "color": "#90A4AE",
+        "fontSize": 9,
+        "fontFamily": "Menlo"
+      },
+      "engineInfoText": {
+        "color": "#546E7A",
+        "fontSize": 8,
+        "fontFamily": "Menlo"
+      },
+      "menuOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.6)",
+        "justifyContent": "flex-start"
+      },
+      "menuContainer": {
+        "backgroundColor": "#37474F",
+        "marginTop": 50,
+        "marginLeft": 0,
+        "width": 253.5,
+        "borderTopRightRadius": 12,
+        "borderBottomRightRadius": 12,
+        "paddingVertical": 8,
+        "elevation": 10,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "width": 4,
+          "height": 0
+        },
+        "shadowOpacity": 0.4,
+        "shadowRadius": 8
+      },
+      "menuItem": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 14,
+        "paddingHorizontal": 18,
+        "borderBottomWidth": 0.5,
+        "borderBottomColor": "#455A64"
+      },
+      "menuItemIcon": {
+        "fontSize": 18,
+        "marginRight": 14
+      },
+      "menuItemText": {
+        "fontSize": 15,
+        "color": "#ECEFF1",
+        "fontWeight": "500"
+      },
+      "promotionOverlay": {
+        "position": "absolute",
+        "left": 0,
+        "right": 0,
+        "top": 0,
+        "bottom": 0,
+        "backgroundColor": "rgba(0,0,0,0.7)",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "zIndex": 100
+      },
+      "promotionDialog": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 16,
+        "padding": 20,
+        "alignItems": "center",
+        "elevation": 10
+      },
+      "promotionTitle": {
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#ECEFF1",
+        "marginBottom": 16
+      },
+      "promotionOptions": {
+        "flexDirection": "row",
+        "gap": 12
+      },
+      "promotionOption": {
+        "width": 60,
+        "height": 60,
+        "borderRadius": 12,
+        "backgroundColor": "#455A64",
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "modalOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.6)",
+        "justifyContent": "flex-end",
+        "alignItems": "center",
+        "padding": 20,
+        "paddingBottom": 40
+      },
+      "bottomModalOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.7)",
+        "justifyContent": "flex-end"
+      },
+      "bottomModalContent": {
+        "backgroundColor": "#1B2631",
+        "borderTopLeftRadius": 20,
+        "borderTopRightRadius": 20,
+        "padding": 20,
+        "maxHeight": "85%"
+      },
+      "pgnModalOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.72)",
+        "justifyContent": "flex-end"
+      },
+      "pgnModalContent": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 20,
+        "marginHorizontal": 12,
+        "marginBottom": 52,
+        "padding": 20,
+        "borderWidth": 1,
+        "borderColor": "rgba(255,255,255,0.08)",
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "width": 0,
+          "height": -4
+        },
+        "shadowOpacity": 0.5,
+        "shadowRadius": 20,
+        "elevation": 16
+      },
+      "panelContainer": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 8,
+        "paddingHorizontal": 10,
+        "paddingTop": 6,
+        "paddingBottom": 8,
+        "marginBottom": 6
+      },
+      "panelHeader": {
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "alignItems": "center",
+        "marginBottom": 4
+      },
+      "panelTitle": {
+        "fontSize": 12,
+        "fontWeight": "bold",
+        "color": "#ECEFF1"
+      },
+      "panelClose": {
+        "fontSize": 14,
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "paddingHorizontal": 4,
+        "paddingVertical": 2
+      },
+      "actionBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 10,
+        "paddingVertical": 12,
+        "alignItems": "center"
+      },
+      "actionBtnText": {
+        "fontSize": 14,
+        "fontWeight": "800",
+        "color": "#0F1A2E"
+      },
+      "secondaryBtn": {
+        "flex": 1,
+        "paddingVertical": 14,
+        "borderRadius": 10,
+        "backgroundColor": "#37474F",
+        "alignItems": "center"
+      },
+      "secondaryBtnText": {
+        "fontSize": 14,
+        "fontWeight": "800",
+        "color": "#ECEFF1"
+      },
+      "textInput": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "paddingHorizontal": 14,
+        "paddingVertical": 10,
+        "color": "#ECEFF1",
+        "fontSize": 14
+      },
+      "pgnTextInput": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "padding": 14,
+        "color": "#ECEFF1",
+        "fontSize": 14,
+        "minHeight": 120,
+        "maxHeight": 220,
+        "textAlignVertical": "top"
+      },
+      "annotationPicker": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 16,
+        "padding": 20,
+        "width": 350
+      },
+      "annotationPickerTitle": {
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#ECEFF1",
+        "marginBottom": 16,
+        "textAlign": "center"
+      },
+      "annotationGrid": {
+        "flexDirection": "row",
+        "flexWrap": "wrap",
+        "gap": 8,
+        "justifyContent": "center",
+        "marginBottom": 16
+      },
+      "annotationBtn": {
+        "width": 70,
+        "height": 60,
+        "borderRadius": 10,
+        "backgroundColor": "#37474F",
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "annotationBtnSymbol": {
+        "fontSize": 20,
+        "fontWeight": "900"
+      },
+      "annotationBtnLabel": {
+        "fontSize": 10,
+        "color": "#8BA3C7",
+        "marginTop": 4,
+        "fontWeight": "600"
+      },
+      "annotationClearBtn": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "paddingVertical": 10,
+        "alignItems": "center"
+      },
+      "annotationClearBtnText": {
+        "color": "#F44336",
+        "fontWeight": "700",
+        "fontSize": 14
+      },
+      "openingBadge": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 4,
+        "paddingHorizontal": 6,
+        "paddingVertical": 3,
+        "marginBottom": 5
+      },
+      "openingBadgeText": {
+        "color": "#FDB022",
+        "fontSize": 10,
+        "fontWeight": "700"
+      },
+      "masterStatsLabel": {
+        "color": "#90A4AE",
+        "fontSize": 10,
+        "marginBottom": 2,
+        "fontWeight": "600"
+      },
+      "masterStatsBar": {
+        "flexDirection": "row",
+        "height": 5,
+        "borderRadius": 2.5,
+        "overflow": "hidden",
+        "marginBottom": 2
+      },
+      "masterStatSegment": {
+        "height": "100%"
+      },
+      "masterStatsRow": {
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 4
+      },
+      "masterStatText": {
+        "fontSize": 9,
+        "fontWeight": "700"
+      },
+      "masterSubTitle": {
+        "color": "#FDB022",
+        "fontSize": 10,
+        "fontWeight": "700",
+        "marginBottom": 3
+      },
+      "masterMoveRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 4,
+        "paddingHorizontal": 6,
+        "borderRadius": 5,
+        "marginBottom": 2,
+        "backgroundColor": "#2D3E49"
+      },
+      "masterMoveSan": {
+        "fontSize": 11,
+        "fontWeight": "800",
+        "color": "#ECEFF1",
+        "width": 36
+      },
+      "masterMoveStats": {
+        "flex": 1,
+        "fontSize": 9,
+        "color": "#90A4AE"
+      },
+      "masterMoveRating": {
+        "fontSize": 9,
+        "color": "#FDB022",
+        "fontWeight": "700"
+      },
+      "masterGameRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 4,
+        "paddingHorizontal": 6,
+        "borderRadius": 4,
+        "marginBottom": 2,
+        "backgroundColor": "#2D3E49"
+      },
+      "masterGamePlayers": {
+        "fontSize": 10,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "masterGameInfo": {
+        "fontSize": 9,
+        "color": "#90A4AE",
+        "marginTop": 1
+      },
+      "masterGameLoad": {
+        "fontSize": 13,
+        "color": "#FDB022",
+        "marginLeft": 6
+      },
+      "editSectionLabel": {
+        "color": "#90A4AE",
+        "fontSize": 12,
+        "fontWeight": "600",
+        "marginBottom": 8
+      },
+      "editPaletteRow": {
+        "flexDirection": "row",
+        "gap": 6,
+        "marginBottom": 6,
+        "justifyContent": "center"
+      },
+      "editPieceBtn": {
+        "borderRadius": 6,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "editPieceBtnActive": {
+        "borderWidth": 2.5,
+        "borderColor": "#FDB022",
+        "backgroundColor": "rgba(253, 176, 34, 0.25)"
+      },
+      "editDoneBtn": {
+        "backgroundColor": "#FDB022",
+        "paddingHorizontal": 14,
+        "paddingVertical": 7,
+        "borderRadius": 8
+      },
+      "editDoneBtnText": {
+        "color": "#0F1A2E",
+        "fontWeight": "800",
+        "fontSize": 13
+      },
+      "editDoneBtnPrimary": {
+        "backgroundColor": "#FDB022",
+        "paddingVertical": 12,
+        "borderRadius": 12,
+        "alignItems": "center",
+        "marginTop": 12,
+        "marginBottom": 4,
+        "elevation": 6,
+        "shadowColor": "#FDB022",
+        "shadowOffset": {
+          "width": 0,
+          "height": 3
+        },
+        "shadowOpacity": 0.55,
+        "shadowRadius": 8
+      },
+      "editDoneBtnPrimaryText": {
+        "color": "#0F1A2E",
+        "fontWeight": "800",
+        "fontSize": 15,
+        "letterSpacing": 0.5
+      },
+      "editQuickBtn": {
+        "flex": 1,
+        "paddingVertical": 10,
+        "borderRadius": 8,
+        "backgroundColor": "#37474F",
+        "alignItems": "center"
+      },
+      "editQuickBtnText": {
+        "fontSize": 12,
+        "fontWeight": "700",
+        "color": "#90A4AE"
+      },
+      "editPanelWrapper": {
+        "backgroundColor": "#263238",
+        "paddingHorizontal": 8,
+        "paddingTop": 4
+      },
+      "editPanelCompact": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 9,
+        "padding": 8
+      },
+      "editPanelTitleRow": {
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "alignItems": "center",
+        "marginBottom": 5
+      },
+      "editPanelTitle": {
+        "color": "#ECEFF1",
+        "fontSize": 13,
+        "fontWeight": "700"
+      },
+      "editPanelHint": {
+        "color": "#546E7A",
+        "fontSize": 10,
+        "fontStyle": "italic"
+      },
+      "editPaletteRowCompact": {
+        "flexDirection": "row",
+        "gap": 4,
+        "marginBottom": 4,
+        "justifyContent": "center"
+      },
+      "editPieceBtnCompact": {
+        "width": 36,
+        "height": 36,
+        "borderRadius": 5,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "editActionsRow": {
+        "flexDirection": "row",
+        "gap": 5,
+        "marginTop": 4,
+        "marginBottom": 4
+      },
+      "editActionBtn": {
+        "flex": 1,
+        "paddingVertical": 6,
+        "borderRadius": 7,
+        "backgroundColor": "#37474F",
+        "alignItems": "center",
+        "justifyContent": "center"
+      },
+      "editActionBtnText": {
+        "fontSize": 11,
+        "fontWeight": "700",
+        "color": "#90A4AE"
+      },
+      "editValidationError": {
+        "color": "#F44336",
+        "fontSize": 11,
+        "marginBottom": 3
+      },
+      "editCastlingSection": {
+        "marginTop": 4,
+        "marginBottom": 4
+      },
+      "editCastlingLabel": {
+        "color": "#78909C",
+        "fontSize": 10,
+        "fontWeight": "700",
+        "letterSpacing": 0.5,
+        "textTransform": "uppercase",
+        "marginBottom": 4
+      },
+      "editCastlingRow": {
+        "flexDirection": "row",
+        "gap": 5
+      },
+      "editCastlingBtn": {
+        "flex": 1,
+        "paddingVertical": 6,
+        "borderRadius": 7,
+        "backgroundColor": "#37474F",
+        "alignItems": "center",
+        "borderWidth": 1,
+        "borderColor": "transparent"
+      },
+      "editCastlingBtnOn": {
+        "backgroundColor": "#1B3A1E",
+        "borderColor": "#4CAF50"
+      },
+      "editCastlingBtnText": {
+        "fontSize": 11,
+        "fontWeight": "700",
+        "color": "#546E7A"
+      },
+      "editCastlingBtnTextOn": {
+        "color": "#4CAF50"
+      },
+      "editDoneBtnCompact": {
+        "backgroundColor": "#FDB022",
+        "paddingVertical": 8,
+        "borderRadius": 9,
+        "alignItems": "center",
+        "marginBottom": 5,
+        "elevation": 4,
+        "shadowColor": "#FDB022",
+        "shadowOffset": {
+          "width": 0,
+          "height": 2
+        },
+        "shadowOpacity": 0.45,
+        "shadowRadius": 6
+      },
+      "editDoneBtnCompactText": {
+        "color": "#0F1A2E",
+        "fontWeight": "800",
+        "fontSize": 13,
+        "letterSpacing": 0.3
+      },
+      "editFenRow": {
+        "flexDirection": "row",
+        "gap": 5,
+        "alignItems": "center"
+      },
+      "editFenInput": {
+        "flex": 1,
+        "backgroundColor": "#37474F",
+        "borderRadius": 7,
+        "paddingHorizontal": 10,
+        "paddingVertical": 5,
+        "color": "#ECEFF1",
+        "fontSize": 12
+      },
+      "editFenLoadBtn": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 7,
+        "paddingHorizontal": 12,
+        "paddingVertical": 5,
+        "borderWidth": 1,
+        "borderColor": "#FDB022"
+      },
+      "editFenLoadBtnText": {
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "fontSize": 12
+      },
+      "folderChip": {
+        "paddingHorizontal": 14,
+        "paddingVertical": 8,
+        "borderRadius": 16,
+        "backgroundColor": "#37474F",
+        "marginRight": 8
+      },
+      "folderChipActive": {
+        "backgroundColor": "#FDB022"
+      },
+      "folderChipText": {
+        "fontSize": 13,
+        "fontWeight": "700",
+        "color": "#90A4AE"
+      },
+      "folderChipTextActive": {
+        "color": "#0F1A2E"
+      },
+      "savedSessionRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 10,
+        "paddingHorizontal": 12,
+        "borderRadius": 10,
+        "backgroundColor": "#37474F",
+        "marginBottom": 8
+      },
+      "savedSessionTitle": {
+        "fontSize": 13,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "savedSessionInfo": {
+        "fontSize": 11,
+        "color": "#90A4AE",
+        "marginTop": 2
+      },
+      "savedSessionNotes": {
+        "fontSize": 11,
+        "color": "#546E7A",
+        "marginTop": 2,
+        "fontStyle": "italic"
+      },
+      "flipBoardBar": {
+        "backgroundColor": "#37474F",
+        "alignItems": "center",
+        "paddingVertical": 7,
+        "borderTopWidth": 1,
+        "borderTopColor": "#455A64"
+      },
+      "flipBoardBarText": {
+        "color": "#90CAF9",
+        "fontSize": 13,
+        "fontWeight": "700",
+        "letterSpacing": 0.5
+      },
+      "horizontalMoveTree": {
+        "backgroundColor": "#1B2631",
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#37474F",
+        "maxHeight": 44
+      },
+      "movesStrip": {
+        "backgroundColor": "#1B2631",
+        "maxHeight": 38,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#37474F"
+      },
+      "movesStripContent": {
+        "alignItems": "center",
+        "paddingHorizontal": 8,
+        "paddingVertical": 5
+      },
+      "movesStripNum": {
+        "fontSize": 12,
+        "color": "#546E7A",
+        "marginHorizontal": 2
+      },
+      "movesStripMove": {
+        "fontSize": 13,
+        "color": "#ECEFF1",
+        "paddingHorizontal": 5,
+        "paddingVertical": 2,
+        "borderRadius": 3,
+        "marginHorizontal": 1
+      },
+      "movesStripMoveActive": {
+        "backgroundColor": "#37474F",
+        "color": "#FDB022"
+      },
+      "movesStripToken": {
+        "fontSize": 13,
+        "color": "#546E7A",
+        "paddingHorizontal": 4
+      },
+      "engineOpeningChip": {
+        "fontSize": 9,
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "fontFamily": "Menlo",
+        "marginLeft": "auto"
+      },
+      "branchModal": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 16,
+        "padding": 20,
+        "width": 350,
+        "elevation": 12,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "width": 0,
+          "height": 6
+        },
+        "shadowOpacity": 0.5,
+        "shadowRadius": 10
+      },
+      "branchModalTitle": {
+        "fontSize": 17,
+        "fontWeight": "800",
+        "color": "#ECEFF1",
+        "textAlign": "center",
+        "marginBottom": 4
+      },
+      "branchModalSub": {
+        "fontSize": 12,
+        "color": "#8BA3C7",
+        "textAlign": "center",
+        "marginBottom": 16
+      },
+      "branchOption": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "paddingHorizontal": 14,
+        "paddingVertical": 12,
+        "marginBottom": 8,
+        "borderLeftWidth": 3,
+        "borderLeftColor": "#546E7A"
+      },
+      "branchOptionMain": {
+        "borderLeftColor": "#FDB022",
+        "backgroundColor": "rgba(253,176,34,0.10)"
+      },
+      "branchOptionMove": {
+        "fontSize": 15,
+        "fontWeight": "800",
+        "color": "#ECEFF1"
+      },
+      "branchOptionPreview": {
+        "fontSize": 12,
+        "color": "#8BA3C7",
+        "marginTop": 3
+      },
+      "branchOptionArrow": {
+        "fontSize": 18,
+        "color": "#FDB022",
+        "marginLeft": 10
+      },
+      "branchCancelBtn": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "paddingVertical": 11,
+        "alignItems": "center",
+        "marginTop": 4
+      },
+      "branchCancelBtnText": {
+        "color": "#90A4AE",
+        "fontWeight": "700",
+        "fontSize": 14
+      },
+      "masterTabBar": {
+        "flexDirection": "row",
+        "marginBottom": 5,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#37474F"
+      },
+      "masterTab": {
+        "flex": 1,
+        "paddingVertical": 4,
+        "alignItems": "center"
+      },
+      "masterTabActive": {
+        "borderBottomWidth": 2,
+        "borderBottomColor": "#FDB022"
+      },
+      "masterTabText": {
+        "fontSize": 10,
+        "fontWeight": "600",
+        "color": "#8BA3C7"
+      },
+      "masterTabTextActive": {
+        "color": "#FDB022",
+        "fontWeight": "700"
+      },
+      "masterGamePinBtn": {
+        "width": 26,
+        "height": 26,
+        "borderRadius": 4,
+        "backgroundColor": "#37474F",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "marginLeft": 4
+      },
+      "masterGamePinBtnActive": {
+        "backgroundColor": "rgba(253,176,34,0.12)"
+      },
+      "masterGamePinIcon": {
+        "fontSize": 12
+      },
+      "gmNoSessionBanner": {
+        "backgroundColor": "#1A2942",
+        "borderRadius": 10,
+        "padding": 16,
+        "alignItems": "center",
+        "marginTop": 8
+      },
+      "gmNoSessionText": {
+        "color": "#8BA3C7",
+        "fontSize": 13,
+        "textAlign": "center",
+        "lineHeight": 20
+      },
+      "gmEmptyState": {
+        "alignItems": "center",
+        "paddingVertical": 28
+      },
+      "gmEmptyStateIcon": {
+        "fontSize": 36,
+        "marginBottom": 10
+      },
+      "gmEmptyStateText": {
+        "color": "#8BA3C7",
+        "fontSize": 13,
+        "textAlign": "center",
+        "lineHeight": 20
+      },
+      "gmSavedGameRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 10,
+        "paddingHorizontal": 10,
+        "borderRadius": 8,
+        "marginBottom": 6,
+        "backgroundColor": "#37474F"
+      },
+      "gmSavedLoadBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 6,
+        "paddingHorizontal": 10,
+        "paddingVertical": 5,
+        "marginLeft": 6
+      },
+      "gmSavedLoadText": {
+        "fontSize": 12,
+        "fontWeight": "800",
+        "color": "#0F1A2E"
+      },
+      "gmSavedRemoveBtn": {
+        "width": 28,
+        "height": 28,
+        "borderRadius": 6,
+        "backgroundColor": "#546E7A",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "marginLeft": 6
+      },
+      "gmSavedRemoveText": {
+        "fontSize": 13,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "gmSavedTip": {
+        "fontSize": 11,
+        "color": "#8BA3C7",
+        "fontStyle": "italic",
+        "marginBottom": 8,
+        "paddingHorizontal": 2
+      },
+      "masterCountdownRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 8,
+        "paddingVertical": 8,
+        "paddingHorizontal": 2
+      },
+      "masterCountdownText": {
+        "color": "#FDB022",
+        "fontSize": 12,
+        "fontWeight": "600"
+      },
+      "masterEmptyText": {
+        "color": "#546E7A",
+        "fontSize": 12,
+        "fontStyle": "italic",
+        "textAlign": "center",
+        "paddingVertical": 10
+      },
+      "gmExplorerHint": {
+        "fontSize": 10,
+        "color": "#546E7A",
+        "fontStyle": "italic",
+        "marginBottom": 3,
+        "paddingHorizontal": 2
+      },
+      "gmPreviewHeader": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "paddingVertical": 10,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#263040",
+        "marginBottom": 14
+      },
+      "gmPreviewBackBtn": {
+        "paddingHorizontal": 10,
+        "paddingVertical": 6,
+        "borderRadius": 8,
+        "backgroundColor": "#263040"
+      },
+      "gmPreviewBackText": {
+        "fontSize": 14,
+        "color": "#8BA3C7",
+        "fontWeight": "600"
+      },
+      "gmPreviewInsertBtn": {
+        "paddingHorizontal": 14,
+        "paddingVertical": 6,
+        "borderRadius": 8,
+        "backgroundColor": "#FDB022"
+      },
+      "gmPreviewInsertText": {
+        "fontSize": 14,
+        "color": "#0F1A2E",
+        "fontWeight": "700"
+      },
+      "gmPreviewCard": {
+        "backgroundColor": "#0D1F2A",
+        "borderRadius": 10,
+        "padding": 14,
+        "borderWidth": 1,
+        "borderColor": "#26C6DA",
+        "marginBottom": 14
+      },
+      "gmPreviewTypeBadge": {
+        "alignSelf": "flex-start",
+        "backgroundColor": "rgba(38,198,218,0.12)",
+        "borderWidth": 1,
+        "borderColor": "#26C6DA",
+        "borderRadius": 4,
+        "paddingHorizontal": 7,
+        "paddingVertical": 2,
+        "marginBottom": 10
+      },
+      "gmPreviewTypeBadgeText": {
+        "fontSize": 9,
+        "fontWeight": "800",
+        "color": "#26C6DA",
+        "letterSpacing": 0.8
+      },
+      "gmPreviewPlayers": {
+        "marginBottom": 8
+      },
+      "gmPreviewPlayerRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 6,
+        "marginBottom": 4
+      },
+      "gmPreviewColorDot": {
+        "width": 10,
+        "height": 10,
+        "borderRadius": 5,
+        "backgroundColor": "#ECEFF1",
+        "borderWidth": 1,
+        "borderColor": "#546E7A"
+      },
+      "gmPreviewPlayerName": {
+        "flex": 1,
+        "fontSize": 14,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "gmPreviewPlayerRating": {
+        "fontSize": 12,
+        "color": "#607D8B"
+      },
+      "gmPreviewVs": {
+        "fontSize": 11,
+        "color": "#546E7A",
+        "fontStyle": "italic",
+        "marginLeft": 16,
+        "marginBottom": 4
+      },
+      "gmPreviewMeta": {
+        "fontSize": 12,
+        "color": "#80DEEA",
+        "fontWeight": "600"
+      },
+      "gmPreviewMovesTitle": {
+        "fontSize": 12,
+        "color": "#546E7A",
+        "fontWeight": "600",
+        "textTransform": "uppercase",
+        "letterSpacing": 0.5,
+        "marginBottom": 6
+      },
+      "gmPreviewMovesScroll": {
+        "maxHeight": 220,
+        "borderRadius": 8,
+        "backgroundColor": "#0D1520",
+        "paddingHorizontal": 4
+      },
+      "gmPreviewMoveRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 5,
+        "paddingHorizontal": 8
+      },
+      "gmPreviewMoveRowAlt": {
+        "backgroundColor": "rgba(255,255,255,0.03)"
+      },
+      "gmPreviewMoveNum": {
+        "width": 28,
+        "fontSize": 12,
+        "color": "#546E7A"
+      },
+      "gmPreviewMoveWhite": {
+        "flex": 1,
+        "fontSize": 13,
+        "color": "#ECEFF1",
+        "fontWeight": "600"
+      },
+      "gmPreviewMoveBlack": {
+        "flex": 1,
+        "fontSize": 13,
+        "color": "#B0BEC5",
+        "fontWeight": "600"
+      },
+      "gmPreviewInsertFull": {
+        "marginTop": 14,
+        "backgroundColor": "#FDB022",
+        "borderRadius": 10,
+        "paddingVertical": 13,
+        "alignItems": "center"
+      },
+      "gmPreviewInsertFullText": {
+        "fontSize": 15,
+        "fontWeight": "700",
+        "color": "#0F1A2E"
+      },
+      "gmPreviewLoadingBox": {
+        "paddingVertical": 48,
+        "alignItems": "center",
+        "gap": 12
+      },
+      "gmPreviewLoadingText": {
+        "fontSize": 14,
+        "color": "#8BA3C7"
+      },
+      "altChipGm": {
+        "backgroundColor": "#0D2D3A",
+        "borderWidth": 1,
+        "borderColor": "#26C6DA",
+        "borderRadius": 6,
+        "paddingHorizontal": 7,
+        "paddingVertical": 3,
+        "marginHorizontal": 2
+      },
+      "altChipGmText": {
+        "fontSize": 12,
+        "color": "#80DEEA",
+        "fontWeight": "600"
+      },
+      "varModalOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.65)",
+        "justifyContent": "flex-end"
+      },
+      "varModalSheet": {
+        "backgroundColor": "#1A2634",
+        "borderTopLeftRadius": 20,
+        "borderTopRightRadius": 20,
+        "paddingTop": 10,
+        "paddingHorizontal": 20,
+        "paddingBottom": 36
+      },
+      "varModalHandle": {
+        "width": 36,
+        "height": 4,
+        "borderRadius": 2,
+        "backgroundColor": "#37474F",
+        "alignSelf": "center",
+        "marginBottom": 14
+      },
+      "varModalHeader": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "marginBottom": 12
+      },
+      "varTypeBadge": {
+        "borderWidth": 1,
+        "borderRadius": 5,
+        "paddingHorizontal": 8,
+        "paddingVertical": 3
+      },
+      "varTypeBadgeText": {
+        "fontSize": 10,
+        "fontWeight": "800",
+        "letterSpacing": 0.8
+      },
+      "varModalCloseBtn": {
+        "width": 28,
+        "height": 28,
+        "borderRadius": 14,
+        "backgroundColor": "#263040",
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "varModalCloseText": {
+        "color": "#8BA3C7",
+        "fontSize": 13,
+        "fontWeight": "700"
+      },
+      "varModalGmLabel": {
+        "fontSize": 12,
+        "color": "#80DEEA",
+        "marginBottom": 8,
+        "lineHeight": 17
+      },
+      "varModalSanRow": {
+        "flexDirection": "row",
+        "alignItems": "baseline",
+        "borderLeftWidth": 3,
+        "paddingLeft": 10,
+        "marginBottom": 4
+      },
+      "varModalSanPrefix": {
+        "fontSize": 14,
+        "color": "#607D8B",
+        "marginRight": 4
+      },
+      "varModalSan": {
+        "fontSize": 20,
+        "fontWeight": "700",
+        "color": "#ECEFF1"
+      },
+      "varModalDivider": {
+        "height": 1,
+        "backgroundColor": "#263040",
+        "marginVertical": 14
+      },
+      "varActionRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 12,
+        "paddingHorizontal": 6,
+        "borderRadius": 12,
+        "gap": 14
+      },
+      "varActionIconWrap": {
+        "width": 40,
+        "height": 40,
+        "borderRadius": 20,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "varActionIcon": {
+        "fontSize": 20
+      },
+      "varActionTitle": {
+        "fontSize": 15,
+        "fontWeight": "700",
+        "color": "#ECEFF1",
+        "marginBottom": 2
+      },
+      "varActionSub": {
+        "fontSize": 12,
+        "color": "#546E7A"
+      },
+      "varActionChevron": {
+        "fontSize": 22,
+        "color": "#546E7A",
+        "fontWeight": "300"
+      },
+      "varDeleteBox": {
+        "backgroundColor": "#1F2D3D",
+        "borderRadius": 12,
+        "padding": 16,
+        "borderWidth": 1,
+        "borderColor": "rgba(239,83,80,0.4)"
+      },
+      "varDeleteTitle": {
+        "fontSize": 15,
+        "fontWeight": "700",
+        "color": "#EF5350",
+        "marginBottom": 8
+      },
+      "varDeleteBody": {
+        "fontSize": 13,
+        "color": "#8BA3C7",
+        "lineHeight": 20,
+        "marginBottom": 16
+      },
+      "varDeleteBtns": {
+        "flexDirection": "row",
+        "gap": 10
+      },
+      "varDeleteCancelBtn": {
+        "flex": 1,
+        "paddingVertical": 11,
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#37474F",
+        "alignItems": "center"
+      },
+      "varDeleteCancelText": {
+        "color": "#90A4AE",
+        "fontWeight": "600",
+        "fontSize": 14
+      },
+      "varDeleteConfirmBtn": {
+        "flex": 1,
+        "paddingVertical": 11,
+        "borderRadius": 8,
+        "backgroundColor": "#EF5350",
+        "alignItems": "center"
+      },
+      "varDeleteConfirmText": {
+        "color": "#fff",
+        "fontWeight": "700",
+        "fontSize": 14
+      }
+    },
+    "saveModalStyles": {
+      "fieldRow": {
+        "flexDirection": "row",
+        "gap": 8,
+        "marginBottom": 8
+      },
+      "fieldInput": {
+        "backgroundColor": "#37474F",
+        "borderRadius": 10,
+        "paddingHorizontal": 14,
+        "paddingVertical": 12,
+        "color": "#FFFFFF",
+        "fontSize": 14,
+        "marginBottom": 8
+      },
+      "dateBtn": {
+        "flex": 1,
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between"
+      },
+      "resultRow": {
+        "flexDirection": "row",
+        "gap": 8,
+        "marginBottom": 10,
+        "marginTop": 2
+      },
+      "resultChip": {
+        "flex": 1,
+        "paddingVertical": 10,
+        "borderRadius": 10,
+        "backgroundColor": "#37474F",
+        "alignItems": "center"
+      },
+      "resultChipActive": {
+        "backgroundColor": "#FDB022"
+      },
+      "resultChipText": {
+        "color": "#8BA3C7",
+        "fontSize": 13,
+        "fontWeight": "700"
+      },
+      "resultChipTextActive": {
+        "color": "#0F1A2E"
+      },
+      "bottomRow": {
+        "flexDirection": "row",
+        "gap": 10,
+        "marginTop": 12
+      },
+      "cancelBtn": {
+        "flex": 1,
+        "paddingVertical": 14,
+        "borderRadius": 12,
+        "backgroundColor": "#37474F",
+        "alignItems": "center"
+      },
+      "cancelBtnText": {
+        "color": "#FFFFFF",
+        "fontSize": 16,
+        "fontWeight": "800"
+      },
+      "saveBtn": {
+        "flex": 1,
+        "paddingVertical": 14,
+        "borderRadius": 12,
+        "backgroundColor": "#4CAF50",
+        "alignItems": "center"
+      },
+      "saveBtnText": {
+        "color": "#FFFFFF",
+        "fontSize": 16,
+        "fontWeight": "800"
+      }
+    },
+    "gameInfoStyles": {
+      "container": {
+        "backgroundColor": "#1B2631",
+        "borderRadius": 10,
+        "paddingHorizontal": 12,
+        "paddingVertical": 8,
+        "marginHorizontal": 8,
+        "marginBottom": 8
+      },
+      "players": {
+        "color": "#FFFFFF",
+        "fontSize": 14,
+        "fontWeight": "700"
+      },
+      "meta": {
+        "color": "#8BA3C7",
+        "fontSize": 12,
+        "marginTop": 3
+      },
+      "notes": {
+        "color": "#6B7B8D",
+        "fontSize": 12,
+        "marginTop": 4,
+        "fontStyle": "italic"
+      }
+    },
+    "sidebarStyles": {
+      "overlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.55)",
+        "flexDirection": "row"
+      },
+      "container": {
+        "backgroundColor": "#1B2631",
+        "width": 265.20000000000005,
+        "flex": 1,
+        "borderRightWidth": 1,
+        "borderRightColor": "#263040",
+        "elevation": 12,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "width": 4,
+          "height": 0
+        },
+        "shadowOpacity": 0.5,
+        "shadowRadius": 12
+      },
+      "header": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "paddingHorizontal": 20,
+        "paddingTop": 56,
+        "paddingBottom": 16,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "#263040"
+      },
+      "headerTitle": {
+        "fontSize": 20,
+        "fontWeight": "800",
+        "color": "#FFFFFF",
+        "letterSpacing": 0.5
+      },
+      "closeBtn": {
+        "width": 32,
+        "height": 32,
+        "borderRadius": 16,
+        "backgroundColor": "#263040",
+        "alignItems": "center",
+        "justifyContent": "center"
+      },
+      "closeBtnText": {
+        "color": "#8BA3C7",
+        "fontSize": 16,
+        "fontWeight": "700"
+      },
+      "sectionTitle": {
+        "fontSize": 11,
+        "fontWeight": "800",
+        "color": "#5A6E87",
+        "letterSpacing": 1.2,
+        "textTransform": "uppercase",
+        "paddingHorizontal": 20,
+        "paddingTop": 18,
+        "paddingBottom": 6
+      },
+      "menuItem": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 13,
+        "paddingHorizontal": 20
+      },
+      "menuIcon": {
+        "fontSize": 18,
+        "width": 30
+      },
+      "menuLabel": {
+        "fontSize": 15,
+        "color": "#E0E0E0",
+        "fontWeight": "500",
+        "flex": 1
+      },
+      "toggleDot": {
+        "width": 10,
+        "height": 10,
+        "borderRadius": 5,
+        "backgroundColor": "#455A64"
+      },
+      "toggleDotActive": {
+        "backgroundColor": "#4CAF50"
+      }
+    },
+    "loadModalStyles": {
+      "sessionCard": {
+        "flexDirection": "row",
+        "backgroundColor": "#263040",
+        "borderRadius": 12,
+        "padding": 14,
+        "marginBottom": 8
+      },
+      "sessionPrimary": {
+        "fontSize": 14,
+        "fontWeight": "700",
+        "color": "#FFFFFF",
+        "marginBottom": 3
+      },
+      "sessionPgn": {
+        "fontSize": 12,
+        "color": "#6B7B8D",
+        "fontFamily": "Menlo"
+      },
+      "sessionMeta": {
+        "fontSize": 11,
+        "color": "#5A6E87",
+        "marginTop": 4
+      },
+      "actionBtn": {
+        "width": 34,
+        "height": 34,
+        "borderRadius": 8,
+        "backgroundColor": "#1B2631",
+        "alignItems": "center",
+        "justifyContent": "center"
+      }
+    },
+    "annotPickerStyles": {
+      "sectionLabel": {
+        "fontSize": 11,
+        "fontWeight": "700",
+        "color": "#5A6E87",
+        "letterSpacing": 1,
+        "textTransform": "uppercase",
+        "marginTop": 12,
+        "marginBottom": 6,
+        "paddingHorizontal": 4
+      }
+    },
+    "accModalStyles": {
+      "overlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.92)",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "paddingHorizontal": 16,
+        "paddingVertical": 24
+      },
+      "card": {
+        "backgroundColor": "#151E2A",
+        "borderRadius": 18,
+        "width": "100%",
+        "maxHeight": 675.2,
+        "overflow": "hidden",
+        "borderWidth": 1,
+        "borderColor": "rgba(253,176,34,0.20)"
+      },
+      "header": {
+        "paddingTop": 20,
+        "paddingBottom": 14,
+        "paddingHorizontal": 20,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(255,255,255,0.07)",
+        "alignItems": "center"
+      },
+      "title": {
+        "fontSize": 13,
+        "fontWeight": "800",
+        "color": "#FDB022",
+        "letterSpacing": 2.5,
+        "textTransform": "uppercase"
+      },
+      "loadingBody": {
+        "alignItems": "center",
+        "paddingVertical": 36,
+        "paddingHorizontal": 24
+      },
+      "loadingText": {
+        "fontSize": 16,
+        "color": "#E0E0E0",
+        "fontWeight": "600",
+        "marginBottom": 6
+      },
+      "loadingHint": {
+        "fontSize": 12,
+        "color": "rgba(255,255,255,0.35)",
+        "marginBottom": 4
+      },
+      "skipBtn": {
+        "marginTop": 20,
+        "paddingVertical": 10,
+        "paddingHorizontal": 28,
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "rgba(255,255,255,0.18)"
+      },
+      "skipBtnText": {
+        "fontSize": 13,
+        "color": "rgba(255,255,255,0.45)",
+        "fontWeight": "600"
+      },
+      "scrollArea": {
+        "flexGrow": 0
+      },
+      "scrollContent": {
+        "paddingHorizontal": 20,
+        "paddingTop": 18,
+        "paddingBottom": 4
+      },
+      "scoresRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "marginBottom": 18
+      },
+      "scoreCol": {
+        "flex": 1,
+        "alignItems": "center"
+      },
+      "playerName": {
+        "fontSize": 12,
+        "fontWeight": "700",
+        "color": "rgba(255,255,255,0.45)",
+        "marginBottom": 4,
+        "letterSpacing": 0.5
+      },
+      "scoreValue": {
+        "fontSize": 36,
+        "fontWeight": "900",
+        "lineHeight": 40
+      },
+      "scoreLabel": {
+        "fontSize": 10,
+        "fontWeight": "600",
+        "color": "rgba(255,255,255,0.25)",
+        "letterSpacing": 1.5,
+        "textTransform": "uppercase",
+        "marginTop": 2
+      },
+      "scoresDivider": {
+        "width": 1,
+        "height": 64,
+        "backgroundColor": "rgba(255,255,255,0.10)",
+        "marginHorizontal": 12
+      },
+      "graphWrap": {
+        "borderRadius": 8,
+        "overflow": "hidden",
+        "backgroundColor": "#0F1A2E",
+        "marginBottom": 18
+      },
+      "classTableHeader": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingBottom": 6,
+        "marginBottom": 2,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(255,255,255,0.07)"
+      },
+      "classTableSide": {
+        "width": 36,
+        "textAlign": "center",
+        "fontSize": 10,
+        "fontWeight": "700",
+        "color": "rgba(255,255,255,0.3)",
+        "letterSpacing": 0.5
+      },
+      "classTableMid": {
+        "flex": 1
+      },
+      "classRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 7,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(255,255,255,0.04)"
+      },
+      "classCount": {
+        "width": 36,
+        "textAlign": "center",
+        "fontSize": 15,
+        "fontWeight": "800"
+      },
+      "classCenter": {
+        "flex": 1,
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "gap": 7
+      },
+      "classDot": {
+        "width": 9,
+        "height": 9,
+        "borderRadius": 5
+      },
+      "className": {
+        "fontSize": 13,
+        "fontWeight": "600",
+        "color": "rgba(255,255,255,0.75)"
+      },
+      "footer": {
+        "padding": 16,
+        "borderTopWidth": 1,
+        "borderTopColor": "rgba(255,255,255,0.07)"
+      },
+      "loadBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 12,
+        "paddingVertical": 14,
+        "alignItems": "center"
+      },
+      "loadBtnText": {
+        "fontSize": 15,
+        "fontWeight": "800",
+        "color": "#0F1A2E",
+        "letterSpacing": 0.3
+      }
+    }
+  }
+}

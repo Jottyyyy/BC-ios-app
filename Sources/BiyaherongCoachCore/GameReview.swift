@@ -6,7 +6,10 @@ import Foundation
 public enum GameReview {
 
     /// One engine evaluation of a position, from White's perspective.
-    public struct Evaluation: Codable, Equatable {
+    /// `Sendable` so a background review can carry its results back. A three-field value type of
+    /// `Int?`/`String?` — the conformance is behaviour-free and no golden is affected. (Public
+    /// structs do not get it implicitly, which is why it is spelled out.)
+    public struct Evaluation: Codable, Equatable, Sendable {
         public let evalCp: Int?
         public let evalMate: Int?
         public let bestMoveSan: String?

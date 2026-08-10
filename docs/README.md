@@ -23,5 +23,8 @@ Feature- and subsystem-level documentation for this repo.
   reusable `<chess-board>` component).
 - [`home-screen.md`](home-screen.md) — the landing dashboard: four bands, a never-scrolling 3×2 grid of six
   equal cards, the Sky/Colorful themes, and the hourly Taglish quote.
+- [`analysis-board.md`](analysis-board.md) — the offline analysis screen: move tree, local engine, ECO book,
+  game review, persistence, Setup Position, PGN import/export, and the pure metrics layer extracted from the
+  real RN StyleSheet.
 
 _More docs get added here as features are built._

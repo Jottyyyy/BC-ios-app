@@ -29,9 +29,24 @@ Sources/BiyaherongCoachCore/     # domain engines (Foundation only — no UIKit/
   ChessBoard.swift               # FEN + legal move generation + SAN (perft-verified) [Chess primitives §11]
   ChessAI.swift                  # negamax + alpha-beta + PST eval; 5 coach personas [Play vs Coach §8.1]
   PHPCompat.swift                # exact PHP <=> / truthiness semantics
+  # --- the Analysis Board (see docs/analysis-board.md) ---
+  ChessNotation.swift            # SAN + UCI PARSING (the inverse of ChessBoard's generator)
+  ChessRules.swift               # position key, insufficient material, fifty-move, threefold
+  MoveTree.swift                 # the move tree with variations + a pure flatten() render model
+  PGN.swift                      # parse + serialize: RAVs, NAGs, comments — the persistence format
+  AnalysisEngine.swift           # the engine protocol and its score types (Stockfish drops in here)
+  LocalEngine.swift              # the interim search: iterative deepening, quiescence, MultiPV, PV
+  OpeningBook.swift              # ECO lookup over the bundled 7,854-row book
+  ReviewAnnotator.swift          # drives the engine over a game; layers `book` on top of GameReview
+  AnalysisSession.swift          # the screen's behaviour, with no screen attached
+  AnalysisStore.swift            # the saved-game library (pure Codable records; no I/O, no clock)
+  PositionEditor.swift           # Setup Position: placement, castling normalisation, validation
 DemoApp/                         # native macOS SwiftUI app wrapping the engines (interactive board + panels)
 Sources/ParityRunner/main.swift  # in-house parity harness (no XCTest in the CLI toolchain)
 tools/oracle/generate_goldens.php# real PHP function bodies → golden JSON
+tools/eco/build_eco.php          # vendored CC0 opening TSVs → the bundled ECO book
+tools/metrics/extract_board_styles.js # TS AST walk over the RN source → board_styles.json
+tools/qa/js_goldens.js           # the JavaScript gate — the one that runs on the Windows checkout
 tools/qa/mutation_test.py        # mutation testing (proves the suite catches bugs)
 Goldens/*.json                   # generated golden vectors (curated + randomized)
 PORTING_NOTES.md                 # decisions & deviations
@@ -44,7 +59,9 @@ tools/oracle/run.sh              # regenerate goldens from PHP, then run the Swi
 php tools/oracle/generate_goldens.php
 swift run ParityRunner
 ```
-Exit code 0 = every parity check passed. Current: **30,275 assertions across 28 groups**, including
+Exit code 0 = every parity check passed. The suite has grown a great deal with the Analysis Board; the
+`requireMinCounts` floors in `Sources/ParityRunner/main.swift` are the authoritative figure, and the run
+prints its own total. It includes
 a **perft** move-generation suite (startpos depth 4 = 197,281 nodes; Kiwipete depth 3 = 97,862), and
 3,000 randomized ELO cases, 500 daily-goal, 300 game reviews, 270 full randomized tournaments, a 1,156-pair
 `<=>` differential, and a classification-boundary grid — all differentially matched against the real PHP.
@@ -94,6 +111,9 @@ cd DemoApp && swift run PieceArtCheck   # 99 assertions: the 12 files + grammar/
 - **Piece artwork** — Uray M. János (2013–2018), derived from the Wikipedia chess set,
   **CC BY-SA**. Files: `assets/images/chess-pieces/*.svg`.
 - **Nunito** — SIL Open Font License. Files: `DemoApp/Sources/BiyaherongUI/Fonts/*.ttf`.
+- **ECO opening names** — [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
+  **CC0 1.0** (public domain dedication). Inputs: `tools/eco/data/*.tsv` (+ `COPYING.txt`); built product:
+  `DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` via `php tools/eco/build_eco.php`.
 
 ## Decisions locked (see PORTING_NOTES.md)
 - **Puzzle bank:** full **550,000** puzzles (~100 MB) → build-time `puzzles.sqlite` (later phase).

@@ -985,4 +985,212 @@ $truthyCases = [];
 foreach ($truthyStrings as $s) $truthyCases[] = ['s' => $s, 'truthy' => (bool) $s];
 dumpGolden('phpcompat_truthy', $truthyCases);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. SAN parsing (App\Services\ChessEngine — the REAL class, not an extraction)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Unlike everything above, this section loads the actual Laravel ChessEngine (it is framework-free,
+// so requiring it is strictly more faithful than copying it) and uses it to pin the SAN parser that
+// Swift's ChessNotation.swift and web-demo/js/engine.js must reproduce.
+//
+// Each case is  { fenBefore, san, uci, fenAfter, key }  and carries THREE Swift assertions:
+//   1. parseSAN(fenBefore, san)          == uci
+//   2. makeMove(parsed).fen              == fenAfter        (all six FEN fields)
+//   3. san(for: parsed) re-parses to the same Move          (closes the generate/parse loop)
+// Assertion 3 is a round-trip, not string equality, because the oracle echoes its input SAN back
+// (`'san' => $original`) and therefore cannot pin SAN *generation* — Swift's own san(for:) owns
+// that, and disambiguation may legitimately be more minimal than the corpus spelling.
+//
+// Corpus A: a deterministic 1-in-12 sample of the vendored ECO lines — real, curated master
+//           openings, ~2,400 plies of captures, castling and disambiguation.
+// Corpus B: hand-built FEN-anchored sequences for what openings never reach — promotion and
+//           underpromotion, capture-promotion, en passant for both colours, castling rights lost to
+//           a rook capture, all three disambiguation forms, check/mate suffixes, and a pin that
+//           makes a pseudo-legally ambiguous move unambiguous.
+
+require_once __DIR__ . '/chess_oracle.php';
+
+if (!ORACLE_ENGINE_AVAILABLE) {
+    fwrite(STDERR, "\nWARNING: skipping the san_parse + pgn_tokens goldens — the real ChessEngine was\n"
+        . "not found at " . ORACLE_ENGINE_PATH . ".\n"
+        . "Set LARAVEL_ROOT or clone the sibling repo, then re-run. ParityRunner will fail its\n"
+        . "san_parse/pgn_tokens floors until you do.\n\n");
+} else {
+
+$sanCases = [];
+
+/** Replay a SAN sequence from `$fen`, emitting one golden case per ply. Aborts loudly on bad SAN. */
+function sanSequence(array &$out, ?string $fen, array $sans, string $src): void {
+    $engine = oracle_engine($fen);
+    foreach ($sans as $i => $san) {
+        $before = $engine->fen();
+        try {
+            $applied = $engine->applyMoveSan($san);
+        } catch (\InvalidArgumentException $e) {
+            fwrite(STDERR, "FATAL: bad golden corpus at $src ply " . ($i + 1) . " ('$san'): "
+                . $e->getMessage() . "\n");
+            exit(1);
+        }
+        $out[] = [
+            'fenBefore' => $before,
+            'san'       => $san,
+            'uci'       => $applied['uci'],
+            'fenAfter'  => $engine->fen(),
+            'key'       => oracle_key($engine),
+            'src'       => "$src#" . ($i + 1),
+        ];
+    }
+}
+
+// ── Corpus A: 1-in-12 sample of the vendored ECO lines ──
+$ecoDir = __DIR__ . '/../eco/data';
+$ecoRows = [];
+foreach (['a', 'b', 'c', 'd', 'e'] as $letter) {
+    $path = "$ecoDir/$letter.tsv";
+    if (!is_file($path)) continue;
+    $lines = file($path, FILE_IGNORE_NEW_LINES);
+    array_shift($lines);
+    foreach ($lines as $line) {
+        if (trim($line) === '') continue;
+        $p = explode("\t", $line);
+        if (count($p) >= 3) $ecoRows[] = $p;
+    }
+}
+if (!$ecoRows) {
+    fwrite(STDERR, "FATAL: no ECO rows for the san_parse corpus — see tools/eco/data/SOURCE.md.\n");
+    exit(1);
+}
+foreach ($ecoRows as $i => $p) {
+    if ($i % 12 !== 0) continue;
+    sanSequence($sanCases, null, oracle_pgn_tokens($p[2]), "eco:{$p[0]}:{$p[1]}");
+}
+$ecoSampled = count($sanCases);
+
+// ── Corpus B: what openings never reach ──
+$promoFen  = '8/P6k/8/8/8/8/6K1/8 w - - 0 1';          // lone a7 pawn, both kings clear
+$capPromo  = '1n5k/P7/8/8/8/8/6K1/8 w - - 0 1';        // a7 pawn, black knight on b8
+$castleFen = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';   // all four castling rights live
+
+foreach (['Q', 'R', 'B', 'N'] as $pc) {
+    sanSequence($sanCases, $promoFen, ["a8=$pc"], "promotion:$pc");
+    sanSequence($sanCases, $capPromo, ["axb8=$pc"], "capture-promotion:$pc");
+}
+
+sanSequence($sanCases, '8/8/8/3pP3/8/8/8/K6k w - d6 0 1',  ['exd6'], 'en-passant:white');
+sanSequence($sanCases, '8/8/8/8/3Pp3/8/8/K6k b - d3 0 1',  ['exd3'], 'en-passant:black');
+sanSequence($sanCases, null, ['e4', 'c5', 'e5', 'd5', 'exd6'], 'en-passant:from-startpos');
+
+sanSequence($sanCases, $castleFen, ['O-O'],    'castle:white-king');
+sanSequence($sanCases, $castleFen, ['O-O-O'],  'castle:white-queen');
+$castleFenB = 'r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1';
+sanSequence($sanCases, $castleFenB, ['O-O'],   'castle:black-king');
+sanSequence($sanCases, $castleFenB, ['O-O-O'], 'castle:black-queen');
+sanSequence($sanCases, $castleFen, ['Rxa8'], 'castle-rights:rook-captured-queenside');
+sanSequence($sanCases, $castleFen, ['Rxh8'], 'castle-rights:rook-captured-kingside');
+sanSequence($sanCases, $castleFen, ['Ra2'],  'castle-rights:rook-moved-queenside');
+sanSequence($sanCases, $castleFen, ['Kf1'],  'castle-rights:king-moved');
+
+// disambiguation: by file, by rank, and by both
+sanSequence($sanCases, '7k/8/8/8/8/8/8/1N1K1N2 w - - 0 1', ['Nbd2'], 'disambig:file-b');
+sanSequence($sanCases, '7k/8/8/8/8/8/8/1N1K1N2 w - - 0 1', ['Nfd2'], 'disambig:file-f');
+sanSequence($sanCases, '7k/8/8/R7/8/8/R7/6K1 w - - 0 1',   ['R5a3'], 'disambig:rank-5');
+sanSequence($sanCases, '7k/8/8/R7/8/8/R7/6K1 w - - 0 1',   ['R2a3'], 'disambig:rank-2');
+sanSequence($sanCases, '7k/8/8/8/Q7/8/8/Q2Q2K1 w - - 0 1', ['Qa1d4'], 'disambig:file-and-rank');
+sanSequence($sanCases, '7k/8/8/8/Q7/8/8/Q2Q2K1 w - - 0 1', ['Qdd4'],  'disambig:file-only-d');
+sanSequence($sanCases, '7k/8/8/8/Q7/8/8/Q2Q2K1 w - - 0 1', ['Q4d4'],  'disambig:rank-only-4');
+
+// a pin makes a pseudo-legally ambiguous knight move unambiguous (only Nd1-c3 is legal)
+sanSequence($sanCases, '4r2k/8/8/8/8/8/4N3/3NK3 w - - 0 1', ['Nc3'], 'disambig:pin-resolves');
+
+// check and mate suffixes must be accepted and stripped
+sanSequence($sanCases, '7k/8/8/8/8/8/8/R5K1 w - - 0 1',      ['Ra8+'], 'suffix:check');
+sanSequence($sanCases, '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1',  ['Ra8#'], 'suffix:mate');
+sanSequence($sanCases, '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1',  ['Ra8'],  'suffix:absent');
+sanSequence($sanCases, null, ['e4', 'e5', 'Qh5', 'Nc6', 'Bc4', 'Nf6', 'Qxf7#'], 'suffix:scholars-mate');
+
+// halfmove clock: resets on pawn move and capture, increments otherwise
+sanSequence($sanCases, null, ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6'], 'clock:quiet-increments');
+sanSequence($sanCases, '7k/8/8/3p4/4P3/8/8/7K w - - 9 40', ['exd5'], 'clock:capture-resets');
+
+dumpGolden('san_parse', $sanCases);
+echo "  san_parse: " . count($sanCases) . " cases ("
+    . $ecoSampled . " from the ECO sample, " . (count($sanCases) - $ecoSampled) . " targeted)\n";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. PGN tokenising (App\Services\PgnImportService::splitPgnGames + tokenizeMoves)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Pins the strip pipeline — comments, nested variations, NAGs, move numbers, result tokens — and
+// header parsing. ORACLE LIMIT: the real tokenizer DISCARDS `( … )` variations, so these goldens
+// pin mainline extraction only. Our PGN parser keeps RAVs; the cross-check is that its mainline SAN
+// sequence equals the oracle's token list. Variation structure has no oracle and is covered by the
+// pgn_roundtrip property group instead.
+
+$pgnSamples = [
+    'plain'            => "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0",
+    'no-result'        => "1. e4 e5 2. Nf3",
+    'black-ellipsis'   => "1. e4 e5 2. Nf3 Nc6 3... Bb5",
+    'comments'         => "1. e4 {King's pawn} e5 {symmetric} 2. Nf3 Nc6 *",
+    'nags'             => "1. e4 \$1 e5 \$2 2. Nf3 \$146 Nc6 0-1",
+    'suffix-annots'    => "1. e4! e5?! 2. Nf3!? Nc6?? 3. Bb5!! a6? 1/2-1/2",
+    'variation'        => "1. e4 e5 (1... c5 2. Nf3 d6) 2. Nf3 Nc6 1-0",
+    'nested-variation' => "1. e4 e5 (1... c5 2. Nf3 (2. Nc3 Nc6) d6) 2. Nf3 *",
+    'comment-in-var'   => "1. e4 e5 (1... c5 {Sicilian} 2. Nf3) 2. Nf3 1-0",
+    'multiline'        => "1. e4 e5\n2. Nf3 Nc6\n3. Bb5 a6\n1-0",
+    'draw-result'      => "1. d4 d5 1/2-1/2",
+    'star-result'      => "1. d4 d5 *",
+    'castling'         => "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6 5. d3 O-O *",
+    'promotion'        => "1. e4 d5 2. exd5 c6 3. dxc6 Nf6 4. cxb7 Bd7 5. bxa8=Q *",
+    'long-numbers'     => "10. Nf3 Nc6 11. Bb5 a6 100. Kg1 Kg8 *",
+    'no-space-numbers' => "1.e4 e5 2.Nf3 Nc6 3.Bb5 1-0",
+    'paren-in-comment' => "1. e4 {a (tricky) comment} e5 2. Nf3 *",
+    'result-in-comment'=> "1. e4 {agreed 1/2-1/2 here} e5 1-0",
+    'digits-in-comment'=> "1. e4 {see 12. Nf3 later} e5 *",
+    'empty-variation'  => "1. e4 () e5 2. Nf3 *",
+    'variation-first'  => "1. e4 (1. d4 d5) e5 2. Nf3 *",
+    'triple-nested'    => "1. e4 e5 (1... c5 2. Nf3 (2. Nc3 Nc6 (2... e6 3. g3)) d6) 2. Nf3 *",
+    'nag-edges'        => "1. e4 \$0 e5 \$255 2. Nf3 \$11 *",
+    'double-comment'   => "1. e4 {one} {two} e5 {three} *",
+    'spaced-result'    => "1. e4 e5   1-0   ",
+    'annot-and-nag'    => "1. e4! \$1 e5?? \$4 2. Nf3 *",
+    'scholars'         => "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0",
+];
+$tokenCases = [];
+foreach ($pgnSamples as $label => $movetext) {
+    $tokenCases[] = ['label' => $label, 'movetext' => $movetext, 'tokens' => oracle_pgn_tokens($movetext)];
+}
+// Plus real movetext: a 1-in-60 sample of the ECO lines, which carry genuine move numbering.
+foreach ($ecoRows as $i => $p) {
+    if ($i % 60 !== 0) continue;
+    $tokenCases[] = ['label' => "eco:{$p[0]}:{$p[1]}", 'movetext' => $p[2], 'tokens' => oracle_pgn_tokens($p[2])];
+}
+dumpGolden('pgn_tokens', $tokenCases);
+
+$pgnFiles = [
+    'single-game' => "[Event \"Test\"]\n[Site \"Manila\"]\n[White \"Juan\"]\n[Black \"Maria\"]\n[Result \"1-0\"]\n\n1. e4 e5 2. Nf3 1-0\n",
+    'two-games'   => "[Event \"A\"]\n[White \"P1\"]\n[Result \"1-0\"]\n\n1. e4 e5 1-0\n\n[Event \"B\"]\n[White \"P2\"]\n[Result \"0-1\"]\n\n1. d4 d5 0-1\n",
+    'crlf'        => "[Event \"CRLF\"]\r\n[Result \"*\"]\r\n\r\n1. e4 e5 *\r\n",
+    'no-headers'  => "1. e4 e5 2. Nf3 Nc6 *\n",
+    'empty-tag'   => "[Event \"\"]\n[Round \"?\"]\n[Date \"????.??.??\"]\n\n1. e4 *\n",
+    'wrapped'     => "[Event \"Wrap\"]\n\n1. e4 e5 2. Nf3 Nc6\n3. Bb5 a6 4. Ba4 Nf6\n1-0\n",
+    'setup-fen'   => "[Event \"Setup\"]\n[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1\"]\n\n1. O-O O-O *\n",
+    'three-games' => "[Event \"A\"]\n\n1. e4 1-0\n\n[Event \"B\"]\n\n1. d4 0-1\n\n[Event \"C\"]\n\n1. c4 *\n",
+    'trailing-blanks' => "[Event \"T\"]\n\n1. e4 e5 1-0\n\n\n\n",
+    'no-blank-line'   => "[Event \"NB\"]\n[Result \"1-0\"]\n1. e4 e5 1-0\n",
+    'ratings'     => "[White \"Juan\"]\n[Black \"Maria\"]\n[WhiteElo \"1850\"]\n[BlackElo \"1720\"]\n[ECO \"B90\"]\n[TimeControl \"600+5\"]\n\n1. e4 c5 *\n",
+];
+$splitCases = [];
+foreach ($pgnFiles as $label => $pgn) {
+    // json_encode turns an EMPTY PHP array into `[]`, which would break a Swift [String: String]
+    // decode. Force every header map to an object so the shape is stable across all cases.
+    $games = array_map(
+        fn(array $g) => ['headers' => (object) $g['headers'], 'movetext' => $g['movetext']],
+        oracle_split_pgn_games($pgn)
+    );
+    $splitCases[] = ['label' => $label, 'pgn' => $pgn, 'games' => $games];
+}
+dumpGolden('pgn_split', $splitCases);
+
+} // end ORACLE_ENGINE_AVAILABLE
+
 echo "DONE\n";

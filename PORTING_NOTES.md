@@ -13,6 +13,17 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** | The whole app is GPL-licensed; source will be published. Affects the later `Engine/` phase (Stockfish xcframework/SPM + UCI bridge). Does **not** affect the parity core. The parity core stays engine-agnostic. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## Resolved decisions (August 2026 — Analysis Board)
+
+| # | Decision | Choice | Consequence |
+|---|----------|--------|-------------|
+| **3** | How the Analysis Board gets evaluations, given Stockfish is still unbuilt | **An engine-agnostic `AnalysisEngine` protocol, backed now by an in-repo search over the existing negamax** | Every engine-dependent surface (live lines, arrows, eval bar, game review) becomes real and testable now; the Stockfish adapter later conforms to the same protocol with no UI change. The protocol names no UCI concept, so it *prevents* rather than causes the leak `CLAUDE.md` forbids. |
+| **4** | Accuracy & move classification for the offline review | **Exact parity — `GameReview.swift` is not modified** | The ~300 golden game reviews stay green. The spec's suggested switch to the Lichess accuracy model was declined: it would require regenerating or retiring that group. Book moves therefore still count toward accuracy (chess.com excludes them; we do not). |
+| **5** | The `book` classification tier, which the server could never produce | **A post-processing layer over `GameReview.Result`, never a tenth branch inside the pinned `classifyMove`** | `emptyClassifications` keeps exactly its 9 keys. The wrapper relabels in-book plies and recomputes the two count dictionaries with a tenth key, leaving accuracy untouched. Locked by the assertion `annotate(r, bookPlies: []).base == r`. |
+| **6** | Offline opening names, replacing the Lichess masters explorer | **A bundled ECO book built from `lichess-org/chess-openings` (CC0)** | 7,854 position-keyed rows shipped in the app bundle. The dataset is fetched at development time only; the app makes no network requests. Attribution sits beside the piece art and Nunito entries. |
+| **7** | Where the Analysis Board's pixel constants come from | **Extracted from the real `board.tsx` StyleSheet by AST walk, not transcribed from the written spec** | `tools/metrics/board_styles.json` (committed) is a shared oracle both the Swift check and the JS twin assert against, so it catches transcription errors from the source rather than mere drift between two hand-typed copies. Deliberate deviations are enumerated and excluded from the comparison. |
+| **8** | How the board gains arrows and drag without endangering Play and Puzzles | **Extend the one shared `BoardView` / `<chess-board>` with defaulted, off-by-default options — never fork it** | Duplicating the sliding-piece identity logic would drift. The cost is that a mistake here breaks three screens, so the defaults are asserted to reproduce today's rendering exactly and a tap-to-move round trip runs with drag enabled in both the headless suite and the browser. |
+
 ## Environment reality (session that produced the parity core)
 
 - Toolchain: **Swift 6.3.3** standalone (no full Xcode, no iOS SDK, no `XCTest`/`Testing` modules).
@@ -80,12 +91,467 @@ and every invented constant, as required by the migration brief (§12 deliverabl
   final tie-break by id asc.
 - Limits: FREE_MAX_PLAYERS=10, FREE_MAX_ROUNDS=3; premium 999 players / 30 rounds.
 
+### Position key / transposition hashing (Analysis Board — `ChessEngine::fenNormalized`, deviates)
+- The canonical key is the **4-field FEN with a dead en-passant square cleared**
+  (`oracle_position_key` in `tools/oracle/chess_oracle.php`; mirrored by `ChessPosition.positionKey`
+  in Swift and `Engine.positionKey` in JS — all three must agree byte for byte). It keys the ECO
+  book **and** threefold repetition.
+- **DELIBERATE DEVIATION (analysis board):** the server's `fenNormalized()` keeps the ep square after
+  *any* double pawn push, so `1. e4 e5 2. Nf3` and `1. Nf3 e5 2. e4` hash differently despite being
+  the same position. That was measured, not theorised — all three of the most common transpositions
+  in chess failed on the first build. Clearing a dead ep square is the standard EPD/X-FEN convention
+  (what Lichess and Polyglot books do), it is required by the spec's acceptance criterion 8, and it
+  also makes threefold repetition FIDE-correct instead of off by one occurrence. 73 ECO positions
+  merged as a result; live ep squares are still preserved (`1. e4 c5 2. e5 d5` keeps `d6`).
+- The availability test is the **presence of a capturing pawn (pseudo-legal)**, not full legality: a
+  pawn pinned against its own king still counts. Chosen so the rule is trivially identical in PHP,
+  Swift and JavaScript; the pinned-pawn case cannot change an opening name.
+
+### The `book` classification tier (Analysis Board — `ReviewAnnotator.swift`, no server counterpart)
+- **The server could never produce `book`** — it had no opening database, so `classifyMove` has nine tiers
+  and `emptyClassifications` nine keys. The offline app has a bundled ECO book, so the tier finally becomes
+  meaningful. It is applied as a **post-layer**: `GameReview.swift` is untouched, and `annotate` relabels
+  in-book plies and recomputes the two count dictionaries with a tenth key.
+- **Accuracy is never recomputed.** Book moves still count toward it. Chess.com excludes them; the server
+  did not, and behavioural parity was the locked decision.
+- **DELIBERATE DEVIATION (client bug fixed):** the React Native `CLASSIFICATION_ORDER`
+  (`constants/classifications.ts`) has only **nine** entries — `book` is missing — while the three
+  `Record<MoveClassification, …>` maps beside it have ten. Since `board.tsx` and `play.tsx` iterate that
+  order to build the summary table, book moves were counted and then **never displayed**.
+  `ReviewAnnotator.displayOrder` inserts `book` after `great`, per the spec.
+- A ply is `book` iff the position **after** it is in the book — `positions[i].positionKey`.
+- Locked by `review_book`, which reuses the 303 `game_review*` golden cases: an empty book must leave
+  `moveEvaluations` and every count untouched (plus `book: 0`), counts must sum to the classified plies, and
+  one book ply must move exactly one count out of its tier.
+
+### Opening book (Analysis Board — `OpeningBook.swift`, replaces the Lichess masters explorer)
+- Keyed by `positionKey`, so transpositions resolve. Two row kinds: **named** (an ECO line ends there) and
+  **pass-through** (a line traverses it, empty name). Both are "in book"; only named rows change the
+  displayed opening, and a miss keeps the **last known** name (spec Part 12.2).
+- **Pure, no file IO.** Giving the Parity Core a resource would create a `Bundle.module` in a manifest that
+  cannot be compile-verified on the development machine, so the caller supplies the TSV text.
+- The TSV's pass-through rows end in a trailing tab with an empty name, so the split must keep the empty
+  final field — `omittingEmptySubsequences: false`.
+- `ParityRunner` reads `Goldens/eco_book.tsv`, a byte copy of the shipped book made by `build_eco.php`, so
+  the group exercises the real parser on the real file. (`build_eco.php` had advertised a ParityRunner `eco`
+  group since phase 0; none existed until now.)
+
+### Analysis search (Analysis Board — `LocalEngine.swift`, no server counterpart)
+- The server's engine was Stockfish behind an HTTP service; there is nothing to port. `LocalEngine` is a
+  **new** interim search built on `ChessAI`'s reusable leaf pieces (`mate`, `material`, `evaluate`,
+  `ordered` — all `internal`, none modified). `ChessAI.negamax` returns only an `Int` with no hook for a
+  best move, so the recursion is reimplemented: a principal variation cannot be recovered from it.
+- **DELIBERATE DEVIATION (API shape):** the engine protocol is **synchronous**, not `actor` +
+  `AsyncThrowingStream`. Core contains no other concurrency, the package builds in Swift 6 language mode
+  with complete strict concurrency (module-level mutable state is a compile error), and `ParityRunner` is
+  synchronous top-level code — so a synchronous engine is the one the parity suite can assert. Cancellation
+  and progress are closures, following the `PuzzleServing.Picker` precedent. The `actor` wrapper belongs in
+  the UI layer.
+- **Limits are depth and nodes, never wall-clock time**, so results are reproducible in a test. A caller
+  wanting a deadline implements it inside `shouldCancel`.
+- **MultiPV needs no root exclusion.** `ChessAI.bestMove` already searches each root move with a fresh full
+  window and no alpha propagation, so every root move gets an exact score rather than a bound; the top-k
+  lines fall out of sorting one pass. Only root-level cutoffs are forfeited.
+- Deliberately absent: transposition table, killers, history, aspiration windows, null-move, LMR. Dropping
+  the table also makes determinism true by construction rather than by a flag.
+- **`ChessAI.captureScore` must not be reused as a quiescence filter.** It detects a capture purely by "is
+  there a piece on `m.to`", so it scores en-passant captures *and* promotions as quiet. `LocalEngine`
+  carries its own `isTactical`. It also force-unwraps `pos.squares[m.from]!`, so it must never be handed a
+  move from a different position.
+- `ChessAI.negamax`'s depth guard is `== 0` and would recurse forever on a negative depth (safe only
+  because its single caller cannot pass one). `LocalEngine` uses `<= 0`.
+- **The `evalMate: 0` guard.** A terminal checkmate converts to `evalCp: ±10000` with `evalMate: nil`,
+  never `evalMate: 0`. The Python service emits 0 for a mated position and PHP's `normalizeEval` prefers
+  `eval_mate`, so it returns `-10000` no matter who delivered mate. Routing through `evalCp` produces the
+  value the PHP *intended*. Standing rule: do not reproduce latent server bugs. Locked by a named assertion
+  in the `search` group.
+- **The `search` and `movetree` mate/flatten tables are hand-authored** — no oracle exists. Mate
+  expectations came from an *independent brute-force checker*, not from the search itself; deriving rather
+  than guessing corrected four wrong entries on the first attempt.
+
+### PGN (Analysis Board — `PGN.swift`, partly oracle-verified)
+- PGN is the **persistence format**, mirroring `analysis_sessions.pgn`, so the round trip must be exact and
+  variations must survive it.
+- `splitGames` and the tokeniser strip pipeline are pinned by the oracle-derived `pgn_split` / `pgn_tokens`
+  goldens. **RAV structure has no oracle** — `PgnImportService::tokenizeMoves` discards variations — so it
+  is covered by round-trip fixpoint plus a canonical-output corpus shared with the JS twin.
+- Canonical output hugs parentheses (`(1... c5 2. Nf3)`). The earlier spaced form round-tripped correctly,
+  which is why only deriving the expected output caught it.
+- Nested variations are re-nested flat on output when they are siblings: `1. e4 e5 (1... c5 (1... e6 2. d4)
+  2. Nf3)` serialises as `1. e4 e5 (1... c5 2. Nf3) (1... e6 2. d4)`. Semantically identical — both are
+  alternatives to `1... e5` — and a fixpoint.
+- A parse error keeps the **partial** tree and reports the failing ply, so an import can say "34 of 41".
+  Null moves (`--`, `Z0`) are rejected deliberately.
+
+### SAN / UCI parsing (Analysis Board — `ChessNotation.swift`, oracle-verified)
+- **Two tiers, both load-bearing.** Tier 1 generates SAN for every legal move with `san(for:)` — the
+  very generator being inverted — and compares. That makes the inverse correct *by construction*, so
+  parser and generator cannot drift; it resolves all 3,105 golden cases on its own. Tier 2 is a
+  tolerant structural re-read for spellings real PGN exporters emit but we never produce. It is not
+  speculative: tier 1 was measured against `Nbd2`, `N1d2`, `Nb1d2`, `Nb1-d2`, `ed5`, `e4xd5`, `a8Q`
+  and `a8(Q)` and misses **every** one.
+- **DELIBERATE DEVIATION (mechanism, not semantics):** the JavaScript twin implements tier 2 with a
+  regex; the Swift uses a hand-rolled character scanner over `Array(san)`. Written on a machine with
+  no Swift toolchain, ~30 extra lines were worth removing every question about `Regex` literal
+  availability, `NSRegularExpression` off-Darwin, and `String.Index` arithmetic. The grammar is
+  identical and both are pinned by the same goldens.
+- An unspecified promotion defaults to **queen** (`a8` ≡ `a8=Q`), the universal convention.
+  `k`/`K` is rejected as a promotion target in both parsers.
+- Parsing returns `nil`, never throws — Core contains no `throws` anywhere.
+- **`ChessPosition.Status` is deliberately NOT widened** with draw cases. It is a four-case enum
+  switched on exhaustively by `SoundManager.playMove` and the Play/Puzzle views; widening it would
+  be a source-breaking change to a module the parity suite cannot compile. Draws live in the
+  parallel `drawReason` / `terminalOutcome` API on both sides.
+- **`draw_rules` and `notation_extra` have no server counterpart.** `ChessEngine.php` states plainly
+  that it skips check/checkmate/stalemate/50-move/repetition. Both groups are therefore hardcoded
+  tables, following the `perft` and `chess_ai` precedent. Their expected values are hand-reasoned
+  rather than captured from the JS twin's output, so the two languages assert *independent*
+  expectations of the same chess facts; the labels are kept identical so the tables can be diffed by
+  eye. (The 58 Swift-side expectations were separately replayed through the twin before shipping.)
+- **K+N+N vs K is NOT treated as insufficient material** — mate is unforceable but not impossible,
+  and FIDE keeps the game live. K/K, K+B/K, K+N/K and any single-colour-complex bishop set are.
+
+### SAN parsing oracle (Analysis Board — the real `App\Services\ChessEngine`, verified)
+- `tools/oracle/chess_oracle.php` loads the **actual** Laravel class rather than extracting it. It is
+  framework-free, so this is strictly more faithful, and it makes the `san_parse` goldens and the ECO
+  book keys consistent by construction. All 3,810 ECO lines (~30,000 plies) replay through it cleanly.
+- **Oracle limits — do not copy these into the port:**
+  - `applyMoveSan` strips `+ # ! ?` without validating them, so it cannot pin check/mate suffixes.
+  - It returns `'san' => $original`, echoing its input, so it is **not** an oracle for SAN
+    *generation* — `ChessBoard.san(for:)` owns that. The third golden assertion is therefore a
+    generate→parse **round-trip**, not string equality; the corpus may legitimately spell a
+    disambiguation less minimally than Swift generates it.
+  - `wouldLeaveKingInCheck` does not remove the en-passant-captured pawn, so an ep-pin edge case can
+    resolve wrongly. It only bites when two candidates remain and one is an ep capture; no such
+    position exists in the corpus.
+  - It assumes input legality (no check/stalemate/50-move/repetition rules at all).
+- `PgnImportService::tokenizeMoves` **discards** `( … )` variations, so `pgn_tokens` pins mainline
+  extraction only. RAV structure has no oracle and is covered by round-trip properties instead. The
+  tokeniser also leaves `!`/`?` attached to SAN tokens — stripping them is the SAN parser's job.
+
 ### Game review (Appendix E §4 — `GameReviewController`, verified)
 - `normalizeEval` mate folding: White `10000 - mate*10`, Black `-10000 - mate*10`.
 - `classifyMove` ladder (brilliant/great/best/excellent/good/inaccuracy/mistake/miss/blunder)
   ported top-to-bottom, first match wins.
 - `isBrilliantMove`: SAN contains `x` AND improvement ≥ 150 (matches code, not the docstring).
 - `evalToWinPct`: `50 + 50*(2/(1+10^(-eval/400)) - 1)`; accuracy = `round(mean, 1)`.
+
+### Analysis Board metrics (Analysis Board — `AnalysisMetrics.swift`, extracted from the RN source)
+- **Ground truth is `board.tsx`'s StyleSheet, not the written spec.** `tools/metrics/extract_board_styles.js`
+  walks the TypeScript AST and emits `tools/metrics/board_styles.json` — 7 blocks, 328 keys, 1,355 property
+  values, **zero unresolved**. Both the Swift check and the JS suite assert against that file.
+- Why: the spec says "eval bar height 3", but the source has **two** eval bars — `evalBarTrack.height = 8`
+  (under the board) and `engineEvalBarTrack.height = 3` (per engine line). Prose had already lost the
+  distinction.
+- `board_styles.json` is **committed**, unlike `Goldens/`, because it derives from a sibling repo the reader
+  may not have — the same reasoning that commits `eco.tsv`.
+- **DELIBERATE DEVIATION — band heights are flexible, not seven fixed literals.** Seven fixed heights
+  overflow a 375×667 SE. The panels band flexes down from its 230 max and the board band absorbs the slack;
+  the sum is asserted at 375×667, 390×844 and 430×932.
+- **DELIBERATE DEVIATION — the ⩲/⩱ eval symbols are swapped in the original.** `board.tsx:221-222` maps
+  `⩱`→"Slight advantage White" and `⩲`→"Slight advantage Black", backwards from standard notation. The port
+  uses the standard meanings and excludes those two rows from the `board_styles.json` comparison.
+- **DELIBERATE DEVIATION — `CLASSIFICATION_ORDER` gains `book`.** The original array has 9 entries against a
+  10-key table, so `book` moves were counted and then never displayed.
+- The ~15 render-function multipliers (arrow shaft `0.18` / head `0.35` / shorten `0.7` / head half-width
+  `0.6`; badge radius `0.21`, offset `0.29`, shadow `+1.5`, ring `+1.5`, baseline `0.37`) are hand-transcribed
+  with line numbers, because they live in render functions rather than a StyleSheet. Note `delayLongPress={400}`
+  appears six times as a JSX prop — a bare `400` grep conflates it with the animation duration.
+
+### Analysis session (Analysis Board — `AnalysisSession.swift`, no server counterpart)
+- **The screen's behaviour lives in Core, not the view model.** `statusText`, opening tracking, arrows,
+  engine rows, the move-strip tokens and the staleness rule are pure functions of state, so they are
+  asserted by `ParityRunner`'s `analysis_session` group (95 assertions, floor 80) *and* by the JS twin —
+  leaving only SwiftUI's rendering unverifiable. Hand-authored on both sides like `draw_rules`, with
+  expectations derived from the RN source's line numbers; there is no PHP oracle for a screen.
+- **DELIBERATE DEVIATION — cancel-and-restart, not skip.** `analyzePosition` guards with
+  `if (isAnalyzing || fen === lastAnalyzedFen) return;` (`board.tsx:885`). Its fetch could not be
+  cancelled, so a position change mid-request was silently dropped and the panel showed stale lines
+  forever. Our engine is cancellable, so `isStale` triggers a restart. Same rule as the `evalMate: 0`
+  case: port the intended behaviour, not the accident.
+- **DELIBERATE DEVIATION — the status line's move number** comes from the position's `fullmove`, not
+  `floor(node.halfMoveIndex / 2) + 1` (`board.tsx:2861`). The original shows the number of the move just
+  *played*, so after 1.e4 e5 it reads "1." when the next move is 2.
+- **DELIBERATE DEVIATION — "(analyzing)"** tracks a real in-flight search. The original appends it on
+  `isAnalyzing || autoAnalyze` (`board.tsx:2868`), so it shows permanently whenever auto-analyse is on.
+- **DELIBERATE DEVIATION — the masters panel becomes the ECO explorer.** `renderMasterDB` was a Lichess
+  call; band 6 now lists `OpeningBook.continuations(from:)`.
+- `evalParts` is the Core/UI boundary: mapping a score to a bar fraction or a ⩲ symbol needs the metrics
+  tables, which live in the UI module and cannot be reached from a Foundation-only Core. The session
+  publishes raw numbers and each platform maps them with the same table.
+- `AnalysisSession` is **not `Sendable`** (it owns a `MoveTree`), so it stays `@MainActor`; only
+  `ChessPosition` / `SearchLimits` / `AnalysisSnapshot` cross to the background search.
+
+### Game review UI (Analysis Board — `ReviewAnnotator.Evaluator`, no server counterpart)
+- **Stepping, not one blocking loop.** A 40-move game costs **28 s at a fixed depth 3**, so
+  `Evaluator` (and `BiyaReview.reviewSteps`) evaluate one position per call. That lets the caller give
+  each position a **200 ms** wall-clock budget through `shouldCancel` and yield between steps, so the
+  UI paints and Cancel lands at once. `evaluate(_:engine:limits:)` is untouched — `review_book` and
+  `review_demo.js` still use it.
+- `Evaluator` holds `[ChessPosition]`, **not** the whole `Plan`: a `Plan` carries `[MoveNode]`, a
+  reference graph that is not `Sendable`, which would pin the walk to one isolation domain.
+- **`GameReview.Evaluation` gained `Sendable`.** A three-field value type of `Int?`/`String?`; the
+  conformance is behaviour-free, no golden is affected, and it is what lets a review run off the main
+  actor. Public structs do not get it implicitly.
+- **The index rule.** `moveEvaluations[].moveIndex` is 1-based (0 = the starting position) while the
+  plan's nodes are 0-based, so the node is `nodes[moveIndex - 1]` — the same `- 1` at
+  `applyClassificationsToTree` (board.tsx:1827). Main line only; variations stay unclassified. Both
+  suites assert it with a hand-built result rather than an engine's.
+- A cancelled run leaves the evaluations **short**; `isComplete` is the guard that stops a caller
+  mistaking that for a truncated game. Nothing is stamped on a cancel.
+- **DELIBERATE DEVIATION — one action does both halves.** The original splits review across two
+  incomplete paths: `runAccuracyAnalysis` (board.tsx:2254) shows the modal but *discards*
+  `move_evaluations`, so the strip stays blank; `handleAnalyzeGame` (:1854) stamps the strip but shows
+  only an `Alert` — no modal, no graph, no cancel. Ours does both from one run.
+- **DELIBERATE DEVIATION — no classification badge on the board.** `renderAnnotationOverlay` (:2661)
+  draws the *manual* PGN glyph for the selected node and never reads `reviewClassification`;
+  classifications appear only in the move strip. `AnalysisBadge` stays unused until Phase 11 wires it
+  to the annotation picker it was written for.
+- **DELIBERATE DEVIATION — the third modal state is "Not enough moves".** Offline the engine cannot be
+  unreachable, so the source's "Analysis unavailable" (429/503/network) has no counterpart. The
+  minimum-3-positions guard (:2256) is kept; there is no maximum, as in the source.
+- Classification quality at depth 2–3 is coarse: `classifyMove`'s thresholds were written for a
+  depth-12 Stockfish. A property of the interim engine, not the port.
+
+### Persistence (Analysis Board — `AnalysisStore.swift`, mirrors the Laravel schema)
+- **RESOLVED DECISION — plain `Codable` JSON, not SwiftData.** This is the app's first writable
+  persistence, so it sets the idiom. Codable is already the house style across Core; it carries no
+  macro risk on a checkout with no compiler; and because the browser mirror stores localStorage JSON,
+  **both languages can assert one canonical library document**, which a `ModelContainer` could never
+  be. The record shapes are unchanged by a later SwiftData port, so the swap is mechanical.
+- Records mirror `analysis_sessions` / `analysis_folders` so a future sync stays possible. The field
+  limits are the **controller's `validate()` rules**, not the column widths — they are tighter
+  (`white_player` is varchar(255), validated `max:100`), so they are the contract.
+- **Deleting a folder UNFILES its sessions** (`nullOnDelete`, plus an explicit null pass at
+  `AnalysisSessionController:417`). Default folders refuse rename and delete (403). Three defaults
+  are seeded lazily with the controller's exact names, colours and sort order.
+- Time is an **injected parameter**, never `Date()` inside the logic — the `PuzzleServing.Picker`
+  precedent, and what makes the 24-hour draft TTL assertable.
+- **DELIBERATE DEVIATION — three source bugs not reproduced.** `initial_fen` is never sent on save
+  (board.tsx:1026-1043) and `generatePgn()` emits no `[FEN]`, so a custom-setup game does not survive
+  a round trip there; `@biyaherong_openfile_draft` is written (:840) and read nowhere, losing unsaved
+  edits to an opened game; and the save modal has no Title field although the column is NOT NULL.
+- **DELIBERATE DEVIATION — no free-session cap** (the server allows 3 for non-premium; offline there
+  are no accounts), **no `share_token`/`is_shared`**, and **no `move_annotations`** — the server needs
+  that column because its client serialises movetext only, while ours emits NAG suffixes inline, so
+  it would be a second copy of what the PGN already carries. A sync layer can derive it.
+- **DELIBERATE DEVIATION — search is in the library sheet.** The original has it only on the sibling
+  `saved.tsx` browser; this rebuild has one screen.
+- Byte-identical re-encoding is **not** claimed across languages: `JSONEncoder(.sortedKeys)` sorts
+  keys and `JSON.stringify` does not. Each side asserts its own fixpoint; the shared claim is the
+  decoded values, guarded by `tools/qa/canonical_library_check.js`.
+
+### Setup Position (Analysis Board — `PositionEditor.swift`, partly no server counterpart)
+
+The original validates a hand-built board in two places: `validateKingPositions:334` checks for a missing
+king and for adjacent kings, and `toggleEditMode:2448` hands the FEN to `new Chess(fen)` and catches the
+throw. **There is no chess.js offline**, so the second half had to be written down rather than inherited.
+
+**RESOLVED DECISION — the validator carries five rules, not two.** `PositionEditor.validate()` refuses a
+missing king, two kings of one colour, adjacent kings, a pawn on rank 1 or 8, and the side *not* to move
+already being in check. That is the set `new Chess(fen)` would have rejected, so behaviour matches the
+original without the dependency. The first two messages are the source's strings verbatim; the rest are
+new. Issues come back in a fixed order so the banner does not flicker.
+
+- **DELIBERATE DEVIATION — castling rights are normalised silently.** A right whose king or rook is not on
+  its home square is dropped when the FEN is emitted (the X-FEN convention), not reported as an error.
+  Ticking `⬜K` on a board with no h1 rook is a statement of intent; refusing would be a dead end with no
+  obvious fix, and the source's chess.js is lenient here too.
+- The editor never emits an en-passant square and always emits fresh clocks (`0 1`), matching what
+  `new Chess(fen)` produces for a position it did not reach by playing moves.
+- **The adjacency test walks every king pair**, not just the first of each colour: on a board that already
+  has a duplicate king, checking only `whiteKings[0]` would let a real adjacency hide behind the count
+  error. Asserted in both languages.
+- **The `.trim()` in `loadFEN` is load-bearing in Swift only.** `ChessPosition(fen:)` splits on the space
+  character alone, so a FEN pasted from a web page with a leading tab would be refused; `engine.js` splits
+  on `/\s+/` and does not care. Removing it is therefore an **equivalent mutant in JavaScript** — recorded
+  here because the JS mutation suite reports it as a survivor, and it is not a coverage hole. The
+  assertion that kills it lives in the Swift `position_editor` group.
+
+### Annotations and the badge (Analysis Board — `AnalysisSession`, no server counterpart)
+
+**RESOLVED DECISION — annotations are stored as NAG codes, not symbol strings.** The source keeps
+`node.annotation = "!!"`. `MoveNode.nag: Int` already existed and `PGN` already round-trips `$n`, so a
+symbol string would be a second encoding of the same fact. `AnalysisSession.nagSymbols` is the single
+table and `nag(forSymbol:)` is derived from it, so the two directions cannot disagree.
+
+- **DELIBERATE DEVIATION — the ⩲/⩱ inversion is corrected in `POSITION_ANNOTATIONS` too.** The source
+  labels `⩱` "Slight edge White" and `⩲` "Slight edge Black" (`board.tsx:231-239`), backwards from
+  standard notation — the same swap already recorded for `EVAL_SYMBOLS`. It matters more here: the picker
+  writes NAGs into the exported PGN, so shipping the swap would emit `$15` where `$14` is meant and every
+  other chess program would read the position backwards. Asserted in both languages, and the
+  extracted-source check asserts that the *source* really does have it that way.
+- `$13` (∞) is display-only: it can arrive in an imported PGN, but the source's picker has no button for
+  it, so ours does not either.
+- **Ported as-is, not "fixed":** the badge draws for **move-quality annotations only** — the overlay looks
+  the symbol up in `MOVE_ANNOTATIONS` alone, so `±` shows in the move strip and nothing on the board. And
+  it reads the **manual** annotation, never the review classification.
+
+**BUG IN THIS REBUILD, now fixed and structurally prevented.** The badge was drawn upper-right. The source
+puts it bottom-right: `squareToPixel` returns the square's **centre** and `renderAnnotationOverlay`
+adds `+ SQUARE_SIZE * 0.29` to both axes. Swift and JavaScript had the same wrong sign and each asserted
+the other's answer — two hand-typed copies agreeing is not verification. Prevented rather than merely
+corrected: `extract_board_styles.js` gained a **`renderConstants`** section that flattens every
+`const NAME = <expr>` and braced JSX attribute in the four geometry render functions into *signed* additive
+terms, so both harnesses assert the direction of an offset and not only its magnitude. That retires the
+last hand-transcribed set of constants in this feature.
+
+### Variations and PGN I/O (Analysis Board — no server counterpart)
+
+- **DELIBERATE DEVIATION — the variation card has two types, not three.** The source's third,
+  `GM REFERENCE`, keys off `node.isGmGame`, which only the Lichess masters explorer ever set; that panel
+  became the bundled ECO book in Phase 8, so nothing can produce the flag.
+- **ASSUMPTION (recorded) — a multi-game PGN loads its first game** and reports how many it found. The
+  source does the same thing silently.
+- **DELIBERATE DEVIATION — an import that yields nothing does not touch the board.** `PGN.parse` is
+  tolerant by design: hand it a paragraph and it returns a zero-move game full of parse errors rather than
+  refusing. That is right for a parser and wrong for an import, so `importPGN` counts a game only if it
+  produced at least one move **or** a custom start position. A setup-only PGN is a legitimate import.
+- **DELIBERATE DEVIATION — export replaces the OS share sheet.** The source calls `Share.share`, which has
+  no offline counterpart; ours shows the text to copy and offers `.fileExporter` (a `.pgn` download in the
+  browser). Same intent.
+- Long-pressing a **branch chip** opens the variation card rather than the annotation picker. The source
+  reaches the card from a separate `varManageBtn`; folding it into the same gesture is an addition, and it
+  is the useful action on a chip.
+
+### The status line's own row (Analysis Board — deviation from `statusToolbarRow`)
+
+**DELIBERATE DEVIATION.** The source puts the status text and the toolbar on one row
+(`styles.statusToolbarRow`, `board.tsx:4617`). This rebuild gives the status text a row of its own.
+
+The reason is measured, not aesthetic: nine emoji buttons come to **346 pt inside a 365 pt card**,
+leaving the status ~19 pt, and it disappears completely — a user reported the screen with no status
+text at all. RN's icon glyphs are narrower than the emoji this port uses for the same buttons, which
+is why one row works there and not here.
+
+The numbers are **not invented**. `styles.statusLine` is a block the source declares for exactly this
+standalone row — `minHeight: 36`, `paddingHorizontal: 12`, `paddingVertical: 6`, its own top border —
+and then never renders: dead, like `renderEvalBar:2741` and `styles.menuContainer`. So the layout is
+the original's own abandoned one, restored with its own values and pinned to `board_styles.json` like
+every other constant. The metrics check also asserts that the two rows really do differ in the source
+(36 vs 38), so the two blocks cannot be conflated later.
+
+### Band flexing (Analysis Board — a bug in this rebuild, now guarded)
+
+**BUG IN THIS REBUILD, fixed and structurally prevented.** The board must be a fixed square derived
+from the screen's **width**, and the ECO panel must be the band that absorbs slack. It was the other
+way round, and the screen visibly broke: the browser sized the board
+`min(100cqw, calc(100cqh - …))` inside a `flex: 1 1 auto` band, so its width tracked the leftover
+height — and bands 6 and 7 change height on every move as ECO and engine rows appear. The board grew
+and shrank as you played, and never filled the card. The Swift screen had a milder form: the board
+band claimed `maxHeight: .infinity` while the opening panel was capped.
+
+`AnalysisLayout.bands(viewportHeight:boardEdge:)` / `MET.bandLayout(...)` already encoded the correct
+rule and was already asserted at three screen sizes — **neither renderer called it.** That is the
+lesson worth keeping: a pure function that nothing calls is not a guarantee, it is documentation.
+
+Guarded three ways now: the metrics suites assert the board edge is a pure function of width
+(identical at five viewport heights) and that a short screen caps the *panels* band rather than the
+board; and `tools/qa/board_layout_check.js` asserts the CSS itself — `flex: none`, no
+`container-type`, no surviving `cq` unit, and `.an-panels` genuinely shrinkable. Reintroducing the
+original two declarations trips five of those assertions. Before it existed, every suite in the repo
+was green while the screen was wrong, because nothing looked at a stylesheet.
+
+### The toolbar row (Analysis Board — `AnalysisBoardScreen.swift`)
+
+**DELIBERATE DEVIATION, then reverted.** Phases 9 and 10 added 💾 🔬 📂 to the toolbar because the ☰ menu
+was still a stand-in. Once the real menu existed, eleven buttons measured **437 pt inside a 365 pt card** —
+overflowing by 72 and squeezing the status line into three wrapped lines that collided with them. The row
+is now the source's nine, with Save, Load and Analyze Game in ☰ where the source keeps them.
+
+The toolbar's ✏️ is the source's: it opens the **annotation picker for the current move**
+(`board.tsx:4626`) and is disabled at the root. Edit Board is a ☰ item only.
+
+Edit mode hides the status row, the strip, the autoplay bar and the engine lines, following
+`board.tsx:4616` ("to maximise board space"), and the board takes the fixed `BOARD_SIZE` square its
+`editBoard` style specifies.
+
+### Haptics (Analysis Board — `Haptics.swift`)
+
+`board.tsx` contains no haptics. But it renders `DragDropChessBoard`, which fires
+`Haptics.impactAsync(ImpactFeedbackStyle.Light)` on **drag pickup** (`DragDropChessBoard.tsx:351`) after
+its piece-exists and correct-colour guards — so the analysis board has exactly one, by inheritance.
+
+- **PORTED:** `.pickUp` — a Light impact when a piece is picked up.
+- **ADDITIONS (agreed with the user):** `.move` (soft, on a quiet move), `.capture` (medium, on a capture
+  or a check), `.success` (a notification when a game review finishes).
+
+Nothing else fires. Navigation, menu items and modals are deliberately silent: a haptic on every tap is
+noise, and the source has none of them either. macOS is a no-op, which is why this is in the UI layer and
+not in Core.
+
+### The `tap` event on `<chess-board>` (web-demo only)
+
+Setup Position needs "which square did you touch" with no notion of a legal move, and `square-select` only
+fires when a square has targets. So the component gained a `tap` event that fires for **every** square,
+before any selection logic and regardless of `interactive`. Purely additive — nothing else listens for it,
+so Play and Puzzles cannot change behaviour — and the component suite covers empty squares, a
+non-interactive board, and the fact that the click a completed drag leaves behind fires no phantom tap.
+
+### Extracted-metrics traps (`board_styles.json`)
+- **Folded screen dimensions.** The extractor evaluates `Dimensions.get()` against a 390×844
+  reference, so `screenHeight * 0.80` lands as the literal `675.2` — right on one phone and wrong on
+  every other, and indistinguishable from an ordinary constant. It now emits **`_deviceDerived`**
+  listing every value that is a tidy multiple of the reference. Three exist:
+  `accModalStyles.card.maxHeight` (H×0.8), `styles.menuContainer.width` (W×0.65, Phase 11) and
+  `sidebarStyles.container.width` (W×0.68). **Encode the ratio**, and assert it by reproducing the
+  literal at the reference height.
+- **Values outside a StyleSheet are invisible to the AST walk.** `components/EvalGraph.tsx` draws its
+  own SVG, so its colours live in JSX attributes. A mutation test caught the gap — changing the
+  graph's background to the wrapper's colour survived every assertion. The graph paints `#1A2740`
+  inside a wrapper already painted `#0F1A2E`; the extractor now scans that file too.
+- **A merged lookup can shadow.** The header title was transcribed as 20, which is
+  `sidebarStyles.headerTitle`; this screen's `styles.headerTitle` is 16. Every typography key is now
+  pinned to the `styles` block specifically.
+- **Geometry inside a render function was invisible too, and that one actually shipped wrong.** The
+  annotation badge's radius and corner offsets live in `renderAnnotationOverlay`, not in any
+  StyleSheet, so they were hand-transcribed — and the y offset was transcribed with the wrong SIGN in
+  both languages, each asserting the other's answer. `renderConstants` now flattens every
+  `const NAME = <expr>` and braced JSX attribute in `squareToPixel`, `renderArrowsOverlay`,
+  `renderAnnotationOverlay` and `renderEditSquare` into **signed additive terms**, so a consumer
+  asserts the direction of an offset and not merely its size. `squareToPixel` is extracted alongside
+  them because it defines the anchor every one of those offsets is measured from — it returns the
+  square's CENTRE, which is the fact the wrong sign came from missing.
+- **Bare module constants were unpinned.** The walk only captured ALL-CAPS arrays and objects, so
+  `EDIT_PALETTE_PIECE_SIZE = 26` was as mistypeable as any StyleSheet value. Numbers and strings are
+  captured now too.
+
+### Analysis screen presentation (Analysis Board — `PhoneView.swift`, no server counterpart)
+- **`.fullScreenCover` does not exist on macOS**, and `PhoneApp` renders inside the macOS demo
+  (`AppShell.swift:46`). The screen is a **`ZStack` sibling** over the existing `VStack`, which also
+  covers `PhoneTabBar` — a plain VStack sibling, not a real `TabView`. Using the iOS-only API would
+  have broken the `swift build` this work is verified by.
+- The web mirror matches: `current = 'analysis'` renders into `#view` (so teardown stays automatic) and
+  `.app-card.an-mode` hides the tab bar.
+- **`PGN.tokenize` was `public` while `PGN.Token` is internal** — a hard compile error that meant the Core
+  module had never compiled. Fixed by making `tokenize` internal, and `tools/qa/swift_lint.js` now flags
+  the whole class of error.
+
+### Board view extension (Analysis Board — `BoardView` in `PlayView.swift`, no server counterpart)
+- **`BoardView` is extended, not forked.** All four call sites pass every argument by label ending at
+  `onTap:`, never as a trailing closure, so appending defaulted parameters is source-compatible.
+  `phoneBoard(_ board: BoardView, …)` takes the **concrete** type, so stored properties are fine but a
+  generic parameter would break it.
+- **New stored properties are never `private`.** `private let x = <value>` is omitted from the memberwise
+  initializer (SE-0242) and so does not downgrade its access — which is why the two colour constants could be
+  private. A **`private var`** *is* included, would make the init private, and would break the cross-file call
+  sites in `PhoneView.swift` and `PuzzleView.swift`.
+- **Drag attaches to the board-level `ZStack`, never to pieces** — `pieceLayer` is `allowsHitTesting(false)`,
+  so a piece gesture never fires. It is disabled via
+  `.gesture(dragGesture, including: onDragMove == nil ? .subviews : .all)`; a plain `if` would change the
+  body's return type and need an `AnyView` box.
+- **`BoardStyle` carries a fill mode, not just colours.** The spec's highlights *replace* the square fill;
+  today's board *overlays* translucent rectangles. `replacesFill` picks between two models. Its defaults
+  reproduce today's exact inline values, so Play and Puzzles render identically.
+- **JS (`<chess-board>`) — three hazards, all confirmed by measurement:** the tap path is a delegated `click`
+  on `.squares`, so any layer above it must be `pointer-events:none`; `.piece` has `transition:transform .33s`,
+  so the drag ghost needs `transition:none`; and `attributeChangedCallback` early-returns while `!_built`
+  while `app.js` sets properties *before* `appendChild`, so new attributes must also be read in
+  `connectedCallback`.
+- The arrow overlay uses `viewBox="0 0 8 8"` — one unit per square — so geometry is resolution-independent and
+  survives resize and flip with no `getBoundingClientRect`. `chess-board.js` deliberately does **not** depend
+  on `analysis-metrics.js` (the component must stand alone); the duplicated ratios and colours are asserted
+  equal in `tools/qa/board_component_test.js`.
 
 ---
 
@@ -152,6 +618,58 @@ A dedicated QA pass validated not just the ports but the *verification itself*:
 Suite total after QA: **30,258 assertions across 27 groups**, all green.
 
 ## Invented tuning constants (new §8 features)
-_None yet — the parity core ports existing algorithms only. New-feature constants
-(coach strength profiles, SRS intervals, daily-puzzle seed) will be recorded here when
-those features are built._
+
+These have **no server counterpart** — nothing in `../BYAHERONG-COACH-LARAVEL` or the Python Stockfish
+service produces them, so they cannot be oracle-verified. They are recorded here rather than left as bare
+literals. Changing one changes behaviour but breaks no parity group.
+
+### Analysis search (`LocalEngine.swift` / `AnalysisEngine.swift`)
+
+| Constant | Value | Why |
+|---|---|---|
+| `SearchLimits.maxDepth` default | `4` | a depth the interim negamax reaches interactively; the review path overrides it |
+| `SearchLimits.multiPV` default | `1` | degrades to plain alpha-beta, which is what the 121-position review path wants |
+| `LocalEngine.maxQDepth` | `6` | caps the quiescence search; without quiescence, depth-3 lines are noise |
+| `LocalEngine.deltaMargin` | `200` cp | delta (futility) pruning margin inside quiescence |
+| node-check interval | 2048 nodes | how often cancellation and the node budget are tested |
+
+Deliberately **not** implemented: aspiration windows, null-move, LMR, bitboards, make/unmake, and a
+transposition table. They are performance, not correctness; on code that cannot be compiled or profiled here,
+the simplest correct search is the right trade. Dropping the TT also makes determinism true by construction
+rather than by a flag.
+
+### Analysis Board timings (`AnalysisMetrics.swift` → `AnalysisTiming`)
+
+| Constant | Value | Source |
+|---|---|---|
+| `analysisDebounceMs` | `300` | from the RN source |
+| `draftAutosaveMs` | `800` | from the RN source |
+| `evalBarAnimationMs` | `400` | from the RN source |
+| `doubleTapWindowMs` | `350` | from the RN source |
+| `longPressDelayMs` | `400` | from the RN source (`delayLongPress`, six JSX sites — not the same 400 as the animation) |
+| `draftTTLHours` | `24` | **invented** — how long an unsaved draft survives |
+| `uiCoalesceMs` | `100` | **invented** — at most one engine-progress UI update per interval, so a fast search does not thrash SwiftUI |
+| `engineDeadlineMs` | `1200` | **invented** — wall-clock budget for one interactive search, enforced inside `shouldCancel` (see below) |
+| `reviewDeadlineMs` | `200` | **invented** — wall-clock budget for ONE position of a game review (see below) |
+| `screenPresentMs` | `250` | **invented** — the slide-up when the Analysis Board covers the tab bar |
+
+**Why the engine is bounded by a deadline and not a depth cap.** Measured in the browser with the
+in-repo search at multiPV 3: depth 4 costs **173 ms** in an endgame and **2794 ms** in a midgame — a
+15× spread, on top of ~6× per ply. Any fixed `maxDepth` is therefore either unusably slow in sharp
+positions or needlessly shallow in quiet ones. A deadline inside `shouldCancel` (polled every 2048
+nodes) reaches depth 4+ where it is cheap, stops at 3 where it is not, and holds total wall time to
+within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth = 6` is only a ceiling.
+
+**Why the review budget is 200 ms.** Same argument, per position. Measured on a 40-move game
+(41 positions) in Node: a fixed depth 3 costs **28 s**; with a per-position deadline, 100 ms gives
+5.0 s at mostly depth 2, **200 ms gives ~9 s at depth 2–3**, and 400 ms gives 17.4 s at mostly
+depth 3. In the browser the stepper measures 207–232 ms per position, so a 40-move game takes ~18 s —
+inside the original's own "This may take 20–30 seconds" promise (board.tsx:3831), and now with a real
+progress bar rather than a static string.
+
+### Board interaction (`chess-board.js`, `BoardView`)
+
+| Constant | Value | Why |
+|---|---|---|
+| drag threshold | `4` px | below this a press stays a tap, so tap-to-move is never hijacked; the same value in both languages |
+| review position guard | ~400 plies | the original's 200-position server cap is gone, so an absurd PGN still needs a bound |

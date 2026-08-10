@@ -391,3 +391,622 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .center-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .puzzle-meta { display: flex; align-items: center; justify-content: space-between; padding: 0 18px 6px; }
 .puzzle-meta .theme { font-weight: 700; }
+
+/* ---- Analysis Board -------------------------------------------------------- */
+/* Seven bands, in the order the RN source renders them (board.tsx:4565-4712). Every number
+   arrives as an --an-* custom property set by analysis.js from BiyaAnalysisMetrics, so no
+   layout constant is written here — the same rule home.js follows with --h-*.
+   The screen owns the whole phone box: `.view.flush` kills the gutter and `.app-card.an-mode`
+   hides the tab bar, because the original is a pushed route with no tab bar and seven bands
+   cannot spare the ~60px. */
+.app-card.an-mode .tabbar { display: none; }
+
+.an-view {
+  height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: var(--an-bg); color: var(--an-text); font-family: var(--font);
+}
+
+/* 1 — header */
+.an-header {
+  flex: none; display: flex; align-items: center; gap: 4px;
+  height: var(--an-header-h); padding: var(--an-header-pad-v) var(--an-header-pad-h);
+  background: var(--an-surface); border-bottom: 1px solid var(--an-divider);
+}
+.an-hbtn {
+  width: var(--an-header-btn-w); height: 100%; flex: none; background: none; border: 0;
+  color: var(--an-text); font-size: var(--an-fs-hbtn); cursor: pointer; border-radius: var(--an-tool-radius);
+}
+.an-hbtn:active { background: var(--an-surface-alt); }
+.an-title { flex: 1; text-align: center; font-weight: 800; font-size: var(--an-fs-title); letter-spacing: -.2px; }
+
+/* 2 — board, then the main eval bar directly under it */
+/* THE BOARD IS SIZED BY WIDTH, AND IT DOES NOT FLEX.
+   `--an-board-edge` is BOARD_SIZE for this screen, published by sizeBands() from the metrics
+   layer's own formula. It used to be `flex: 1 1 auto` with `container-type: size` and
+   `min(100cqw, calc(100cqh - …))`, which made the board's WIDTH track the leftover HEIGHT — so it
+   grew and shrank every time the ECO or engine panel gained a row, and never filled the screen.
+   Keep this band `flex: none`; `.an-panels` is the one that gives way. */
+.an-board {
+  flex: none; padding-top: var(--an-board-pad-top);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+}
+.an-board chess-board { width: var(--an-board-edge); --board-radius: 0; }
+.an-eval {
+  flex: none; width: var(--an-board-edge);
+  height: var(--an-eval-h); margin-top: 2px; border-radius: var(--an-eval-r);
+  background: var(--an-eval-track); overflow: hidden;
+}
+.an-eval .fill {
+  height: 100%; width: 50%; background: var(--an-eval-fill);
+  transition: width var(--an-eval-anim) ease;
+}
+
+/* 3 — the status line, then the toolbar.
+   TWO ROWS, not the source's one: nine emoji buttons measure 346px in a 365px card and left the
+   status ~19px, so it vanished. The numbers are `styles.statusLine`'s — a block the source declares
+   for exactly this standalone row and then never renders. Deviation recorded in PORTING_NOTES. */
+.an-statusline {
+  flex: none; min-height: var(--an-statusline-h);
+  display: flex; align-items: center; gap: 5px;
+  padding: var(--an-statusline-pad-v) var(--an-statusline-pad-h);
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
+}
+.an-status {
+  flex: none; min-height: var(--an-status-h); display: flex; align-items: center; gap: 6px;
+  justify-content: center;
+  padding-left: var(--an-status-pad-l); padding-right: var(--an-header-pad-h);
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
+  border-bottom: 1px solid var(--an-divider);
+}
+.an-status-text {
+  font-size: var(--an-fs-status); font-weight: 700; line-height: 1.25;
+  /* `numberOfLines={2}` (board.tsx:4619). Without the clamp the status wraps to three lines on a
+     narrow phone and collides with the toolbar, which is what it was doing. */
+  min-width: 0; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.an-spin {
+  width: 10px; height: 10px; flex: none; border-radius: 50%;
+  border: 2px solid var(--an-spinner); border-right-color: transparent;
+  animation: an-spin .7s linear infinite; visibility: hidden;
+}
+@keyframes an-spin { to { transform: rotate(360deg); } }
+.an-tools {
+  display: flex; align-items: center; gap: 2px; flex: 0 1 auto;
+  min-width: 0; overflow-x: auto; scrollbar-width: none;
+}
+.an-tools::-webkit-scrollbar { height: 0; }
+.an-tool, .an-nav {
+  background: var(--an-surface-alt); border: 0; color: var(--an-text); cursor: pointer;
+  border-radius: var(--an-tool-radius); line-height: 1;
+}
+.an-tool { font-size: var(--an-fs-tool); min-width: var(--an-tool-min-w); padding: var(--an-tool-pad-v) var(--an-tool-pad-h); }
+.an-nav { font-size: var(--an-fs-nav); min-width: var(--an-nav-min-w); padding: var(--an-tool-pad-v) var(--an-nav-pad-h); }
+.an-tool:active, .an-nav:active { opacity: .7; }
+.an-tool.on { color: var(--an-gold); }
+
+/* 4 — autoplay speed bar */
+.an-autoplay {
+  flex: none; display: none; text-align: center; cursor: pointer;
+  padding: var(--an-autoplay-pad-v) 0; font-size: var(--an-fs-autoplay); font-weight: 700;
+  background: var(--an-surface-alt); color: var(--an-text-2);
+}
+
+/* 5 — the move strip: main line as a token run, branches inline as chips */
+.an-strip {
+  flex: none; height: var(--an-strip-h); display: flex; align-items: center;
+  gap: var(--an-strip-gap); overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+  padding: var(--an-strip-pad-v) var(--an-strip-pad-h);
+  background: var(--an-surface); border-bottom: 1px solid var(--an-divider);
+  scrollbar-width: none;
+}
+.an-strip::-webkit-scrollbar { height: 0; }
+.an-strip-empty { font-size: var(--an-fs-status); color: var(--an-text-muted); }
+.an-num { font: 600 var(--an-fs-num)/1 var(--mono); color: var(--an-text-muted); flex: none; }
+.an-move, .an-alt {
+  flex: none; border: 0; cursor: pointer; font-family: var(--mono);
+  border-radius: var(--an-tool-radius); background: none; color: var(--an-text);
+  font-size: var(--an-fs-move); font-weight: 700; padding: 3px 5px;
+}
+.an-alt {
+  font-size: var(--an-fs-alt); background: var(--an-surface-alt2); color: var(--an-text-2);
+  border: 1px solid var(--an-divider);
+}
+.an-move.onpath, .an-alt.onpath { color: var(--an-gold); }
+.an-move.active, .an-alt.active { background: var(--an-gold); color: var(--an-on-gold); }
+
+/* 6 — panels: the ECO explorer, replacing the Lichess masters panel */
+/* The band that gives way. It absorbs every bit of slack — a short screen, a taller engine panel,
+   a wrapped status line — so none of that can reach the board. `--an-panels-h` is what bandLayout
+   says it should get; `flex: 1 1 auto` lets it shrink below that when the engine panel grows. */
+.an-panels {
+  flex: 1 1 auto; min-height: 0; height: var(--an-panels-h);
+  max-height: var(--an-panels-max); overflow-y: auto;
+  padding: 0 var(--an-panels-pad-h) 6px; background: var(--an-bg); scrollbar-width: none;
+}
+.an-panels::-webkit-scrollbar { width: 0; }
+.an-panel-head {
+  position: sticky; top: 0; background: var(--an-bg); padding: 6px 0 4px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
+  color: var(--an-text-muted);
+}
+.an-panel-empty { font-size: var(--an-fs-status); color: var(--an-text-muted); padding: 4px 0 8px; }
+.an-brow {
+  display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
+  background: var(--an-surface-alt2); border: 0; border-radius: var(--an-tool-radius);
+  color: var(--an-text); cursor: pointer; padding: 5px 8px; margin-bottom: 3px;
+}
+.an-brow:active { opacity: .75; }
+.an-bsan { font: 700 var(--an-fs-move)/1 var(--mono); flex: none; min-width: 46px; }
+.an-beco { font-size: var(--an-fs-opening); font-weight: 700; color: var(--an-gold); flex: none; }
+.an-bname {
+  font-size: var(--an-fs-alt); color: var(--an-text-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 7 — engine lines, pinned to the bottom */
+.an-engine {
+  flex: none; background: var(--an-surface); border-top: 1px solid var(--an-divider);
+  padding: var(--an-engine-pad-t) var(--an-engine-pad-h) var(--an-engine-pad-b);
+}
+.an-micro {
+  height: var(--an-micro-h); border-radius: var(--an-micro-r); overflow: hidden;
+  background: var(--an-eval-track); margin-bottom: 4px;
+}
+.an-micro .fill {
+  height: 100%; width: 50%; background: var(--an-eval-fill);
+  transition: width var(--an-eval-anim) ease;
+}
+.an-erow {
+  display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+  background: none; border: 0; color: var(--an-text); cursor: pointer; padding: 2px 3px;
+  border-radius: var(--an-tool-radius);
+}
+.an-erow:active { background: var(--an-surface-alt); }
+.an-erow-empty { font-size: var(--an-fs-etext); color: var(--an-text-muted); padding: 3px; }
+.an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: 40px; flex: none; }
+.an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: 38px; flex: none; }
+.an-epv {
+  font: 400 var(--an-fs-epv)/1.3 var(--mono); color: var(--an-text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-info { display: flex; align-items: center; gap: 6px; padding: 3px 3px 0; }
+.an-depth {
+  font: 700 var(--an-fs-depth)/1 var(--mono); color: var(--an-text-2); background: var(--an-surface-alt);
+  padding: 3px 5px; border-radius: var(--an-tool-radius); flex: none;
+}
+.an-symbol { font-size: var(--an-fs-esan); font-weight: 800; color: var(--an-text); flex: none; }
+.an-opening {
+  font-size: var(--an-fs-opening); font-weight: 700; color: var(--an-gold);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* the branch picker — an overlay, matching how PromotionOverlay is done in the Swift twin */
+.an-sheet {
+  position: absolute; inset: 0; z-index: 40; display: flex; align-items: center;
+  justify-content: center; background: rgba(0, 0, 0, .55);
+}
+.an-sheet-card {
+  min-width: 62%; max-width: 86%; background: var(--an-surface);
+  border: 1px solid var(--an-divider); border-radius: 12px; padding: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .5);
+}
+.an-sheet-title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--an-text-muted); margin-bottom: 8px; text-align: center;
+}
+.an-sheet-btn {
+  display: block; width: 100%; margin-bottom: 5px; padding: 8px; cursor: pointer;
+  background: var(--an-surface-alt); border: 0; border-radius: var(--an-tool-radius);
+  color: var(--an-text); font: 700 13px/1 var(--mono);
+}
+.an-sheet-btn.main { background: var(--an-gold); color: var(--an-on-gold); }
+.an-sheet-btn.cancel { background: none; color: var(--an-text-muted); font-family: var(--font); }
+.an-sheet-tag { font: 600 9px/1 var(--font); opacity: .8; margin-left: 5px; }
+
+/* review: the classification symbol after a reviewed move (board.tsx:3092) */
+.an-cls { font-size: 9px; font-weight: 700; margin-left: 1px; }
+
+/* review: the accuracy modal — every value from accModalStyles via --an-rv-* */
+.an-rv {
+  position: absolute; inset: 0; z-index: 45; display: flex;
+  align-items: center; justify-content: center;
+  padding: var(--an-rv-pad-v) var(--an-rv-pad-h); background: var(--an-rv-scrim);
+}
+.an-rv-card {
+  width: 100%; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--an-rv-card-bg); border-radius: var(--an-rv-card-r);
+  border: 1px solid var(--an-rv-card-border);
+}
+.an-rv-head {
+  flex: none; text-align: center; text-transform: uppercase;
+  padding: var(--an-rv-head-pt) var(--an-rv-head-ph) var(--an-rv-head-pb);
+  border-bottom: 1px solid var(--an-rv-hairline);
+  font-size: var(--an-rv-title-fs); font-weight: 800; color: var(--an-gold);
+  letter-spacing: var(--an-rv-title-tr);
+}
+.an-rv-body {
+  display: flex; flex-direction: column; align-items: center;
+  padding: var(--an-rv-body-pv) var(--an-rv-body-ph);
+}
+.an-rv-text {
+  font-size: var(--an-rv-text-fs); font-weight: 600;
+  color: var(--an-rv-text-color); margin-bottom: var(--an-rv-gap);
+}
+.an-rv-hint { font-size: var(--an-rv-hint-fs); color: var(--an-rv-hint-color); }
+.an-rv-track {
+  width: 100%; height: 4px; margin-top: 12px; border-radius: 2px; overflow: hidden;
+  background: var(--an-eval-track);
+}
+.an-rv-track .fill { height: 100%; width: 0; background: var(--an-gold); transition: width .2s linear; }
+.an-rv-skip {
+  margin-top: var(--an-rv-skip-mt); cursor: pointer; background: none;
+  padding: var(--an-rv-skip-pv) var(--an-rv-skip-ph); border-radius: var(--an-rv-skip-r);
+  border: 1px solid var(--an-rv-skip-border);
+  font-size: var(--an-rv-skip-fs); font-weight: 600; color: var(--an-rv-skip-color);
+}
+.an-rv-scroll {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none;
+  padding: var(--an-rv-content-pt) var(--an-rv-content-ph) var(--an-rv-content-pb);
+}
+.an-rv-scroll::-webkit-scrollbar { width: 0; }
+.an-rv-scores { display: flex; align-items: center; margin-bottom: var(--an-rv-section); }
+.an-rv-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.an-rv-player {
+  font-size: var(--an-rv-player-fs); font-weight: 700;
+  color: var(--an-rv-player-color); margin-bottom: var(--an-rv-player-gap);
+}
+.an-rv-score { font-size: var(--an-rv-score-fs); font-weight: 900; line-height: var(--an-rv-score-lh); }
+.an-rv-scorelabel {
+  font-size: var(--an-rv-slabel-fs); font-weight: 600; text-transform: uppercase;
+  color: var(--an-rv-slabel-color); letter-spacing: var(--an-rv-slabel-tr); margin-top: 2px;
+}
+.an-rv-div {
+  width: 1px; flex: none; height: var(--an-rv-divider-h);
+  background: var(--an-rv-divider-color); margin: 0 var(--an-rv-divider-mh);
+}
+.an-rv-graph {
+  border-radius: var(--an-rv-graph-r); overflow: hidden;
+  background: var(--an-rv-graph-bg); margin-bottom: var(--an-rv-section);
+}
+.an-rv-svg { display: block; width: 100%; height: var(--an-rv-graph-h); }
+.an-rv-thead {
+  display: flex; align-items: center; padding-bottom: var(--an-rv-thead-pb); margin-bottom: 2px;
+  border-bottom: 1px solid var(--an-rv-hairline);
+}
+.an-rv-side {
+  width: var(--an-rv-side-w); text-align: center; flex: none;
+  font-size: var(--an-rv-side-fs); font-weight: 700; color: var(--an-rv-side-color);
+}
+.an-rv-mid { flex: 1; }
+.an-rv-row {
+  display: flex; align-items: center; padding: var(--an-rv-row-pv) 0;
+  border-bottom: 1px solid var(--an-rv-row-rule);
+}
+.an-rv-count {
+  width: var(--an-rv-side-w); flex: none; text-align: center;
+  font-size: var(--an-rv-count-fs); font-weight: 800;
+}
+.an-rv-centre {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--an-rv-centre-gap);
+}
+.an-rv-dot { width: var(--an-rv-dot); height: var(--an-rv-dot); border-radius: var(--an-rv-dot-r); flex: none; }
+.an-rv-name { font-size: var(--an-rv-name-fs); font-weight: 600; color: var(--an-rv-name-color); }
+.an-rv-foot { flex: none; padding: var(--an-rv-foot-pad); border-top: 1px solid var(--an-rv-hairline); }
+.an-rv-btn {
+  width: 100%; cursor: pointer; border: 0; background: var(--an-gold); color: var(--an-on-gold);
+  border-radius: var(--an-rv-btn-r); padding: var(--an-rv-btn-pv) 0;
+  font-size: var(--an-rv-btn-fs); font-weight: 800; letter-spacing: var(--an-rv-btn-tr);
+}
+
+/* persistence: the save form and the library, as bottom sheets (the source's own shape) */
+.an-bs {
+  position: absolute; inset: 0; z-index: 46; display: flex;
+  align-items: flex-end; background: var(--an-bs-scrim);
+}
+.an-bs-card {
+  /* border-box so the 85% cap includes the padding — otherwise the sheet is ~89% of the screen. */
+  width: 100%; max-height: 85%; box-sizing: border-box; display: flex; flex-direction: column;
+  background: var(--an-bs-bg); padding: var(--an-bs-pad);
+  border-radius: var(--an-bs-r) var(--an-bs-r) 0 0;
+}
+.an-bs-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--an-bs-head-gap);
+}
+.an-bs-title { font-size: var(--an-bs-title-fs); font-weight: 700; color: var(--an-text); }
+.an-bs-close {
+  background: none; border: 0; cursor: pointer; color: var(--an-gold);
+  font-size: var(--an-bs-close-fs); font-weight: 700; padding: 2px 4px;
+}
+.an-bs-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; padding-top: 8px; }
+.an-bs-body::-webkit-scrollbar { width: 0; }
+.an-bs-note { font-size: var(--an-bs-res-fs); color: var(--an-text-muted); padding: 6px 0; }
+.an-bs-label {
+  font-size: var(--an-bs-res-fs); font-weight: 700; color: var(--an-text-2); margin: 4px 0 6px;
+}
+.an-bs-row { display: flex; gap: var(--an-bs-field-gap); }
+.an-bs-input {
+  width: 100%; box-sizing: border-box; border: 0; outline: none; font-family: var(--font);
+  background: var(--an-bs-field-bg); border-radius: var(--an-bs-field-r);
+  padding: var(--an-bs-field-pv) var(--an-bs-field-ph);
+  color: #fff; font-size: var(--an-bs-field-fs); margin-bottom: var(--an-bs-field-gap);
+}
+.an-bs-input.narrow { width: 80px; flex: none; }
+.an-bs-input::placeholder { color: var(--an-text-muted); }
+.an-bs-notes { min-height: 56px; resize: vertical; }
+.an-bs-results {
+  display: flex; gap: var(--an-bs-res-gap);
+  margin: 2px 0 var(--an-bs-res-mb);
+}
+.an-bs-result {
+  flex: 1; cursor: pointer; border: 0; background: var(--an-bs-field-bg);
+  padding: var(--an-bs-res-pv) 4px; border-radius: var(--an-bs-res-r);
+  font-size: var(--an-bs-res-fs); font-weight: 700; color: var(--an-bs-res-idle);
+}
+.an-bs-result.active { background: var(--an-gold); color: var(--an-on-gold); }
+.an-bs-chips {
+  display: flex; gap: var(--an-bs-chip-gap); overflow-x: auto; padding-bottom: 8px;
+  scrollbar-width: none;
+}
+.an-bs-chips::-webkit-scrollbar { height: 0; }
+.an-bs-chip {
+  flex: none; cursor: pointer; border: 0; background: var(--an-bs-field-bg);
+  padding: var(--an-bs-chip-pv) var(--an-bs-chip-ph); border-radius: var(--an-bs-chip-r);
+  font-size: var(--an-bs-chip-fs); font-weight: 700; color: var(--an-bs-chip-idle);
+  white-space: nowrap;
+}
+.an-bs-chip.active { background: var(--an-gold); color: var(--an-on-gold); }
+.an-bs-chip.add { color: var(--an-gold); }
+.an-bs-foot { flex: none; display: flex; gap: var(--an-bs-btn-gap); margin-top: var(--an-bs-btn-mt); }
+.an-bs-cancel, .an-bs-save {
+  flex: 1; cursor: pointer; border: 0; color: #fff;
+  padding: var(--an-bs-btn-pv) 0; border-radius: var(--an-bs-btn-r);
+  font-size: var(--an-bs-btn-fs); font-weight: 800;
+}
+.an-bs-cancel { background: var(--an-bs-cancel-bg); }
+.an-bs-save { background: var(--an-bs-save-bg); }
+.an-bs-rows { padding-top: 4px; }
+.an-lib-card {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--an-lib-card-bg); border-radius: var(--an-lib-card-r);
+  padding: var(--an-lib-card-pad); margin-bottom: var(--an-lib-card-gap);
+}
+.an-lib-main { flex: 1; min-width: 0; cursor: pointer; }
+.an-lib-primary {
+  font-size: var(--an-lib-primary-fs); font-weight: 700; color: #fff;
+  margin-bottom: var(--an-lib-primary-gap);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-lib-pgn {
+  font: 400 var(--an-lib-pgn-fs)/1.3 var(--mono); color: var(--an-lib-pgn-color);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-lib-meta {
+  font-size: var(--an-lib-meta-fs); color: var(--an-lib-meta-color);
+  margin-top: var(--an-lib-meta-gap);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.an-lib-action {
+  width: var(--an-lib-action); height: var(--an-lib-action); flex: none; cursor: pointer;
+  border: 0; border-radius: var(--an-lib-action-r); background: var(--an-lib-action-bg);
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+
+/* ---- Analysis Board, phase 11: sidebar · Setup Position · pickers ------------
+   Every number here is a CSS custom property set from BiyaAnalysisMetrics (MENU / EDIT / MODALS),
+   which is asserted against tools/metrics/board_styles.json. Nothing is typed in twice. */
+
+/* the ☰ sidebar (sidebarStyles) */
+.an-mn { position: absolute; inset: 0; z-index: 48; display: flex; background: var(--an-mn-scrim); }
+.an-mn-panel {
+  width: var(--an-mn-width); height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column;
+  background: var(--an-mn-bg);
+  border-right: var(--an-mn-border-w) solid var(--an-mn-border);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, .5);
+  animation: an-mn-in .18s ease-out;
+}
+@keyframes an-mn-in { from { transform: translateX(-100%); } to { transform: none; } }
+.an-mn-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: var(--an-mn-head-pt) var(--an-mn-head-ph) var(--an-mn-head-pb);
+  border-bottom: var(--an-mn-border-w) solid var(--an-mn-border);
+}
+.an-mn-title {
+  font-size: var(--an-mn-title-fs); font-weight: 800;
+  color: var(--an-mn-title-color); letter-spacing: var(--an-mn-title-tr);
+}
+.an-mn-close {
+  width: var(--an-mn-close); height: var(--an-mn-close); flex: none; cursor: pointer; border: 0;
+  border-radius: var(--an-mn-close-r); background: var(--an-mn-close-bg);
+  color: var(--an-text-2); font-size: var(--an-mn-close-fs); font-weight: 700;
+}
+.an-mn-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.an-mn-body::-webkit-scrollbar { width: 0; }
+.an-mn-sect {
+  font-size: var(--an-mn-sect-fs); font-weight: 800; color: var(--an-mn-sect-color);
+  letter-spacing: var(--an-mn-sect-tr); text-transform: uppercase;
+  padding: var(--an-mn-sect-pt) var(--an-mn-head-ph) var(--an-mn-sect-pb);
+}
+.an-mn-item {
+  width: 100%; box-sizing: border-box; display: flex; align-items: center;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  padding: var(--an-mn-item-pv) var(--an-mn-item-ph);
+}
+.an-mn-item:active { background: rgba(255, 255, 255, .05); }
+.an-mn-icon { font-size: var(--an-mn-icon-fs); width: var(--an-mn-icon-w); flex: none; }
+.an-mn-label {
+  flex: 1 1 auto; font-family: var(--font); font-size: var(--an-mn-label-fs);
+  font-weight: 500; color: var(--an-mn-label-color);
+}
+.an-mn-dot {
+  width: var(--an-mn-dot); height: var(--an-mn-dot); flex: none;
+  border-radius: 50%; background: var(--an-mn-dot-idle);
+}
+.an-mn-dot.on { background: var(--an-mn-dot-on); }
+
+/* the manual-annotation badge, in the same 8x8 viewBox the arrows use */
+.an-board-stack { position: relative; display: flex; flex-direction: column; align-items: center; }
+.an-badge { position: absolute; inset: 0; pointer-events: none; }
+.an-badge svg { width: 100%; height: 100%; display: block; }
+
+/* Setup Position (the edit* keys) — it takes over band 6.
+   The board band is `flex: 1 1 auto`, so without this the editor is pushed off the bottom of a
+   phone-sized screen and cannot be reached. The RN original reflows for the same reason: it swaps
+   the flexible board for a fixed-size `editBoard` while the panel is open. Here the board gives up
+   its stretch instead, and the panel takes the slack. Engine lines are hidden — they have nothing
+   to say about a half-built position, and the panel needs the room. */
+/* The board needs no edit-mode override any more: it is already the fixed `BOARD_SIZE` square the
+   source's `editBoard` style specifies, in edit mode and out of it. Only the panel band changes,
+   because the editor is taller than the ECO list and wants the room the hidden bands free up. */
+.an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; }
+.an-view.editing .an-engine { display: none; }
+.an-view.editing .an-strip { display: none; }
+/* board.tsx:4616 hides the whole status+toolbar row in edit mode, in its own words "to maximise
+   board space". Neither the status line nor the nav buttons mean anything mid-edit. */
+.an-view.editing .an-status { display: none; }
+.an-view.editing .an-autoplay { display: none; }
+.an-tool:disabled { opacity: .35; cursor: default; }
+.an-ed { background: var(--an-ed-bg); border-radius: var(--an-ed-r); padding: var(--an-ed-pad); }
+.an-ed-title-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--an-ed-title-gap);
+}
+.an-ed-title { font-size: var(--an-ed-title-fs); font-weight: 700; color: var(--an-ed-title-color); }
+.an-ed-hint { font-size: var(--an-ed-hint-fs); font-style: italic; color: var(--an-ed-hint-color); }
+.an-ed-pal {
+  display: flex; gap: var(--an-ed-pal-gap); justify-content: center;
+  margin-bottom: var(--an-ed-pal-row-gap);
+}
+.an-ed-piece {
+  width: var(--an-ed-btn); height: var(--an-ed-btn); flex: none; cursor: pointer;
+  border: var(--an-ed-active-bw) solid transparent; box-sizing: border-box;
+  border-radius: var(--an-ed-btn-r);
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.an-ed-pal.light .an-ed-piece { background: var(--an-ed-light); }
+.an-ed-pal.dark  .an-ed-piece { background: var(--an-ed-dark); }
+.an-ed-piece img { width: var(--an-ed-piece); height: var(--an-ed-piece); }
+.an-ed-piece.active { border-color: var(--an-ed-active-bc); background: var(--an-ed-active-fill); }
+.an-ed-actions { display: flex; gap: var(--an-ed-act-gap); margin: var(--an-ed-pal-row-gap) 0; }
+.an-ed-act {
+  flex: 1 1 0; cursor: pointer; border: 0; font-family: var(--font);
+  padding: var(--an-ed-act-pv) 0; border-radius: var(--an-ed-act-r);
+  background: var(--an-ed-act-bg); font-size: var(--an-ed-act-fs); font-weight: 700;
+  color: var(--an-ed-act-color);
+}
+.an-ed-act.active { background: var(--an-ed-erase-bg); color: var(--an-ed-erase-color); }
+.an-ed-turn { background: var(--an-ed-light); color: var(--an-ed-turn-light-color); }
+.an-ed-turn.dark { background: var(--an-ed-turn-dark-bg); color: var(--an-ed-turn-dark-color); }
+.an-ed-cas { margin: var(--an-ed-pal-row-gap) 0; }
+.an-ed-cas-label {
+  font-size: var(--an-ed-cas-lbl-fs); font-weight: 700; color: var(--an-ed-cas-lbl-color);
+  letter-spacing: var(--an-ed-cas-tr); text-transform: uppercase; margin-bottom: 4px;
+}
+.an-ed-cas-row { display: flex; gap: var(--an-ed-cas-gap); }
+.an-ed-cas-btn {
+  flex: 1 1 0; cursor: pointer; font-family: var(--font); box-sizing: border-box;
+  padding: var(--an-ed-cas-pv) 0; border-radius: var(--an-ed-cas-r);
+  background: var(--an-ed-cas-bg); border: 1px solid transparent;
+  font-size: var(--an-ed-cas-fs); font-weight: 700; color: var(--an-ed-cas-color);
+}
+.an-ed-cas-btn.on {
+  background: var(--an-ed-cas-on-bg); border-color: var(--an-ed-cas-on-bc);
+  color: var(--an-ed-cas-on-color);
+}
+.an-ed-err { color: var(--an-ed-err); font-size: var(--an-ed-err-fs); margin-bottom: 3px; }
+.an-ed-done {
+  width: 100%; cursor: pointer; border: 0; font-family: var(--font);
+  background: var(--an-ed-done-bg); padding: var(--an-ed-done-pv) 0;
+  border-radius: var(--an-ed-done-r); margin-bottom: 5px;
+  color: var(--an-ed-done-color); font-size: var(--an-ed-done-fs); font-weight: 800;
+  letter-spacing: var(--an-ed-done-tr);
+}
+.an-ed-fen-row { display: flex; gap: var(--an-ed-fen-gap); align-items: center; }
+.an-ed-fen {
+  flex: 1 1 auto; min-width: 0; box-sizing: border-box; border: 0; outline: none;
+  font-family: var(--mono); background: var(--an-ed-fen-bg); border-radius: var(--an-ed-fen-r);
+  padding: var(--an-ed-fen-pv) var(--an-ed-fen-ph);
+  color: var(--an-ed-fen-color); font-size: var(--an-ed-fen-fs);
+}
+.an-ed-fen::placeholder { color: var(--an-text-muted); }
+.an-ed-load {
+  flex: none; cursor: pointer; font-family: var(--font);
+  background: var(--an-ed-fen-bg); border: 1px solid var(--an-ed-load-bc);
+  border-radius: var(--an-ed-fen-r); padding: var(--an-ed-fen-pv) var(--an-ed-load-ph);
+  color: var(--an-ed-load-color); font-size: var(--an-ed-load-fs); font-weight: 700;
+}
+
+/* PGN import/export, the annotation picker and the variation card — all in the bottom sheet */
+.an-md-pgn-input {
+  width: 100%; box-sizing: border-box; border: 0; outline: none; resize: vertical;
+  font-family: var(--mono); background: var(--an-md-pgn-in-bg);
+  border-radius: var(--an-md-pgn-in-r); padding: var(--an-md-pgn-in-pad);
+  color: var(--an-md-pgn-in-color); font-size: var(--an-md-pgn-in-fs);
+  min-height: var(--an-md-pgn-in-min); max-height: var(--an-md-pgn-in-max);
+}
+.an-md-row {
+  display: flex; gap: var(--an-bs-btn-gap); margin-top: var(--an-bs-btn-mt); flex: none;
+}
+.an-md-row > button { flex: 1 1 0; }
+.an-md-danger { background: var(--an-md-var-del); }
+.an-md-sect {
+  font-size: var(--an-fs-pick-sect); font-weight: 700; color: var(--an-md-sect-color);
+  letter-spacing: var(--an-md-sect-tr); text-transform: uppercase;
+  margin: var(--an-md-sect-mt) 0 var(--an-md-sect-mb);
+}
+.an-md-grid {
+  display: flex; flex-wrap: wrap; gap: var(--an-md-grid-gap); justify-content: center;
+  margin-bottom: var(--an-md-grid-mb);
+}
+.an-md-abtn {
+  width: var(--an-md-btn-w); height: var(--an-md-btn-h); cursor: pointer; border: 0;
+  border-radius: var(--an-md-btn-r); background: var(--an-md-btn-bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.an-md-abtn.active { outline: 2px solid var(--an-gold); }
+.an-md-asym {
+  font-family: var(--font); font-size: var(--an-fs-pick-sym); font-weight: 900; color: var(--an-text);
+}
+.an-md-alabel {
+  font-family: var(--font); font-size: var(--an-fs-pick-label); font-weight: 600;
+  color: var(--an-md-label-color); margin-top: var(--an-md-label-gap);
+  text-align: center; line-height: 1.1;
+}
+.an-md-clear {
+  width: 100%; cursor: pointer; border: 0; font-family: var(--font);
+  background: var(--an-md-clear-bg); border-radius: var(--an-md-clear-r);
+  padding: var(--an-md-clear-pv) 0;
+  color: var(--an-md-clear-color); font-size: var(--an-md-clear-fs); font-weight: 700;
+}
+.an-md-vbadge {
+  align-self: flex-start; font-size: var(--an-fs-pick-sect); font-weight: 800;
+  letter-spacing: var(--an-md-sect-tr); padding: 3px 8px; border-radius: 6px;
+  background: var(--an-md-var-sub-bg); border: 1px solid var(--an-md-var-sub);
+  color: var(--an-md-var-sub); margin-bottom: 10px;
+}
+.an-md-vbadge.main {
+  background: var(--an-md-var-main-bg); border-color: var(--an-md-var-main);
+  color: var(--an-md-var-main);
+}
+.an-md-vrow {
+  width: 100%; box-sizing: border-box; display: flex; align-items: center;
+  gap: var(--an-md-var-gap); cursor: pointer; border: 0; background: none; text-align: left;
+  padding: var(--an-md-var-pv) 6px; border-radius: var(--an-md-var-ar); margin-bottom: 4px;
+}
+.an-md-vrow:active { background: rgba(255, 255, 255, .05); }
+.an-md-vicon {
+  width: 34px; height: 34px; flex: none; border-radius: 8px; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.an-md-vrow.promote .an-md-vicon { background: var(--an-md-var-main-bg); }
+.an-md-vrow.delete  .an-md-vicon { background: var(--an-md-var-del-bg); }
+.an-md-vtext { flex: 1 1 auto; min-width: 0; }
+.an-md-vtitle {
+  font-size: var(--an-md-var-fs); font-weight: 700; color: var(--an-text); margin-bottom: 2px;
+}
+.an-md-vrow.delete .an-md-vtitle { color: var(--an-md-var-del); }
+.an-md-vsub { font-size: var(--an-md-var-sub-fs); color: var(--an-text-muted); }
+.an-md-vchev { flex: none; font-size: 20px; color: var(--an-text-muted); }
+.an-md-vrow.delete .an-md-vchev { color: var(--an-md-var-del); }

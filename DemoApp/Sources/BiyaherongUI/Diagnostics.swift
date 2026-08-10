@@ -34,6 +34,16 @@ public func biyaherongDiagnostics() -> String {
         out += "WARNING: expected 5 PNGs + 1 SVG in Images/ — home screen cards will render blank\n"
     }
 
+    // The offline ECO opening book (tools/eco/build_eco.php). Same silent-failure mode as Images/:
+    // without `.copy("ECO")` the analysis board simply never names an opening.
+    let ecoURL = Bundle.module.url(forResource: "eco", withExtension: "tsv", subdirectory: "ECO")
+    if let ecoURL, let size = try? ecoURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+        out += "ECO: eco.tsv found (\(size / 1024) KB)\n"
+    } else {
+        out += "WARNING: ECO/eco.tsv missing — openings will never be named. "
+        out += "Run `php tools/eco/build_eco.php`.\n"
+    }
+
     out += "HomeArt: " + HomeArt.diagnosticsSummary() + "\n"
     return out
 }

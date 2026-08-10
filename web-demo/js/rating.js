@@ -47,10 +47,15 @@
     return 'Novice';
   }
 
-  // Eval (centipawns, white's perspective) → white win probability [0..100].
-  // From GameReview.evalToWinPct.
-  function evalToWinPct(evalCp) {
-    return 50 + 50 * (2 / (1 + Math.pow(10, -evalCp / 400)) - 1);
+  // Eval (centipawns, WHITE's perspective) → `color`'s win probability [0..100].
+  // Faithful port of GameReview.evalToWinPct (GameReview.swift:84-87).
+  //
+  // `color` defaults to 'w' because the eval bar in app.js flips the sign itself and passes an
+  // already-white-relative number. The game review needs the flip done here, per side — without it
+  // Black's accuracy is wrong on every move.
+  function evalToWinPct(evalCp, color) {
+    var e = (color === 'b') ? -evalCp : evalCp;
+    return 50 + 50 * (2 / (1 + Math.pow(10, -e / 400)) - 1);
   }
 
   global.Rating = {
@@ -59,4 +64,8 @@
     classify: classify, evalToWinPct: evalToWinPct,
     roundHalfAwayFromZero: roundHalfAwayFromZero
   };
+
+  /* Makes the rating math requireable headlessly under Node without changing browser behaviour.
+     Like engine.js and ai.js, this file has no named binding, so the branch lives inside the IIFE. */
+  if (typeof module !== 'undefined' && module.exports) { module.exports = global.Rating; }
 })(typeof window !== 'undefined' ? window : globalThis);

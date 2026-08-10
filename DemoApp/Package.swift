@@ -27,7 +27,7 @@ let package = Package(
             // Bundle.module lookup MUST pass `subdirectory:`. `.process` would flatten these and
             // silently break PieceArt / Sound / Theme.fontsReady / HomeArt.
             resources: [.copy("puzzles.sqlite"), .copy("Fonts"), .copy("Characters"), .copy("Sounds"),
-                        .copy("Pieces"), .copy("Images")]
+                        .copy("Pieces"), .copy("Images"), .copy("ECO")]
         ),
         .executableTarget(
             name: "DemoApp",
@@ -42,6 +42,13 @@ let package = Package(
         // quote index, expiry formatting and banner-style precedence (no XCTest in this toolchain).
         .executableTarget(
             name: "HomeMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
+        // Runnable self-check for the Analysis Board's pure layer — board geometry, arrow/badge
+        // geometry, the eval bar and graph, the display tables, and the band budget. Also asserts
+        // those constants against tools/metrics/board_styles.json, extracted from the RN source.
+        .executableTarget(
+            name: "AnalysisMetricsCheck",
             dependencies: ["BiyaherongUI"]
         ),
     ]

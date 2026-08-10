@@ -74,6 +74,13 @@ func load<T: Decodable>(_ name: String, _ type: T.Type) -> T {
     catch { fatalError("Decode \(name).json failed: \(error)") }
 }
 
+/// Raw text from the goldens directory — the ECO book ships as TSV, not JSON, so that the real
+/// `OpeningBook(tsv:)` parser is exercised against the real file.
+func loadText(_ name: String) -> String? {
+    let url = goldenDir.appendingPathComponent(name)
+    return try? String(contentsOf: url, encoding: .utf8)
+}
+
 func loadOptional<T: Decodable>(_ name: String, _ type: T.Type) -> T? {
     let url = goldenDir.appendingPathComponent("\(name).json")
     guard let data = try? Data(contentsOf: url) else { return nil }
@@ -287,6 +294,1499 @@ for (fen, expUci) in [
     guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
     let m = ChessAI.bestMove(pos, persona: coachPogi, using: &aiRng)
     h.check(m?.uci == expUci, "AI \(fen.prefix(18))… -> \(m?.uci ?? "nil") != \(expUci)")
+}
+
+// SAN parsing — the inverse of san(for:), against the REAL App\Services\ChessEngine.
+// Every ply of a 1-in-12 sample of the vendored ECO lines plus hand-built cases for what openings
+// never reach. Three assertions per case: the parsed UCI, the resulting six-field FEN, and the
+// position key. `src` is the oracle's provenance tag, e.g. "eco:B90:… Najdorf Variation#9".
+struct SanParseCase: Decodable {
+    let fenBefore: String, san: String, uci: String, fenAfter: String, key: String, src: String
+}
+h.begin("san_parse")
+for c in load("san_parse", [SanParseCase].self) {
+    guard let pos = ChessPosition(fen: c.fenBefore) else { h.check(false, "\(c.src) bad fenBefore"); continue }
+    guard let m = pos.move(forSAN: c.san) else { h.check(false, "\(c.src) move(forSAN: \"\(c.san)\") -> nil"); continue }
+    h.check(m.uci == c.uci, "\(c.src) uci \(m.uci) != \(c.uci)")
+    let after = pos.makeMove(m)
+    h.check(after.fen == c.fenAfter, "\(c.src) fen \(after.fen) != \(c.fenAfter)")
+    h.check(after.positionKey == c.key, "\(c.src) key \(after.positionKey) != \(c.key)")
+}
+
+// Notation edge cases the oracle cannot supply: the tolerant spellings real PGN exporters emit,
+// UCI parsing, and rejection. Hardcoded like `perft` and `chess_ai` — there is no server
+// counterpart to generate them. Labels match the assertions in web-demo/js/engine.js so the two
+// tables can be diffed by eye.
+h.begin("notation_extra")
+let oneKnight = "7k/8/8/8/8/8/8/1N2K3 w - - 0 1"      // only b1 can reach d2
+let twoKnights = "7k/8/8/8/8/8/8/1N1K1N2 w - - 0 1"   // b1 AND f1 reach d2 — genuinely ambiguous
+let pawnCapture = "7k/8/8/3p4/4P3/8/8/7K w - - 0 1"
+let promotion = "8/P6k/8/8/8/8/6K1/8 w - - 0 1"
+let castling = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
+// Explicit element types throughout, like `perftCases` above: a bare 20-element literal of tuples
+// is the classic way to make the Swift type-checker give up on an expression.
+let sanAccept: [(String, String, String)] = [
+    (oneKnight, "Nd2", "b1d2"),                       // minimal — what we generate
+    (oneKnight, "Nbd2", "b1d2"),                      // over-disambiguated by file
+    (oneKnight, "N1d2", "b1d2"),                      // over-disambiguated by rank
+    (oneKnight, "Nb1d2", "b1d2"),                     // long algebraic
+    (oneKnight, "Nb1-d2", "b1d2"),                    // long algebraic with a dash
+    (twoKnights, "Nbd2", "b1d2"),                     // real disambiguation still works
+    (twoKnights, "Nfd2", "f1d2"),
+    (pawnCapture, "exd5", "e4d5"),
+    (pawnCapture, "ed5", "e4d5"),                     // 'x' omitted
+    (pawnCapture, "e4xd5", "e4d5"),                   // long algebraic capture
+    (promotion, "a8=Q", "a7a8q"),
+    (promotion, "a8Q", "a7a8q"),                      // '=' omitted
+    (promotion, "a8(Q)", "a7a8q"),                    // parenthesised
+    (promotion, "a8=q", "a7a8q"),                     // lowercase promotion letter
+    (promotion, "a8=N", "a7a8n"),                     // underpromotion
+    (promotion, "a8", "a7a8q"),                       // bare — defaults to queen
+    (castling, "O-O", "e1g1"),
+    (castling, "0-0-0", "e1c1"),                      // zero-spelled
+    (castling, "O-O+", "e1g1"),                       // suffixes are stripped
+    (castling, "O-O!?", "e1g1"),
+]
+for (fen, san, expected) in sanAccept {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let got = pos.move(forSAN: san)?.uci
+    h.check(got == expected, "parseSAN \"\(san)\" -> \(got ?? "nil") != \(expected)")
+}
+let sanReject: [(String, String, String)] = [
+    (ChessPosition.startFEN, "zz9", "garbage"),
+    (ChessPosition.startFEN, "e5", "an illegal move"),
+    (ChessPosition.startFEN, "", "the empty string"),
+    (ChessPosition.startFEN, "   ", "whitespace only"),
+    (twoKnights, "Nd2", "an ambiguous move"),
+]
+for (fen, san, why) in sanReject {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let got = pos.move(forSAN: san)
+    h.check(got == nil, "parseSAN rejects \(why): \"\(san)\" -> \(got?.uci ?? "nil")")
+}
+// "" means the parse must fail.
+let uciCases: [(String, String, String)] = [
+    (ChessPosition.startFEN, "e2e4", "e2e4"),
+    (promotion, "a7a8q", "a7a8q"),
+    (promotion, "a7a8N", "a7a8n"),                    // uppercase promotion letter
+    (ChessPosition.startFEN, "e2e5", ""),             // illegal
+    (ChessPosition.startFEN, "e2e", ""),              // too short
+    (ChessPosition.startFEN, "z9e4", ""),             // bad square
+    (promotion, "a7a8k", ""),                         // a king is not a promotion target
+]
+for (fen, uci, expected) in uciCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let got = pos.move(forUCI: uci)?.uci ?? ""
+    h.check(got == expected, "parseUCI \"\(uci)\" -> \(got.isEmpty ? "nil" : got) != \(expected.isEmpty ? "nil" : expected)")
+}
+
+// Draw rules and the position key. Also hardcoded: App\Services\ChessEngine explicitly skips
+// check/stalemate/fifty-move/repetition, so there is nothing on the server to oracle against.
+// Expected values are hand-reasoned, not copied from the JS twin's output — the two languages
+// assert independent expectations of the same chess facts.
+h.begin("draw_rules")
+let materialCases: [(String, Bool, String)] = [
+    ("8/8/4k3/8/8/3K4/8/8 w - - 0 1", true, "K vs K"),
+    ("8/8/4k3/8/8/3K1B2/8/8 w - - 0 1", true, "K+B vs K"),
+    ("8/8/4k3/8/8/3K1N2/8/8 w - - 0 1", true, "K+N vs K"),
+    ("8/4b3/4k3/8/8/3K1B2/8/8 w - - 0 1", false, "K+B vs K+B on opposite colours (e7 dark, f3 light)"),
+    ("8/5b2/4k3/8/8/3K1B2/8/8 w - - 0 1", true, "K+B vs K+B on the same colour (f7 and f3 both light)"),
+    ("8/8/4k3/8/8/3K1NN1/8/8 w - - 0 1", false, "K+N+N vs K is NOT insufficient"),
+    ("8/8/4k3/8/8/3K1B1N/8/8 w - - 0 1", false, "K+B+N vs K can mate"),
+    ("8/8/4k3/8/8/3K1P2/8/8 w - - 0 1", false, "a pawn is sufficient"),
+    ("8/8/4k3/8/8/3K1R2/8/8 w - - 0 1", false, "a rook is sufficient"),
+    ("8/8/4k3/8/8/3K1Q2/8/8 w - - 0 1", false, "a queen is sufficient"),
+    (ChessPosition.startFEN, false, "the start position is not a material draw"),
+]
+for (fen, expected, why) in materialCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    h.check(pos.hasInsufficientMaterial == expected, "insufficientMaterial: \(why)")
+}
+let fiftyCases: [(String, Bool, String)] = [
+    ("7k/8/8/8/8/8/8/R5K1 w - - 99 60", false, "fifty-move at 99 halfmoves"),
+    ("7k/8/8/8/8/8/8/R5K1 w - - 100 60", true, "fifty-move at 100 halfmoves"),
+    ("7k/8/8/8/8/8/8/R5K1 w - - 101 60", true, "fifty-move past 100 halfmoves"),
+]
+for (fen, expected, why) in fiftyCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    h.check(pos.isFiftyMoveDraw == expected, why)
+}
+let startKey = ChessPosition.start().positionKey
+h.check(startKey == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -", "positionKey is the 4-field FEN")
+h.check(ChessRules.repetitionCount([startKey, startKey], of: startKey) == 2, "repetitionCount counts occurrences")
+h.check(ChessRules.isThreefold([startKey, startKey], of: startKey) == false, "two occurrences is not threefold")
+h.check(ChessRules.isThreefold([startKey, startKey, startKey], of: startKey) == true, "three occurrences is threefold")
+let epKeyCases: [(String, String, String)] = [
+    ("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1", "-", "an uncapturable ep square is cleared"),
+    ("rnbqkbnr/pp2pppp/8/2ppP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3", "d6", "a capturable ep square is kept"),
+    ("rnbqkbnr/ppp1pppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 3", "e3", "a capturable ep square is kept (dxe3)"),
+]
+for (fen, expectedEp, why) in epKeyCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let got = String(pos.positionKey.split(separator: " ")[3])
+    h.check(got == expectedEp, "\(why): ep \(got) != \(expectedEp)")
+}
+let terminalCases: [(String, TerminalKind, TerminalReason, String)] = [
+    ("R5k1/5ppp/8/8/8/8/8/6K1 b - - 1 1", .checkmate, .checkmate, "checkmate"),
+    ("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", .draw, .stalemate, "stalemate"),
+    ("8/8/4k3/8/8/3K4/8/8 w - - 0 1", .draw, .insufficient, "a material draw"),
+    ("7k/8/8/8/8/8/8/R5K1 w - - 100 60", .draw, .fifty, "the fifty-move rule"),
+]
+for (fen, kind, reason, why) in terminalCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let out = pos.terminalOutcome()
+    h.check(out.kind == kind && out.reason == reason,
+            "terminalOutcome \(why): \(out.kind.rawValue)/\(out.reason?.rawValue ?? "nil") != \(kind.rawValue)/\(reason.rawValue)")
+}
+if let mated = ChessPosition(fen: "R5k1/5ppp/8/8/8/8/8/6K1 b - - 1 1") {
+    h.check(mated.terminalOutcome().winner == .white, "terminalOutcome names the winner")
+}
+h.check(ChessPosition.start().terminalOutcome().kind == .ongoing, "the start position is ongoing")
+h.check(ChessPosition.start().terminalOutcome(historyKeys: [startKey, startKey, startKey]).reason == .repetition,
+        "terminalOutcome detects threefold repetition")
+
+// Move tree — structural invariants, plus the exact flatten() rows for one fixed PGN. That last
+// assertion is the highest-value cross-language check in the feature: the identical table is
+// asserted by web-demo/js/movetree.js, so the two implementations cannot silently disagree about
+// traversal order, nesting depth or PGN move numbering.
+h.begin("movetree")
+if let t = MoveTree() {
+    h.check(t.root.children.isEmpty, "a new tree has no moves")
+    h.check(t.current === t.root, "the cursor starts at the root")
+    h.check(t.root.ply == 0, "the root is ply 0")
+    h.check(t.root.fenAfter == ChessPosition.startFEN, "the root holds the start position")
+    let first = t.add(san: "e4")
+    h.check(first?.created == true, "add(san:) creates a node")
+    h.check(first?.node.uci == "e2e4", "the node carries the uci")
+    h.check(t.add(san: "zz9") == nil, "add(san:) rejects unparseable input")
+    t.goToStart()
+    let again = t.add(san: "e4")
+    h.check(again?.created == false, "replaying an existing move does not create a node")
+    h.check(t.root.children.count == 1, "the root still has exactly one child")
+    t.goToStart()
+    let d4 = t.add(san: "d4")
+    h.check(t.root.children.count == 2, "a different move branches")
+    h.check(t.root.children[0].san == "e4", "the first move played stays the main line")
+    if let node = d4?.node {
+        h.check(t.promote(node), "promote swaps with children[0]")
+        h.check(t.root.children[0].san == "d4", "the promoted move is now the main line")
+        h.check(t.promote(t.root.children[0]) == false, "promoting the main line is a no-op")
+        h.check(t.remove(node) == 1, "remove reports the subtree size")
+        h.check(t.root.children.count == 1, "the variation is gone")
+    }
+}
+h.check(MoveTree(initialFEN: "not a fen") == nil, "MoveTree rejects a bad FEN")
+if let t2 = MoveTree() {
+    for s in ["e4", "e5", "Nf3", "Nc6"] { t2.add(san: s) }
+    let deep = t2.current
+    h.check(MoveTree.path(to: deep) == [0, 0, 0, 0], "path(to:) yields child indices")
+    h.check(t2.node(atPath: [0, 0, 0, 0]) === deep, "node(atPath:) round-trips")
+    h.check(t2.node(atPath: [0, 0, 9]) == nil, "node(atPath:) returns nil for a bad path")
+    h.check(t2.mainlineSANs() == ["e4", "e5", "Nf3", "Nc6"], "mainlineSANs follows children[0]")
+    h.check(MoveTree.line(to: deep).count == 5, "line(to:) includes the root")
+    h.check(MoveTree.historyKeys(to: deep).count == 5, "historyKeys includes the root")
+    h.check(MoveTree.historyKeys(to: deep).first == ChessPosition.start().positionKey,
+            "the first history key is the start position")
+    t2.goToStart()
+    h.check(t2.goForward().san == "e4", "goForward follows the main line")
+    t2.goBack(); t2.goBack()
+    h.check(t2.current === t2.root, "goBack at the root is a no-op")
+    h.check(t2.goToEnd().san == "Nc6", "goToEnd reaches the leaf")
+}
+// The fixed PGN. Expected rows are copied from the JS twin's output, which was inspected by hand.
+let flattenSource = "1. e4 e5 (1... c5 2. Nf3 d6) 2. Nf3 Nc6 3. Bb5 *"
+let expectedRows: [(Int, String, String)] = [
+    (0, "1.", "e4"),
+    (0, "", "e5"),
+    (1, "1...", "c5"),
+    (1, "2.", "Nf3"),
+    (1, "", "d6"),
+    (0, "2.", "Nf3"),
+    (0, "", "Nc6"),
+    (0, "3.", "Bb5"),
+]
+if let g = PGN.parseFirst(flattenSource) {
+    g.tree.goToEnd()
+    let rows = g.tree.flatten()
+    h.check(rows.count == expectedRows.count, "flatten row count \(rows.count) != \(expectedRows.count)")
+    if rows.count == expectedRows.count {
+        for (i, want) in expectedRows.enumerated() {
+            let got = rows[i]
+            h.check(got.depth == want.0 && got.numberText == want.1 && got.san == want.2,
+                    "flatten row \(i): (\(got.depth),\"\(got.numberText)\",\"\(got.san)\") != (\(want.0),\"\(want.1)\",\"\(want.2)\")")
+        }
+    }
+    h.check(rows.filter { $0.isCurrent }.count == 1, "exactly one row is current")
+    h.check(rows.last?.isCurrent == true, "the last main-line move is current after goToEnd")
+    h.check(rows.filter { $0.isOnPath }.count == 5, "the path back to the root is marked")
+    h.check(rows[2].parentID == rows[0].id, "parentID links the variation to its branch point")
+} else {
+    h.check(false, "the fixed flatten PGN failed to parse")
+}
+
+// PGN tokenising and file splitting — against the PHP oracle's goldens from phase 0.
+struct PgnTokenCase: Decodable { let label: String, movetext: String, tokens: [String] }
+h.begin("pgn_tokens")
+for c in load("pgn_tokens", [PgnTokenCase].self) {
+    let got = PGN.mainlineTokens(c.movetext)
+    h.check(got.count == c.tokens.count, "\(c.label) token count \(got.count) != \(c.tokens.count)")
+    h.check(got == c.tokens, "\(c.label) [\(got.joined(separator: " "))] != [\(c.tokens.joined(separator: " "))]")
+}
+
+struct PgnSplitGame: Decodable { let headers: [String: String], movetext: String }
+struct PgnSplitCase: Decodable { let label: String, pgn: String, games: [PgnSplitGame] }
+h.begin("pgn_split")
+for c in load("pgn_split", [PgnSplitCase].self) {
+    let got = PGN.splitGames(c.pgn)
+    h.check(got.count == c.games.count, "\(c.label) game count \(got.count) != \(c.games.count)")
+    for (a, b) in zip(got, c.games) {
+        h.check(a.movetext == b.movetext, "\(c.label) movetext \"\(a.movetext)\" != \"\(b.movetext)\"")
+        h.check(a.headers == b.headers, "\(c.label) headers \(a.headers) != \(b.headers)")
+    }
+}
+
+// PGN round trip. Expected canonical movetext is the JS twin's output, so a divergence in either
+// serializer shows up here rather than as a silent formatting drift.
+h.begin("pgn_roundtrip")
+let pgnCorpus: [(String, String)] = [
+    ("1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0",
+     "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0"),
+    ("1. e4 e5 (1... c5 2. Nf3 d6) 2. Nf3 Nc6 *",
+     "1. e4 e5 (1... c5 2. Nf3 d6) 2. Nf3 Nc6 *"),
+    ("1. e4 e5 (1... c5 (1... e6 2. d4) 2. Nf3) 2. Nf3 1/2-1/2",
+     "1. e4 e5 (1... c5 2. Nf3) (1... e6 2. d4) 2. Nf3 1/2-1/2"),
+    ("1. e4! e5?! {sharp} 2. Nf3 $10 *",
+     "1. e4 $1 e5 $6 {sharp} 2. Nf3 $10 *"),
+    ("1. e4 d5 2. exd5 c6 3. dxc6 Nf6 4. cxb7 Bd7 5. bxa8=Q *",
+     "1. e4 d5 2. exd5 c6 3. dxc6 Nf6 4. cxb7 Bd7 5. bxa8=Q *"),
+    ("1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O 6. Nf3 h6 0-1",
+     "1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O 6. Nf3 h6 0-1"),
+]
+for (src, wantBody) in pgnCorpus {
+    guard let g1 = PGN.parseFirst(src) else { h.check(false, "failed to parse \(src)"); continue }
+    let text1 = PGN.serialize(g1)
+    let parts = text1.components(separatedBy: "\n\n")
+    let body = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    h.check(body == wantBody, "canonical movetext \"\(body)\" != \"\(wantBody)\"")
+    guard let g2 = PGN.parseFirst(text1) else { h.check(false, "failed to reparse \(src)"); continue }
+    h.check(PGN.serialize(g2) == text1, "serialize is a fixpoint for \(src.prefix(28))…")
+    h.check(g1.tree.mainlineSANs() == g2.tree.mainlineSANs(), "the main line survives the round trip")
+    h.check(g1.errors.isEmpty, "a clean corpus game reports no errors")
+}
+if let bad = PGN.parseFirst("1. e4 e5 2. Nf3 Qz9 4. Bb5 *") {
+    h.check(bad.errors.count == 1, "one error is reported for a bad move")
+    h.check(bad.errors.first?.ply == 4, "the error names the failing ply")
+    h.check(bad.tree.mainlineSANs() == ["e4", "e5", "Nf3"], "the moves before the error are kept")
+}
+if let nullMove = PGN.parseFirst("1. e4 -- 2. Nf3 *") {
+    h.check(nullMove.errors.first?.message.contains("null moves") == true, "null moves are rejected")
+}
+if let setup = PGN.parseFirst("[SetUp \"1\"]\n[FEN \"r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1\"]\n\n1. O-O-O O-O *") {
+    h.check(setup.tree.mainlineSANs() == ["O-O-O", "O-O"], "a game from a custom FEN parses")
+    h.check(PGN.serialize(setup).contains("[SetUp \"1\"]"), "a custom start emits SetUp")
+    h.check(PGN.serialize(setup).contains("[FEN \"r3k2r"), "a custom start emits FEN")
+}
+if let multi = PGN.parseFirst("[Event \"The \\\"Big\\\" One\"]\n\n1. e4 *") {
+    h.check(multi.headers["Event"] == "The \"Big\" One", "escaped quotes are unescaped on read")
+    h.check(PGN.serialize(multi).hasPrefix("[Event \"The \\\"Big\\\" One\"]"), "and re-escaped on write")
+}
+h.check(PGN.parse("[Event \"A\"]\n\n1. e4 e5 1-0\n\n[Event \"B\"]\n\n1. d4 d5 0-1\n").count == 2,
+        "a two-game file yields two games")
+
+// The analysis search. Mate expectations are ground truth from a brute-force checker, NOT from this
+// engine — guessing them by eye produced four wrong entries when the JS twin was written.
+h.begin("search")
+let engine = LocalEngine()
+let mateCases: [(String, Int, Int, String)] = [
+    ("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", 1, 2, "back-rank mate in 1 (Ra8#)"),
+    ("6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1", 1, 2, "back-rank mate in 1, both sides castled"),
+    ("6k1/5p1p/8/8/8/8/8/R5RK w - - 0 1", 1, 2, "back-rank mate in 1 through an open g7"),
+    ("7k/R7/1R6/8/8/8/8/7K w - - 0 1", 1, 2, "rook ladder mate in 1"),
+    ("6k1/8/6K1/8/8/8/8/7Q w - - 0 1", 1, 2, "K+Q mate in 1"),
+    ("7k/8/6K1/8/8/8/8/R7 w - - 0 1", 1, 2, "K+R corner mate in 1"),
+    ("7k/6R1/8/8/8/8/8/6RK w - - 0 1", 2, 4, "two-rook mate in 2"),
+    ("6k1/8/6K1/8/8/8/8/7R w - - 0 1", 2, 4, "K+R mate in 2"),
+]
+for (fen, wantMate, depth, why) in mateCases {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let r = engine.analyzeToCompletion(pos, limits: SearchLimits(maxDepth: depth, multiPV: 1))
+    guard let best = r.lines.first else { h.check(false, "\(why): no lines"); continue }
+    if case .mate(let n) = best.score {
+        h.check(n == wantMate, "\(why): M\(n) != M\(wantMate)")
+    } else {
+        h.check(false, "\(why): \(best.score.displayText) is not a mate score")
+    }
+}
+if let quiet = ChessPosition(fen: "5rk1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1") {
+    let r = engine.analyzeToCompletion(quiet, limits: SearchLimits(maxDepth: 3, multiPV: 1))
+    if case .cp = r.lines.first?.score { h.check(true, "no mate available -> cp") }
+    else { h.check(false, "no mate available: expected a cp score") }
+}
+// MultiPV invariants and PV legality.
+if let mid = ChessPosition(fen: "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4") {
+    let r = engine.analyzeToCompletion(mid, limits: SearchLimits(maxDepth: 3, multiPV: 3))
+    h.check(r.lines.count == 3, "multiPV returns 3 lines, got \(r.lines.count)")
+    var roots = Set<String>()
+    for (i, l) in r.lines.enumerated() {
+        h.check(l.rank == i + 1, "line \(i + 1) rank \(l.rank)")
+        h.check(l.pvSAN.count == l.pv.count, "line \(i + 1) pvSAN length matches pv")
+        var p = mid, legal = true
+        for m in l.pv {
+            if !p.legalMoves().contains(m) { legal = false; break }
+            p = p.makeMove(m)
+        }
+        h.check(legal, "line \(i + 1) PV is fully legal")
+        if let f = l.pv.first { roots.insert(f.uci) }
+    }
+    h.check(roots.count == r.lines.count, "multiPV root moves are distinct")
+    if r.lines.count > 1 {
+        for i in 1 ..< r.lines.count {
+            if case .cp(let a) = r.lines[i - 1].score, case .cp(let b) = r.lines[i].score {
+                h.check(a >= b, "multiPV scores are non-increasing (\(a) then \(b))")
+            }
+        }
+    }
+    // Determinism: the same request twice must produce the identical snapshot.
+    let again = engine.analyzeToCompletion(mid, limits: SearchLimits(maxDepth: 3, multiPV: 3))
+    h.check(again.lines == r.lines, "the search is deterministic")
+    h.check(again.nodes == r.nodes, "node counts match across identical runs")
+    // Progress fires once per completed depth.
+    var seen: [Int] = []
+    _ = engine.analyze(mid, limits: SearchLimits(maxDepth: 3), historyKeys: [],
+                       shouldCancel: { false }, onProgress: { seen.append($0.depth) })
+    h.check(seen == [1, 2, 3], "onProgress fires per depth, got \(seen)")
+}
+// White-relative signs: the same board must score with the same sign whoever is to move.
+for (fen, why) in [("4k3/8/8/8/8/8/8/3QK3 w - - 0 1", "White to move"),
+                   ("4k3/8/8/8/8/8/8/3QK3 b - - 0 1", "Black to move")] {
+    guard let pos = ChessPosition(fen: fen) else { h.check(false, "bad fen \(fen)"); continue }
+    let r = engine.analyzeToCompletion(pos, limits: SearchLimits(maxDepth: 2))
+    if case .cp(let c) = r.lines.first?.score {
+        h.check(c > 0, "White up a queen scores positive, \(why): got \(c)")
+    } else {
+        h.check(true, "White up a queen found a mate, \(why)")
+    }
+}
+// Quiescence: a hanging queen must be taken rather than left to the horizon.
+if let hanging = ChessPosition(fen: "4k3/8/8/8/3q4/8/3Q4/4K3 w - - 0 1") {
+    let r = engine.analyzeToCompletion(hanging, limits: SearchLimits(maxDepth: 2))
+    h.check(r.lines.first?.pvSAN.first == "Qxd4",
+            "the free queen is captured, got \(r.lines.first?.pvSAN.first ?? "nil")")
+}
+// Terminal short-circuit, and the guard against the server's evalMate:0 bug.
+if let mated = ChessPosition(fen: "R5k1/5ppp/8/8/8/8/8/6K1 b - - 1 1") {
+    let r = engine.analyzeToCompletion(mated, limits: SearchLimits(maxDepth: 4))
+    h.check(r.lines.isEmpty, "a finished game produces no lines")
+    h.check(r.nodes == 0, "a finished game is never searched")
+    h.check(r.terminal?.kind == .checkmate, "checkmate is reported as terminal")
+    let ev = r.score?.asReviewEvaluation() ?? GameReview.Evaluation(evalCp: nil, evalMate: nil, bestMoveSan: nil)
+    h.check(ev.evalMate == nil, "terminal mate NEVER sets evalMate — the server's latent bug")
+    h.check(ev.evalCp == 10000, "White mating gives evalCp +10000, got \(String(describing: ev.evalCp))")
+    h.check(GameReview.normalizeEval(ev) == 10000, "normalizeEval agrees, so the review sees +10000")
+}
+if let stale = ChessPosition(fen: "7k/5Q2/6K1/8/8/8/8/8 b - - 0 1") {
+    let r = engine.analyzeToCompletion(stale, limits: SearchLimits(maxDepth: 4))
+    h.check(r.terminal?.reason == .stalemate, "stalemate is terminal")
+    h.check(r.score?.asReviewEvaluation().evalCp == 0, "a draw is 0 cp")
+}
+// A real, non-terminal mate still uses evalMate.
+if let m1 = ChessPosition(fen: "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1") {
+    let r = engine.analyzeToCompletion(m1, limits: SearchLimits(maxDepth: 2))
+    let ev = r.lines.first?.score.asReviewEvaluation(bestMoveSan: "Ra8#")
+    h.check(ev?.evalMate == 1 && ev?.evalCp == nil, "a forced mate uses evalMate, not evalCp")
+    h.check(ev?.bestMoveSan == "Ra8#", "the best-move SAN is carried through")
+}
+// Display formatting matches the spec's engine-line column.
+h.check(EngineScore.cp(130).displayText == "+1.3", "displayText +1.3")
+h.check(EngineScore.cp(-70).displayText == "-0.7", "displayText -0.7")
+h.check(EngineScore.cp(0).displayText == "+0.0", "displayText +0.0")
+h.check(EngineScore.mate(4).displayText == "M4", "displayText M4")
+h.check(EngineScore.mate(-3).displayText == "M-3", "displayText M-3")
+h.check(engine.identifier == "local-negamax-v1", "the engine identifies itself for review caching")
+
+// The bundled ECO opening book. Exercises the real OpeningBook(tsv:) parser against the real
+// shipped file (copied into Goldens/ by build_eco.php), then replays the oracle's sampled lines.
+struct EcoLookupCase: Decodable {
+    let sanMoves: [String], key: String, eco: String, name: String, plyCount: Int
+}
+struct EcoTransposition: Decodable { let lineA: String, lineB: String, keyA: String, keyB: String }
+struct EcoGolden: Decodable { let lookups: [EcoLookupCase], transpositions: [EcoTransposition] }
+
+if let tsv = loadText("eco_book.tsv"), let g = loadOptional("eco_lookup", EcoGolden.self) {
+    h.begin("eco")
+    let book = OpeningBook(tsv: tsv)
+    h.check(book.count > 7000, "the book parsed \(book.count) rows, expected > 7000")
+    for c in g.lookups {
+        var pos = ChessPosition.start()
+        var ok = true
+        for san in c.sanMoves {
+            guard let m = pos.move(forSAN: san) else { ok = false; break }
+            pos = pos.makeMove(m)
+        }
+        guard ok else { h.check(false, "\(c.eco) \(c.name): line did not replay"); continue }
+        h.check(pos.positionKey == c.key, "\(c.eco) \(c.name): key \(pos.positionKey) != \(c.key)")
+        guard let e = book.entry(for: c.key) else {
+            h.check(false, "\(c.eco) \(c.name): key missing from the book")
+            continue
+        }
+        h.check(e.eco == c.eco && e.name == c.name,
+                "\(c.eco) \(c.name): book says (\(e.eco), \(e.name))")
+    }
+    for t in g.transpositions {
+        var a = ChessPosition.start(), b = ChessPosition.start()
+        var ok = true
+        for san in PGN.mainlineTokens(t.lineA) {
+            guard let m = a.move(forSAN: san) else { ok = false; break }
+            a = a.makeMove(m)
+        }
+        for san in PGN.mainlineTokens(t.lineB) {
+            guard let m = b.move(forSAN: san) else { ok = false; break }
+            b = b.makeMove(m)
+        }
+        guard ok else { h.check(false, "transposition \(t.lineA) did not replay"); continue }
+        h.check(a.positionKey == b.positionKey, "transposition \"\(t.lineA)\" == \"\(t.lineB)\"")
+        h.check(a.positionKey == t.keyA, "transposition \"\(t.lineA)\" matches the oracle key")
+    }
+    // Pass-through rows are in book but carry no name — that is what makes the `book` tier fire for
+    // a whole opening rather than only at the handful of positions an ECO line happens to end on.
+    var kid = ChessPosition.start()
+    for san in ["d4", "Nf6", "c4", "g6", "Nc3", "Bg7"] {
+        if let m = kid.move(forSAN: san) { kid = kid.makeMove(m) }
+    }
+    h.check(book.contains(kid.positionKey), "a pass-through position is in book")
+    h.check(book.named(kid.positionKey) == nil, "but it carries no name of its own")
+    let ruy = book.named("r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq -")
+    h.check(ruy?.name == "Ruy Lopez", "the Ruy Lopez is named")
+    if let ruy {
+        h.check(book.nameFor(kid.positionKey, lastKnown: ruy) == ruy,
+                "a pass-through keeps the last known opening")
+        h.check(book.nameFor("not a key", lastKnown: ruy) == ruy, "a miss keeps it too")
+    }
+    h.check(book.nameFor("not a key", lastKnown: nil) == nil, "with nothing known, a miss stays nil")
+    let starts = book.continuations(from: ChessPosition.start())
+    h.check(starts.count > 15, "the start position has many book continuations (\(starts.count))")
+    h.check(starts.map(\.san) == starts.map(\.san).sorted(), "continuations are sorted by SAN")
+    h.check(starts.contains { $0.san == "e4" } && starts.contains { $0.san == "d4" },
+            "e4 and d4 are book continuations")
+} else {
+    h.begin("eco")
+    h.check(false, "Goldens/eco_book.tsv or eco_lookup.json missing — run php tools/eco/build_eco.php")
+}
+
+// The `book` tier, layered over the untouched GameReview result. Reuses the same 303 golden cases
+// the game_review groups consume, so no new fixtures are needed.
+h.begin("review_book")
+if let reviewCases = loadOptional("game_review", [GameReviewCase].self) {
+    for (ci, c) in reviewCases.enumerated() {
+        let evals = c.evaluations.map { GameReview.Evaluation(evalCp: $0.eval_cp, evalMate: $0.eval_mate, bestMoveSan: $0.best_move_san) }
+        let moves = c.moves.map { GameReview.Move(san: $0?.san, color: $0?.color) }
+        let base = GameReview.review(evaluations: evals, moves: moves)
+
+        // An EMPTY book must change nothing. This is the load-bearing assertion: the `book` tier is
+        // a post-layer, and GameReview keeps exactly its nine keys.
+        let none = ReviewAnnotator.annotate(base, moves: moves, bookPlies: [])
+        h.check(none.moveEvaluations == base.moveEvaluations, "case\(ci) empty book leaves moveEvaluations untouched")
+        h.check(none.whiteAccuracy == base.whiteAccuracy && none.blackAccuracy == base.blackAccuracy,
+                "case\(ci) accuracy is never recomputed")
+        h.check(none.whiteClassifications.count == 10, "case\(ci) the display map has 10 keys")
+        h.check(none.whiteClassifications["book"] == 0, "case\(ci) an empty book adds book:0")
+        // Iterate the base result's own keys rather than GameReview.emptyClassifications, which is
+        // internal to BiyaherongCoachCore and invisible from this module.
+        var whiteMatches = true, blackMatches = true
+        for k in base.whiteClassifications.keys {
+            if none.whiteClassifications[k] != base.whiteClassifications[k] { whiteMatches = false }
+            if none.blackClassifications[k] != base.blackClassifications[k] { blackMatches = false }
+        }
+        h.check(whiteMatches, "case\(ci) empty book preserves every White count")
+        h.check(blackMatches, "case\(ci) empty book preserves every Black count")
+
+        // Marking every ply as book moves every count into `book` and empties the rest.
+        let allPlies = Set(base.moveEvaluations.map(\.moveIndex))
+        let all = ReviewAnnotator.annotate(base, moves: moves, bookPlies: allPlies)
+        h.check(all.moveEvaluations.allSatisfy { $0.classification == "book" },
+                "case\(ci) a full book relabels every ply")
+        let bookTotal = (all.whiteClassifications["book"] ?? 0) + (all.blackClassifications["book"] ?? 0)
+        h.check(bookTotal == base.moveEvaluations.count,
+                "case\(ci) book counts sum to the classified plies (\(bookTotal) != \(base.moveEvaluations.count))")
+        h.check(all.base.whiteClassifications == base.whiteClassifications,
+                "case\(ci) the base result survives untouched")
+        // Counts always sum to the number of classified plies, whatever the book says.
+        var sum = 0
+        for k in ReviewAnnotator.displayOrder {
+            sum += (none.whiteClassifications[k] ?? 0) + (none.blackClassifications[k] ?? 0)
+        }
+        h.check(sum == base.moveEvaluations.count, "case\(ci) counts sum to the move count")
+    }
+}
+if let randomCases = loadOptional("game_review_random", [GameReviewCase].self) {
+    for (ci, c) in randomCases.enumerated() {
+        let evals = c.evaluations.map { GameReview.Evaluation(evalCp: $0.eval_cp, evalMate: $0.eval_mate, bestMoveSan: $0.best_move_san) }
+        let moves = c.moves.map { GameReview.Move(san: $0?.san, color: $0?.color) }
+        let base = GameReview.review(evaluations: evals, moves: moves)
+        let none = ReviewAnnotator.annotate(base, moves: moves, bookPlies: [])
+        h.check(none.moveEvaluations == base.moveEvaluations, "g\(ci) empty book leaves moveEvaluations untouched")
+        h.check(none.whiteAccuracy == base.whiteAccuracy, "g\(ci) accuracy is never recomputed")
+        var sum = 0
+        for k in ReviewAnnotator.displayOrder {
+            sum += (none.whiteClassifications[k] ?? 0) + (none.blackClassifications[k] ?? 0)
+        }
+        h.check(sum == base.moveEvaluations.count, "g\(ci) counts sum to the move count")
+        // Relabelling ply 1 moves exactly one count out of its tier and into `book`.
+        if let first = base.moveEvaluations.first {
+            let one = ReviewAnnotator.annotate(base, moves: moves, bookPlies: [first.moveIndex])
+            let isWhite = moves[first.moveIndex].color == "w"
+            let counts = isWhite ? one.whiteClassifications : one.blackClassifications
+            let baseCounts = isWhite ? base.whiteClassifications : base.blackClassifications
+            h.check(counts["book"] == 1, "g\(ci) one book ply gives book:1")
+            h.check(counts[first.classification] == (baseCounts[first.classification] ?? 0) - 1,
+                    "g\(ci) and drops the original tier by exactly one")
+        }
+    }
+}
+h.check(ReviewAnnotator.displayOrder.count == 10, "displayOrder has ten tiers")
+h.check(ReviewAnnotator.displayOrder[2] == "book", "book sits after great — the fix for CLASSIFICATION_ORDER")
+// GameReview must still produce exactly nine keys: the book tier is a post-layer, not a tenth
+// branch inside the pinned classifier.
+h.check(GameReview.review(evaluations: [], moves: []).whiteClassifications.count == 9,
+        "GameReview itself still has exactly nine keys")
+
+// MARK: - 5b. Analysis session (the Analysis Board's behaviour, with no screen attached)
+//
+// Hand-authored on both sides, like `draw_rules` and `notation_extra`: there is no PHP oracle for a
+// screen. The expectations are DERIVED FROM the React Native source (line numbers in the comments),
+// not copied from the JS twin's output, so the two languages assert independently-reasoned facts
+// about the same behaviour. The labels are kept identical to the JS ones so the two tables can be
+// diffed by eye against web-demo/js/analysis.js's selfTest.
+
+h.begin("analysis_session")
+do {
+    // loadText takes the FULL filename and returns an Optional — same call shape as the `eco` group.
+    let book = OpeningBook(tsv: loadText("eco_book.tsv") ?? "")
+    h.check(book.count > 7000, "the ECO book loaded (\(book.count) rows)")
+
+    func newSession(_ fen: String = ChessPosition.startFEN) -> AnalysisSession? {
+        AnalysisSession(initialFEN: fen, book: book)
+    }
+
+    // 1. a fresh session
+    guard let s = newSession() else {
+        h.check(false, "a session is created from the start position")
+        exit(Int32(h.summary()))
+    }
+    h.check(s.position.fen == ChessPosition.startFEN, "cursor starts at the start position")
+    h.check(s.historyKeys.count == 1, "history holds just the start key")
+    h.check(s.statusText == "1. White's move", "status at the start: \(s.statusText)")
+    h.check(s.arrows.isEmpty, "no arrows without a snapshot")
+    h.check(s.engineRows.isEmpty, "no engine rows without a snapshot")
+    h.check(s.stripTokens.isEmpty, "the strip is empty before any move")
+    h.check(s.isStale, "a session with no snapshot is stale")
+    h.check(s.lastMove == nil, "no last move at the start")
+    h.check(s.checkSquare == nil, "nobody is in check at the start")
+
+    // 2. the move-number DEVIATION — board.tsx:2861 would say "1." after 1.e4 e5
+    s.play(san: "e4")
+    h.check(s.statusText == "1... Black's move", "after 1.e4 it is Black to move on move 1")
+    s.play(san: "e5")
+    h.check(s.statusText == "2. White's move",
+            "after 1.e4 e5 the next move is 2 (the RN source reads \"1.\" — deliberate deviation)")
+
+    // 3. the move strip, mainline only (board.tsx:3049-3120)
+    let toks = s.stripTokens
+    h.check(toks.count == 3, "two plies render as number + move + move, got \(toks.count)")
+    h.check(toks[0].kind == .number && toks[0].text == "1.", "the number token precedes White")
+    h.check(toks[1].text == "e4", "first move token")
+    h.check(toks[2].text == "e5", "second move token")
+    h.check(toks[2].isCurrent, "the cursor token is current")
+    h.check(!toks[1].isCurrent, "earlier tokens are not current")
+    h.check(toks[1].isOnPath, "earlier tokens are on the path")
+
+    // 4. branching — the alternative appears inline as a chip
+    s.goBack()
+    s.play(san: "c5")
+    let alts = s.stripTokens.filter { $0.kind == .alternative }
+    h.check(alts.count == 1, "one alternative chip, got \(alts.count)")
+    h.check(alts.first?.text == "1...c5", "the chip carries its own move number and the ... prefix")
+    h.check(alts.first?.isCurrent == true, "the chip is current because the cursor is on it")
+    h.check(s.stripTokens.filter { $0.kind == .move }.count == 2, "the main line still shows two moves")
+    h.check(s.tree.mainline()[1].san == "e5", "c5 is a variation, not the main line")
+
+    // 5. navigation always clears the snapshot (board.tsx:1457-1470)
+    let fakeSnap = AnalysisSnapshot(fen: s.position.fen, depth: 1, nodes: 1, lines: [],
+                                    isFinal: true, terminal: nil)
+    s.snapshot = fakeSnap
+    h.check(!s.isStale, "a snapshot for the current position is fresh")
+    s.goBack()
+    h.check(s.snapshot == nil, "going back clears the snapshot")
+    h.check(s.isStale, "and that makes it stale again")
+    s.snapshot = AnalysisSnapshot(fen: s.position.fen, depth: 1, nodes: 1, lines: [],
+                                  isFinal: true, terminal: nil)
+    h.check(s.play(san: "Nf3") == nil, "Nf3 is not legal for Black, so it is rejected")
+    h.check(s.snapshot != nil, "a rejected move leaves the snapshot alone")
+    s.play(san: "Nc6")
+    h.check(s.snapshot == nil, "playing a move clears the snapshot")
+
+    // 6. forward with several children has to ask which (board.tsx:1506-1516)
+    s.goToStart()
+    s.goForward()
+    h.check(s.forwardOptions().count == 3, "after 1.e4 there are three recorded continuations")
+    h.check(s.forwardOptions().map { $0.san }.joined(separator: " ") == "e5 c5 Nc6",
+            "in the order they were added, children[0] being the main line")
+    h.check(s.goForward(1)?.san == "c5", "the index selects which branch")
+    s.goBack()
+    h.check(s.goForward(2)?.san == "Nc6", "including the third")
+    s.goBack()
+    h.check(s.goForward()?.san == "e5", "no index means the main line")
+    h.check(s.goForward() == nil, "a leaf has nowhere to go forward")
+    s.goToStart()
+    h.check(s.goToEnd().san == "e5", "goToEnd follows the MAIN line, not the last one played")
+
+    // 7. staleness drives the restart policy (board.tsx:885 — the bug we do not reproduce)
+    if let s2 = newSession() {
+        s2.snapshot = AnalysisSnapshot(fen: ChessPosition.startFEN, depth: 1, nodes: 1, lines: [],
+                                       isFinal: true, terminal: nil)
+        h.check(!s2.wantsAnalysis, "a fresh snapshot needs no work")
+        s2.play(san: "d4")
+        h.check(s2.wantsAnalysis, "moving makes it want a new search")
+        s2.autoAnalyze = false
+        h.check(!s2.wantsAnalysis, "not with auto-analyse off")
+        s2.autoAnalyze = true; s2.autoplaying = true
+        h.check(!s2.wantsAnalysis, "not while autoplaying")
+        h.check(s2.statusText == "▶ Autoplay...", "autoplay replaces the whole status line")
+        s2.autoplaying = false
+        h.check(s2.statusText == "1... Black's move", "and stops doing so when it ends")
+    } else { h.check(false, "session 2") }
+
+    // 8. terminal positions
+    if let mated = newSession("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3") {
+        h.check(mated.statusText == "Checkmate!", "fool's mate reads as checkmate")
+        h.check(!mated.wantsAnalysis, "a finished game is never analysed")
+    } else { h.check(false, "mated session") }
+    if let stale = newSession("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1") {
+        h.check(stale.statusText == "Stalemate", "stalemate is named")
+    } else { h.check(false, "stalemate session") }
+    if let bare = newSession("7k/8/6K1/8/8/8/8/8 w - - 0 1") {
+        h.check(bare.statusText == "Draw", "insufficient material reads as a draw")
+        h.check(bare.outcome.reason == .insufficient, "and names its reason")
+    } else { h.check(false, "bare session") }
+
+    // 9. check marker — 1.e4 d5 2.Bb5+ is check, not mate (four blocks are available)
+    if let chk = newSession() {
+        for m in ["e4", "d5", "Bb5"] { chk.play(san: m) }
+        h.check(chk.position.status() == .check, "Bb5 gives check without mating")
+        h.check(chk.statusText.hasSuffix(" +"), "a check appends \" +\": \(chk.statusText)")
+        h.check(chk.statusText.contains("Black's move"), "and still says whose move it is")
+    } else { h.check(false, "check session") }
+
+    // 10. the analysing marker tracks a real search, not the toggle (deviation 2)
+    if let an = newSession() {
+        an.autoAnalyze = true
+        h.check(!an.statusText.contains("(analyzing)"),
+                "auto-analyse alone does not claim to be analysing")
+        an.analyzing = true
+        h.check(an.statusText.contains("\n(analyzing)"), "an in-flight search does")
+    } else { h.check(false, "analysing session") }
+
+    // 11. openings, including the carry that keeps a name after leaving the book (spec 12.2)
+    if let op = newSession() {
+        h.check(op.openingText == nil, "the start position has no name")
+        op.play(san: "e4")
+        h.check(op.openingText?.hasPrefix("B00") == true,
+                "after 1.e4 the book names B00, got \(op.openingText ?? "nil")")
+        op.play(san: "c5")
+        h.check(op.openingText?.contains("Sicilian") == true, "after 1...c5 it is a Sicilian")
+        for m in ["Nf3", "d6", "d4", "cxd4"] { op.play(san: m) }
+        h.check(op.openingText == "B50: Sicilian Defense", "six plies in")
+        op.play(san: "Nxd4")
+        h.check(book.named(op.tree.current.key) == nil, "ply 7 is a pass-through row, not a named line")
+        h.check(op.openingText == "B50: Sicilian Defense",
+                "an unnamed book position keeps the previous name")
+        for m in ["Nf6", "Nc3", "a6"] { op.play(san: m) }
+        h.check(op.openingText?.contains("Najdorf") == true, "ten plies in it is the Najdorf")
+        for m in ["Be3", "e5", "Nb3", "Be6", "f3"] { op.play(san: m) }
+        h.check(op.openingText == "B90: Sicilian Defense: Najdorf Variation, English Attack",
+                "and fifteen plies in it has a full name")
+        op.play(san: "Be7")
+        h.check(!book.contains(op.tree.current.key), "ply 16 is out of book")
+        h.check(op.openingText == "B90: Sicilian Defense: Najdorf Variation, English Attack",
+                "leaving the book keeps the last named line rather than going blank")
+        h.check(op.bookContinuations.isEmpty, "and offers no continuations from out of book")
+    } else { h.check(false, "opening session") }
+    if let cont = newSession() {
+        h.check(cont.bookContinuations.count > 10,
+                "the start position has many book continuations, got \(cont.bookContinuations.count)")
+        let sans = cont.bookContinuations.map { $0.san }
+        h.check(sans == sans.sorted(), "continuations are sorted by SAN")
+    } else { h.check(false, "continuations session") }
+
+    // 12. arrows and engine rows come straight from a snapshot (board.tsx:2807-2831)
+    if let fake = newSession(), let e4 = fake.position.move(forSAN: "e4"),
+       let d4 = fake.position.move(forSAN: "d4") {
+        fake.snapshot = AnalysisSnapshot(
+            fen: ChessPosition.startFEN, depth: 4, nodes: 100,
+            lines: [
+                EngineLine(rank: 1, score: .cp(30), pv: [e4],
+                           pvSAN: ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4", "Nf6"], depth: 4),
+                EngineLine(rank: 2, score: .cp(20), pv: [d4], pvSAN: ["d4", "d5"], depth: 4),
+            ],
+            isFinal: true, terminal: nil)
+        let ar = fake.arrows
+        h.check(ar.count == 2, "one arrow per line")
+        h.check(ar[0].from == e4.from, "the best arrow starts where the best move does")
+        h.check(ar[0].rank == 0, "ranks are 0-based for the arrow colours")
+        h.check(ar[1].rank == 1, "the second line is rank 1")
+        let rows = fake.engineRows
+        h.check(rows[0].san == "e4", "the row names its move")
+        h.check(rows[0].evalText == "+0.3", "the row formats its score, got \(rows[0].evalText)")
+        h.check(rows[0].continuation == "e5 Nf3 Nc6 Bb5 a6 Ba4",
+                "the continuation shows six plies after the move, got \(rows[0].continuation)")
+        h.check(rows[1].continuation == "d5", "a short PV shows what it has")
+        h.check(!fake.isStale, "a snapshot matching the cursor is fresh")
+        h.check(fake.evalParts.cp == 30, "evalParts carries the centipawns")
+        h.check(fake.evalParts.mate == nil, "and no mate")
+        h.check(fake.evalParts.winner == nil, "and no terminal winner")
+    } else { h.check(false, "snapshot session") }
+
+    // 13. mate and terminal scores
+    if let mate = newSession() {
+        mate.snapshot = AnalysisSnapshot(fen: ChessPosition.startFEN, depth: 1, nodes: 1,
+                                         lines: [], isFinal: true, terminal: nil)
+        h.check(mate.evalParts.cp == nil && mate.evalParts.mate == nil,
+                "a snapshot with no lines has no score")
+        mate.snapshot = AnalysisSnapshot(
+            fen: ChessPosition.startFEN, depth: 1, nodes: 1,
+            lines: [EngineLine(rank: 1, score: .mate(-2), pv: [], pvSAN: [], depth: 1)],
+            isFinal: true, terminal: nil)
+        h.check(mate.evalParts.mate == -2, "evalParts carries a mate score")
+        mate.snapshot = AnalysisSnapshot(
+            fen: ChessPosition.startFEN, depth: 0, nodes: 0, lines: [], isFinal: true,
+            terminal: TerminalOutcome(kind: .checkmate, reason: .checkmate, winner: .black))
+        h.check(mate.evalParts.winner == .black, "evalParts names the side that delivered mate")
+    } else { h.check(false, "mate session") }
+
+    // 14. the board's own inputs
+    if let bd = newSession() {
+        bd.play(san: "e4")
+        h.check(bd.lastMove?.uci == "e2e4", "the last move is what the board highlights")
+        bd.goToStart()
+        h.check(bd.lastMove == nil, "the root has no last move")
+    } else { h.check(false, "board session") }
+
+    // 15. Review state — the 1-based moveIndex mapping is the whole risk here
+    if let rv = newSession() {
+        for m in ["e4", "e5", "Nf3", "Nc6"] { rv.play(san: m) }
+        h.check(rv.review == nil, "a fresh session has no review")
+        h.check(rv.reviewSummary == nil, "and no summary")
+        h.check(rv.stripTokens.allSatisfy { $0.classification == nil },
+                "no strip token carries a classification")
+
+        let rvPlan = ReviewAnnotator.plan(rv.tree)
+        h.check(rvPlan.nodes.count == 4, "the plan walked four plies")
+
+        // A hand-built result: moveIndex 1...4 -> nodes[0...3]. Deliberately NOT from the engine, so
+        // the mapping is asserted independently of what any search happens to return.
+        let evals: [GameReview.Evaluation] = [
+            GameReview.Evaluation(evalCp: 0, evalMate: nil, bestMoveSan: nil),
+            GameReview.Evaluation(evalCp: 30, evalMate: nil, bestMoveSan: "e4"),
+            GameReview.Evaluation(evalCp: -400, evalMate: nil, bestMoveSan: "c5"),
+            GameReview.Evaluation(evalCp: 10, evalMate: nil, bestMoveSan: "Nf3"),
+            GameReview.Evaluation(evalCp: 0, evalMate: nil, bestMoveSan: "Nc6"),
+        ]
+        let base = GameReview.review(evaluations: evals, moves: rvPlan.moves)
+        let annotated = ReviewAnnotator.annotate(base, moves: rvPlan.moves, bookPlies: [1])
+        rv.applyReview(annotated, nodes: rvPlan.nodes)
+
+        h.check(rv.classification(forNodeID: rvPlan.nodes[0].id) == "book",
+                "moveIndex 1 maps to nodes[0], not nodes[1]")
+        h.check(rv.classification(forNodeID: rvPlan.nodes[1].id) != nil, "moveIndex 2 maps to nodes[1]")
+        h.check(rv.classification(forNodeID: rvPlan.nodes[3].id) != nil, "moveIndex 4 maps to nodes[3]")
+        h.check(rv.classification(forNodeID: rv.tree.root.id) == nil, "the root is never classified")
+        h.check(rv.classification(forNodeID: 9999) == nil, "an unknown id gives nil")
+
+        let moveToks = rv.stripTokens.filter { $0.kind == .move }
+        h.check(moveToks.count == 4, "four move tokens")
+        h.check(moveToks[0].classification == "book", "the strip carries the first tier")
+        h.check(moveToks.allSatisfy { $0.classification != nil }, "and one for every reviewed ply")
+        h.check(rv.stripTokens.filter { $0.kind == .number }.allSatisfy { $0.classification == nil },
+                "number tokens carry none")
+
+        if let sum = rv.reviewSummary {
+            h.check(sum.whiteAccuracy == base.whiteAccuracy, "the summary reports the base accuracy")
+            h.check(sum.blackAccuracy == base.blackAccuracy, "for both sides")
+            h.check(!sum.rows.isEmpty, "the table has rows")
+            h.check(sum.rows.allSatisfy { $0.white > 0 || $0.black > 0 },
+                    "and DROPS tiers that are zero on both sides")
+            let order = ReviewAnnotator.displayOrder
+            let idx = sum.rows.compactMap { order.firstIndex(of: $0.key) }
+            h.check(idx == idx.sorted(), "rows follow displayOrder")
+            h.check(sum.rows.contains { $0.key == "book" }, "and Book is among them")
+            h.check(sum.graph.count == base.evalGraph.count, "one graph point per position")
+        } else { h.check(false, "reviewSummary after applyReview") }
+
+        // A variation added after the review must not gain a classification.
+        rv.goBack()
+        rv.play(san: "Nf6")
+        let alts = rv.stripTokens.filter { $0.kind == .alternative }
+        h.check(alts.count == 1, "one branch chip")
+        h.check(alts[0].classification == nil, "a branch chip is never classified")
+        h.check(rv.review != nil, "navigating and branching does not drop the review")
+
+        // Clearing — what a cancelled review must do.
+        rv.applyReview(nil, nodes: [])
+        h.check(rv.review == nil, "clearing drops the review")
+        h.check(rv.reviewSummary == nil, "and the summary")
+        h.check(rv.classification(forNodeID: rvPlan.nodes[0].id) == nil, "and every classification")
+        h.check(rv.reviewProgress == nil, "and the progress")
+    } else { h.check(false, "review session") }
+
+    // 16. The Evaluator steps one position at a time and reports a short run honestly
+    if let ev = newSession() {
+        for m in ["e4", "e5", "Nf3"] { ev.play(san: m) }
+        let p = ReviewAnnotator.plan(ev.tree)
+        var walker = ReviewAnnotator.Evaluator(plan: p, limits: SearchLimits(maxDepth: 1))
+        h.check(walker.total == 4, "four positions to evaluate")
+        h.check(walker.completed == 0, "none done yet")
+        h.check(!walker.isFinished, "and not finished")
+        var steps = 0
+        while walker.step(engine: LocalEngine(), shouldCancel: { false }) { steps += 1 }
+        h.check(steps == 4, "one step per position, got \(steps)")
+        h.check(walker.completed == 4, "all four completed")
+        h.check(walker.isComplete, "a full walk is complete")
+        h.check(walker.isFinished, "and finished")
+        h.check(walker.evaluations.count == 4, "with one evaluation each")
+
+        var stopper = ReviewAnnotator.Evaluator(plan: p, limits: SearchLimits(maxDepth: 1))
+        stopper.step(engine: LocalEngine(), shouldCancel: { false })
+        stopper.step(engine: LocalEngine(), shouldCancel: { true })
+        h.check(stopper.cancelled, "cancelling is recorded")
+        h.check(stopper.isFinished, "and ends the walk")
+        h.check(stopper.completed == 1, "with only the completed positions")
+        h.check(!stopper.isComplete, "isComplete() is the guard against a short review")
+    } else { h.check(false, "evaluator session") }
+
+    // ---- annotations (phase 11) ------------------------------------------------
+    // The NAG table and its inverse must agree, or a picked symbol round-trips to a different one.
+    if let an = newSession() {
+        h.check(AnalysisSession.nagSymbols.count == 14,
+                "six move-quality NAGs plus eight position NAGs")
+        for (code, sym) in AnalysisSession.nagSymbols {
+            h.check(AnalysisSession.nag(forSymbol: sym) == code,
+                    "NAG \(code) round-trips through its symbol")
+        }
+        h.check(AnalysisSession.nagText(0) == "", "NAG 0 renders as nothing")
+        h.check(AnalysisSession.nagText(999) == "", "an unknown NAG renders as nothing")
+        h.check(AnalysisSession.nag(forSymbol: "nonsense") == 0, "an unknown symbol maps to no NAG")
+        // The ⩲/⩱ correction reaches the picker, which is what writes NAGs into the PGN.
+        h.check(AnalysisSession.nag(forSymbol: "⩲") == 14,
+                "⩲ is $14 — White is slightly better (the source has this backwards)")
+        h.check(AnalysisSession.nag(forSymbol: "⩱") == 15, "⩱ is $15 — Black is slightly better")
+        h.check(AnalysisSession.nag(forSymbol: "!!") == 3, "!! is $3")
+        h.check(AnalysisSession.nag(forSymbol: "?!") == 6, "?! is $6")
+
+        an.play(san: "e4"); let e4id = an.tree.current.id
+        an.play(san: "e5")
+        h.check(an.annotationSymbol(forNodeID: e4id) == nil, "a move starts unannotated")
+        h.check(an.setNAG(3, forNodeID: e4id), "set !! on 1.e4")
+        h.check(an.annotationSymbol(forNodeID: e4id) == "!!", "and the overlay shows it")
+        h.check(an.stripTokens.first { $0.id == e4id && $0.kind == .move }?.text == "e4!!",
+                "the strip appends the glyph to the SAN")
+        h.check(an.setNAG(16, forNodeID: e4id), "change it to ±")
+        h.check(an.stripTokens.first { $0.id == e4id && $0.kind == .move }?.text == "e4±",
+                "a position annotation still shows in the strip")
+        h.check(an.annotationSymbol(forNodeID: e4id) == nil,
+                "but draws NO badge — renderAnnotationOverlay looks only in MOVE_ANNOTATIONS")
+        h.check(an.clearNAG(forNodeID: e4id), "clear it")
+        h.check(an.stripTokens.first { $0.id == e4id && $0.kind == .move }?.text == "e4",
+                "and a bare SAN comes back")
+        h.check(!an.setNAG(3, forNodeID: an.tree.root.id), "the root cannot be annotated")
+        h.check(!an.setNAG(3, forNodeID: 99999), "nor can a node that does not exist")
+        h.check(an.annotationSymbol(forNodeID: 99999) == nil, "and a missing node has no glyph")
+        h.check(an.annotationSquare == an.tree.current.move?.to,
+                "the badge square is where the move landed")
+        an.goToStart()
+        h.check(an.annotationSquare == nil, "and there is none at the root")
+    } else { h.check(false, "annotation session") }
+
+    // ---- variations (phase 11) --------------------------------------------------
+    if let vr = newSession() {
+        vr.play(san: "e4"); vr.play(san: "e5"); vr.play(san: "Nf3")
+        let nf3id = vr.tree.current.id
+        vr.goBack()
+        vr.play(san: "Nc3"); let nc3id = vr.tree.current.id
+        vr.play(san: "Nc6")
+
+        guard let mainInfo = vr.variationInfo(nodeID: nf3id),
+              let altInfo = vr.variationInfo(nodeID: nc3id) else {
+            h.check(false, "variation info for both continuations"); exit(Int32(h.summary()))
+        }
+        h.check(mainInfo.typeLabel == "MAIN LINE", "2.Nf3 is the main line")
+        h.check(!mainInfo.canPromote, "and cannot be promoted")
+        h.check(mainInfo.movePrefix == "2.", "a White move reads \"2.\"")
+        h.check(altInfo.typeLabel == "SUB-VARIATION", "2.Nc3 is a sub-variation")
+        h.check(altInfo.canPromote, "and can be promoted")
+        h.check(altInfo.siblingCount == 2, "there are two continuations at that point")
+        h.check(altInfo.subtreeCount == 2, "2.Nc3 plus its one continuation")
+        h.check(vr.variationInfo(nodeID: vr.tree.root.id) == nil, "the root has no variation card")
+        h.check(vr.variationInfo(nodeID: 99999) == nil, "nor does a node that is not there")
+        h.check(vr.variationInfo(nodeID: vr.tree.current.id)?.movePrefix == "2...",
+                "a Black move reads \"2...\"")
+        vr.setNAG(5, forNodeID: nc3id)
+        h.check(vr.variationInfo(nodeID: nc3id)?.nagText == "!?", "the card shows the annotation")
+        vr.clearNAG(forNodeID: nc3id)
+
+        // Promoting the DEEPEST node must lift the whole line, not one ply — the difference
+        // between MoveTree.promote and promoteFully, and invisible on a 1-ply branch.
+        vr.play(san: "Bc4"); let bc4id = vr.tree.current.id
+        h.check(vr.promote(nodeID: bc4id), "promote the deepest node of the variation")
+        h.check(vr.tree.mainlineSANs().joined(separator: " ") == "e4 e5 Nc3 Nc6 Bc4",
+                "promoting a leaf lifts every ancestor with it")
+        h.check(vr.variationInfo(nodeID: nc3id)?.typeLabel == "MAIN LINE", "2.Nc3 came along")
+        h.check(vr.variationInfo(nodeID: nf3id)?.typeLabel == "SUB-VARIATION", "and 2.Nf3 was demoted")
+        h.check(!vr.promote(nodeID: vr.tree.root.id), "the root cannot be promoted")
+        h.check(!vr.promote(nodeID: 99999), "nor can a missing node")
+        h.check(!vr.promote(nodeID: nc3id), "promoting the main line again changes nothing")
+
+        // Deleting the branch the cursor is standing in must not leave a dangling cursor.
+        if let nf3 = vr.node(id: nf3id) { vr.goTo(nf3) }
+        h.check(vr.tree.current.id == nf3id, "stand inside the branch about to go")
+        h.check(vr.deleteBranch(nodeID: nf3id) == 1, "one node removed")
+        h.check(vr.tree.current.id != nf3id, "the cursor moved out of the deleted subtree")
+        h.check(vr.variationInfo(nodeID: nf3id) == nil, "and the node is gone")
+        h.check(vr.deleteBranch(nodeID: vr.tree.root.id) == 0, "the root cannot be deleted")
+        h.check(vr.deleteBranch(nodeID: 99999) == 0, "nor can a missing node")
+    } else { h.check(false, "variation session") }
+
+    // ---- PGN in and out (phase 11) ----------------------------------------------
+    if let im = newSession() {
+        let withVars = """
+        [Event "Test Cup"]
+        [Site "Manila"]
+        [White "Ana"]
+        [Black "Ben"]
+        [Result "1-0"]
+        [ECO "C20"]
+
+        1. e4 e5 2. Nf3 $1 (2. Nc3 Nc6) 2... Nc6 1-0
+
+        """
+        let res = im.importPGN(withVars)
+        h.check(res.ok, "a PGN with a variation imports")
+        h.check(res.gamesFound == 1, "one game found")
+        h.check(res.moveCount == 4, "four main-line moves")
+        h.check(res.errors.isEmpty, "and no parse errors")
+        h.check(res.headers["White"] == "Ana", "the headers come back for the save form")
+        h.check(res.headers["ECO"] == "C20", "including ECO")
+        h.check(res.result == "1-0", "and the result")
+        h.check(im.tree.mainlineSANs().joined(separator: " ") == "e4 e5 Nf3 Nc6",
+                "the main line is the imported one")
+        h.check(im.tree.current.san == "Nc6", "and the cursor lands on the last move")
+        h.check(im.snapshot == nil, "importing invalidates any snapshot")
+        h.check(im.stripTokens.filter { $0.kind == .alternative }.count == 1,
+                "the variation survived as a branch chip")
+    } else { h.check(false, "import session") }
+
+    if let bad = newSession() {
+        let badRes = bad.importPGN("this is not a pgn at all")
+        h.check(!badRes.ok, "nonsense does not import")
+        h.check(!badRes.errors.isEmpty, "the tolerant parser still reports what it choked on")
+        h.check(bad.tree.mainline().isEmpty, "and the board is left alone")
+        h.check(!bad.importPGN("").ok, "the empty string does not import")
+        // A failed import must not wipe a game that was already there.
+        bad.play(san: "d4"); bad.play(san: "d5")
+        h.check(!bad.importPGN("not a pgn").ok, "a failed import over a real game fails")
+        h.check(bad.tree.mainlineSANs().joined(separator: " ") == "d4 d5",
+                "and leaves that game untouched")
+    } else { h.check(false, "bad-import session") }
+
+    if let setupOnly = newSession() {
+        let setupText = """
+        [SetUp "1"]
+        [FEN "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1"]
+
+        *
+
+        """
+        let r = setupOnly.importPGN(setupText)
+        h.check(r.ok, "a setup-only PGN imports")
+        h.check(r.moveCount == 0, "with no moves")
+        h.check(setupOnly.tree.initialFEN == "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1",
+                "onto its custom position")
+    } else { h.check(false, "setup-only session") }
+
+    if let multi = newSession() {
+        let two = """
+        [White "A"]
+
+        1. e4 *
+
+        [White "B"]
+
+        1. d4 *
+
+        """
+        let r = multi.importPGN(two)
+        h.check(r.gamesFound == 2, "a two-game PGN reports both")
+        h.check(multi.tree.mainlineSANs() == ["e4"], "but loads the first (recorded assumption)")
+    } else { h.check(false, "multi-game session") }
+
+    if let ex = newSession(), let back = newSession() {
+        h.check(ex.exportPGN() == "", "an untouched start position exports nothing")
+        ex.play(san: "e4"); ex.play(san: "c5")
+        ex.setNAG(6, forNodeID: ex.tree.current.id)
+        let text = ex.exportPGN(headers: ["White": "Ana", "Black": "Ben", "ECO": "B20"], result: "1-0")
+        h.check(text.contains("[White \"Ana\"]"), "the export carries its headers")
+        h.check(text.contains("[ECO \"B20\"]"), "including the non-roster ones")
+        h.check(text.contains("1-0"), "and the result")
+        let backRes = back.importPGN(text)
+        h.check(backRes.ok, "the export re-imports")
+        h.check(back.tree.mainlineSANs() == ["e4", "c5"], "with the same moves")
+        h.check(back.tree.current.nag == 6, "and the NAG survived the round trip")
+        h.check(back.exportPGN(headers: backRes.headers, result: backRes.result) == text,
+                "and re-exporting is byte-identical")
+    } else { h.check(false, "export session") }
+
+    // ---- applying an edited position (phase 11) ---------------------------------
+    if let ed = newSession() {
+        ed.play(san: "e4")
+        guard let endgame = ChessPosition(fen: "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1") else {
+            h.check(false, "the endgame FEN parses"); exit(Int32(h.summary()))
+        }
+        h.check(ed.applyEditedPosition(endgame), "a legal position applies")
+        h.check(ed.tree.initialFEN == "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1", "the tree restarts from it")
+        h.check(ed.tree.mainline().isEmpty, "with no moves")
+        h.check(ed.position.sideToMove == .white, "and White to move")
+        h.check(ed.snapshot == nil, "the snapshot went with the old game")
+        ed.autoplaying = true
+        ed.applyEditedPosition(endgame)
+        h.check(!ed.autoplaying, "swapping the game out stops autoplay")
+        ed.selected = 12
+        ed.applyEditedPosition(endgame)
+        h.check(ed.selected == nil, "and the selection goes with the old board")
+        // A custom start survives an export/import round trip, which the SOURCE's does not: its
+        // generatePgn emits movetext only, so a setup game does not survive a save (phase-10 bug #1).
+        ed.play(san: "e4")
+        let edText = ed.exportPGN()
+        h.check(edText.contains("[FEN \"8/8/8/3k4/8/8/4P3/4K3 w - - 0 1\"]"),
+                "the export carries a [FEN] tag for a custom start")
+        if let edBack = newSession() {
+            h.check(edBack.importPGN(edText).ok, "and it re-imports")
+            h.check(edBack.tree.initialFEN == "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1",
+                    "onto the same custom position")
+        } else { h.check(false, "custom-start re-import session") }
+    } else { h.check(false, "edited-position session") }
+}
+
+// MARK: - 5d. Setup Position (edit mode)
+//
+// Hand-authored on both sides, like `draw_rules` and `analysis_session`: there is no PHP oracle for
+// a board editor. The expectations are reasoned from board.tsx (line numbers in the comments), not
+// copied from the JS twin's output, and the labels match web-demo/js/position-editor.js's selfTest
+// so the two tables can be diffed by eye.
+
+h.begin("position_editor")
+do {
+    // ---- palette -------------------------------------------------------------
+    h.check(PositionEditor.whitePieceKeys == ["K", "Q", "R", "B", "N", "P"],
+            "white palette order matches board.tsx:276")
+    h.check(PositionEditor.blackPieceKeys == ["k", "q", "r", "b", "n", "p"],
+            "black palette order matches board.tsx:277")
+    for k in PositionEditor.whitePieceKeys + PositionEditor.blackPieceKeys {
+        h.check(PositionEditor.key(for: PositionEditor.piece(forKey: k)) == k, "round trip \(k)")
+    }
+    h.check(PositionEditor.piece(forKey: "K")?.color == .white, "uppercase is White")
+    h.check(PositionEditor.piece(forKey: "k")?.color == .black, "lowercase is Black")
+    h.check(PositionEditor.piece(forKey: "x") == nil, "an unknown letter is not a piece")
+    h.check(PositionEditor.piece(forKey: "") == nil, "the empty string is not a piece")
+    h.check(PositionEditor.piece(forKey: "KQ") == nil, "a two-character key is not a piece")
+    h.check(PositionEditor.key(for: nil) == nil, "no piece, no key")
+
+    // ---- create --------------------------------------------------------------
+    var ed = PositionEditor()
+    h.check(ed.fen == ChessPosition.startFEN, "a fresh editor is the start position")
+    h.check(ed.sideToMove == .white, "White to move by default")
+    h.check(ed.castleWK && ed.castleWQ && ed.castleBK && ed.castleBQ, "all four rights start on")
+    h.check(PositionEditor(fen: "8/8/8/8/8/8/8/K6k w - - 0 1").fen == "8/8/8/8/8/8/8/K6k w - - 0 1",
+            "create from a FEN")
+    h.check(PositionEditor(fen: "not a fen").fen == ChessPosition.startFEN,
+            "a broken FEN falls back to the start position")
+    // A struct is a value: copying must not alias the squares.
+    var copy = ed
+    copy.put("Q", at: 28)
+    h.check(ed.squares[28] == nil, "a copy does not alias the original squares")
+
+    // ---- put / remove / clear ------------------------------------------------
+    var ed2 = PositionEditor()
+    ed2.clear()
+    h.check(ed2.fen.split(separator: " ")[0] == "8/8/8/8/8/8/8/8", "clear empties the board")
+    h.check(!ed2.castleWK && !ed2.castleWQ && !ed2.castleBK && !ed2.castleBQ,
+            "clear drops the castling toggles with the rooks")
+    h.check(ed2.put("K", at: 4), "place a white king on e1")
+    h.check(ed2.put("k", at: 60), "place a black king on e8")
+    h.check(ed2.fen.split(separator: " ")[0] == "4k3/8/8/8/8/8/8/4K3", "the kings are where they were put")
+    h.check(!ed2.put("K", at: 64), "a square past the board is refused")
+    h.check(!ed2.put("K", at: -1), "a negative square is refused")
+    h.check(!ed2.put("Z", at: 20), "an unknown piece key is refused")
+    h.check(ed2.remove(at: 4), "removing an occupied square reports true")
+    h.check(!ed2.remove(at: 4), "removing an empty square reports false")
+    h.check(!ed2.remove(at: 99), "removing off-board reports false")
+    ed2.put("K", at: 4)
+
+    // ---- side to move --------------------------------------------------------
+    h.check(ed2.toggleSideToMove() == .black, "toggle to Black")
+    h.check(ed2.fen.split(separator: " ")[1] == "b", "and the FEN says so")
+    h.check(ed2.toggleSideToMove() == .white, "toggle back to White")
+
+    // ---- reset ---------------------------------------------------------------
+    var ed3 = PositionEditor(fen: "8/8/8/8/8/8/8/K6k b - - 0 1")
+    ed3.reset()
+    h.check(ed3.fen == ChessPosition.startFEN, "reset restores the start position, side and rights")
+
+    // ---- loadFEN -------------------------------------------------------------
+    var ed4 = PositionEditor()
+    h.check(ed4.loadFEN("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1"), "a legal FEN loads")
+    h.check(ed4.sideToMove == .black, "loadFEN syncs the turn (board.tsx:2541)")
+    h.check(ed4.castleWK && ed4.castleWQ && ed4.castleBK && ed4.castleBQ,
+            "loadFEN syncs all four castling toggles (board.tsx:2542)")
+    // The trim is load-bearing HERE, unlike in the JS twin: ChessPosition(fen:) splits on the SPACE
+    // character alone, so a tab-wrapped FEN pasted from a web page would be refused without it.
+    h.check(ed4.loadFEN("\t8/8/8/8/8/8/8/K6k w - - 0 1\n"), "a tab/newline wrapped FEN is trimmed and loads")
+    h.check(ed4.fen == "8/8/8/8/8/8/8/K6k w - - 0 1", "and the trimmed FEN is what loaded")
+    h.check(!ed4.loadFEN("garbage"), "a broken FEN is refused")
+    h.check(ed4.fen == "8/8/8/8/8/8/8/K6k w - - 0 1", "and a refused load changes nothing")
+    h.check(!ed4.loadFEN(""), "the empty string is refused")
+    h.check(!ed4.loadFEN("   \t \n  "), "whitespace alone is not a FEN")
+    h.check(ed4.loadFEN("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"),
+            "a FEN carrying an ep square loads")
+    h.check(ed4.fen.split(separator: " ")[3] == "-", "but the editor never emits an en-passant square")
+
+    // ---- castling normalisation ----------------------------------------------
+    var ed5 = PositionEditor()
+    ed5.remove(at: 7)
+    h.check(ed5.fen.split(separator: " ")[2] == "Qkq", "no h1 rook, no white kingside right")
+    ed5.remove(at: 0)
+    h.check(ed5.fen.split(separator: " ")[2] == "kq", "no a1 rook either")
+    var ed6 = PositionEditor()
+    ed6.remove(at: 4); ed6.put("K", at: 12)
+    h.check(ed6.fen.split(separator: " ")[2] == "kq", "a king off its home square loses both white rights")
+    var ed6b = PositionEditor()
+    ed6b.remove(at: 60); ed6b.put("k", at: 52)
+    h.check(ed6b.fen.split(separator: " ")[2] == "KQ", "a black king off e8 loses both black rights")
+    var ed6c = PositionEditor()
+    ed6c.remove(at: 63)
+    h.check(ed6c.fen.split(separator: " ")[2] == "KQq", "no h8 rook, no black kingside right")
+    var ed6d = PositionEditor()
+    ed6d.remove(at: 56)
+    h.check(ed6d.fen.split(separator: " ")[2] == "KQk", "no a8 rook, no black queenside right")
+    var ed7 = PositionEditor()
+    ed7.castleWK = false; ed7.castleBQ = false
+    h.check(ed7.fen.split(separator: " ")[2] == "Qk", "the toggles themselves are honoured")
+    var ed8 = PositionEditor()
+    ed8.clear(); ed8.put("K", at: 4); ed8.put("k", at: 60)
+    ed8.castleWK = true; ed8.castleWQ = true; ed8.castleBK = true; ed8.castleBQ = true
+    h.check(ed8.fen.split(separator: " ")[2] == "-",
+            "ticking every box with no rooks on the board yields no rights")
+    let nc = PositionEditor().normalizedCastling
+    h.check(nc.wk && nc.wq && nc.bk && nc.bq, "the start position keeps all four")
+
+    // ---- validation ----------------------------------------------------------
+    func issues(_ e: PositionEditor) -> String { e.validate().map(\.rawValue).joined(separator: ",") }
+
+    let v = PositionEditor()
+    h.check(issues(v) == "", "the start position is valid")
+    h.check(v.isValid, "isValid agrees")
+    h.check(v.firstIssueText == nil, "and there is no banner")
+
+    var noKings = PositionEditor(); noKings.clear()
+    h.check(issues(noKings) == "whiteKingMissing,blackKingMissing", "an empty board is missing both kings")
+    h.check(noKings.firstIssueText == "White king is missing.", "the message is the source's, verbatim")
+
+    var oneKing = PositionEditor(); oneKing.clear(); oneKing.put("K", at: 0)
+    h.check(issues(oneKing) == "blackKingMissing", "a lone white king is missing its opponent")
+    h.check(oneKing.firstIssueText == "Black king is missing.", "second message, also verbatim")
+
+    var twoWhite = PositionEditor(); twoWhite.clear()
+    twoWhite.put("K", at: 0); twoWhite.put("K", at: 2); twoWhite.put("k", at: 63)
+    h.check(issues(twoWhite) == "tooManyWhiteKings", "two white kings is refused")
+    var twoBlack = PositionEditor(); twoBlack.clear()
+    twoBlack.put("K", at: 0); twoBlack.put("k", at: 61); twoBlack.put("k", at: 63)
+    h.check(issues(twoBlack) == "tooManyBlackKings", "two black kings is refused")
+
+    var adj = PositionEditor(); adj.clear(); adj.put("K", at: 0); adj.put("k", at: 1)
+    h.check(issues(adj) == "kingsAdjacent", "side by side")
+    h.check(adj.firstIssueText == "Kings cannot be adjacent — illegal position.", "the source's wording")
+    var diag = PositionEditor(); diag.clear(); diag.put("K", at: 0); diag.put("k", at: 9)
+    h.check(issues(diag) == "kingsAdjacent", "diagonally adjacent counts too")
+    var apart = PositionEditor(); apart.clear(); apart.put("K", at: 0); apart.put("k", at: 18)
+    h.check(issues(apart) == "", "a knight's move apart is fine")
+    var sameFile = PositionEditor(); sameFile.clear(); sameFile.put("K", at: 0); sameFile.put("k", at: 8)
+    h.check(issues(sameFile) == "kingsAdjacent", "one rank apart on the same file")
+
+    var pawn8 = PositionEditor(); pawn8.clear()
+    pawn8.put("K", at: 0); pawn8.put("k", at: 63); pawn8.put("P", at: 56)
+    h.check(issues(pawn8) == "pawnOnBackRank", "a white pawn on rank 8")
+    var pawn1 = PositionEditor(); pawn1.clear()
+    pawn1.put("K", at: 4); pawn1.put("k", at: 60); pawn1.put("p", at: 1)
+    h.check(issues(pawn1) == "pawnOnBackRank", "a black pawn on rank 1")
+    var pawn2 = PositionEditor(); pawn2.clear()
+    pawn2.put("K", at: 4); pawn2.put("k", at: 60); pawn2.put("P", at: 8)
+    h.check(issues(pawn2) == "", "a pawn on rank 2 is ordinary")
+
+    // The side NOT to move must not already be in check — what chess.js refused for the source.
+    h.check(issues(PositionEditor(fen: "4k3/8/8/8/8/8/8/4R2K w - - 0 1")) == "sideNotToMoveInCheck",
+            "Black is in check but it is White to move")
+    h.check(issues(PositionEditor(fen: "4k3/8/8/8/8/8/8/4R2K b - - 0 1")) == "",
+            "the same board with Black to move is a legal check")
+    h.check(issues(PositionEditor(fen: "4k3/8/8/8/8/8/8/R6K w - - 0 1")) == "", "no check either way")
+    h.check(issues(PositionEditor(fen: "3k3r/8/8/8/8/8/8/7K b - - 0 1")) == "sideNotToMoveInCheck",
+            "and it works the other way round too")
+
+    // Order is fixed, so the banner does not flicker between renders.
+    var many = PositionEditor(); many.clear()
+    many.put("K", at: 0); many.put("K", at: 1); many.put("k", at: 2); many.put("P", at: 56)
+    h.check(issues(many) == "tooManyWhiteKings,kingsAdjacent,pawnOnBackRank",
+            "issues come back in a fixed order")
+    h.check(PositionEditor.Issue.kingsAdjacent.text.contains("adjacent"), "issue text is looked up")
+    h.check(PositionEditor.Issue.allCases.count == 7, "seven ways a board can be refused")
+
+    // ---- apply ----------------------------------------------------------------
+    h.check(noKings.apply() == nil, "an invalid board applies to nothing")
+    let good = PositionEditor(fen: "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1")
+    guard let applied = good.apply() else {
+        h.check(false, "a legal board applies"); exit(Int32(h.summary()))
+    }
+    h.check(applied.fen == "8/8/8/3k4/8/8/4P3/4K3 w - - 0 1", "and reproduces its own FEN")
+    h.check(!applied.legalMoves().isEmpty, "the applied position generates moves")
+    h.check(good.makeTree() != nil, "and it makes a tree")
+    h.check(noKings.makeTree() == nil, "an invalid board makes none")
+    // Apply always resets the clocks — `new Chess(fen)` in the source does not preserve them either.
+    let clocks = PositionEditor(fen: "8/8/8/3k4/8/8/4P3/4K3 w - - 37 99")
+    h.check(clocks.fen.split(separator: " ").dropFirst(4).joined(separator: " ") == "0 1",
+            "the editor always emits fresh clocks")
+
+    // A round trip through apply is stable — the property the move tree depends on.
+    for probe in ["8/8/8/8/8/8/8/K6k w - - 0 1",
+                  "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
+                  "8/5k2/8/8/8/8/2P5/6K1 b - - 0 1",
+                  "4k3/8/4K3/8/8/8/8/8 w - - 0 1"] {
+        let e = PositionEditor(fen: probe)
+        guard let out = e.apply() else { h.check(false, "probe \(probe) should apply"); continue }
+        h.check(out.fen == e.fen, "apply round trip: \(probe)")
+    }
+}
+
+// MARK: - 5c. Analysis store (the saved-game library)
+//
+// Hand-authored on both sides, like `analysis_session`. The strongest assertion here is the
+// CANONICAL DOCUMENT: the same JSON string is hardcoded in `web-demo/js/analysis-store.js`, and each
+// language must decode it to the same records. That is a genuine cross-language contract, not two
+// implementations agreeing with themselves — and it is only possible because the store is plain
+// JSON on both sides.
+
+h.begin("analysis_store")
+do {
+    // Keep byte-identical with CANONICAL in web-demo/js/analysis-store.js.
+    let canonical = """
+    {"version":1,"nextSessionId":3,"nextFolderId":5,\
+    "folders":[\
+    {"id":1,"name":"Opening Repertoire","color":"#4CAF50","sortOrder":1,"isDefault":true,"createdAt":1000},\
+    {"id":4,"name":"Endgames","color":"#FDB022","sortOrder":4,"isDefault":false,"createdAt":2000}],\
+    "sessions":[\
+    {"id":1,"folderId":1,"title":"Najdorf line","notes":null,"pgn":"1. e4 c5 *",\
+    "initialFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",\
+    "result":null,"whitePlayer":"Ana","blackPlayer":"Bo","whiteRating":1850,"blackRating":1720,\
+    "eventName":"Club night","gameDate":"2026-02-14","timeControl":"15+10","location":"Cebu",\
+    "roundInfo":"3","eco":"B90","createdAt":1000,"updatedAt":3000},\
+    {"id":2,"folderId":null,"title":"Untitled Analysis","notes":"scratch","pgn":"1. d4 *",\
+    "initialFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",\
+    "result":"1-0","whitePlayer":null,"blackPlayer":null,"whiteRating":null,"blackRating":null,\
+    "eventName":null,"gameDate":null,"timeControl":null,"location":null,\
+    "roundInfo":null,"eco":null,"createdAt":2000,"updatedAt":2000}],\
+    "drafts":{}}
+    """
+
+    // 1. an empty library
+    var lib = AnalysisLibrary()
+    h.check(lib.version == AnalysisStore.libraryVersion, "a fresh library carries its version")
+    h.check(lib.sessions.isEmpty, "no sessions")
+    h.check(lib.folders.isEmpty, "no folders")
+    h.check(AnalysisStore.sessions(lib).isEmpty, "the list is empty")
+    h.check(AnalysisStore.draft(&lib, mode: AnalysisStore.draftNew, now: 0) == nil, "and no draft")
+
+    // 2. seeding is idempotent and matches the server's own three
+    AnalysisStore.seedDefaultFolders(&lib, now: 1000)
+    h.check(lib.folders.count == 3, "three defaults are seeded")
+    h.check(AnalysisStore.folders(lib).map { $0.name }.joined(separator: ", ")
+            == "Opening Repertoire, Setup Position, My Games", "in the server's order")
+    h.check(AnalysisStore.folders(lib)[0].color == "#4CAF50", "with its colour")
+    h.check(AnalysisStore.folders(lib).allSatisfy { $0.isDefault }, "all marked default")
+    AnalysisStore.seedDefaultFolders(&lib, now: 2000)
+    h.check(lib.folders.count == 3, "seeding twice adds nothing")
+
+    // 3. folder CRUD
+    guard let custom = AnalysisStore.createFolder(&lib, name: "  Endgames  ", now: 2000) else {
+        h.check(false, "createFolder")
+        exit(Int32(h.summary()))
+    }
+    h.check(custom.name == "Endgames", "a new folder is trimmed")
+    h.check(custom.color == AnalysisStore.defaultFolderColor, "and gets the default colour")
+    h.check(custom.sortOrder == 4, "sortOrder is max + 1")
+    h.check(!custom.isDefault, "and it is not a default")
+    h.check(AnalysisStore.createFolder(&lib, name: "   ", now: 2000) == nil, "a blank name is rejected")
+    let longName = AnalysisStore.createFolder(&lib, name: String(repeating: "x", count: 200), now: 2000)
+    h.check(longName?.name.count == AnalysisStore.Limits.folderName, "a long name is clamped")
+    if let longName { AnalysisStore.deleteFolder(&lib, id: longName.id) }
+    h.check(AnalysisStore.renameFolder(&lib, id: custom.id, name: "Rook endings"),
+            "a custom folder renames")
+    h.check(AnalysisStore.folder(lib, id: custom.id)?.name == "Rook endings", "and keeps the name")
+    let firstDefault = AnalysisStore.folders(lib)[0].id
+    h.check(!AnalysisStore.renameFolder(&lib, id: firstDefault, name: "Nope"),
+            "a DEFAULT folder refuses to rename")
+    h.check(!AnalysisStore.deleteFolder(&lib, id: firstDefault), "and refuses to delete")
+    h.check(!AnalysisStore.renameFolder(&lib, id: 9999, name: "Ghost"), "an unknown id refuses")
+
+    // 4. saving
+    guard let s1 = AnalysisStore.save(&lib, AnalysisStore.SaveFields(
+        pgn: "1. e4 c5 *", title: "  Najdorf line  ", folderID: custom.id,
+        whitePlayer: "Ana", blackPlayer: "Bo", whiteRating: "1850", blackRating: "1720",
+        eventName: "Club night", gameDate: "2026-02-14", timeControl: "15+10",
+        location: "Cebu", roundInfo: "3", eco: "B90"), now: 1000) else {
+        h.check(false, "save")
+        exit(Int32(h.summary()))
+    }
+    h.check(s1.id == 1, "the first session gets id 1")
+    h.check(s1.title == "Najdorf line", "the title is trimmed")
+    h.check(s1.whiteRating == 1850, "a numeric string rating becomes a number")
+    h.check(s1.notes == nil, "an absent field is nil, not empty")
+    h.check(s1.initialFEN == ChessPosition.startFEN, "initialFEN defaults to the standard start")
+    h.check(s1.createdAt == 1000 && s1.updatedAt == 1000, "both stamps are set")
+    h.check(AnalysisStore.save(&lib, AnalysisStore.SaveFields(pgn: "   "), now: 1000) == nil,
+            "a blank PGN is refused")
+
+    let untitled = AnalysisStore.save(&lib, AnalysisStore.SaveFields(
+        pgn: "1. d4 *", notes: "scratch", result: "1-0"), now: 2000)
+    h.check(untitled?.title == AnalysisStore.defaultTitle, "no title falls back to the default")
+    h.check(untitled?.folderID == nil, "and it is unfiled")
+    h.check(untitled?.id == 2, "ids keep counting")
+
+    let starred = AnalysisStore.save(&lib, AnalysisStore.SaveFields(pgn: "1. c4 *", result: "*"), now: 2100)
+    h.check(starred?.result == nil, "a \"*\" result is stored as nil")
+    if let starred { AnalysisStore.deleteSession(&lib, id: starred.id) }
+
+    // 5. updating in place
+    let updated = AnalysisStore.save(&lib, AnalysisStore.SaveFields(
+        id: s1.id, pgn: "1. e4 c5 2. Nf3 *", title: "Najdorf line"), now: 3000)
+    h.check(updated?.id == s1.id, "an existing id updates rather than inserting")
+    h.check(lib.sessions.count == 2, "the count is unchanged")
+    h.check(updated?.createdAt == 1000, "createdAt is preserved")
+    h.check(updated?.updatedAt == 3000, "updatedAt moves")
+    h.check(updated?.whitePlayer == nil, "fields absent from the update are cleared, as a PUT would")
+    let ghost = AnalysisStore.save(&lib, AnalysisStore.SaveFields(id: 9999, pgn: "1. f4 *"), now: 3100)
+    h.check(ghost?.id == 4, "an id that no longer exists inserts with a FRESH id (3 was used)")
+    if let ghost { AnalysisStore.deleteSession(&lib, id: ghost.id) }
+
+    // 6. filtering, search and order
+    AnalysisStore.save(&lib, AnalysisStore.SaveFields(
+        id: s1.id, pgn: "1. e4 c5 2. Nf3 *", title: "Najdorf line", folderID: custom.id,
+        whitePlayer: "Zubov", blackPlayer: "Bo"), now: 3000)
+    h.check(AnalysisStore.sessions(lib).count == 2, "all shows both")
+    h.check(AnalysisStore.sessions(lib).first?.id == s1.id, "ordered by updatedAt descending")
+    h.check(AnalysisStore.sessions(lib, filter: .unfiled).count == 1, "unfiled shows one")
+    h.check(AnalysisStore.sessions(lib, filter: .unfiled).first?.id == untitled?.id, "the right one")
+    h.check(AnalysisStore.sessions(lib, filter: .folder(custom.id)).count == 1, "a folder filters")
+    h.check(AnalysisStore.sessions(lib, search: "najdorf").count == 1, "search is case-insensitive")
+    h.check(AnalysisStore.sessions(lib, search: "ZUB").count == 1, "and matches a player")
+    h.check(AnalysisStore.sessions(lib, search: "scratch").count == 1, "and the notes")
+    h.check(AnalysisStore.sessions(lib, search: "nothing here").isEmpty, "a miss returns nothing")
+    h.check(AnalysisStore.sessions(lib, search: "ana").count == 1,
+            "it matches mid-word, as ilike %term% does")
+    h.check(AnalysisStore.sessions(lib, filter: .folder(custom.id), search: "scratch").isEmpty,
+            "filter and search combine")
+    h.check(AnalysisStore.sessionCount(lib, folderID: custom.id) == 1, "the chip count for a folder")
+    h.check(AnalysisStore.sessionCount(lib, folderID: nil) == 1, "and for unfiled")
+
+    // 7. deleting a folder UNFILES its games — it must never delete them
+    h.check(AnalysisStore.deleteFolder(&lib, id: custom.id), "a custom folder deletes")
+    h.check(lib.sessions.count == 2, "its sessions survive")
+    h.check(AnalysisStore.session(lib, id: s1.id)?.folderID == nil, "and become unfiled")
+    h.check(AnalysisStore.sessionCount(lib, folderID: nil) == 2, "so unfiled now holds both")
+    h.check(AnalysisStore.folder(lib, id: custom.id) == nil, "the folder itself is gone")
+
+    let orphan = AnalysisStore.save(&lib, AnalysisStore.SaveFields(pgn: "1. g3 *", folderID: 9999), now: 4000)
+    h.check(orphan?.folderID == nil, "an unknown folderID is treated as unfiled")
+    if let orphan { AnalysisStore.deleteSession(&lib, id: orphan.id) }
+
+    if let uid = untitled?.id {
+        h.check(AnalysisStore.deleteSession(&lib, id: uid), "deleting reports success")
+        h.check(!AnalysisStore.deleteSession(&lib, id: uid), "deleting twice does not")
+    }
+    h.check(lib.sessions.count == 1, "and the count drops")
+
+    // 8. drafts — the TTL is why time is injected
+    var d = AnalysisLibrary()
+    AnalysisStore.putDraft(&d, mode: AnalysisStore.draftNew,
+                           AnalysisDraft(pgn: "1. e4 *", initialFEN: ChessPosition.startFEN,
+                                         timestamp: 0), now: 10_000)
+    h.check(AnalysisStore.draft(&d, mode: AnalysisStore.draftNew, now: 10_000)?.pgn == "1. e4 *",
+            "a fresh draft reads back")
+    h.check(AnalysisStore.draft(&d, mode: AnalysisStore.draftNew,
+                                now: 10_000 + AnalysisStore.draftTTLMs) != nil,
+            "exactly at the TTL it is still good")
+    h.check(AnalysisStore.draft(&d, mode: AnalysisStore.draftNew,
+                                now: 10_000 + AnalysisStore.draftTTLMs + 1) == nil,
+            "one millisecond later it is stale")
+    h.check(d.drafts[AnalysisStore.draftNew] == nil, "and reading a stale draft PRUNES it")
+
+    AnalysisStore.putDraft(&d, mode: AnalysisStore.draftOpenFile,
+                           AnalysisDraft(pgn: "1. d4 *", initialFEN: ChessPosition.startFEN,
+                                         timestamp: 0, sessionID: 7, title: "T", notes: "N",
+                                         folderID: 2), now: 5000)
+    let od = AnalysisStore.draft(&d, mode: AnalysisStore.draftOpenFile, now: 5000)
+    h.check(od?.sessionID == 7, "the openfile draft carries its session id")
+    h.check(od?.title == "T", "its title")
+    h.check(od?.folderID == 2, "and its folder")
+    h.check(AnalysisStore.draft(&d, mode: AnalysisStore.draftSetup, now: 5000) == nil,
+            "the slots are independent")
+    h.check(AnalysisStore.clearDraft(&d, mode: AnalysisStore.draftOpenFile), "clearing succeeds")
+    h.check(!AnalysisStore.clearDraft(&d, mode: AnalysisStore.draftOpenFile), "twice does not")
+
+    h.check(!AnalysisStore.draftWorthKeeping(pgn: "", initialFEN: ChessPosition.startFEN),
+            "an empty board at the start is not worth saving")
+    h.check(AnalysisStore.draftWorthKeeping(pgn: "1. e4 *", initialFEN: ChessPosition.startFEN),
+            "moves are")
+    h.check(AnalysisStore.draftWorthKeeping(pgn: "", initialFEN: "8/8/8/8/8/8/8/K6k w - - 0 1"),
+            "so is a custom start with no moves")
+
+    // 9. normalize — ids recover past whatever is present
+    let recovered = AnalysisStore.normalize(AnalysisLibrary(
+        folders: [AnalysisFolderRecord(id: 4, name: "F", color: "#fff", sortOrder: 1,
+                                       isDefault: false, createdAt: 0)],
+        sessions: []))
+    h.check(recovered.nextFolderID == 5, "next folder id recovers past the highest present")
+    h.check(AnalysisStore.decode("nonsense").sessions.isEmpty, "garbage decodes to an empty library")
+    h.check(AnalysisStore.decode("{}").folders.isEmpty, "and so does an empty object")
+
+    // 10. THE CANONICAL DOCUMENT — the cross-language contract
+    let parsed = AnalysisStore.decode(canonical)
+    h.check(parsed.sessions.count == 2, "the canonical document has two sessions")
+    h.check(parsed.folders.count == 2, "and two folders")
+    h.check(parsed.nextSessionID == 3, "its next session id")
+    h.check(parsed.nextFolderID == 5, "and next folder id")
+    h.check(AnalysisStore.session(parsed, id: 1)?.title == "Najdorf line", "session 1 is the Najdorf")
+    h.check(AnalysisStore.session(parsed, id: 1)?.whiteRating == 1850, "with its rating as a number")
+    h.check(AnalysisStore.session(parsed, id: 1)?.eco == "B90", "and its ECO")
+    h.check(AnalysisStore.session(parsed, id: 1)?.gameDate == "2026-02-14", "and its date")
+    h.check(AnalysisStore.session(parsed, id: 1)?.notes == nil, "a null decodes to nil")
+    h.check(AnalysisStore.session(parsed, id: 2)?.folderID == nil, "session 2 is unfiled")
+    h.check(AnalysisStore.session(parsed, id: 2)?.result == "1-0", "and decisive")
+    h.check(AnalysisStore.folder(parsed, id: 4)?.name == "Endgames", "the custom folder came through")
+    h.check(AnalysisStore.folder(parsed, id: 1)?.isDefault == true, "and the default is marked")
+    h.check(AnalysisStore.sessions(parsed).first?.id == 1, "the newest-updated sorts first")
+    h.check(AnalysisStore.sessions(parsed, filter: .unfiled).count == 1, "one is unfiled")
+    h.check(AnalysisStore.sessionCount(parsed, folderID: 1) == 1, "folder 1 holds one game")
+    h.check(parsed.drafts.isEmpty, "and it carries no drafts")
+    // Our own round trip is a fixpoint. Byte-equality with the JS string is deliberately NOT
+    // claimed: JSONEncoder(.sortedKeys) and JSON.stringify order keys differently.
+    h.check(AnalysisStore.decode(AnalysisStore.encode(parsed)) == parsed,
+            "encode then decode is a fixpoint")
 }
 
 // MARK: - 6. Tournaments
@@ -552,7 +2052,10 @@ if let cases = loadOptional("phpcompat_truthy", [TruthyCase].self) {
 h.requireMinCounts([
     "rating": 390, "compare_moves": 6, "streak_target": 36, "streak_increment": 4, "streak_reset": 2,
     "daily_limits": 168, "daily_goal": 18, "game_review": 47, "classify": 88, "rating_tier": 14, "rush": 12,
-    "perft": 17, "chess_ai": 2,
+    "perft": 17, "chess_ai": 2, "san_parse": 9000, "notation_extra": 30, "draw_rules": 30,
+    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 45,
+    "eco": 1200, "review_book": 1500, "analysis_session": 200, "analysis_store": 80,
+    "position_editor": 80,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,
     "phpcompat_names": 1089, "phpcompat_truthy": 14,
