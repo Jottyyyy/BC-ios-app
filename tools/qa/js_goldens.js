@@ -40,6 +40,9 @@ var MKEYS = require(path.join(__dirname, 'metrics_key_check.js'));
 var REPLAY = require(path.join(__dirname, 'replay_position_editor.js'));
 var SKEYS = require(path.join(__dirname, 'swift_source_keys.js'));
 var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
+var HOST = require(path.join(JS, 'engine-host.js'));
+var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
+var WORKER = require(path.join(__dirname, 'worker_protocol_check.js'));
 
 function loadGolden(name) {
   var p = path.join(GOLDENS, name + '.json');
@@ -53,6 +56,8 @@ function loadGolden(name) {
 
 var suites = [];
 function record(name, result) { suites.push({ name: name, result: result }); }
+// Suites that need the event loop (the worker yields with setTimeout between depths).
+var asyncSuites = [];
 
 // A tiny harness matching the shape the module self-tests return.
 function harness() {
@@ -103,6 +108,12 @@ record('swift tables vs JS', REPLAY.selfTest());
 record('swift source lookups', SKEYS.selfTest());
 // The board must be sized by WIDTH and must not flex — the one bug that lived in CSS.
 record('board layout invariants', LAYOUT.selfTest());
+// Where the search runs, and the frame budget it must respect when it runs in-thread.
+record('engine-host.selfTest', HOST.selfTest());
+record('engine frame budget', BUDGET.selfTest());
+// The worker itself, driven through its real message protocol in a fake worker scope.
+// Async: it yields between depths exactly as it does in a browser, so the report waits.
+asyncSuites.push({ name: 'analysis worker protocol', mod: WORKER });
 
 // ---- 2b. game_review — the review math against the PHP oracle's own vectors ---
 // Same 303 cases and the same tolerances the Swift `game_review` / `game_review_random` groups use,
@@ -196,6 +207,19 @@ record('san_parse goldens', E.selfTestGoldens(loadGolden('san_parse')));
 })();
 
 // ---- Report -----------------------------------------------------------------
+// Async suites finish on the event loop, so the report waits for them and then runs unchanged.
+// Run them now — after every synchronous suite, so a check that yields to the event loop is timing
+// the code and not this harness blocking it for the length of the ECO replay.
+function settle() {
+  return asyncSuites.reduce(function (chain, a) {
+    return chain.then(function () {
+      return a.mod.run().then(function (r) { record(a.name, r); });
+    });
+  }, Promise.resolve());
+}
+
+settle().then(function () {
+
 var total = 0, failed = 0;
 console.log('');
 suites.forEach(function (s) {
@@ -213,3 +237,4 @@ if (failed === 0) {
 }
 console.log('❌ ' + failed + ' of ' + suites.length + ' suites FAILED (' + total + ' assertions passed)');
 process.exit(1);
+});

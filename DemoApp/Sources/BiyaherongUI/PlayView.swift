@@ -106,7 +106,7 @@ final class ChessGameVM: ObservableObject {
         if let cs = capSq, let cp = position.squares[cs] { captured.append(cp) }
         let san = position.san(for: m)
 
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+        withAnimation(AnalysisTiming.pieceMove) {
             if let cs = capSq { pieces.removeAll { $0.square == cs } }
             if let idx = pieces.firstIndex(where: { $0.square == m.from }) {
                 if let promo = m.promotion { pieces[idx].piece = Piece(moving.color, promo) }

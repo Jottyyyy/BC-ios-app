@@ -230,7 +230,7 @@ final class AnalysisVM: ObservableObject {
         let isEP = moving.kind == .pawn && m.to == before.enPassant && before.squares[m.to] == nil
         let capSq = isEP ? Square.make(file: Square.file(m.to), rank: Square.rank(m.from))
                          : (before.squares[m.to] != nil ? m.to : nil)
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+        withAnimation(AnalysisTiming.pieceMove) {
             if let cs = capSq { pieces.removeAll { $0.square == cs } }
             if let idx = pieces.firstIndex(where: { $0.square == m.from }) {
                 if let promo = m.promotion { pieces[idx].piece = Piece(moving.color, promo) }

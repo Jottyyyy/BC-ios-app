@@ -28,6 +28,8 @@ node tools/qa/swift_lint.js            # brackets + public-exposes-internal, for
 node tools/qa/metrics_key_check.js     # every MET.<BLOCK>.<key> and AnalysisEdit.foo resolves, JS + Swift
 node tools/qa/swift_source_keys.js     # every StyleSheet lookup AnalysisMetricsCheck makes has a value
 node tools/qa/board_layout_check.js    # the board is width-sized and does not flex — the CSS-level gate
+node tools/qa/engine_budget_check.js   # no synchronous search chunk may freeze the UI
+node tools/qa/worker_protocol_check.js # drives the real Worker protocol without a browser
 node tools/qa/replay_position_editor.js  # the blind-written Swift tables, replayed through the proven JS
 node tools/metrics/extract_board_styles.js   # regenerate board_styles.json from the RN source
 
@@ -74,6 +76,10 @@ suite, including the session layer and a real hit-test check of the board compon
 | `tools/qa/swift_source_keys.js` | every StyleSheet lookup the Swift check makes has a value to find |
 | `tools/qa/replay_position_editor.js` | the Swift tables, replayed through the JS that has actually run |
 | `tools/qa/board_layout_check.js` | the layout invariants the CSS must keep: board fixed and width-sized, panels flexible |
+| `web-demo/js/engine-host.js` | decides where the search runs: a Worker when served, sliced in-thread from `file://` |
+| `web-demo/js/analysis-worker.js` | the worker: `importScripts` the unmodified engines, then analyze/bestMove/cancel |
+| `tools/qa/engine_budget_check.js` | the frame budget — no chunk over 80ms×4, reported in dropped frames |
+| `tools/qa/worker_protocol_check.js` | the worker's protocol, in a fake worker scope |
 
 ## Extract, don't transcribe
 
@@ -222,9 +228,36 @@ depth is therefore too slow somewhere or too shallow everywhere. A 1200 ms budge
 `shouldCancel` reaches depth 4+ in quiet positions, stops at 3 in sharp ones, and holds total wall
 time to within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth` is only a ceiling.
 
-In JavaScript there are no Web Workers (`file://` gives an opaque origin), so `analyzeProgressive`
-runs **one depth per macrotask**: lines appear as they are found and a cancel lands immediately.
-Its synchronous core, `analyzeSteps`, is what keeps a Promise-shaped API inside the assertions.
+### In the browser: a Worker when it can, sliced when it cannot
+
+This used to read "there are no Web Workers, so `analyzeProgressive` runs one depth per macrotask."
+One depth per macrotask was not enough, and a user reported the consequence: piece movement felt
+delayed. **One depth is one uninterruptible block** — measured, depth 3 = 624 ms and depth 4 =
+2,885 ms, i.e. 37 and 173 frames during which nothing on the page can move.
+
+`web-demo/js/engine-host.js` now owns the choice, and both screens (the analysis search and Play's
+coach) go through it:
+
+| page opened | engine runs | worst block |
+|---|---|---|
+| served over http | `analysis-worker.js`, a real Worker | none — the main thread never searches |
+| `file://` | in-thread, one **80 ms slice** per depth | ~94 ms |
+
+The `file://` case is the old constraint and it is still real: a document with an opaque origin
+cannot construct a Worker, and the blob-URL and `data:` workarounds inherit that origin. What was
+wrong was treating it as a blanket rule. The slice deadline is passed to the search's own
+`shouldCancel`, which the engine polls every 2048 nodes, so the block is cut **from the inside** and
+cannot overrun however sharp the position is. The engine simply reaches a shallower depth.
+
+`analyzeSteps` remains the synchronous core, and it is what makes the slicing possible at all:
+`engine-host` drives it directly so it can reset the deadline before each depth, which
+`analyzeProgressive` cannot do because it builds its cancel closure once.
+
+Two gates hold this: `tools/qa/engine_budget_check.js` times the real stepper and fails if any chunk
+exceeds the budget (reporting the breach in dropped frames), and
+`tools/qa/worker_protocol_check.js` drives the worker's real message protocol in a fake worker scope
+— necessary because a worker bug is invisible from `file://`, invisible in Node, and *not* caught by
+the host's fallback, which only fires when construction throws.
 
 ### The stale-search bug we do not reproduce
 

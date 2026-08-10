@@ -962,6 +962,23 @@ enum AnalysisTiming {
     /// 20-30 seconds" promise (board.tsx:3831) — with a real progress bar and a working Cancel.
     /// Measured alternatives: 100ms is ~5s but mostly depth 1-2; 400ms is ~17s for depth 3.
     static let reviewDeadlineMs = 200
+    /// INVENTED: how long a piece takes to slide to its square. The RN board animates with a
+    /// Reanimated spring, which has no extractable duration, so there is nothing to port. 170ms with
+    /// an ease-out and NO overshoot is between lichess (~200) and chess.com (~150); this rebuild
+    /// used a springy 330ms, which read as sluggish.
+    static let pieceAnimationMs = 170
+    /// `pieceAnimationMs` as seconds, so no view body divides by 1000.
+    static var pieceAnimationSeconds: Double { Double(pieceAnimationMs) / 1000 }
+    /// The slide every board uses. An ease-out with NO overshoot, matching the browser's
+    /// `cubic-bezier(.22,.61,.36,1)`. It was `.spring(response: 0.34, dampingFraction: 0.82)` — a
+    /// springy third of a second that read as sluggish next to chess.com and lichess.
+    static var pieceMove: Animation { .easeOut(duration: pieceAnimationSeconds) }
+    /// INVENTED: the ceiling on ONE synchronous chunk of search when the engine cannot be moved off
+    /// the UI thread. Swift always can (`Task.detached`), so this is the browser twin's constant —
+    /// it is here so the two metrics layers stay identical and the value is asserted in both.
+    /// Measured: one whole depth per block was 624ms at depth 3 and 2885ms at depth 4; slicing each
+    /// depth at 80ms holds the worst block to 94ms.
+    static let inlineSearchBudgetMs = 80
     /// INVENTED: how long the screen takes to slide up over the tab bar.
     static let screenPresentMs = 250
     /// `longPressDelayMs` as seconds, so no view body divides by 1000.

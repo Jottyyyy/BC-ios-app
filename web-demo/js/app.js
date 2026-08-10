@@ -9,7 +9,10 @@
 (function () {
   'use strict';
   var E = window.Engine, CA = window.CoachAI, C = window.Coaches, R = window.Rating,
-    SND = window.SoundManager, PUZZLES = window.SAMPLE_PUZZLES;
+    SND = window.SoundManager, PUZZLES = window.SAMPLE_PUZZLES,
+    // Where the coach's search runs — a worker thread when the page is served, in-thread from
+    // file://. Declared here with the rest so a missing <script> tag fails at load, not on a click.
+    EngineHost = window.BiyaEngineHost;
 
   // ------------------------------------------------------------------ store --
   var KEY = 'biya.demo.v1';
@@ -305,7 +308,10 @@
     play.thinking = true; play.boardEl.interactive = false;
     showThinking(true);
     var snapshot = play.pos;
-    Promise.all([CA.bestMoveAsync(play.pos, play.coach), delay(380)]).then(function (res) {
+    // Through the host, not CoachAI directly: `bestMoveAsync` was `setTimeout(0)` plus a fully
+    // synchronous search, so the board froze while the coach thought. On a served page this now
+    // runs on a worker thread; from file:// it falls back to exactly the old call.
+    Promise.all([EngineHost.bestMove(play.pos, play.coach), delay(380)]).then(function (res) {
       play.thinking = false; showThinking(false);
       if (play.pos !== snapshot || play.over) { play.boardEl.interactive = canHumanMove(); return; } // state changed (new game/undo)
       var m = res[0];

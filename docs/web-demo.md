@@ -78,6 +78,8 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 | `js/opening-book.js` | ECO lookup over `eco-data.js`: naming, transpositions, book continuations | `OpeningBook.swift` |
 | `js/eco-data.js` | the bundled offline ECO book, 7,854 position-keyed rows. **Generated** — `php tools/eco/build_eco.php` | `DemoApp/…/ECO/eco.tsv` |
 | `js/analysis-metrics.js` | the Analysis Board's pure layer: board geometry, band heights, palette, typography, arrow/badge/indicator maths, the classification and eval-symbol tables, timings. Asserted against the numbers extracted from the real RN StyleSheet | `DemoApp/…/AnalysisMetrics.swift` |
+| `js/engine-host.js` | decides **where the search runs**: a Web Worker when served, sliced in-thread from `file://`. Both screens call it | — (the Swift side uses `Task.detached`) |
+| `js/analysis-worker.js` | the worker itself: `importScripts` the unmodified engines, then an analyze/bestMove/cancel message loop | — |
 | `js/position-editor.js` | Setup Position: piece placement, silent castling normalisation, and the validation chess.js used to do for the original | `PositionEditor.swift` |
 | `js/analysis-store.js` | the saved-game library: records mirroring the Laravel schema, folder rules, search, and the 24h draft TTL. Shares one canonical document with the Swift store | `AnalysisStore.swift` |
 | `js/analysis.js` | ⭐ the Analysis Board: a pure session layer (status line, opening tracking, arrows, engine rows, move-strip tokens, the staleness rule) **plus** the seven-band screen | `AnalysisSession.swift`, `AnalysisVM.swift`, `AnalysisBoardScreen.swift` |
@@ -90,8 +92,26 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 | `css/theme.css`, `css/app.css` | design tokens + shell styling | `Theme.swift` |
 | `assets/` | pieces, sounds, coach avatars, fonts (copied from the app) | — |
 
-All scripts are classic `<script>` (no ES modules) and the AI runs on the main thread, so it works from
-`file://` with no build step.
+All scripts are classic `<script>` (no ES modules), so it works from `file://` with no build step.
+
+**Where the engine runs is no longer "the main thread" flatly** — `js/engine-host.js` decides:
+
+- **served over http** (Live Server, or `python -m http.server`) → `js/analysis-worker.js`, a real
+  Web Worker. The main thread never runs a search, which is what makes piece movement smooth.
+- **`file://`** → in-thread, because a document with an opaque origin cannot construct a Worker (the
+  blob-URL and `data:` workarounds inherit the same origin and fail identically). Each depth then
+  gets its own **80 ms slice deadline**, cut from inside the search, so the worst block is ~94 ms
+  instead of the 624–2,885 ms it used to be. The engine reaches a shallower depth; nothing freezes.
+
+`BiyaEngineHost.mode` reports which one you got. Both screens go through the host — the Analysis
+Board's search and Play's coach — and the worker loads the *unmodified* engine files via
+`importScripts`, so what runs there is byte-identical to what the golden suite proves.
+
+**If you edit `js/analysis-worker.js`, run `node tools/qa/worker_protocol_check.js`.** The worker only
+runs on a served page, so a mistake in it is invisible from `file://` and in Node, and the host
+cannot catch it: construction succeeds, the fallback never fires, and the board silently stops
+getting snapshots. That check drives the real message protocol in a fake worker scope; it caught an
+`importScripts` ordering bug the first time it ran.
 
 ## The reusable `<chess-board>` component
 

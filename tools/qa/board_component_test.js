@@ -117,10 +117,18 @@ function buildDom() {
   }
 
   var registry = Object.create(null);
+  // A MANUAL frame clock. The drag coalesces its writes into one rAF callback, and the only way to
+  // assert "one transform per frame, however many pointer events arrived" is to control when a
+  // frame happens. `flushFrames()` runs whatever is pending.
+  var frames = [];
+  var frameId = 0;
   var sandbox = {
     HTMLElement: El,
     CustomEvent: CustomEventShim,
-    requestAnimationFrame: function (f) { return setTimeout(f, 0); },
+    requestAnimationFrame: function (f) { frameId += 1; frames.push({ id: frameId, fn: f }); return frameId; },
+    cancelAnimationFrame: function (id) {
+      for (var i = 0; i < frames.length; i++) if (frames[i].id === id) { frames.splice(i, 1); return; }
+    },
     setTimeout: setTimeout,
     clearTimeout: clearTimeout,
     console: console,
@@ -137,7 +145,15 @@ function buildDom() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(SOURCE, 'utf8'), sandbox, { filename: SOURCE });
-  return { sandbox: sandbox, registry: registry, El: El, CustomEvent: CustomEventShim };
+  return {
+    sandbox: sandbox, registry: registry, El: El, CustomEvent: CustomEventShim,
+    flushFrames: function () {
+      var due = frames.splice(0, frames.length);
+      due.forEach(function (f) { f.fn(); });
+      return due.length;
+    },
+    pendingFrames: function () { return frames.length; }
+  };
 }
 
 // ---- the suite --------------------------------------------------------------
@@ -323,6 +339,9 @@ function selfTest() {
     pointer(b, 'pointermove', E4);
     check(b._drag.moved === true, 'crossing the threshold starts the drag');
     check(b._drag.el.classList.contains('dragging'), 'the ghost gets the dragging class');
+    // The visual work is deferred to a frame — that is the coalescing, asserted properly below.
+    check(!b._cellBySq.get(E4).classList.contains('drophover'), 'nothing is painted before the frame');
+    dom.flushFrames();
     check(b._cellBySq.get(E4).classList.contains('drophover'), 'the square under the pointer is highlighted');
     pointer(b, 'pointerup', E4);
     check(moves.length === 1 && moves[0].uci === 'e2e4',
@@ -335,6 +354,117 @@ function selfTest() {
     check(b._suppressClick === false, 'the suppression flag is one-shot');
     clickSquare(b, E4);
     check(b._selected === E4, 'the next click selects as usual');
+  })();
+
+
+  // -- 4b. smoothness: the three things that made a drag feel laggy -------------
+  //
+  // All three were reported as one symptom ("may delay, hindi smooth"). Each is asserted here in
+  // the form it actually took, because none of them is visible to a numbers-only suite.
+  (function () {
+    // (a) NO LAYOUT READS ON THE POINTERMOVE PATH.
+    // `_onPointerMove` used to call getBoundingClientRect(), and `_squareAtPoint` called it AGAIN —
+    // two forced layouts per event, at up to 120Hz. The rect is now read once, on pointerdown.
+    var b = makeBoard({ targets: { 12: [E3, E4], 28: [E5] }, draggable: true });
+    var reads = 0;
+    var realRect = b._boardEl.getBoundingClientRect;
+    b._boardEl.getBoundingClientRect = function () { reads += 1; return realRect.call(this); };
+
+    pointer(b, 'pointerdown', E2);
+    check(reads === 1, 'pointerdown reads the board rect exactly once, got ' + reads);
+    check(b._rect !== null, 'and caches it for the drag');
+
+    reads = 0;
+    pointer(b, 'pointermove', E4);
+    pointer(b, 'pointermove', E5);
+    pointer(b, 'pointermove', E4);
+    dom.flushFrames();
+    check(reads === 0, 'no pointermove or frame reads the rect again, got ' + reads + ' reads');
+
+    // (b) ONE WRITE PER FRAME, HOWEVER MANY EVENTS ARRIVE.
+    var writes = 0;
+    var ghost = b._drag.el;
+    var lastTransform = ghost.style.transform;
+    Object.defineProperty(ghost.style, 'transform', {
+      configurable: true,
+      get: function () { return lastTransform; },
+      set: function (v) { writes += 1; lastTransform = v; }
+    });
+    pointer(b, 'pointermove', E5);
+    pointer(b, 'pointermove', E4);
+    pointer(b, 'pointermove', E5);
+    check(writes === 0, 'three events inside one frame write nothing yet, got ' + writes);
+    check(dom.pendingFrames() === 1, 'and schedule exactly one frame, got ' + dom.pendingFrames());
+    dom.flushFrames();
+    check(writes === 1, 'the frame writes the transform once, got ' + writes);
+
+    // (c) AT MOST TWO CELLS CHANGE, NOT ALL 64.
+    // The old code ran `_cells.forEach(remove('drophover'))` on every single pointer event.
+    var touched = 0;
+    b._cells.forEach(function (c) {
+      var add = c.classList.add, rm = c.classList.remove;
+      c.classList.add = function () { touched += 1; return add.apply(this, arguments); };
+      c.classList.remove = function () { touched += 1; return rm.apply(this, arguments); };
+    });
+    pointer(b, 'pointermove', E4);
+    dom.flushFrames();
+    check(touched <= 2, 'moving to a new square touches at most 2 cells, got ' + touched);
+    touched = 0;
+    pointer(b, 'pointermove', E4);          // same square again
+    dom.flushFrames();
+    check(touched === 0, 'and staying on the same square touches none, got ' + touched);
+
+    pointer(b, 'pointerup', E4);
+    check(b._rect === null, 'the cached rect is released on drop');
+    check(b._hoverSq === null, 'and the hover square is cleared');
+    check(dom.pendingFrames() === 0, 'and no frame is left scheduled');
+  })();
+
+  // -- 4c. a drop lands where you let go ----------------------------------------
+  //
+  // It used to snap the piece back to its origin and then slide it to the target over 330ms once
+  // the app repainted — you watched it jump home and travel back. chess.com and lichess leave it.
+  (function () {
+    var b = makeBoard({ targets: { 12: [E3, E4], 28: [E5] }, draggable: true });
+    var moves = recorder(b);
+    pointer(b, 'pointerdown', E2);
+    pointer(b, 'pointermove', E4);
+    dom.flushFrames();
+    pointer(b, 'pointerup', E4);
+    check(moves.length === 1, 'the drop fires its move');
+    check(b._justDropped === true, 'and flags the render that follows as a drop');
+
+    // The app now applies the move and repaints, exactly as analysis.js/app.js do.
+    var el = b._els.get(E2).el;
+    var transitions = [];
+    var realStyle = el.style;
+    b.setPosition('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+                  { animate: true, lastMove: { from: E2, to: E4 } });
+    check(b._justDropped === false, 'the flag is one-shot');
+    check(b._els.get(E4) && b._els.get(E4).el === el, 'the same element ended up on the target');
+    check(Number(el.dataset.sq) === E4, 'placed on e4');
+
+    // A TAP move, by contrast, must still animate — that is the whole point of the slide.
+    var t = makeBoard({ targets: { 12: [E3, E4] } });
+    clickSquare(t, E2); clickSquare(t, E4);
+    check(t._justDropped === false, 'a tap never sets the drop flag');
+  })();
+
+  // -- 4d. the slide is quick and does not overshoot ----------------------------
+  (function () {
+    var raw = require('fs').readFileSync(require('path').join(
+      require('path').resolve(__dirname, '..', '..'), 'web-demo', 'js', 'chess-board.js'), 'utf8');
+    // Strip comments first: the source explains the OLD curve in a comment right above the new
+    // rule, and a check that cannot tell a declaration from a description is worse than none.
+    var css = raw.replace(/\/\/[^\r\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    check(/--piece-anim,\s*170ms/.test(css),
+      'the slide defaults to 170ms — between lichess (~200) and chess.com (~150)');
+    check(!/transition:transform \.33s/.test(css),
+      'the springy 330ms slide is gone');
+    check(!/cubic-bezier\(\.34,1\.15/.test(css),
+      'and so is its overshoot curve, which read as bouncy rather than crisp');
+    check(/transition:transform var\(--piece-anim/.test(css),
+      'the duration is a CSS variable, so a host can retune it without forking the component');
   })();
 
   (function () {

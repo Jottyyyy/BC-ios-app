@@ -490,7 +490,22 @@ var BiyaAnalysisMetrics = (function () {
     // ~9s in Node and ~18s in the browser, which lands inside the original's own "This may take
     // 20-30 seconds" promise (board.tsx:3831) — with a real progress bar and a working Cancel.
     // Measured alternatives: 100ms is ~5s but mostly depth 1-2; 400ms is ~17s for depth 3.
-    reviewDeadline: 200
+    reviewDeadline: 200,
+    // INVENTED: how long a piece takes to slide to its square. The RN board animates with a
+    // Reanimated spring, which has no extractable duration, so there is nothing to port. 170ms with
+    // an ease-out and NO overshoot is between lichess (~200) and chess.com (~150); the old value was
+    // 330ms on a springy `cubic-bezier(.34,1.15,.64,1)`, which read as sluggish.
+    pieceAnimation: 170,
+    // INVENTED: the ceiling on ONE synchronous chunk of search when the engine cannot be put in a
+    // Worker (i.e. opened from file://, where the opaque origin makes `new Worker` throw).
+    //
+    // This is the constant that fixes the reported "delay". The search used to run one whole depth
+    // per uninterrupted block: measured on a midgame position, depth 3 = 624ms and depth 4 = 2885ms,
+    // i.e. 37 and 173 dropped frames with nothing on screen able to move. Passing this as each
+    // depth's own `shouldCancel` deadline cuts the block from the INSIDE — the search polls every
+    // 2048 nodes — so no chunk can overrun. Measured with an 80ms slice: worst block 94ms, and the
+    // search still reaches depth 2 in sharp midgames and depth 5 in quiet endgames.
+    inlineSearchBudget: 80
   };
   /** Search limits for the live board. maxDepth is a ceiling; the deadline is what usually binds. */
   var ENGINE_LIMITS = { maxDepth: 6, multiPV: 3 };
@@ -679,6 +694,12 @@ var BiyaAnalysisMetrics = (function () {
     expect(TIMINGS.draftAutosave === 800, 'draft autosave is 800ms');
     expect(TIMINGS.doubleTapWindow === 350, 'double-tap window is 350ms');
     expect(TIMINGS.draftTTLHours === 24, 'drafts expire after 24 hours');
+    expect(TIMINGS.pieceAnimation === 170, 'a piece slides in 170ms');
+    expect(TIMINGS.pieceAnimation < TIMINGS.analysisDebounce,
+      'and lands before the engine is even scheduled, so a search can never start mid-slide');
+    expect(TIMINGS.inlineSearchBudget === 80, 'one in-thread search chunk is capped at 80ms');
+    expect(TIMINGS.inlineSearchBudget * 2 < TIMINGS.engineDeadline,
+      'the per-chunk slice is well under the whole-search deadline, or slicing would do nothing');
     expect(TIMINGS.longPressDelay === 400, 'long-press delay is 400ms');
     expect(TIMINGS.uiCoalesce === 100, 'engine progress coalesces to 100ms');
     expect(TIMINGS.engineDeadline === 1200, 'one interactive search gets 1200ms');
