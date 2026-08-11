@@ -26,5 +26,9 @@ Feature- and subsystem-level documentation for this repo.
 - [`analysis-board.md`](analysis-board.md) — the offline analysis screen: move tree, local engine, ECO book,
   game review, persistence, Setup Position, PGN import/export, and the pure metrics layer extracted from the
   real RN StyleSheet.
+- [`puzzle-hub.md`](puzzle-hub.md) — the offline puzzle feature: the curated 93k-puzzle bundle and how it is
+  built, the shared solver core, the selection ladders over SQLite, and the local progress store.
+  Plus the style extraction, the metrics layer and the first three screens (Hub, Play Puzzles Home,
+  Play Puzzles Solver). **Phases D–F — Daily, Thematic, Streak, Turbo and the final sweep — pending.**
 
 _More docs get added here as features are built._

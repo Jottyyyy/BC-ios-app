@@ -34,14 +34,11 @@ const DRAG_TSX = path.join(FRONTEND, 'components', 'DragDropChessBoard.tsx');
 const GRAPH_TSX = path.join(FRONTEND, 'components', 'EvalGraph.tsx');
 const OUT = path.join(__dirname, 'board_styles.json');
 
-let ts;
-try {
-  ts = require(path.join(FRONTEND, 'node_modules', 'typescript'));
-} catch (e) {
-  console.error('FATAL: cannot load typescript from ' + path.join(FRONTEND, 'node_modules', 'typescript'));
-  console.error('The sibling BYAHERONG-COACH-FRONTEND repo (with node_modules) must be present.');
-  process.exit(1);
-}
+// The AST evaluator, the StyleSheet walker and the signed-term describer live in rn_ast.js — the
+// Puzzle Hub's extractor needs exactly the same machinery over eleven more files. This file's
+// output must stay byte-identical across that refactor, which is how the move was verified.
+const RN = require('./rn_ast.js');
+const ts = RN.loadTypeScript(FRONTEND);
 for (const f of [BOARD_TSX, DRAG_TSX, GRAPH_TSX]) {
   if (!fs.existsSync(f)) { console.error('FATAL: missing ' + f); process.exit(1); }
 }
@@ -73,151 +70,12 @@ const SEED = {
   screenHeight: REF_HEIGHT,
 };
 
-// `...StyleSheet.absoluteFillObject`
-const ABSOLUTE_FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 };
-
-// ---- AST evaluation ---------------------------------------------------------
-
-const unresolved = [];
-
-function makeEvaluator(sf) {
-  function evalNode(node, where) {
-    if (ts.isNumericLiteral(node)) return Number(node.text);
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-    if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
-    if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
-    if (node.kind === ts.SyntaxKind.NullKeyword) return null;
-
-    // `'relative' as const`
-    if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) return evalNode(node.expression, where);
-    if (ts.isParenthesizedExpression(node)) return evalNode(node.expression, where);
-
-    if (ts.isPrefixUnaryExpression(node)) {
-      const v = evalNode(node.operand, where);
-      if (typeof v !== 'number') return undefined;
-      if (node.operator === ts.SyntaxKind.MinusToken) return -v;
-      if (node.operator === ts.SyntaxKind.PlusToken) return v;
-      return undefined;
-    }
-
-    // Pre-seeded module constants: SQUARE_SIZE, width, …
-    if (ts.isIdentifier(node)) {
-      if (Object.prototype.hasOwnProperty.call(SEED, node.text)) return SEED[node.text];
-      unresolved.push({ where, kind: 'Identifier', text: node.getText() });
-      return undefined;
-    }
-
-    // Arithmetic over seeded constants: `width * 0.65`, `screenHeight * 0.80`
-    if (ts.isBinaryExpression(node)) {
-      const l = evalNode(node.left, where), r = evalNode(node.right, where);
-      if (typeof l !== 'number' || typeof r !== 'number') return undefined;
-      switch (node.operatorToken.kind) {
-        case ts.SyntaxKind.AsteriskToken: return l * r;
-        case ts.SyntaxKind.SlashToken: return l / r;
-        case ts.SyntaxKind.PlusToken: return l + r;
-        case ts.SyntaxKind.MinusToken: return l - r;
-        default:
-          unresolved.push({ where, kind: 'BinaryExpression', text: node.getText() });
-          return undefined;
-      }
-    }
-
-    // `Platform.OS === 'ios' ? A : B` — keep the iOS branch; this app ships on iOS.
-    if (ts.isConditionalExpression(node)) {
-      const cond = node.condition.getText();
-      if (/Platform\.OS\s*===\s*'ios'/.test(cond)) return evalNode(node.whenTrue, where);
-      if (/Platform\.OS\s*!==\s*'ios'/.test(cond)) return evalNode(node.whenFalse, where);
-      unresolved.push({ where, kind: 'ConditionalExpression', text: node.getText().slice(0, 70) });
-      return undefined;
-    }
-
-    // Math.floor / Math.round / Math.min / Math.max over resolved values
-    if (ts.isCallExpression(node)) {
-      const callee = node.expression.getText();
-      const m = /^Math\.(floor|round|ceil|abs|min|max)$/.exec(callee);
-      if (m) {
-        const args = node.arguments.map(a => evalNode(a, where));
-        if (args.some(a => typeof a !== 'number')) return undefined;
-        return Math[m[1]].apply(null, args);
-      }
-      unresolved.push({ where, kind: 'CallExpression', text: node.getText().slice(0, 70) });
-      return undefined;
-    }
-
-    if (ts.isObjectLiteralExpression(node)) return objectOf(node, where);
-    if (ts.isArrayLiteralExpression(node)) {
-      const out = node.elements.map(e => evalNode(e, where));
-      return out.some(v => v === undefined) ? undefined : out;
-    }
-
-    unresolved.push({ where, kind: ts.SyntaxKind[node.kind], text: node.getText().slice(0, 70) });
-    return undefined;
-  }
-
-  function objectOf(obj, where) {
-    const out = {};
-    for (const p of obj.properties) {
-      if (ts.isSpreadAssignment(p)) {
-        if (/StyleSheet\.absoluteFillObject/.test(p.expression.getText())) Object.assign(out, ABSOLUTE_FILL);
-        else unresolved.push({ where, kind: 'Spread', text: p.getText() });
-        continue;
-      }
-      if (!ts.isPropertyAssignment(p)) continue;
-      const key = p.name.getText().replace(/^['"]|['"]$/g, '');
-      const v = evalNode(p.initializer, where + '.' + key);
-      if (v !== undefined) out[key] = v;
-    }
-    return out;
-  }
-
-  return { evalNode, objectOf };
-}
-
-function parse(file) {
-  return ts.createSourceFile(path.basename(file), fs.readFileSync(file, 'utf8'),
-                             ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-}
-
 // ---- Walk board.tsx ---------------------------------------------------------
 
-const boardSF = parse(BOARD_TSX);
-const { evalNode, objectOf } = makeEvaluator(boardSF);
-
-const stylesheets = {};
-const moduleConstants = {};
-
-function visit(node) {
-  if (ts.isVariableDeclaration(node) && node.initializer) {
-    const name = node.name.getText();
-
-    // const styles = StyleSheet.create({ … })
-    if (ts.isCallExpression(node.initializer)
-        && node.initializer.expression.getText() === 'StyleSheet.create'
-        && node.initializer.arguments.length === 1
-        && ts.isObjectLiteralExpression(node.initializer.arguments[0])) {
-      const block = {};
-      for (const p of node.initializer.arguments[0].properties) {
-        if (!ts.isPropertyAssignment(p)) continue;
-        const key = p.name.getText().replace(/^['"]|['"]$/g, '');
-        block[key] = objectOf(p.initializer, name + '.' + key);
-      }
-      stylesheets[name] = block;
-      return;   // do not descend; already consumed
-    }
-
-    // Module-scope constants the views read: ARROW_COLORS, AUTOPLAY_SPEEDS, and the bare numbers
-    // (EDIT_PALETTE_PIECE_SIZE, …) — those are just as easy to mistype as a StyleSheet value.
-    if (/^[A-Z][A-Z0-9_]*$/.test(name)
-        && (ts.isArrayLiteralExpression(node.initializer) || ts.isObjectLiteralExpression(node.initializer)
-            || ts.isNumericLiteral(node.initializer) || ts.isStringLiteral(node.initializer))) {
-      const v = evalNode(node.initializer, 'const.' + name);
-      if (v !== undefined) moduleConstants[name] = v;
-      return;
-    }
-  }
-  ts.forEachChild(node, visit);
-}
-visit(boardSF);
+const boardSF = RN.parse(ts, BOARD_TSX);
+const ev = RN.createEvaluator(ts, SEED);
+const unresolved = ev.unresolved;
+const { stylesheets, moduleConstants } = RN.collectStyleSheets(ts, boardSF, ev);
 
 // ---- Render-function constants ----------------------------------------------------
 //
@@ -235,106 +93,7 @@ visit(boardSF);
 const RENDER_FUNCTIONS = ['squareToPixel', 'renderArrowsOverlay', 'renderAnnotationOverlay',
                           'renderEditSquare'];
 
-/** Flatten an additive chain into signed leaves: `a + b*2 - c` → [+a, +b*2, -c]. */
-function additiveTerms(node, sign, out) {
-  if (ts.isParenthesizedExpression(node)) return additiveTerms(node.expression, sign, out);
-  if (ts.isBinaryExpression(node)) {
-    const k = node.operatorToken.kind;
-    if (k === ts.SyntaxKind.PlusToken) {
-      additiveTerms(node.left, sign, out); additiveTerms(node.right, sign, out); return out;
-    }
-    if (k === ts.SyntaxKind.MinusToken) {
-      additiveTerms(node.left, sign, out); additiveTerms(node.right, -sign, out); return out;
-    }
-  }
-  out.push({ sign: sign, node: node });
-  return out;
-}
-
-/** Describe one leaf: a bare number, a reference, or `ref * k` / `ref / k` / `k * ref`. */
-function describeTerm(t) {
-  const text = t.node.getText().replace(/\s+/g, ' ');
-  const d = { sign: t.sign, text: text };
-  if (ts.isNumericLiteral(t.node)) { d.value = Number(t.node.text); return d; }
-  if (ts.isIdentifier(t.node) || ts.isPropertyAccessExpression(t.node)) { d.ref = text; d.ratio = 1; return d; }
-  if (ts.isBinaryExpression(t.node)) {
-    const op = t.node.operatorToken.kind;
-    const l = t.node.left, r = t.node.right;
-    const refText = n => (ts.isIdentifier(n) || ts.isPropertyAccessExpression(n)) ? n.getText() : null;
-    if (op === ts.SyntaxKind.AsteriskToken) {
-      if (refText(l) && ts.isNumericLiteral(r)) { d.ref = refText(l); d.ratio = Number(r.text); return d; }
-      if (ts.isNumericLiteral(l) && refText(r)) { d.ref = refText(r); d.ratio = Number(l.text); return d; }
-    }
-    if (op === ts.SyntaxKind.SlashToken && refText(l) && ts.isNumericLiteral(r)) {
-      d.ref = refText(l); d.ratio = 1 / Number(r.text); return d;
-    }
-  }
-  return d;   // opaque: text only, still diffable
-}
-
-function describeExpr(node) {
-  if (ts.isParenthesizedExpression(node)) return describeExpr(node.expression);
-  if (ts.isConditionalExpression(node)) {
-    return {
-      text: node.getText().replace(/\s+/g, ' '),
-      condition: node.condition.getText().replace(/\s+/g, ' '),
-      whenTrue: describeExpr(node.whenTrue),
-      whenFalse: describeExpr(node.whenFalse),
-    };
-  }
-  return {
-    text: node.getText().replace(/\s+/g, ' '),
-    terms: additiveTerms(node, 1, []).map(describeTerm),
-  };
-}
-
-const renderConstants = {};
-
-function collectRenderFunction(name, body) {
-  const found = {};
-  const jsxCount = {};
-  (function walk(n) {
-    // `const cx = pos.x + SQUARE_SIZE * 0.29;`
-    if (ts.isVariableDeclaration(n) && n.initializer && ts.isIdentifier(n.name)) {
-      found[n.name.text] = describeExpr(n.initializer);
-    }
-    // `return { x: …, y: … };`
-    if (ts.isReturnStatement(n) && n.expression && ts.isObjectLiteralExpression(n.expression)) {
-      for (const p of n.expression.properties) {
-        if (ts.isPropertyAssignment(p)) {
-          found['return.' + p.name.getText()] = describeExpr(p.initializer);
-        }
-      }
-    }
-    // `<Circle cx={cx + 1.5} r={r} />` — the shadow offset, the ring, the text baseline.
-    if (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) {
-      const tag = n.tagName.getText();
-      const idx = (jsxCount[tag] = (jsxCount[tag] || 0));
-      jsxCount[tag] += 1;
-      for (const a of n.attributes.properties) {
-        if (!ts.isJsxAttribute(a) || !a.initializer) continue;
-        const attr = a.name.getText();
-        if (ts.isStringLiteral(a.initializer)) {
-          found[tag + '[' + idx + '].' + attr] = { text: a.initializer.text, literal: a.initializer.text };
-        } else if (ts.isJsxExpression(a.initializer) && a.initializer.expression) {
-          found[tag + '[' + idx + '].' + attr] = describeExpr(a.initializer.expression);
-        }
-      }
-    }
-    ts.forEachChild(n, walk);
-  })(body);
-  renderConstants[name] = found;
-}
-
-(function findRenderFunctions(node) {
-  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
-      && RENDER_FUNCTIONS.indexOf(node.name.text) !== -1
-      && node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
-    collectRenderFunction(node.name.text, node.initializer.body);
-    return;
-  }
-  ts.forEachChild(node, findRenderFunctions);
-})(boardSF);
+const renderConstants = RN.findNamedFunctions(ts, boardSF, RENDER_FUNCTIONS);
 
 for (const f of RENDER_FUNCTIONS) {
   if (!renderConstants[f]) { console.error('FATAL: render function not found in board.tsx: ' + f); process.exit(1); }

@@ -717,3 +717,139 @@ progress bar rather than a static string.
 |---|---|---|
 | drag threshold | `4` px | below this a press stays a tap, so tap-to-move is never hijacked; the same value in both languages |
 | review position guard | ~400 plies | the original's 200-position server cap is gone, so an absurd PGN still needs a bound |
+
+---
+
+## Puzzle Hub (spec Parts 3–5, 7, 11, 15, 17)
+
+### Resolved decisions
+
+| Decision | Why |
+|---|---|
+| **Codable + JSON, not SwiftData** for Part 4's records | The record *shapes* are the spec's, field for field; only the mechanism differs. The app already persists the Analysis Board's library as Codable + JSON (`AnalysisStore` + `AnalysisLibraryFile`) and a second persistence stack would buy nothing — and would put the Parity Core one import away from a framework it is not allowed to have. |
+| **`WITHOUT ROWID`** on `puzzle_themes` and `theme_rating_index` | A storage class, not a schema change: columns, constraints and every Part 7 query are identical. It is the whole difference between the spec's literal schema at **50 MB** and the **33 MB** that fits its own stated 25–35 MB budget. Both composite keys are genuinely unique (432,507 rows, 432,507 distinct). Two of the spec's four declared indexes are now those primary keys and are not restated. |
+| **The corpus lands at 92,976**, not the spec's estimated 95,000–105,000 | The spec's own step-2 arithmetic fixes the base at 22 × 4,000 = 88,000, and every later step (theme quotas, warmup, rare sweep) is a *floor*, not a target. The rules were implemented as written; the prose was an over-estimate. |
+| **The rare-theme set is computed, not read from the spec's list** | The rule is "fewer than 1,000 rows in the raw corpus". `anastasiaMate` (636) satisfies it and is absent from the spec's hand-written list of twelve. The build prints a note whenever the computed set and the documented list disagree. |
+| **The 2600–2800 tail is not a band** | The spec fixes both "22 bands" (400–2600) and a 2800 rating ceiling. They only reconcile if the tail enters through the theme quotas and the rare sweep, which is what it does — 195 puzzles, enough that a 2700-rated user's ±100 window is not void. |
+| **`Rating.compareMoves` stays, and is never called** | It is a faithful port of the server's first-move-only comparator and is pinned by the `compare_moves` goldens. It is also spec fix #10. Keeping it preserves parity; calling it would reintroduce the bug. Enforced by assertions in `replay_puzzle_core.js` and `puzzle_core_test.js`. |
+| **Spec fix #7 (scope the Tier-3 wipe) lives in the caller** | `PuzzleServing` never wiped anything: it takes `seen` as an argument and *reports* `didReset` as a flag. Scoping in `PuzzleSelection.scopeForReset` leaves the golden-pinned ladder byte-identical. |
+| **Part 17 beats Part 5.3 on the Daily opponent delay** | 5.3 says "500 ms everywhere except Puzzle Turbo"; Part 17's table gives Daily **400 ms**. The table titled *master* wins. |
+| **There is no embedded Stockfish** | Parts 0 and 18 assume one exists from the Analysis Board. It does not — no `.cpp`, `.xcframework` or NNUE anywhere in the tree. The engine panel will use `LocalEngine`/`AnalysisEngine` with the Analysis Board's measured limits, not Part 18's depth-20 / 1000 ms. |
+| **A replay earns no daily-goal credit** | Part 8 bundles the ledger row, the Elo, the `ThemeStat` bump and the goal counter under "on the first `finish()` for a puzzle". The alternative would let a user farm a 10-a-day goal by replaying one puzzle. |
+| **The daily puzzle is not marked seen** | It is a pure function of the date, and marking it would make today's puzzle unavailable to whichever other mode had not served it yet. |
+| **SQL tier-1/tier-2 return a bounded sample (256 rows)** | `ArrayPool` hands the picker every eligible candidate; a 93k corpus cannot. `ORDER BY RANDOM() LIMIT n` is a uniform random subset, so a uniform pick from it is uniform overall — and emptiness, the only thing the ladder branches on, is preserved exactly. |
+
+### Invented constants
+
+| Constant | Value | Why |
+|---|---|---|
+| `MIN_NB_PLAYS` | `50` | Below this a Lichess puzzle's rating has not settled. Spec Part 3.2. |
+| `PER_BAND` | `4000` | Spec Part 3.2. All 22 bands hold more than this, so the base is exactly 88,000. |
+| `quality` | `popularity × log10(max(nb_plays, 10))` | Spec Part 3.2. **Quantised to an integer (×10⁶) before it is used as a sort key** — `log10` is the one place a platform's libm could differ in the last ULP and silently reorder two rows across machines. |
+| `DAILY_SHUFFLE_SEED` | `0x81723F5A0C219E4D` | Invented, and fixed forever: changing it reshuffles every past and future date. Consumed by a splitmix64 Fisher–Yates written out in the build script rather than `random.shuffle`, so the pool does not depend on the CPython version. |
+| `dailyEpoch` | `2026-01-01`, **local** | Spec Part 11.1. Fixed forever for the same reason. |
+| `sampleLimit` | `256` | Invented — how many rows a SQL tier query materialises before the picker chooses. See the decision above. |
+| slice sizes | 60/band, 80/theme, 120 warmup, 400 daily | Invented — the browser demo's corpus slice. 400 daily entries so the demo's Daily mode covers a year without wrapping. |
+
+### Deviations from the corpus's own convention
+
+The bundled corpus follows Lichess: **`moves[0]` belongs to the opponent**. The demo's older
+`web-demo/js/puzzles.js` sample set uses the opposite convention (`solution[0]` is the solver's).
+The two are not interchangeable; the Puzzle Hub reads only `puzzle-data.js`.
+
+### Puzzle Hub screens (spec Parts 9, 10, 15, 18, 19)
+
+Every screen number comes from `tools/metrics/extract_puzzle_styles.js` walking the eleven RN
+puzzle screens into `tools/metrics/puzzle_styles.json`, exactly as the Analysis Board's numbers come
+from `board_styles.json`. Where the spec's prose and the source disagree, **the source wins** and
+the disagreement is recorded here.
+
+| Spec says | The source says | Resolution |
+|---|---|---|
+| Part 1: one "standard header", `paddingTop 10, paddingBottom 6` | Eight distinct header shapes across eleven screens. Hub `paddingVertical 10`; rated solver `paddingVertical 8`; Play Puzzles home `paddingTop 10 / paddingBottom 6` | Encoded **per screen**. `replay_puzzle_core.js` asserts the hub and solver stay different, so the three cannot be folded into one constant later |
+| Part 10.3: "Next Puzzle →" has top margin 8 | `marginBottom: 8` in the StyleSheet **and** an inline `marginTop: 8` at three call sites | Both encoded (`nextMarginTop`, `nextMarginBottom`) |
+| Part 9.2: mode tiles at "13% alpha" / "33% alpha" | `mode.color + '22'` / `+ '55'` — hex bytes, i.e. 13.33% / 33.33% | The bytes are encoded, not the rounded percentages |
+| Part 9.2: hub accents `#A855F7` / `#4A90E2` / `#FF6B35` for Thematic / Turbo / Streak | The screens themselves use `#8E24AA` / `#1E88E5` / `#F4511E` | **Unified onto the screen colours** (the spec's own fix 9.2a). `PuzzleHub.sourceHex` keeps what the source had so the deviation stays checkable |
+| Part 9.2: the folder is `puzzle-rush` | The user-facing name is Puzzle Turbo | Swift types are `Turbo…`; "rush" never appears in UI copy |
+| Part 18: depth 20 / 1000 ms Stockfish | There is no Stockfish in this repo | `LocalEngine` through `engine-host`, at the Analysis Board's measured limits |
+| Part 0: typography | The RN original loads Nunito but never applies it on a puzzle screen | These screens use the **system font**, not `Theme.nunito` |
+
+### Invented constants — Puzzle Hub screens
+
+Nothing below has an RN source, so `selfTestSource` cannot assert it. Each is either new design in
+the spec or a browser-only necessity.
+
+| Constant | Value | Why |
+|---|---|---|
+| `PuzzleGoalStrip.*` | radius 14, ring 44/5, pill 20/10/5, … | Part 15.2 is **new design** — the server had a `/api/daily-goal` endpoint the mobile app never called, so there is no StyleSheet to extract |
+| `PuzzleStatsStyle.*` | card 16/16/12, spark 52, bars 80/4/28, … | Part 10.1's stats **replace** the leaderboard, so the source's geometry is for a different screen |
+| `PuzzleStats.sparkYMargin` | `25` | Spec Part 10.1. Without it a flat rating history clips to both edges of the box |
+| `PuzzleStats.sparkMinPoints` | `2` | **Invented.** A one-point polyline is an invisible dot that reads as a bug, so fewer than two points renders nothing |
+| `statsEmpty` copy | "Solve your first puzzle to start tracking your stats." | **Invented**, agreed with the user: on day one the rating card renders and the four data-driven cards collapse to one line, rather than showing four blank charts |
+| `PuzzleStore.sampleLimit` | `256` | See the Phase A table — the SQL pool materialises a bounded uniform sample rather than the whole match set |
+
+### The layering boundary for `PuzzleStats`
+
+`PuzzleStats` is in Core and is Foundation-only, so it holds no presentation constants: the two
+functions that produce geometry (`sparkline`, `activity`) take their pixel sizes as **parameters**
+and the UI passes them from `PuzzleStatsStyle`. What stays in Core are the domain numbers — how
+many attempts a sparkline looks back over, how many theme rows there is room for. Same boundary
+`AnalysisSession` draws when it publishes raw numbers for each platform's metrics table to map.
+`replay_puzzle_core.js` asserts that no `Color(` and no pixel constant appears in the file.
+
+### Puzzle Hub — Daily and Thematic (spec Parts 11, 12)
+
+| Spec says | The source says | Resolution |
+|---|---|---|
+| Part 11.2: hero subtitle "A new puzzle every day — powered by Chess.com" | the same, plus a `CHESSCOM_API` constant and a credit link | Subtitle changed to **"always offline"**; the credit link and the hostname are deleted. Part 22.2 forbids any hostname in this feature, and the metrics suite asserts the source HAD one so the deletion stays recorded |
+| Part 11.3: Daily's opponent delay is 400 ms, "a small original inconsistency — pick one and be consistent" | `dailySolver` has no `COMPUTER_MOVE_DELAY`; Part 17 gives Daily 400 | **400**, per Part 17, already encoded in `PuzzleSession.Timing` since Phase A |
+| Part 12: Thematic is premium-gated | `thematicGrid` has `lockOverlay`, `lockIcon`, `lockTitle`, `lockSub`, `gridLocked`, `premiumBadge` | All deleted (one-time purchase). Asserted that they were present, so the removal is a decision on record |
+| Part 12.1: the twelve theme labels | `thematicGrid.THEMES`, with labels **and** tile colours | Extracted, not typed. The emoji in Fork, Skewer, Mate in 1 and Middlegame carry U+FE0F and the one in Mate in 2 does not; both languages assert that |
+| Part 18: one engine panel | `thematicSolver` has `padding: 12` and `engineLineRow.paddingVertical: 5` where `playSolver` has 8 and 3 | Encoded separately, with an assertion that they really differ — sharing one set of numbers is the obvious shortcut and it would be wrong |
+
+### Invented constants — Daily and Thematic
+
+None. Every number on these four screens came out of `puzzle_styles.json`.
+
+### Decisions
+
+| Decision | Why |
+|---|---|
+| `puzzle-board.js` is a **factory**, not a singleton | `puzzle-solver.js` is an IIFE with twelve module-level variables. Two solvers alive at once — a Turbo run behind a results overlay, say — would share `session`, `timers` and `engineToken` |
+| Each mode keeps its own chrome | Part 1 says build the *core* once, and `PuzzleSession` is that. The RN source has four separate solver files because the chrome is genuinely all that differs: Daily a banner, Thematic a stats bar, Streak a result overlay, Turbo a clock and lives |
+| `bottomPanel` takes a mode and DERIVES from `WRONG_POLICY` | It was written phase-only for Play and offered Streak and Turbo a Retry their own policy forbids. Restating a fact that already has a home is how the two came to disagree |
+| `hasEnginePanel` / `hasSaveSheet` are facts, not preferences | `puzzle_styles.json` carries `enginePanel*` only on `playSolver` and `thematicSolver`, and `savePuzzle*` only on `playSolver`. Offering those buttons elsewhere would be inventing UI |
+| `rushBest` is keyed by **String** in both languages | JSON object keys are strings, so a numeric key in JS round-tripped to a string and the two sides disagreed about whether `rushBest[3]` and `rushBest["3"]` were the same slot |
+| `RushEndReason` is enumerated in JS too | Swift's is an enum, so a typo there is a compile error. `'timesUp'` for `'timeUp'` would have passed silently and reached the results screen |
+| The mutation harness runs **every** pure suite | Six mutants survived its first Phase-D run purely because it executed only `puzzle_core_test.js` while their assertions lived elsewhere. The tests were there; the harness was the gap |
+| `TurboRun` is a **new** engine, not part of `PuzzleRush` | `PuzzleRush` is presentation (`modes`, `bestScore`, `modeLabel`). Turbo's lives, target rating and score span a whole run, and `PuzzleSession` resets per puzzle — so the whole of Part 14.2 lived nowhere |
+| Turbo's warmup is **5**, Streak's is **10** | Both extracted from the RN source (`turboRun.moduleConstants.RUSH_WARMUP_COUNT` vs `StreakEngine.warmupCount`). They look like the same constant and are not |
+| A wrong Turbo answer raises the target by **10** | `DIFFICULTY_STEP_WRONG` is positive in the source. A rush gets harder whatever you do; missing only slows the climb |
+| Turbo's clock is derived from `startedAt`, never accumulated | Same rule as the rated timer. A delayed or dropped tick cannot drift a clock that is recomputed from a timestamp |
+| `TurboRun.formatClock` is separate from `PuzzleDisplay.formatTime` | Turbo prints `3:00`, the rated screen prints `03:00`. Sharing one function would silently restyle one of them |
+| `served()` guards on `startedAt == nil` **only** | The extra `puzzlesServed == 1` was redundant on a fresh run and wrong on a resumed one, where the count picks up mid-run. Caught by a *surviving* mutant — the suite saying the clause does nothing |
+| `endStreakRun` **requires** `bestBefore` | `StreakEngine.increment` raises `bestStreak` during the run, so comparing at the end made `isNewBest` unreachable-false and the 🏆 badge dead. Passing it is now mandatory in both languages; omitting it throws |
+| A scoreless rush run writes no history row | The rule `endStreakRun` already applied to a zero-length streak. An instant quit was polluting the mode-select screen's last-ten list |
+| `highlightSolution` is its own board channel | Part 13.3 needs two tints so the reveal reads as a direction, and it must survive the next `paint()`, which rewrites the last-move squares from the session every time |
+| The feedback dot's geometry is stored as **signed terms** | `left` subtracts its radius term and `top` adds its own. Two hand-typed copies agreeing with each other is not verification — this is the exact shape of the bug that shipped the annotation badge in the wrong corner in both languages |
+| The board flip is **asymmetric** | `col = black ? 7 - file : file` but `row = black ? rank : 7 - rank`. Extracted, not reasoned about |
+| Turbo owns the `pzr-` / `pzrr-` CSS prefix | Thematic already had `pzt-`; `.pzt-title` and `.pzt-card` would have been shared between two unrelated screens |
+| The Part 22.2 offline scan excludes the SVG namespace and the metrics self-test | `createElementNS` needs `http://www.w3.org/2000/svg`, which is an XML identifier and not an address, and `puzzle-metrics.js` quotes the source's `api.chess.com` in order to prove the port dropped it. Asserting a URL is absent is not calling it |
+| The puzzle path has **four** sounds, not six | `hooks/usePuzzleSound.ts` loads `gameStart`/`move`/`capture`/`gameOver` and nothing else, and `playMoveSound` is capture-or-move. `check.mp3` and `castling.mp3` ship and the hub never reaches them — the fuller chain is the Play screen's `SoundManager`. Pinned so it is not "fixed" |
+| Sound names and delays are **extracted**, like every other constant | They were the last hand-typed values in the port, and three of the five screens had the sound wiring wrong precisely because nothing compared them to the source. `rn_ast.js` now collects `playSound`/`playMoveSound` calls with their enclosing function, and every `setTimeout` delay |
+| A named delay that cannot be resolved is **fatal** | `setTimeout(fn, COMPUTER_MOVE_DELAY)` is an identifier, not a literal. Matching only literals silently dropped Streak entirely — a missing delay is invisible downstream, so the extractor exits rather than skipping |
+| Streak and Turbo do not chime on a correct solve | Their `gameOver` marks a **run** ending (`endGame()` in Turbo, the failure branch in Streak). Play, Daily and Thematic are one-puzzle-at-a-time, so finishing *is* the event and they do chime |
+| `endStreakRun` compares with `>=`, so a TIE shows 🏆 NEW BEST | Deliberate parity: the RN screen ends a run on `currentStreak >= bestStreak`. Its `>=` compensated for the server bumping the row mid-run; `bestBefore` removes the need for that, but the user-visible rule — matching your record is celebrated — is what the app does |
+| `bestBefore` is kept even though `>=` makes it redundant | With `>=`, reading the live `bestStreak` is provably equivalent: `length >= max(b, length)` iff `length >= b`. `bestBefore` is kept because it does not depend on `increment` raising the best to exactly that maximum, so it survives a change to the ramp that the live read would not. The corresponding mutant was removed rather than left as a false coverage hole |
+| One haptic, on **pickup**, in the shared board | `DragDropChessBoard.tsx:351` fires a single `ImpactFeedbackStyle.Light` after three guards — the square holds a piece, it belongs to the side to move, it passes the colour filter. `_targetsFrom()` is those three rolled into one. Never on drop, never on a right or wrong answer, and not per-screen |
+| `navigator.vibrate` is a no-op on desktop and iOS Safari | Expected, not a gap. The web mirror exists so the call **site** is defined and asserted; `ios/` reaches the same decision through `PuzzleHaptics.onPickup`, and Android does feel it |
+| Six CSS custom properties were deleted rather than wired | Each was computed from the extraction and written to a property nothing read — the goal ring already passes its track colour to the SVG `stroke` attribute, the banner uses per-state fills, no screen renders a loading state, and a one-line row has no gap. Styling a state that cannot appear would be inventing UI |
+| The two promotion dialogs are **two views**, not one | `board.tsx` shows a horizontal row of unlabelled 60pt tiles over a 0.7 scrim titled "Promote to:"; the puzzle screens show a vertical list of labelled accent rows over 0.80/0.82 titled "Choose Promotion". Every extracted property differs. `AnalysisPromotion` and `PuzzlePromotion`, `PromotionOverlay` and `PuzzlePromotionOverlay`, and a `promotionLayout` on `<chess-board>` |
+| `PuzzleHaptics` was deleted, not kept | `Haptics.swift` already ports the same `DragDropChessBoard.tsx:351` decision. Two sources of truth for one fact is the failure this project keeps hitting |
+| `PuzzleHubStore` is internal, like every view in the package | Only `Roots.swift` is public. Declaring it public was also a compile error: `PuzzleStore.Puzzle` is internal and a public signature cannot name it |
+| The Swift screens serve **only** through the store | `serve*` commits `seen` and persists in one step. A screen reaching the pool directly would mutate the in-memory set and never write it back, so the saved file would fork from the live one |
+| The old sample puzzles live on at a **dev** entry | `AppShell`'s `Dev · Sample Puzzles`, mirroring `?dev=samples` in `web-demo`. They use the opposite move convention (`solution[0]` is the solver's, the corpus has `moves[0]` belonging to the opponent), so they cannot share the hub's solver. `PuzzlesPhone` was deleted outright — a second unreachable copy is one too many |
+| The hub hero is a **glyph** standing in for an image | The source renders `PuzzleKnightImg`. Both twins substitute `♞`; it was briefly a puzzle piece in Swift and a knight in JS, which the string-parity check caught the moment it existed |
+| `AnalysisSession.engineRows` is also a static | The puzzle suggestions panel is the same panel, and it has no session to hang off. Duplicating the formatting would mean two places to get `pvPreview` and `displayText` right |
+| A mutation harness spanning two languages needs a **two-directory restore** | The per-mutant restore said `JS` after Swift files were added, so every Swift mutant was written into `web-demo/js/` as a stray while the real file kept its mutation. Four unrelated mutants then reported the same leaked failure. A restore that restores the wrong file reports kills that never happened |
+| A positional check is not a semantic one | The lock-ordering assertion passed a mutant that disabled the guard with `if false`, because the text order was unchanged. The replay now asserts the condition itself |

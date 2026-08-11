@@ -171,6 +171,34 @@ struct BoardStyle: Equatable {
 }
 
 /// Highlight colours and legal-move indicators (spec 3.3, 3.7).
+/// The Analysis Board's promotion dialog, from `board.tsx`'s own StyleSheet.
+///
+/// **Not** `PuzzlePromotion`. The two dialogs share a name and nothing else: this one is a
+/// horizontal row of square tiles with no labels, over a lighter scrim; the puzzle hub's is a
+/// vertical list of labelled, accent-filled rows. Every extracted property differs, so making one
+/// component serve both would silently restyle whichever screen lost the argument.
+///
+/// Values from `tools/metrics/board_styles.json` -> `stylesheets.styles.promotion*`.
+enum AnalysisPromotion {
+    static let scrim = Color.black.opacity(0.7)
+    static let zIndex: Double = 100
+    static let dialogFill = Theme.c(0x37474F)
+    static let dialogRadius: CGFloat = 16
+    static let dialogPadding: CGFloat = 20
+    static let elevation: CGFloat = 10
+    static let titleSize: CGFloat = 16
+    static let titleColor = Theme.c(0xECEFF1)
+    static let titleMarginBottom: CGFloat = 16
+    static let optionsGap: CGFloat = 12
+    static let optionSize: CGFloat = 60
+    static let optionRadius: CGFloat = 12
+    static let optionFill = Theme.c(0x455A64)
+    /// Same fixed order and no cancel as everywhere else — one must be chosen.
+    static let order: [PieceKind] = [.queen, .rook, .bishop, .knight]
+    /// board.tsx:3241. The puzzle hub says "Choose Promotion" — another way the two differ.
+    static let title = "Promote to:"
+}
+
 enum AnalysisIndicator {
     static let selected = Theme.c(0xF6F669)
     static let lastMove = Theme.c(0xCDD26A)

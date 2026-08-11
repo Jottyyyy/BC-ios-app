@@ -48,6 +48,7 @@ tools/eco/build_eco.php          # vendored CC0 opening TSVs → the bundled ECO
 tools/metrics/extract_board_styles.js # TS AST walk over the RN source → board_styles.json
 tools/qa/js_goldens.js           # the JavaScript gate — the one that runs on the Windows checkout
 tools/qa/mutation_test.py        # mutation testing (proves the suite catches bugs)
+tools/puzzlebank/build_puzzles.py# 550k-row Lichess CSV → the curated 93k puzzles.sqlite (deterministic)
 Goldens/*.json                   # generated golden vectors (curated + randomized)
 PORTING_NOTES.md                 # decisions & deviations
 ```

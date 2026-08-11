@@ -46,6 +46,9 @@ python3 tools/qa/mutation_test.py             # mutation testing (proves the sui
 # --- the JavaScript gate: the ONE full suite that runs on this Windows checkout ---
 node tools/qa/js_goldens.js                   # every JS suite + the oracle replays + the Swift cross-checks
 node tools/qa/swift_lint.js                   # brackets + public-exposes-internal, for uncompilable Swift
+node tools/qa/swift_symbol_check.js           # every Namespace.member and Puzzle*/Analysis* type resolves
+node tools/qa/replay_puzzle_vm.js             # the Swift screens BRANCHES, replayed against the JS twin
+# ^ run these two with NO arguments: narrowing degrades them (swift_lint warns when it happens)
 node tools/metrics/extract_board_styles.js    # re-derive board_styles.json from the RN source (committed)
 
 # --- macOS demo app (BiyaherongUI package) ---
@@ -53,8 +56,11 @@ DemoApp/run-demo.sh                           # build (release) + bundle + launc
 cd DemoApp && swift run DemoApp               # run the demo executable directly (faster dev loop)
 cd DemoApp && swift run PieceArtCheck         # 99-assertion SVG piece-renderer self-check
 
-# --- Puzzle bank (later phase) ---
-python3 tools/puzzlebank/build_puzzles.py <in.csv> <out.sqlite>   # CSV -> read-only puzzles.sqlite
+# --- Puzzle bank (repo-relative defaults; ~9s) ---
+python3 tools/puzzlebank/build_puzzles.py     # 550k-row CSV -> curated 93k puzzles.sqlite + web slice
+node tools/qa/puzzle_corpus_check.js          # quotas, indexes, every line replayed through the engine
+python3 tools/qa/corpus_mutation_test.py      # proves that gate is not vacuous
+node tools/qa/puzzle_core_mutation_test.js    # ditto for the session/selection/progress suite
 
 # --- iOS app (macOS + Xcode 16+ only) ---
 cd ios && xcodegen generate && open Biyaherong.xcodeproj          # see ios/BUILD-iOS.md
@@ -68,9 +74,12 @@ cd ios && xcodegen generate && open Biyaherong.xcodeproj          # see ios/BUIL
 - **Running a single test/group is not supported by any flag.** `ParityRunner` always runs all groups; its
   only optional argument is an alternate goldens directory (`swift run ParityRunner /path/to/Goldens`). To
   narrow scope, edit `Sources/ParityRunner/main.swift`.
-- ⚠ **`tools/qa/mutation_test.py`** and **`tools/puzzlebank/build_puzzles.py`** contain **hardcoded macOS
-  paths** (`/Users/…`). Edit `ROOT`/default paths (or pass explicit args to build_puzzles) before running
-  on this Windows checkout.
+- ⚠ **`tools/qa/mutation_test.py`** still contains **hardcoded macOS paths** (`/Users/…`). Edit `ROOT`
+  before running it on this Windows checkout. (`tools/puzzlebank/build_puzzles.py` and
+  `tools/qa/corpus_mutation_test.py` are now repo-relative.)
+- **`DemoApp/Sources/BiyaherongUI/puzzles.sqlite` is generated but deliberately COMMITTED** — CI clones
+  this repo alone and never sees the source CSV in the sibling Laravel repo. The build is deterministic,
+  so an unchanged corpus produces no diff.
 - **CI (`codemagic.yaml`)** only builds/ships the iOS app (workflows `ios-free-unsigned`, `ios-testflight`).
   **It does not run the parity or mutation suites** — those are local/dev gates.
 
@@ -85,7 +94,9 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
 - **`Sources/BiyaherongCoachCore/`** — the domain engines and *test oracle*. **Foundation only** (no
   UIKit/SwiftUI/SwiftData). Engines: `ChessBoard` (FEN + legal moves + SAN, perft-verified), `ChessAI`
   (negamax + PST eval + 5 coach personas), `Rating` (ELO K=32/floor 400 + tiers), `Streak`,
-  `PuzzleServing`, `DailyLimits`, `DailyGoal`, `PuzzleRush`, `GameReview`, `Tournament` (Swiss/Round-Robin
+  `PuzzleServing`, `DailyLimits`, `DailyGoal`, `PuzzleRush`, `PuzzleSession` (the one solver core all
+  five puzzle modes configure), `PuzzleSelection` (the ladders over an abstract pool),
+  `PuzzleProgress`, `GameReview`, `Tournament` (Swiss/Round-Robin
   + Buchholz/SB/direct-encounter tiebreaks), `PHPCompat`. The Analysis Board adds `ChessNotation`
   (SAN/UCI *parsing*), `ChessRules`, `MoveTree`, `PGN`, `AnalysisEngine` + `LocalEngine`, `OpeningBook`,
   `ReviewAnnotator`, `AnalysisSession`, `AnalysisStore` and `PositionEditor` — all Foundation-only, all

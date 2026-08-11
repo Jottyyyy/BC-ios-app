@@ -1,51 +1,9 @@
 import SwiftUI
 import BiyaherongCoachCore
 
-// Shared piece-mutation helpers (used by the puzzle board; mirror ChessGameVM's logic).
-func capturedPiece(in pos: ChessPosition, move m: Move) -> Piece? {
-    let moving = pos.squares[m.from]!
-    let isEP = moving.kind == .pawn && m.to == pos.enPassant && pos.squares[m.to] == nil
-    let cs = isEP ? Square.make(file: Square.file(m.to), rank: Square.rank(m.from))
-                  : (pos.squares[m.to] != nil ? m.to : nil)
-    return cs.flatMap { pos.squares[$0] }
-}
-
-func mutatePieces(_ pieces: inout [BoardPiece], move m: Move, positionBefore pos: ChessPosition) {
-    let moving = pos.squares[m.from]!
-    let isEP = moving.kind == .pawn && m.to == pos.enPassant && pos.squares[m.to] == nil
-    let capSq = isEP ? Square.make(file: Square.file(m.to), rank: Square.rank(m.from))
-                     : (pos.squares[m.to] != nil ? m.to : nil)
-    if let cs = capSq { pieces.removeAll { $0.square == cs } }
-    if let idx = pieces.firstIndex(where: { $0.square == m.from }) {
-        if let promo = m.promotion { pieces[idx].piece = Piece(moving.color, promo) }
-        pieces[idx].square = m.to
-    }
-    if moving.kind == .king, abs(Square.file(m.to) - Square.file(m.from)) == 2 {
-        let rank = Square.rank(m.from)
-        let (rf, rt) = Square.file(m.to) == 6
-            ? (Square.make(file: 7, rank: rank), Square.make(file: 5, rank: rank))
-            : (Square.make(file: 0, rank: rank), Square.make(file: 3, rank: rank))
-        if let ri = pieces.firstIndex(where: { $0.square == rf }) { pieces[ri].square = rt }
-    }
-}
-
-func move(fromUci uci: String, in pos: ChessPosition) -> Move? {
-    let cs = Array(uci)
-    guard cs.count >= 4,
-          let from = Square.index(String(cs[0...1])),
-          let to = Square.index(String(cs[2...3])) else { return nil }
-    var promo: PieceKind?
-    if cs.count >= 5 { promo = ["q": .queen, "r": .rook, "b": .bishop, "n": .knight][Character(cs[4].lowercased())] }
-    return pos.legalMoves().first { $0.from == from && $0.to == to && $0.promotion == promo }
-}
-
-func piecesFrom(_ pos: ChessPosition) -> [BoardPiece] {
-    (0..<64).compactMap { sq in pos.squares[sq].map { BoardPiece(id: UUID(), square: sq, piece: $0) } }
-}
-
 @MainActor
 final class PuzzleVM: ObservableObject {
-    enum Phase { case solving, solved, failed, empty }
+    enum SolveState { case solving, solved, failed, empty }
 
     @Published var pieces: [BoardPiece] = []
     @Published var selected: Int? = nil
@@ -58,7 +16,7 @@ final class PuzzleVM: ObservableObject {
     @Published var solved = 0
     @Published var attempted = 0
     @Published var lastDelta = 0
-    @Published var phase: Phase = .empty
+    @Published var phase: SolveState = .empty
     @Published var message = "Loading puzzles…"
     @Published var puzzle: PuzzleStore.Puzzle?
     @Published var sideToMove: PieceColor = .white

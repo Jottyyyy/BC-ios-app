@@ -598,6 +598,39 @@ function selfTest() {
     check(b._overlayEl.children.length === 2, 'pre-connect arrows are drawn once the overlay exists');
   })();
 
+  // ---- the two-toned solution highlight (Puzzle Streak, Part 13.3) ------------------
+  // `highlightLastMove` paints both squares one colour. The streak solution strip shows the
+  // correct move with a LIGHTER origin and a STRONGER destination, so the direction reads at a
+  // glance — one class cannot express that.
+  (function () {
+    var b = makeBoard({});
+    var from = b._cellBySq.get(E2), to = b._cellBySq.get(E4);
+
+    check(!from.classList.contains('solfrom'), 'no solution highlight by default');
+    b.highlightSolution(E2, E4);
+    check(from.classList.contains('solfrom'), 'the origin gets its own class');
+    check(to.classList.contains('solto'), 'and the destination a different one');
+    check(!from.classList.contains('solto') && !to.classList.contains('solfrom'),
+      'the two are not interchangeable — that is the whole point');
+    b.highlightSolution(null);
+    check(!from.classList.contains('solfrom') && !to.classList.contains('solto'),
+      'passing null clears it');
+
+    // Additive: it must not disturb the last-move highlight, and must win where they overlap.
+    b.highlightLastMove(E2, E4);
+    check(from.classList.contains('last'), 'the last move still marks its squares');
+    b.highlightSolution(E2, E4);
+    check(from.classList.contains('last') && from.classList.contains('solfrom'),
+      'and a solution on the same square adds to it rather than replacing it');
+    // Two distinct custom properties back them, or both would render identically.
+    var src = require('fs').readFileSync(
+      require('path').join(__dirname, '..', '..', 'web-demo', 'js', 'chess-board.js'), 'utf8');
+    check(src.indexOf('--hl-sol-from') > 0 && src.indexOf('--hl-sol-to') > 0,
+      'each tone has its own custom property');
+    check(src.indexOf('.sq.solfrom::before') > 0 && src.indexOf('.sq.solto::before') > 0,
+      'and its own rule');
+  })();
+
   function report() {
     if (extra > 0) failures.push('… and ' + extra + ' more failures');
     return {
@@ -608,6 +641,52 @@ function selfTest() {
           + failures.map(function (x) { return '  ✗ ' + x; }).join('\n')
     };
   }
+
+  // ---- the pickup haptic ------------------------------------------------------------------
+  //
+  // `DragDropChessBoard.tsx:351` fires ONE light impact, on pickup, after three guards: the square
+  // holds a piece, it belongs to the side to move, and it passes the colour filter. `_targetsFrom`
+  // is those three conditions rolled into one — a square with no legal moves fails all of them —
+  // so the assertion that matters is the negative one: an empty or enemy square must not buzz.
+  {
+    var buzzes = [];
+    // The component runs inside the vm sandbox, so its `navigator` is the SANDBOX's, not Node's.
+    // Stubbing global.navigator here would set a variable the component cannot see, and every
+    // assertion below would pass for the wrong reason.
+    function setNav(v) { dom.sandbox.navigator = v; }
+    setNav({ vibrate: function (ms) { buzzes.push(ms); return true; } });
+    try {
+      var b = makeBoard({ draggable: true, targets: {} });
+      pointer(b, 'pointerdown', E2);
+      check(buzzes.length === 0, 'a square with no legal moves does not buzz');
+
+      var d = makeBoard({ draggable: true, targets: { 12: [E4] } });
+      pointer(d, 'pointerdown', E2);
+      check(buzzes.length === 1, 'picking up a movable piece buzzes exactly once');
+      check(buzzes[0] > 0, 'with a positive duration, got ' + buzzes[0]);
+
+      // On DROP, never again — the source has no drop haptic.
+      pointer(d, 'pointermove', E4);
+      pointer(d, 'pointerup', E4);
+      check(buzzes.length === 1, 'and completing the move does not buzz again');
+
+      // Opt-out, so a screen can silence it without re-deriving the trigger somewhere else.
+      var q = makeBoard({ draggable: true, targets: { 12: [E4] } });
+      q.haptics = false;
+      pointer(q, 'pointerdown', E2);
+      check(buzzes.length === 1, 'and .haptics = false silences it');
+      check(q.haptics === false, 'which the getter reports');
+
+      // A browser without the API must not throw — desktop and iOS Safari have no vibrate.
+      setNav({});
+      var n = makeBoard({ draggable: true, targets: { 12: [E4] } });
+      pointer(n, 'pointerdown', E2);
+      check(!!n._drag, 'a browser with no vibrate() still starts the drag rather than throwing');
+    } finally {
+      delete dom.sandbox.navigator;
+    }
+  }
+
   return report();
 }
 
