@@ -16,6 +16,10 @@ xcuserdata/
 # The 96 MB puzzle CSV is sourced from the Laravel repo at build time; do not commit it here.
 Goldens/*.tmp
 
-# Generated puzzle DB (regenerate via tools/puzzlebank/build_puzzles.py)
-DemoApp/Sources/DemoApp/puzzles.sqlite
+# The generated puzzle DB is deliberately NOT ignored. It is built from the 550k-row CSV in the
+# sibling Laravel repo, which codemagic.yaml never sees — CI clones this repo alone — so the
+# 33 MB DemoApp/Sources/BiyaherongUI/puzzles.sqlite has to be tracked. Regenerate it with
+# tools/puzzlebank/build_puzzles.py; the build is deterministic, so an unchanged corpus produces
+# no diff. (The line that used to sit here named DemoApp/Sources/DemoApp/puzzles.sqlite, a path
+# that has not existed for several phases.)
 Goldens/

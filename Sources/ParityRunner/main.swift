@@ -2044,6 +2044,697 @@ if let cases = loadOptional("phpcompat_truthy", [TruthyCase].self) {
     for c in cases { h.check(phpStringIsTruthy(c.s) == c.truthy, "truthy(\(c.s)) = \(phpStringIsTruthy(c.s)) != \(c.truthy)") }
 }
 
+// MARK: - Puzzle Hub (spec Parts 4, 5, 7, 8, 15)
+//
+// No goldens: the PHP oracle covers the puzzle ARITHMETIC (`rating`, `serving`, `streak_*`,
+// `rush`, `daily_goal`) and those groups already pass above. What follows is the layer built on
+// top of them — the solver state machine, the selection ladders over a pool, and the local
+// progress store — which has no server counterpart to generate vectors from.
+//
+// The fixtures are real rows from the bundled corpus and their expectations were COMPUTED by
+// `web-demo/js/puzzle-session.js` (emitted by `tools/qa/gen_puzzle_fixtures.js`), not typed out.
+// `tools/qa/replay_puzzle_core.js` re-derives every one of them from this source text, so a later
+// hand-edit here that drifts from the JS is caught even though `swift` cannot run on the
+// authoring checkout.
+
+// GENERATED FIXTURES — real rows from the bundled corpus, emitted by
+// tools/qa/gen_puzzle_fixtures.js. Ids are SHIPPING-CORPUS ids resolved by lichess_id,
+// not the browser slice's renumbered ones. Expectations were COMPUTED by
+// web-demo/js/puzzle-session.js, not typed by hand.
+struct PZFixture { let key: String; let id: Int; let lichessId: String; let fen: String
+                   let moves: [String]
+                   let rating: Int; let themes: [String]; let userIsWhite: Bool
+                   let flipped: Bool; let wrongMove: String; let pgn: String }
+let pzFixtures: [PZFixture] = [
+    PZFixture(key: "mate1", id: 711,
+              lichessId: "1aq1P", fen: "6k1/1b3ppp/1p2p3/p7/6P1/2rp1N2/1r2BK1P/3R4 b - - 1 41",
+              moves: ["d3e2", "d1d8"],
+              rating: 408, themes: ["backRankMate", "endgame", "mate", "mateIn1", "oneMove"],
+              userIsWhite: true, flipped: false,
+              wrongMove: "d1e1", pgn: "41... dxe2 42. Rd8# *"),
+    PZFixture(key: "four", id: 228,
+              lichessId: "3LbEZ", fen: "7k/4R2p/1p2p2P/2pp1r2/8/P4p1K/1PP5/8 b - - 1 37",
+              moves: ["f3f2", "e7e8", "f5f8", "e8f8"],
+              rating: 400, themes: ["endgame", "mate", "mateIn2", "rookEndgame", "short"],
+              userIsWhite: true, flipped: false,
+              wrongMove: "b2b3", pgn: "37... f2 38. Re8+ Rf8 39. Rxf8# *"),
+    PZFixture(key: "eight", id: 16103,
+              lichessId: "3ef1K", fen: "8/8/8/R1p2rkp/P1K5/8/8/8 w - - 0 46",
+              moves: ["a5c5", "f5c5", "c4c5", "h5h4", "a4a5", "h4h3", "a5a6", "h3h2", "a6a7", "h2h1q"],
+              rating: 795, themes: ["advancedPawn", "crushing", "endgame", "promotion", "quietMove", "rookEndgame", "veryLong"],
+              userIsWhite: false, flipped: true,
+              wrongMove: "f5e5", pgn: "46. Rxc5 Rxc5+ 47. Kxc5 h4 48. a5 h3 49. a6 h2 50. a7 h1=Q *"),
+    PZFixture(key: "promo", id: 9645,
+              lichessId: "5SvTF", fen: "2kRr3/1bP3pp/1B6/1P6/4p3/3p2P1/4P2P/6K1 b - - 3 36",
+              moves: ["e8d8", "c7d8q"],
+              rating: 652, themes: ["advancedPawn", "endgame", "master", "mate", "mateIn1", "oneMove", "promotion"],
+              userIsWhite: true, flipped: false,
+              wrongMove: "g1h1", pgn: "36... Rxd8 37. cxd8=Q# *"),
+    PZFixture(key: "solverBlack", id: 739,
+              lichessId: "1sxiH", fen: "4r1k1/p4ppp/Q7/8/8/6P1/P5PP/2R1r2K w - - 1 30",
+              moves: ["c1e1", "e8e1", "a6f1", "e1f1"],
+              rating: 409, themes: ["backRankMate", "endgame", "mate", "mateIn2", "queenRookEndgame", "short"],
+              userIsWhite: false, flipped: true,
+              wrongMove: "f7f6", pgn: "30. Rxe1 Rxe1+ 31. Qf1 Rxf1# *"),
+    PZFixture(key: "solverWhite", id: 228,
+              lichessId: "3LbEZ", fen: "7k/4R2p/1p2p2P/2pp1r2/8/P4p1K/1PP5/8 b - - 1 37",
+              moves: ["f3f2", "e7e8", "f5f8", "e8f8"],
+              rating: 400, themes: ["endgame", "mate", "mateIn2", "rookEndgame", "short"],
+              userIsWhite: true, flipped: false,
+              wrongMove: "b2b3", pgn: "37... f2 38. Re8+ Rf8 39. Rxf8# *"),
+    PZFixture(key: "offbook", id: 2347,
+              lichessId: "2yEwW", fen: "r1bqkb1r/pp1pnppp/2n1p3/2p2P1Q/2B1P3/8/PPPP2PP/RNB1K1NR b KQkq - 0 5",
+              moves: ["e6f5", "h5f7"],
+              rating: 456, themes: ["attackingF2F7", "mate", "mateIn1", "oneMove", "opening"],
+              userIsWhite: true, flipped: false,
+              wrongMove: "b1c3", pgn: "5... exf5 6. Qxf7# *"),
+]
+let pzOffbookMate = "c4f7"   // a mate that is NOT the stored line
+
+
+/// `PieceKind` from a UCI promotion suffix, for the fixture walker.
+func pzPromo(_ uci: String) -> PieceKind? {
+    switch uci.last {
+    case "q": return .queen
+    case "r": return .rook
+    case "b": return .bishop
+    case "n": return .knight
+    default: return nil
+    }
+}
+
+func pzPuzzle(_ f: PZFixture) -> PuzzleSession.Puzzle {
+    PuzzleSession.Puzzle(id: f.id, fen: f.fen, moves: f.moves, rating: f.rating,
+                         themes: f.themes, openingTags: [])
+}
+
+h.begin("puzzle_session")
+do {
+    // ---- 5.1 the move convention, on every fixture ---------------------------
+    for f in pzFixtures {
+        guard var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .play) else {
+            h.check(false, "[\(f.key)] the fixture FEN parses"); continue
+        }
+        h.check(s.phase == .loading, "[\(f.key)] a new session starts in loading")
+        h.check(s.moveIndex == 1, "[\(f.key)] moveIndex starts at 1 — index 0 is the opponent's")
+        h.check(s.userColor == (f.userIsWhite ? .white : .black),
+                "[\(f.key)] the solver is the OPPOSITE of the FEN's side to move")
+        h.check(s.flipped == f.flipped, "[\(f.key)] the board flips when the solver plays Black")
+        h.check(s.mistakes == 0, "[\(f.key)] no mistakes yet")
+        h.check(f.moves.count % 2 == 0, "[\(f.key)] the corpus move count is even")
+
+        let setup = s.applySetupMove()
+        h.check(setup.applied, "[\(f.key)] the setup move applies")
+        h.check(setup.uci == f.moves[0], "[\(f.key)] and it is moves[0]")
+        h.check(s.phase == .playing, "[\(f.key)] the session becomes playable")
+        h.check(s.position.sideToMove == s.userColor, "[\(f.key)] then it is the solver's turn")
+        h.check(s.lastMove?.from == String(f.moves[0].prefix(2)),
+                "[\(f.key)] lastMove points at the setup move")
+        h.check(!s.applySetupMove().applied, "[\(f.key)] applying the setup twice is a no-op")
+    }
+
+    // ---- userColor does not depend on the mode -------------------------------
+    for f in pzFixtures {
+        for m in PuzzleSession.Mode.allCases {
+            h.check(PuzzleSession.create(puzzle: pzPuzzle(f), mode: m)?.userColor
+                        == (f.userIsWhite ? .white : .black),
+                    "[\(f.key)/\(m.rawValue)] userColor is mode-independent")
+        }
+    }
+    h.check(PuzzleSession.create(puzzle: PuzzleSession.Puzzle(id: 0, fen: "not a fen",
+                                                              moves: ["a2a4"], rating: 0),
+                                 mode: .play) == nil,
+            "an unparseable FEN yields no session rather than trapping")
+    h.check(PuzzleSession.userColor(fen: pzFixtures[0].fen)
+                == (pzFixtures[0].userIsWhite ? .white : .black), "userColor(fen:) agrees")
+
+    // ---- solving a whole line, in every mode ---------------------------------
+    for f in pzFixtures {
+        for mode in PuzzleSession.Mode.allCases {
+            guard var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: mode) else { continue }
+            _ = s.applySetupMove()
+            var idx = 1
+            var guardCount = 0
+            while s.phase == .playing && idx < f.moves.count && guardCount < 40 {
+                guardCount += 1
+                let u = f.moves[idx]
+                let out = s.submit(from: String(u.prefix(2)),
+                                   to: String(u.dropFirst(2).prefix(2)),
+                                   promotion: u.count == 5 ? pzPromo(u) : nil)
+                guard case .correct(let c) = out else {
+                    h.check(false, "[\(f.key)/\(mode.rawValue)] ply \(idx) should be correct")
+                    break
+                }
+                if c.solved { break }
+                h.check(c.opponentReplyAfterMs == PuzzleSession.Timing.opponentDelayMs(mode),
+                        "[\(f.key)/\(mode.rawValue)] the reply delay is the master-table value")
+                let reply = s.applyOpponentReply()
+                h.check(reply.applied, "[\(f.key)/\(mode.rawValue)] the opponent replies")
+                idx += 2
+                h.check(s.moveIndex == idx, "[\(f.key)/\(mode.rawValue)] moveIndex advances by 2")
+            }
+            h.check(s.phase == .solved, "[\(f.key)/\(mode.rawValue)] the line solves")
+            h.check(!s.applyOpponentReply().applied,
+                    "[\(f.key)/\(mode.rawValue)] no reply is pending after a solve")
+        }
+    }
+
+    // ---- 5.4 rule 1: the checkmate short-circuit -----------------------------
+    if let f = pzFixtures.first(where: { $0.key == "offbook" }),
+       var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .play) {
+        _ = s.applySetupMove()
+        let out = s.submit(from: String(pzOffbookMate.prefix(2)),
+                           to: String(pzOffbookMate.dropFirst(2).prefix(2)))
+        if case .correct(let c) = out {
+            h.check(c.byCheckmate, "an OFF-BOOK mate is correct, and flagged as such")
+            h.check(c.played == pzOffbookMate, "the accepted move is the one played")
+            h.check(c.played != f.moves[1], "and it is NOT the stored answer")
+        } else {
+            h.check(false, "the checkmate short-circuit accepts an off-book mate")
+        }
+        h.check(s.phase == .solved, "the puzzle ends")
+        h.check(s.solvedByCheckmate, "and records how")
+        h.check(s.position.status() == .checkmate, "the board really is mate")
+        // This is exactly the case the server's comparator got wrong (spec fix #10).
+        h.check(!PuzzleRatingEngine.compareMoves(correct: [f.moves[1]], user: [pzOffbookMate]),
+                "the server's compareMoves would have called this wrong")
+    }
+
+    // ---- 5.5 the five wrong-move policies ------------------------------------
+    for f in pzFixtures where !f.wrongMove.isEmpty {
+        for mode in PuzzleSession.Mode.allCases {
+            guard var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: mode) else { continue }
+            _ = s.applySetupMove()
+            let before = s.position.fen
+            let out = s.submit(from: String(f.wrongMove.prefix(2)),
+                               to: String(f.wrongMove.dropFirst(2).prefix(2)))
+            guard case .wrong(let w) = out else {
+                h.check(false, "[\(f.key)/\(mode.rawValue)] an off-book non-mate is wrong")
+                continue
+            }
+            let p = PuzzleSession.wrongPolicy(mode)
+            h.check(w.policy == p, "[\(f.key)/\(mode.rawValue)] the mode's policy is reported")
+            h.check(w.expected == f.moves[1], "[\(f.key)/\(mode.rawValue)] the expected move")
+            h.check(w.mistakes == 1, "[\(f.key)/\(mode.rawValue)] the mistake is counted")
+            h.check((s.position.fen == before) == p.undo,
+                    "[\(f.key)/\(mode.rawValue)] the board \(p.undo ? "snaps back" : "keeps the move")")
+            h.check(s.phase == (p.staysPlayable ? .playing : .failed),
+                    "[\(f.key)/\(mode.rawValue)] phase after a wrong move")
+            h.check(w.sound == (p.gameOverSound ? .gameOver : nil),
+                    "[\(f.key)/\(mode.rawValue)] wrong-move sound")
+        }
+    }
+
+    // The policy table itself, read off Part 5.5 line for line.
+    let pPlay = PuzzleSession.wrongPolicy(.play)
+    h.check(pPlay.undo && !pPlay.staysPlayable && !pPlay.endsRun && !pPlay.costsALife
+            && pPlay.bannerMs == nil && pPlay.advanceMs == nil && !pPlay.gameOverSound
+            && pPlay.offersRetry, "Play: undo, Retry/Solution/Next, no sound")
+    let pDaily = PuzzleSession.wrongPolicy(.daily)
+    h.check(pDaily.undo && pDaily.staysPlayable && pDaily.bannerMs == 1300 && pDaily.offersRetry
+            && !pDaily.endsRun, "Daily: undo, a 1300ms banner, unlimited retries")
+    let pThem = PuzzleSession.wrongPolicy(.thematic)
+    h.check(pThem.undo && !pThem.staysPlayable && !pThem.endsRun && pThem.offersRetry,
+            "Thematic: undo, Retry/Solution, no rating penalty")
+    let pStreak = PuzzleSession.wrongPolicy(.streak)
+    h.check(pStreak.undo && pStreak.endsRun && pStreak.gameOverSound && !pStreak.offersRetry,
+            "Streak: undo, the run ends immediately, game-over sound")
+    let pTurbo = PuzzleSession.wrongPolicy(.turbo)
+    h.check(!pTurbo.undo && pTurbo.costsALife && pTurbo.advanceMs == 500 && !pTurbo.offersRetry,
+            "Turbo: NO undo, one life, next puzzle in 500ms")
+
+    // Daily's unlimited retries, and that the answer still works afterwards.
+    if let f = pzFixtures.first(where: { $0.key == "four" }),
+       var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .daily) {
+        _ = s.applySetupMove()
+        for _ in 0..<3 {
+            _ = s.submit(from: String(f.wrongMove.prefix(2)),
+                         to: String(f.wrongMove.dropFirst(2).prefix(2)))
+        }
+        h.check(s.mistakes == 3, "Daily allows repeated wrong tries")
+        h.check(s.phase == .playing, "and stays playable")
+        if case .correct = s.submit(from: String(f.moves[1].prefix(2)),
+                                    to: String(f.moves[1].dropFirst(2).prefix(2))) {
+            h.check(true, "and the right answer is still accepted")
+        } else { h.check(false, "and the right answer is still accepted") }
+    }
+
+    // ---- an illegal move is a silent no-op everywhere ------------------------
+    for mode in PuzzleSession.Mode.allCases {
+        guard var s = PuzzleSession.create(puzzle: pzPuzzle(pzFixtures[1]), mode: mode) else { continue }
+        _ = s.applySetupMove()
+        let before = s.position.fen
+        h.check(s.submit(from: "a1", to: "a8") == .illegal, "[\(mode.rawValue)] illegal is illegal")
+        h.check(s.mistakes == 0, "[\(mode.rawValue)] and is not a mistake")
+        h.check(s.phase == .playing, "[\(mode.rawValue)] and ends nothing")
+        h.check(s.position.fen == before, "[\(mode.rawValue)] and moves no piece")
+    }
+
+    // ---- 5.6 promotion --------------------------------------------------------
+    if let f = pzFixtures.first(where: { $0.key == "promo" }),
+       var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .play) {
+        _ = s.applySetupMove()
+        let u = f.moves[1]
+        let from = String(u.prefix(2)), to = String(u.dropFirst(2).prefix(2))
+        h.check(s.needsPromotion(from: from, to: to),
+                "a pawn reaching the last rank needs the dialog")
+        h.check(!s.needsPromotion(from: "z9", to: "a1"), "a nonsense square does not")
+        // needsPromotion must agree with the engine over EVERY legal move, not just this one.
+        let engineSays = s.position.legalMoves().filter { m in
+            s.position.squares[m.from]?.kind == .pawn
+                && (Square.rank(m.to) == 7 || Square.rank(m.to) == 0)
+        }.count
+        let weSay = s.position.legalMoves().filter {
+            s.needsPromotion(from: Square.name($0.from), to: Square.name($0.to))
+        }.count
+        h.check(weSay == engineSays, "needsPromotion agrees with the engine on every legal move")
+        // An omitted promotion defaults to queen (5.1).
+        if case .correct = s.submit(from: from, to: to) {
+            h.check(u.hasSuffix("q"), "an omitted promotion defaults to queen")
+        } else { h.check(false, "the promotion move is accepted") }
+    }
+
+    // ---- 10.3 retry and Solution ---------------------------------------------
+    if let f = pzFixtures.first(where: { $0.key == "four" }),
+       var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .play) {
+        _ = s.applySetupMove()
+        _ = s.submit(from: String(f.moves[1].prefix(2)), to: String(f.moves[1].dropFirst(2).prefix(2)))
+        _ = s.applyOpponentReply()
+        h.check(s.moveIndex == 3, "two plies in")
+        let r = s.retry()
+        h.check(s.moveIndex == 1, "retry resets the move index")
+        h.check(s.phase == .loading, "retry returns to the pre-setup state")
+        h.check(s.position.fen == f.fen, "retry rebuilds from the puzzle FEN")
+        h.check(s.lastMove == nil, "retry clears the last move")
+        h.check(r.restartClock, "retry restarts the clock — fix (a)")
+        h.check(r.sound == .gameStart, "retry plays the game-start sound — fix (b)")
+        h.check(!r.submitsRating, "retry never re-submits the rating")
+        h.check(r.setupAfterMs == 500, "retry replays the setup after 500ms")
+    }
+    if let f = pzFixtures.first(where: { $0.key == "eight" }),
+       var s = PuzzleSession.create(puzzle: pzPuzzle(f), mode: .play) {
+        _ = s.applySetupMove()
+        let rev = s.revealSolution()
+        h.check(s.phase == .reviewing, "Solution moves the session to reviewing")
+        h.check(rev.runEngine && rev.maxArrows == 3, "and asks the engine for up to 3 arrows")
+        h.check(rev.remaining.count == f.moves.count - 1, "the remaining line is reported")
+        h.check(rev.remaining.first == f.moves[1], "starting at the solver's next move")
+        // Two-sided free play, judged by nothing.
+        let a = s.position.legalMoves()[0]
+        if case .freePlay = s.submit(from: Square.name(a.from), to: Square.name(a.to),
+                                     promotion: a.promotion) {
+            h.check(true, "a move while reviewing is free play")
+        } else { h.check(false, "a move while reviewing is free play") }
+        h.check(s.mistakes == 0, "and is never scored")
+        let b = s.position.legalMoves()[0]
+        if case .freePlay = s.submit(from: Square.name(b.from), to: Square.name(b.to),
+                                     promotion: b.promotion) {
+            h.check(true, "the opponent's pieces move too")
+        } else { h.check(false, "the opponent's pieces move too") }
+    }
+
+    // ---- 10.3 Save Puzzle -----------------------------------------------------
+    for f in pzFixtures {
+        let p = pzPuzzle(f)
+        h.check(PuzzleSession.solutionPGN(p) == f.pgn, "[\(f.key)] the Save Puzzle PGN")
+        h.check(f.pgn.hasSuffix(" *"), "[\(f.key)] terminated by ` *`")
+        h.check(!f.pgn.contains("[FEN"), "[\(f.key)] no FEN header — it goes in initialFEN")
+        h.check(PuzzleSession.savePuzzleName(p) == "Puzzle #\(f.id)", "[\(f.key)] prefilled name")
+        let notes = PuzzleSession.savePuzzleNotes(p)
+        h.check(notes.hasPrefix("Rating: \(f.rating)"), "[\(f.key)] notes open with the rating")
+        h.check(!notes.split(separator: "\n", omittingEmptySubsequences: false).contains(""),
+                "[\(f.key)] only non-empty lines")
+        h.check(notes.contains("Themes: " + f.themes.joined(separator: ", ")),
+                "[\(f.key)] themes line")
+        h.check(!notes.contains("Opening:"), "[\(f.key)] no opening line when there are no tags")
+    }
+
+    // ---- Part 17, the Master Timing Table -------------------------------------
+    h.check(PuzzleSession.Timing.opponentDelayMs(.play) == 500, "Play opponent delay")
+    h.check(PuzzleSession.Timing.opponentDelayMs(.thematic) == 500, "Thematic opponent delay")
+    h.check(PuzzleSession.Timing.opponentDelayMs(.streak) == 500, "Streak opponent delay")
+    // Part 5.3 says "500 everywhere except Turbo"; Part 17 gives Daily 400. Part 17 wins.
+    h.check(PuzzleSession.Timing.opponentDelayMs(.daily) == 400, "Daily is 400, per the master table")
+    h.check(PuzzleSession.Timing.opponentDelayMs(.turbo) == 300, "Turbo opponent delay")
+    h.check(PuzzleSession.Timing.turboAdvanceMs == 500, "Turbo advances after 500ms")
+    h.check(PuzzleSession.Timing.turboFeedbackMs == 500, "the Turbo feedback dot lives 500ms")
+    h.check(PuzzleSession.Timing.dailyWrongBannerMs == 1300, "the Daily wrong banner lives 1300ms")
+    h.check(PuzzleSession.Timing.tickMs == 1000, "clocks tick every 1000ms")
+    h.check(PuzzleSession.Timing.goalRingMs == 400, "the goal ring animates over 400ms")
+    h.check(PuzzleSession.Timing.draftTTLMs == 86_400_000, "drafts live 24 hours")
+    h.check(PuzzleSession.Timing.turboSeconds(3) == 180, "3-minute Turbo")
+    h.check(PuzzleSession.Timing.turboSeconds(5) == 300, "5-minute Turbo")
+    h.check(PuzzleSession.Timing.turboSeconds(0) == 0, "Infinite Turbo has no clock")
+
+    // ---- Part 15.1, the one predicate ------------------------------------------
+    for m in [PuzzleSession.Mode.play, .daily, .thematic, .streak] {
+        h.check(PuzzleSession.countsTowardDailyGoal(m), "\(m.rawValue) counts toward the daily goal")
+    }
+    h.check(!PuzzleSession.countsTowardDailyGoal(.turbo),
+            "Turbo is excluded — a 3-minute run would make a 10-a-day goal meaningless")
+}
+
+h.begin("puzzle_selection")
+do {
+    // Ids deliberately NOT in rating order, and two candidates exactly on the +-100 boundary:
+    // with the ids sorted, "lowest id" and "closest by ABS" coincide and the three ladders become
+    // indistinguishable; with nothing on the boundary, an inclusive-vs-exclusive window is invisible.
+    let pool = PuzzleSelection.ArrayPool([
+        PuzzleServing.Candidate(id: 1, rating: 1000, themes: ["fork"]),
+        PuzzleServing.Candidate(id: 2, rating: 1050, themes: ["pin"]),
+        PuzzleServing.Candidate(id: 3, rating: 1400, themes: ["fork"]),
+        PuzzleServing.Candidate(id: 4, rating: 1800, themes: ["skewer"]),
+        PuzzleServing.Candidate(id: 5, rating: 1100, themes: ["pin"]),
+        PuzzleServing.Candidate(id: 6, rating: 900, themes: ["pin"]),
+        PuzzleServing.Candidate(id: 7, rating: 1610, themes: ["fork"]),
+    ])
+    h.check(pool.windowUnseen(center: 1000, window: 100, theme: nil, seen: []).count == 4,
+            "whereBetween is inclusive at BOTH ends")
+    h.check(pool.windowUnseen(center: 1000, window: 99, theme: nil, seen: []).count == 2,
+            "one point narrower excludes both edges")
+
+    var r = PuzzleSelection.serveRandom(pool, center: 1000, window: 100, theme: nil, seen: [])
+    h.check(r.stage == .windowUnseen && r.candidate?.id == 1 && !r.didReset, "tier 1")
+    r = PuzzleSelection.serveRandom(pool, center: 1000, window: 100, theme: nil, seen: [1, 2, 5, 6])
+    h.check(r.stage == .anyUnseenRandom && r.candidate?.id == 3, "tier 2: any unseen, random")
+    r = PuzzleSelection.serveRandom(pool, center: 1000, window: 100, theme: nil,
+                                    seen: [1, 2, 3, 4, 5, 6, 7])
+    h.check(r.stage == .afterResetRandom && r.didReset, "tier 3 reports the reset")
+    // Streak's tier 2 is CLOSEST where Play's is random. Unseen is {4 @1800, 7 @1610}: the closest
+    // to 1500 is 7 and the lowest id is 4, so the two ladders cannot agree by coincidence.
+    r = PuzzleSelection.serveClosest(pool, center: 1500, window: 50, theme: nil, seen: [1, 2, 3, 5, 6])
+    h.check(r.stage == .anyUnseenClosest && r.candidate?.id == 7, "streak tier 2 is closest-by-abs")
+    r = PuzzleSelection.serveRandom(pool, center: 1500, window: 50, theme: nil, seen: [1, 2, 3, 5, 6])
+    h.check(r.candidate?.id == 4, "where Play's tier 2 takes the picker's answer")
+    r = PuzzleSelection.serveThematic(pool, center: 1000, theme: "fork", seen: [1])
+    h.check(r.stage == .anyUnseenRandom && r.candidate?.id == 3, "thematic tier 2 is random")
+    r = PuzzleSelection.serveThematic(pool, center: 1000, theme: "fork", seen: [1, 3, 7])
+    h.check(r.stage == .afterResetClosest && r.candidate?.id == 1, "thematic tier 3 is closest")
+    let empty = PuzzleSelection.ArrayPool([])
+    r = PuzzleSelection.serveClosest(empty, center: 1200, window: 50, theme: nil, seen: [])
+    h.check(r.stage == .none && r.candidate == nil && r.didReset,
+            "an empty pool yields nothing, and PHP still deleted the seen rows first")
+
+    // The three ladders here must agree with the golden-pinned array versions, case for case.
+    // This is what lets the SQLite store reuse `PuzzleServing`'s contract without a second port.
+    let arr = pool.candidates
+    for center in [400, 900, 1000, 1200, 1500, 1800, 2400] {
+        for window in [50, 100, 200] {
+            for theme in [nil, "fork", "pin", "skewer", "nosuch"] as [String?] {
+                for seen in [Set<Int>(), Set([1]), Set([1, 2, 3]), Set([1, 2, 3, 4, 5, 6, 7])] {
+                    let a = PuzzleSelection.serveRandom(pool, center: center, window: window,
+                                                        theme: theme, seen: seen)
+                    let b = PuzzleServing.serveRandom(arr, center: center, window: window,
+                                                      theme: theme, seen: seen)
+                    h.check(a == b, "serveRandom(\(center),\(window),\(theme ?? "-")) matches PuzzleServing")
+                    let c = PuzzleSelection.serveClosest(pool, center: center, window: window,
+                                                         theme: theme, seen: seen)
+                    let d = PuzzleServing.serveClosest(arr, center: center, window: window,
+                                                       theme: theme, seen: seen)
+                    h.check(c == d, "serveClosest(\(center),\(window),\(theme ?? "-")) matches PuzzleServing")
+                    if let t = theme {
+                        let e = PuzzleSelection.serveThematic(pool, center: center, window: window,
+                                                              theme: t, seen: seen)
+                        let f = PuzzleServing.serveThematic(arr, center: center, window: window,
+                                                            theme: t, seen: seen)
+                        h.check(e == f, "serveThematic(\(center),\(window),\(t)) matches PuzzleServing")
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- the Tier-3 scope (spec fix #7) ----------------------------------------
+    h.check(PuzzleSelection.scopeForReset(theme: "fork", center: 1200, window: 100,
+                                          seenCount: 5, corpusCount: 1000) == .theme("fork"),
+            "a themed query scopes the wipe to its theme")
+    h.check(PuzzleSelection.scopeForReset(theme: nil, center: 1200, window: 100,
+                                          seenCount: 5, corpusCount: 1000)
+                == .window(lo: 1100, hi: 1300),
+            "an unthemed query scopes to its rating band")
+    h.check(PuzzleSelection.scopeForReset(theme: "fork", center: 1200, window: 100,
+                                          seenCount: 1000, corpusCount: 1000) == .all,
+            "only a genuinely exhausted corpus wipes everything")
+    // The bug itself: exhausting one theme must not cost another mode its history.
+    var seen: Set<Int> = [1, 2, 3, 4, 5, 6, 7]
+    let removed = PuzzleSelection.forget(.theme("fork"), from: &seen, in: pool)
+    h.check(removed == 3, "the three forks are forgotten")
+    h.check(seen == [2, 4, 5, 6], "and nothing else is — this is spec fix #7")
+    var seen2: Set<Int> = [1, 2, 3, 4, 5, 6, 7]
+    h.check(PuzzleSelection.forget(.window(lo: 900, hi: 1100), from: &seen2, in: pool) == 4,
+            "a banded wipe forgets its band")
+    h.check(seen2 == [3, 4, 7], "and leaves the rest")
+    var seen3: Set<Int> = [1, 2, 3]
+    let wiped = PuzzleSelection.forget(.all, from: &seen3, in: pool)
+    h.check(wiped == 3 && seen3.isEmpty, "a global wipe forgets everything")
+
+    // ---- windows (7.2 / 7.3 / 7.4) ---------------------------------------------
+    h.check(PuzzleServing.regularWindow == 100, "rated is +-100")
+    h.check(PuzzleServing.streakWindow == 50, "streak and turbo are +-50")
+    h.check(PuzzleServing.thematicWindow == 200, "thematic is +-200")
+
+    // ---- the daily index (11.1) --------------------------------------------------
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "Asia/Manila")!      // UTC+8: where fix #1 was visible
+    func d(_ y: Int, _ m: Int, _ dd: Int, _ hh: Int = 12) -> Date {
+        cal.date(from: DateComponents(year: y, month: m, day: dd, hour: hh))!
+    }
+    h.check(PuzzleSelection.daysSinceEpoch(d(2026, 1, 1), calendar: cal) == 0, "the epoch is day 0")
+    h.check(PuzzleSelection.daysSinceEpoch(d(2026, 1, 2), calendar: cal) == 1, "the day after is 1")
+    h.check(PuzzleSelection.dailyIndex(d(2026, 1, 1), poolCount: 3000, calendar: cal) == 0,
+            "index 0 at the epoch")
+    h.check(PuzzleSelection.dailyIndex(d(2026, 8, 11, 0), poolCount: 3000, calendar: cal)
+                == PuzzleSelection.dailyIndex(d(2026, 8, 11, 23), poolCount: 3000, calendar: cal),
+            "the same LOCAL day gives the same puzzle — fix #1")
+    h.check(PuzzleSelection.dailyIndex(d(2026, 8, 12, 0), poolCount: 3000, calendar: cal)
+                != PuzzleSelection.dailyIndex(d(2026, 8, 11, 23), poolCount: 3000, calendar: cal),
+            "and it rolls at local midnight, not 8am")
+    let past = PuzzleSelection.dailyIndex(d(2025, 6, 15), poolCount: 3000, calendar: cal)
+    h.check(past >= 0 && past < 3000, "a pre-epoch date stays in range — the double modulo")
+    h.check(PuzzleSelection.dailyIndex(d(2026, 1, 1), poolCount: 0, calendar: cal) == 0,
+            "an empty pool does not divide by zero")
+    var walked = Set<Int>()
+    for i in 0..<365 { walked.insert(PuzzleSelection.dailyIndex(d(2026, 1, 1).addingTimeInterval(Double(i) * 86400), poolCount: 3000, calendar: cal)) }
+    h.check(walked.count == 365, "a year of dates gives 365 distinct puzzles")
+
+    h.check(PuzzleSelection.uiThemes.count == 12, "twelve UI themes (Part 12.1)")
+    h.check(PuzzleSelection.uiThemes.first == "hangingPiece", "in grid order")
+    h.check(PuzzleSelection.uiThemes.last == "middlegame", "ending with middlegame")
+}
+
+h.begin("puzzle_progress")
+do {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "Asia/Manila")!
+    func ms(_ y: Int, _ m: Int, _ dd: Int, _ hh: Int = 12) -> Int {
+        Int(cal.date(from: DateComponents(year: y, month: m, day: dd, hour: hh))!
+                .timeIntervalSince1970 * 1000)
+    }
+    let t0 = ms(2026, 8, 11)
+
+    // ---- seeding (Part 4) ------------------------------------------------------
+    var s = PuzzleProgress.seed(now: t0)
+    h.check(s.profile.rating == 1200, "a new profile starts at 1200")
+    h.check(s.profile.highestRating == 1200, "and its high-water mark matches")
+    h.check(s.rushBest.count == 3, "three RushBest rows are seeded")
+    h.check(s.streak.puzzleRating == 600, "the streak ramp starts at 600")
+    h.check(s.streak.currentStreak == 0 && s.streak.bestStreak == 0, "no streak yet")
+    h.check(s.attempts.isEmpty && s.seen.isEmpty && s.streakRuns.isEmpty && s.rushRuns.isEmpty
+            && s.rushDraft == nil && s.playDraft == nil && s.themeStats.isEmpty
+            && s.dailySolves.isEmpty, "and nothing else is seeded")
+    h.check(s.version == PuzzleProgress.stateVersion, "the state carries its version")
+
+    // ---- the rated ledger (Part 8) ---------------------------------------------
+    let want = PuzzleRatingEngine.evaluate(userRating: 1200, puzzleRating: 1300, isCorrect: true)
+    let r1 = PuzzleProgress.recordRatedAttempt(&s, puzzleId: 10, isCorrect: true,
+                                               puzzleRating: 1300, themes: ["fork", "pin"],
+                                               solveTimeSeconds: 12, now: t0, calendar: cal)
+    h.check(r1.firstAttempt, "the first attempt counts")
+    h.check(r1.ratingChange == want.ratingChange, "the Elo delta comes from the pinned engine")
+    h.check(s.profile.rating == want.newRating, "and is applied")
+    h.check(s.profile.highestRating == want.newRating, "highestRating follows a rise")
+    h.check(s.attempts.count == 1, "one ledger row")
+    h.check(s.attempts[0].solveTimeSeconds == 12, "solve time is kept locally")
+    h.check(s.themeStats["fork"]?.attempted == 1 && s.themeStats["fork"]?.solved == 1,
+            "ThemeStat attempted and solved")
+    h.check(s.themeStats["pin"]?.attempted == 1, "every theme on the puzzle is counted")
+    h.check(r1.countedTowardGoal, "a correct rated solve counts toward the goal")
+
+    let ratingBefore = s.profile.rating, highBefore = s.profile.highestRating
+    let r2 = PuzzleProgress.recordRatedAttempt(&s, puzzleId: 10, isCorrect: true,
+                                               puzzleRating: 1300, themes: ["fork", "pin"],
+                                               now: t0 + 1000, calendar: cal)
+    h.check(!r2.firstAttempt && r2.ratingChange == 0, "a replay moves nothing")
+    h.check(s.profile.rating == ratingBefore, "the rating is unchanged")
+    h.check(s.attempts.count == 1, "no second ledger row")
+    h.check(s.themeStats["fork"]?.attempted == 1, "no second ThemeStat bump")
+    h.check(!r2.countedTowardGoal, "and no second daily-goal credit")
+
+    let r3 = PuzzleProgress.recordRatedAttempt(&s, puzzleId: 11, isCorrect: false,
+                                               puzzleRating: 1000, themes: ["endgame"],
+                                               now: t0, calendar: cal)
+    h.check(r3.ratingChange < 0, "a wrong answer costs rating — that is the point of a rating")
+    h.check(s.profile.highestRating == highBefore, "a fall does not lower highestRating")
+    h.check(s.themeStats["endgame"]?.attempted == 1 && s.themeStats["endgame"]?.solved == 0,
+            "a failed attempt is attempted but not solved")
+    h.check(!r3.countedTowardGoal, "and earns no goal credit")
+
+    // The floor, exercised against an EVENLY rated puzzle: a 401 losing to a 2800 drops ~0.
+    var low = PuzzleProgress.seed(now: t0)
+    low.profile.rating = 401
+    let lr = PuzzleProgress.recordRatedAttempt(&low, puzzleId: 1, isCorrect: false,
+                                               puzzleRating: 400, themes: [], now: t0,
+                                               calendar: cal)
+    h.check(lr.ratingChange <= -10, "an even-money loss is a real drop")
+    h.check(low.profile.rating == 400, "the rating floor holds at exactly 400")
+    h.check(low.attempts[0].ratingAfter == 400, "and the ledger records the floored value")
+
+    // Spec fix #9: the newest rows, not the oldest.
+    var hst = PuzzleProgress.seed(now: t0)
+    for i in 0..<40 {
+        PuzzleProgress.recordRatedAttempt(&hst, puzzleId: i, isCorrect: true, puzzleRating: 1200,
+                                          themes: [], now: t0 + i * 1000, calendar: cal)
+    }
+    let hist = PuzzleProgress.ratingHistory(hst, limit: 30)
+    h.check(hist.count == 30, "history is capped at 30")
+    h.check(hist[0].puzzleId == 39, "and starts with the NEWEST — the server took the oldest")
+    h.check(hist[29].puzzleId == 10, "walking back 30")
+
+    // ---- the daily goal (Part 15) ----------------------------------------------
+    var g = PuzzleProgress.seed(now: ms(2026, 8, 11))
+    var status = PuzzleProgress.dailyGoalStatus(g, now: ms(2026, 8, 11), calendar: cal)
+    h.check(status.solvedToday == 0 && status.target == 10 && !status.complete,
+            "nothing solved yet, and the target is the server's literal 10")
+    for _ in 0..<10 { PuzzleProgress.recordSolve(&g, mode: .thematic, now: ms(2026, 8, 11), calendar: cal) }
+    status = PuzzleProgress.dailyGoalStatus(g, now: ms(2026, 8, 11), calendar: cal)
+    h.check(status.solvedToday == 10 && status.complete && status.progress == 1.0,
+            "the goal completes at 10 and the ring fills")
+    PuzzleProgress.recordSolve(&g, mode: .thematic, now: ms(2026, 8, 11), calendar: cal)
+    h.check(PuzzleProgress.dailyGoalStatus(g, now: ms(2026, 8, 11), calendar: cal).progress == 1.0,
+            "and the ring does not overfill")
+    let beforeTurbo = g.dailySolves[PuzzleProgress.dayKey(ms(2026, 8, 11), calendar: cal)]
+    h.check(!PuzzleProgress.recordSolve(&g, mode: .turbo, now: ms(2026, 8, 11), calendar: cal),
+            "a Turbo solve does not count")
+    h.check(g.dailySolves[PuzzleProgress.dayKey(ms(2026, 8, 11), calendar: cal)] == beforeTurbo,
+            "and does not move the counter")
+
+    var gs = PuzzleProgress.seed(now: ms(2026, 8, 1))
+    for dd in [7, 8, 9, 10, 11] {
+        PuzzleProgress.recordSolve(&gs, mode: .play, now: ms(2026, 8, dd), calendar: cal)
+    }
+    h.check(PuzzleProgress.goalStreakDays(gs, now: ms(2026, 8, 11), calendar: cal) == 5,
+            "five consecutive days")
+    h.check(PuzzleProgress.goalStreakDays(gs, now: ms(2026, 8, 12), calendar: cal) == 5,
+            "the streak survives the whole of the following day")
+    h.check(PuzzleProgress.goalStreakDays(gs, now: ms(2026, 8, 13), calendar: cal) == 0,
+            "and dies the day after that")
+    var gg = PuzzleProgress.seed(now: ms(2026, 8, 1))
+    for dd in [5, 6, 9, 10, 11] {
+        PuzzleProgress.recordSolve(&gg, mode: .play, now: ms(2026, 8, dd), calendar: cal)
+    }
+    h.check(PuzzleProgress.goalStreakDays(gg, now: ms(2026, 8, 11), calendar: cal) == 3,
+            "a gap breaks the streak")
+    h.check(PuzzleProgress.goalStreakDays(PuzzleProgress.seed(now: t0), now: t0, calendar: cal) == 0,
+            "no solves, no streak")
+
+    // Day keys are LOCAL and roll at local midnight (fix #1).
+    h.check(PuzzleProgress.dayKey(ms(2026, 8, 11, 23), calendar: cal) == "2026-08-11",
+            "late evening is today")
+    h.check(PuzzleProgress.dayKey(ms(2026, 8, 12, 0), calendar: cal) == "2026-08-12",
+            "past midnight is tomorrow")
+    h.check(PuzzleProgress.dayNumber("2026-08-12") - PuzzleProgress.dayNumber("2026-08-11") == 1,
+            "day numbers are contiguous")
+    h.check(PuzzleProgress.key(fromDayNumber: PuzzleProgress.dayNumber("2026-03-15")) == "2026-03-15",
+            "day keys round-trip")
+    h.check(PuzzleProgress.dayNumber("2026-03-30") - PuzzleProgress.dayNumber("2026-03-29") == 1,
+            "DST spring forward is still one day")
+    h.check(PuzzleProgress.dayNumber("2026-10-26") - PuzzleProgress.dayNumber("2026-10-25") == 1,
+            "DST fall back is still one day")
+
+    // ---- Daily Puzzle state (Part 11) ------------------------------------------
+    var dp = PuzzleProgress.seed(now: ms(2026, 8, 1))
+    var dr = PuzzleProgress.recordDailyPuzzleSolve(&dp, now: ms(2026, 8, 9), calendar: cal)
+    h.check(dr.streak == 1 && dp.daily.totalSolved == 1, "the first daily solve starts a streak")
+    dr = PuzzleProgress.recordDailyPuzzleSolve(&dp, now: ms(2026, 8, 9, 20), calendar: cal)
+    h.check(dr.alreadySolvedToday && dp.daily.streak == 1 && dp.daily.totalSolved == 1,
+            "solving twice on one day is caught, and doubles nothing")
+    dr = PuzzleProgress.recordDailyPuzzleSolve(&dp, now: ms(2026, 8, 10), calendar: cal)
+    h.check(dr.streak == 2, "the next day continues it")
+    dr = PuzzleProgress.recordDailyPuzzleSolve(&dp, now: ms(2026, 8, 13), calendar: cal)
+    h.check(dr.streak == 1, "a missed day restarts it")
+    h.check(dp.dailySolves[PuzzleProgress.dayKey(ms(2026, 8, 13), calendar: cal)] == 1,
+            "a daily solve also feeds the goal counter")
+
+    // ---- runs -------------------------------------------------------------------
+    var rs = PuzzleProgress.seed(now: t0)
+    var run = PuzzleProgress.endStreakRun(&rs, length: 7, now: t0)
+    h.check(run.isNewBest && rs.streak.bestStreak == 7, "a first run is a best")
+    h.check(rs.streakRuns.count == 1, "and is written to history")
+    h.check(rs.streak.currentStreak == 0 && rs.streak.puzzleRating == 600,
+            "the run and the difficulty ramp both reset")
+    run = PuzzleProgress.endStreakRun(&rs, length: 3, now: t0 + 1)
+    h.check(!run.isNewBest && rs.streak.bestStreak == 7,
+            "a shorter run does not lower the best — one source of truth (fix #8)")
+    PuzzleProgress.endStreakRun(&rs, length: 0, now: t0 + 2)
+    h.check(rs.streakRuns.count == 2, "a zero-length run is not written to history")
+
+    var rh = PuzzleProgress.seed(now: t0)
+    let rr = PuzzleProgress.endRushRun(&rh, mode: 3, score: 24, mistakes: 1, reason: .timeUp, now: t0)
+    h.check(rr.isNewBest && rh.rushBest["3"] == 24, "the first timed run is a best")
+    h.check(rh.rushRuns[0].reason == .timeUp, "the real reason is stored")
+    PuzzleProgress.endRushRun(&rh, mode: 3, score: 12, mistakes: 3, reason: .threeMistakes,
+                              now: t0 + 1)
+    h.check(rh.rushRuns[1].reason == .threeMistakes,
+            "three mistakes is not \"Time's Up!\" — fix #6")
+    h.check(rh.rushBest["3"] == 24, "a worse run does not lower the best")
+    PuzzleProgress.endRushRun(&rh, mode: 0, score: 40, mistakes: 0, reason: .quit, now: t0 + 2)
+    h.check(rh.rushRuns[2].reason == .quit && rh.rushBest["0"] == 40,
+            "quitting still writes history and saves the best — fix #13")
+    h.check(rh.rushBest["3"] == 24, "per-mode bests are independent")
+    PuzzleProgress.saveRushDraft(&rh, score: 5, mistakes: 1, targetRating: 900, puzzlesServed: 6,
+                                 now: t0)
+    PuzzleProgress.endRushRun(&rh, mode: 0, score: 5, mistakes: 1, reason: .backgrounded, now: t0 + 3)
+    h.check(rh.rushDraft == nil, "ending an infinite run clears its draft — fix #5")
+
+    // ---- drafts (24h TTL) --------------------------------------------------------
+    let DAY = 24 * 60 * 60 * 1000
+    var dfs = PuzzleProgress.seed(now: t0)
+    PuzzleProgress.savePlayDraft(&dfs, puzzleId: 77, now: t0)
+    h.check(PuzzleProgress.loadPlayDraft(&dfs, now: t0 + DAY - 1000)?.puzzleId == 77,
+            "a draft under 24h restores")
+    h.check(PuzzleProgress.loadPlayDraft(&dfs, now: t0 + DAY + 1000) == nil,
+            "a draft over 24h does not")
+    h.check(dfs.playDraft == nil, "and the stale draft is cleared")
+    PuzzleProgress.saveRushDraft(&dfs, score: 9, mistakes: 2, targetRating: 1100,
+                                 puzzlesServed: 11, now: t0)
+    h.check(PuzzleProgress.loadRushDraft(&dfs, now: t0 + 1000)?.score == 9,
+            "a rush draft under 24h restores")
+    h.check(PuzzleProgress.loadRushDraft(&dfs, now: t0 + DAY + 1) == nil,
+            "and expires the same way")
+    h.check(dfs.rushDraft == nil, "clearing itself as it goes")
+
+    // ---- the seen set, and the JSON round-trip -----------------------------------
+    var js = PuzzleProgress.seed(now: t0)
+    PuzzleProgress.commitSeen(&js, Set([5, 1, 3]))
+    h.check(js.seen == [1, 3, 5], "the seen set serialises sorted, so the file is stable")
+    h.check(PuzzleProgress.seenSet(js) == Set([1, 3, 5]), "and reads back")
+    PuzzleProgress.recordRatedAttempt(&js, puzzleId: 3, isCorrect: true, puzzleRating: 1250,
+                                      themes: ["fork"], solveTimeSeconds: 8, now: t0, calendar: cal)
+    PuzzleProgress.endStreakRun(&js, length: 4, now: t0)
+    PuzzleProgress.savePlayDraft(&js, puzzleId: 3, now: t0)
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.sortedKeys]
+    if let data = try? enc.encode(js),
+       let back = try? JSONDecoder().decode(PuzzleProgressState.self, from: data) {
+        h.check(back == js, "the whole state round-trips through JSON")
+        if let again = try? enc.encode(back) {
+            h.check(again == data, "and re-encodes byte for byte")
+        } else { h.check(false, "and re-encodes byte for byte") }
+    } else {
+        h.check(false, "the whole state round-trips through JSON")
+    }
+}
+
 // MARK: - Done
 
 // Every mandatory group must contribute at least its expected floor of assertions
@@ -2056,6 +2747,7 @@ h.requireMinCounts([
     "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 45,
     "eco": 1200, "review_book": 1500, "analysis_session": 200, "analysis_store": 80,
     "position_editor": 80,
+    "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,
     "phpcompat_names": 1089, "phpcompat_truthy": 14,

@@ -87,7 +87,12 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 | `js/home.js` | the home dashboard; its top half is the pure metrics layer + `BiyaHome.selfTest()` | `HomeMetrics.swift`, `HomeScreen.swift` |
 | `js/app.js` | 4-tab shell (Home / Puzzles / Play / Profile); wires board ↔ engine ↔ AI; localStorage stats | mirrors `DemoApp` PhoneApp |
 | `js/sound.js` | event → mp3 mapping | `Sound.swift` |
-| `js/puzzles.js` | embedded sample puzzles (every one is an engine-verified mate) | — |
+| `js/puzzles.js` | the OLD Puzzles tab's ten embedded samples (every one an engine-verified mate). **Different move convention from the Puzzle Hub** — here `solution[0]` is the solver's; in the corpus `moves[0]` is the opponent's. Not interchangeable | — |
+| `js/puzzle-data.js` | the Puzzle Hub's corpus slice: 1,912 real puzzles across every band and theme. **Generated** — `python tools/puzzlebank/build_puzzles.py`. A page cannot load the device's 33 MB SQLite, so the browser proves the LOGIC on real puzzles and is explicitly not the shipping corpus; it flags itself with `isSlice` and carries `corpusTotal`/`dailyPoolTotal` | `DemoApp/…/puzzles.sqlite` (92,976 rows) |
+| `js/puzzle-serving.js` | the three fallback ladders, pinned by the `serving` goldens. Side-effect free: takes `seen`, reports `didReset` | `PuzzleServing.swift` |
+| `js/puzzle-session.js` | ⭐ the one solver core all five modes configure: the `moves[0]` convention, the phase machine, the checkmate short-circuit, the five wrong-move policies, promotion, retry, Solution, the Save Puzzle PGN | `PuzzleSession.swift` |
+| `js/puzzle-store.js` | the four selectors: the ladders over a pool, the scoped Tier-3 wipe (spec fix #7), and the deterministic local-calendar daily index | `PuzzleSelection.swift`, `DemoApp/…/PuzzleStore.swift` |
+| `js/puzzle-progress.js` | everything the user does: the rated ledger, seen set, streak/rush state, drafts with a 24h TTL, the daily-goal counter | `PuzzleProgress.swift` |
 | `js/device.js` | iPhone model picker — sets the frame's real screen aspect ratio + bezel style | — (page chrome) |
 | `css/theme.css`, `css/app.css` | design tokens + shell styling | `Theme.swift` |
 | `assets/` | pieces, sounds, coach avatars, fonts (copied from the app) | — |

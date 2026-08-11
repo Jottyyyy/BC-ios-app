@@ -51,5 +51,12 @@ let package = Package(
             name: "AnalysisMetricsCheck",
             dependencies: ["BiyaherongUI"]
         ),
+        // The Puzzle Hub's derived layer: the bottom panel, the info strip, both clock formatters,
+        // the Turbo bands, the feedback dot's signed geometry, the sound tables and the two
+        // promotion dialogs. The raw constants are covered by tools/qa/replay_puzzle_core.js.
+        .executableTarget(
+            name: "PuzzleMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
     ]
 )

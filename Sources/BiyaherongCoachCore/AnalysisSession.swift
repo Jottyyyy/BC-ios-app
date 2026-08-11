@@ -236,7 +236,14 @@ public final class AnalysisSession {
     /// How many PV plies an engine row shows after the move itself (board.tsx:2827).
     public static let pvPreview = 6
 
-    public var engineRows: [EngineRow] {
+    public var engineRows: [EngineRow] { AnalysisSession.engineRows(from: snapshot) }
+
+    /// The same rows, from a snapshot alone.
+    ///
+    /// Static because the puzzle hub's suggestions panel is the *same panel* — eval, SAN and the
+    /// PV preview — and it has no `AnalysisSession` to hang off. Duplicating six lines of
+    /// formatting there would have meant two places to get `pvPreview` and `displayText` right.
+    public static func engineRows(from snapshot: AnalysisSnapshot?) -> [EngineRow] {
         guard let lines = snapshot?.lines else { return [] }
         // A plain loop rather than `enumerated().map { i, line in … }`: this module is written
         // without a compiler, and closure-over-tuple destructuring is the kind of thing that is

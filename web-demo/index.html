@@ -90,6 +90,15 @@
   <script src="js/sound.js"></script>
   <script src="js/chess-board.js"></script>
   <script src="js/puzzles.js"></script>
+  <!-- Puzzle Hub: the generated corpus slice, then the pure layer it drives.
+       ORDER MATTERS: puzzle-store reads BiyaPuzzleServing and puzzle-progress reads
+       BiyaPuzzleSession + Rating, all at load time. -->
+  <script src="js/puzzle-data.js"></script>
+  <script src="js/puzzle-serving.js"></script>
+  <script src="js/puzzle-session.js"></script>
+  <script src="js/puzzle-store.js"></script>
+  <script src="js/streak-engine.js"></script>
+  <script src="js/puzzle-progress.js"></script>
   <script src="js/home.js"></script>
   <script src="js/eco-data.js"></script>
   <script src="js/movetree.js"></script>
@@ -104,6 +113,22 @@
   <script src="js/analysis-store.js"></script>
   <script src="js/position-editor.js"></script>
   <script src="js/analysis.js"></script>
+  <!-- The Puzzle Hub screens. puzzle-metrics reads analysis-metrics (same board component), and
+       every screen reads puzzle-app, so these must come after BOTH and after analysis-metrics. -->
+  <script src="js/puzzle-metrics.js"></script>
+  <script src="js/puzzle-app.js"></script>
+  <script src="js/puzzle-stats.js"></script>
+  <script src="js/puzzle-hub.js"></script>
+  <script src="js/puzzle-home.js"></script>
+  <!-- The plumbing every solver shares, then the per-mode screens on top of it. -->
+  <script src="js/puzzle-board.js"></script>
+  <script src="js/puzzle-solver.js"></script>
+  <script src="js/puzzle-daily.js"></script>
+  <script src="js/puzzle-thematic.js"></script>
+  <script src="js/turbo-run.js"></script>
+  <!-- Streak before Turbo: Turbo reuses its relativeDate for the run history. -->
+  <script src="js/puzzle-streak.js"></script>
+  <script src="js/puzzle-turbo.js"></script>
   <script src="js/app.js"></script>
   <script src="js/device.js"></script>
 </body>

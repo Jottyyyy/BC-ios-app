@@ -36,6 +36,7 @@ function walk(dir, out) {
 }
 
 var files = process.argv.slice(2);
+var narrowed = files.length > 0;
 if (!files.length) {
   files = walk(path.join(ROOT, 'Sources'), []);
   walk(path.join(ROOT, 'DemoApp', 'Sources'), files);
@@ -198,4 +199,17 @@ Object.keys(sources).forEach(function (rel) {
 
 console.log(bad ? '\nX ' + bad + ' structural problem(s) in ' + files.length + ' file(s)'
                 : '\nOK — ' + files.length + ' file(s) structurally sound');
+
+// The ACCESS rule needs the WHOLE module to know which types are internal. Given an explicit file
+// list it only sees those files, so every unknown type reads as "not internal" and the rule
+// silently passes — which is not a smaller check, it is a check that cannot fail.
+//
+// This warning exists because that trap actually fired: `swift_lint.js <one-file>` reported a
+// clean bill on a store with eight `public func`s returning an internal type, all of them hard
+// compile errors, and the full run found every one.
+if (narrowed && !bad) {
+  console.log('\n! Narrowed to ' + files.length + ' file(s): the ACCESS rule is DEGRADED — it '
+            + 'cannot see\n  which types the rest of the module declares internal. Run with no '
+            + 'arguments before\n  trusting a clean result.');
+}
 process.exit(bad ? 1 : 0);

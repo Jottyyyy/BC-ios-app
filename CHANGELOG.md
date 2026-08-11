@@ -9,6 +9,655 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-11 (feature) — Puzzle Hub, Phase G complete: the app runs the hub
+
+The last nine SwiftUI screens, the shell rewiring, and both safety nets. All five modes are now
+reachable and playable in the iOS app, and every Core engine has a consumer.
+
+**Added — the nine remaining screens.** `PuzzlePlayScreens` (stats home with sparkline, activity
+bars and theme rows; the rated solver with its clock, Elo delta, engine panel and Save sheet),
+`PuzzleDailyScreens`, `PuzzleThematicScreens`, `PuzzleStreakScreens` and `PuzzleTurboScreens`.
+Plus `PuzzleBottomPanel`, `PuzzleEnginePanelView` and `PuzzleModal` in the shared parts.
+
+Every screen **asks** the shared derivations rather than restating them:
+`PuzzleDisplay.bottomPanel` decides which buttons appear from the mode's own `WRONG_POLICY`,
+`hasEnginePanel` and `hasSaveSheet` come from what the extraction actually carries, and the Turbo
+advance delay travels with the wrong-move outcome instead of being written down a second time.
+No numeric literal or arithmetic appears in any view body.
+
+**Fixed — 61 strings existed in one language only.** Every Streak and Turbo string went into the JS
+twin in Phase E and never into `PuzzleStrings`: 138 keys in JS against 86 in Swift. The screens
+could not be written without them and nothing would have noticed, because no check compared the
+tables. They are ported now — generated from the JS rather than retyped — and
+`replay_puzzle_core.js` asserts **key parity in both directions**, plus that a Swift `func` is a JS
+function and vice versa, so one language cannot hard-code what the other computes.
+
+That check immediately earned itself twice: it found two Swift-only strings I had added
+(`promotionTitle`, `hubHeroGlyph`), and the hero glyph was **wrong** — I had a puzzle piece where
+the JS twin has a knight. The source draws a knight *image*, so the glyph is the stand-in and both
+now agree.
+
+**Fixed — eight colour constants existed only in JS** (`modalBorderColor`, `tabBestSelectedColor`,
+`countBadgeFill` and five more). The replay checks numeric keys, which is precisely why only the
+colours slipped through.
+
+**Changed — `AnalysisSession.engineRows` is now also a static.** The puzzle suggestions panel is
+the *same* panel — eval, SAN, PV preview — and duplicating six lines of formatting would have meant
+two places to get `pvPreview` and `displayText` right.
+
+**Changed — the shell.** `PhoneApp`'s Puzzles tab and `AppShell`'s sidebar entry both open
+`PuzzleHubScreen`. `ProfilePhone` reads `PuzzleHubStore`, so the profile no longer shows a rating
+from a screen the user cannot reach. The ten hand-made samples survive at a labelled
+**Dev · Sample Puzzles** panel — they use the opposite move convention, so they were never going to
+share this solver. `PuzzlesPhone` and its view model were deleted rather than left unreachable.
+
+#### The two safety nets, and what they caught
+
+**`PuzzleMetricsCheck`** (`swift run PuzzleMetricsCheck`) asserts the **derived** layer — the bottom
+panel, the info strip, both clock formatters, the four Turbo bands, the feedback dot's signed
+geometry with real numbers, the sound tables and the two promotion dialogs. It deliberately does
+*not* re-check the ~1,000 raw constants: `replay_puzzle_core.js` already compares those, and a
+second copy would be a second chance to be wrong.
+
+**`tools/qa/replay_puzzle_vm.js`** — 109 assertions reading the screens' *branches* and replaying
+them against the JS twin. Streak's silence on a solve, the anti-reroll lock being read **before**
+anything is served, `bestBefore` captured at run start, Turbo's single idempotent exit, out-of-lives
+beating the clock, the infinite/timed split on leaving, Thematic never touching Elo, and no screen
+reaching past the store to the pool.
+
+**`swift_symbol_check.js` gained a type check.** The member check cannot see
+`PuzzleFooScreen(store:)` when the type does not exist at all — no namespace to look inside — which
+is the dominant hazard when nine screens reference each other. It now flags undeclared `Puzzle*` and
+`Analysis*` constructors, and listed exactly the eight screens still to write.
+
+#### A harness bug that was reporting kills that never happened
+
+Adding Swift to the mutation suite meant resolving two directories. The per-mutant restore still
+said `JS`, so every Swift mutant was written into `web-demo/js/` as a stray `.swift` file while the
+real file **kept its mutation**. Four unrelated mutants then "died" of the same leaked edit, all
+reporting an identical failure — which is what gave it away. A restore that restores the wrong file
+is worse than no restore.
+
+Fixed, strays deleted, and one genuine survivor surfaced once the run was honest: mutating the lock
+guard to `if false` kept the text order intact, so the positional check passed. The replay now
+asserts the **condition**, not just the ordering.
+
+**81/81 mutants killed**, each with its own distinct failure.
+
+Gate: **22,690 assertions across 36 suites** · lint clean on 84 files · **1,906 member references
+and 94 project types resolve** · 1,074 metrics references · 124 corpus assertions.
+
+**Nothing here was compiled.** This checkout has no Swift toolchain. On a Mac the remaining steps
+are `swift build`, `swift run ParityRunner`, `swift run PuzzleMetricsCheck`, `swift run
+PieceArtCheck`, then `cd ios && xcodegen generate`.
+
+### 2026-08-11 (feature) — Puzzle Hub, Phase G part 1: the promotion dialogs, and the Core gets a consumer
+
+Phase G is the SwiftUI half. This entry covers the bug fixes and the foundation; the remaining
+screens are listed at the end and are **not** written yet.
+
+**Fixed — two promotion dialogs were being treated as one, in both languages.** The Analysis Board
+and the puzzle hub each have their own in the RN source, and **every extracted property differs**:
+
+| | Analysis (`board.tsx`) | Puzzle hub |
+|---|---|---|
+| scrim | 0.7 | 0.80 / 0.82 |
+| card | `#37474F` r16 p20, no width | `#1A2942` r20 p24 w280 |
+| title | 16pt `#ECEFF1` "Promote to:" | 18pt `#FFFFFF` centred "Choose Promotion" |
+| options | row of 60pt unlabelled tiles `#455A64` | column of labelled accent rows |
+
+Swift's `PromotionOverlay` was hand-typed to roughly the Analysis design — 46pt tiles where the
+source has 60, radius 8 where it has 12, no title at all — while `PuzzlePromotion` sat unread in
+the metrics file. The web `<chess-board>` had the same problem. Both are now extracted: a new
+`AnalysisPromotion` namespace, a corrected `PromotionOverlay`, a separate `PuzzlePromotionOverlay`,
+and a `promotionLayout` property on `<chess-board>` (`'row'` default, `'list'` for the hub) so the
+two designs stay two designs. Collapsing them would have silently restyled whichever screen lost.
+
+**The `KNOWN_UNREAD` allowlist is now empty.** Thirteen entries at the end of Phase E, seven after
+Phase F, zero now. Every `--pz*` property the stylesheet reads is written, and every one written is
+read. All nine promotion properties route through one `PuzzleMetrics.applyPromotion` instead of
+five partial copies — three screens had been setting five of the nine and two all nine.
+
+**Fixed — `PuzzleHaptics` duplicated `Haptics.Kind.pickUp`.** I added it in Phase F without noticing
+`Haptics.swift` already ports the same `DragDropChessBoard.tsx:351` decision, comment and all. Two
+sources of truth for one fact. Deleted; the views call `Haptics.play(.pickUp)`.
+
+**Added — `PuzzleHubStore`, the consumer five Core engines never had.** `PuzzleProgress`,
+`TurboRun`, `PuzzleStats`, `DailyGoal` and `PuzzleServing` were all written, pinned against PHP
+goldens, and called by nothing — the same failure that hid the dead `StreakEngine.increment` in
+Phase D, at the scale of a whole feature. The store holds `PuzzleProgressState`, owns the
+`SQLitePuzzlePool`, persists to Application Support as JSON, and every `serve*` **serves, commits
+`seen` and writes in one step** so no caller can forget the middle one.
+
+**Added — `PuzzleHubScreen` and the daily-goal ring**, plus `PuzzleSolverParts`: the shared solver
+engine (mount → submit → opponent reply → finish, with every continuation cancellable) and the
+shared header and board band. `BoardView` needed no change — Streak's two-tone reveal goes through
+its existing `customHighlights`.
+
+#### Two tooling gaps, both found the hard way
+
+**`swift_lint.js` gave a false green.** Run with an explicit file list it only loads those files, so
+its ACCESS rule — "public signature names an internal type" — sees no other declarations and
+passes everything. It reported a clean bill on `PuzzleHubStore` while eight `public func`s returned
+the internal `PuzzleStore.Puzzle`, all hard compile errors; the full run found every one. The
+narrowed mode now prints a DEGRADED warning.
+
+**Added `tools/qa/swift_symbol_check.js`.** `swift` is not on PATH here, so a view reading
+`PuzzleHub.cardTextGap` when the constant is `cardGap` is invisible until a Mac. Bracket matching
+does not catch it and neither does the StyleSheet-key check. This resolves every
+`Namespace.member` reference against the declarations. It found **19 real errors** in the first two
+files written this phase — including `DailyGoal.Status` (really `PuzzleProgress.GoalStatus`) and
+five session transitions I had written as static functions when they are mutating methods on
+`State` taking square *names*, not indices. It builds its table from the whole tree even when
+narrowed, which is exactly the trap `swift_lint.js` fell into. Across the existing codebase all
+**1,151** references resolve, so it is calibrated, not noisy.
+
+Gate: **22,574 assertions across 35 suites**, 74/74 mutants, 149 board assertions, 991 Swift
+constants replayed, `swift_lint.js` clean on 77 files.
+
+#### Not done — the rest of Phase G
+
+Nine screens (Play home/solver, Daily home/solver, Thematic grid/solver, Streak home/solver, Turbo
+select/run), the `PhoneApp`/`AppShell` rewiring, `ProfilePhone` repointing, `PuzzleMetricsCheck`
+and `tools/qa/replay_puzzle_vm.js`. The Puzzles tab still shows the old ten-sample view, and
+`PuzzleHubScreen` references those nine screen types — so **`DemoApp` and `ios/` will not build
+until they exist.** Everything landed here is lint-clean and symbol-checked; none of it is
+compiled, because this checkout has no Swift toolchain.
+
+### 2026-08-11 (fix) — Puzzle Hub, Phase F: the sound layer was never connected
+
+Phase F was scoped as a sweep. It turned out the sound layer had never been wired to the puzzle
+hub at all, and the reason it went unnoticed for four phases is the interesting part.
+
+**Fixed — no puzzle screen had ever made a sound.** All five did
+`var SND = (typeof Sound !== 'undefined') ? Sound : null;`. The global `sound.js` exports is
+**`SoundManager`**; `Sound` has never existed. `analysis.js` and `app.js` get it right; the hub
+never did. So `SND` was permanently `null` and every `play()` written in phases B–E was a no-op —
+through a feature with 22,000 passing assertions.
+
+Nothing caught it because every test asserted that the sound *code runs*. It did run; it ran into
+a null. The new assertions are deliberately end-to-end — patch the real player, drive a real
+screen, require that a sound comes out the other side — and there is a mutant that reverts the
+global's name and **must** be killed. If that one ever survives, the tests have gone back to
+checking that sound code executes.
+
+**Fixed — Turbo asked for a sound that does not exist.** `play('puzzle-correct')` is in neither
+the four-key RN vocabulary nor the six bundled mp3s, and `SoundManager.play` returns silently on a
+miss, so it was a no-op that *looked* deliberate. The source plays nothing extra on a Turbo solve:
+its only `gameOver` is in `endGame()`. Removed.
+
+**Two things I expected to be bugs were correct, and are now pinned so nobody "fixes" them.**
+`PuzzleSession` emits only `capture`/`move` and never `check` or `castling` — `usePuzzleSound.ts`
+loads exactly four sounds and `playMoveSound` is capture-or-move, so the richer chain belongs to
+the Play screen's `SoundManager`, not the hub. And all three solve chimes (Play, Daily, Thematic)
+were already in the right branch; an early grep of mine said otherwise and was wrong.
+
+**Added — sounds and timings are now EXTRACTED, not typed.** This is the change that matters more
+than any single fix. `TIMING` and every sound name were the last hand-written values in the port,
+in a project whose central rule is *extract, don't transcribe* — and the sound names were wrong in
+three places precisely because nothing compared them to anything.
+
+`tools/metrics/rn_ast.js` gained `collectSoundCalls`, `collectDelays` and `collectSoundHook`;
+`puzzle_styles.json` now carries every `playSound`/`playMoveSound` call **with the function it sits
+in** (so "on solve" versus "on run end" is recoverable rather than remembered) and every
+`setTimeout`/`setInterval` delay. A new `SOUNDS` namespace in both languages is asserted against
+that, and all seven `TIMING` values are checked against the call site that actually schedules them
+— the opponent reply against the `setTimeout` that schedules the opponent, and so on. All seven
+were already correct; now they are held there.
+
+One trap on the way: matching only *numeric* delays silently dropped Streak entirely, because it
+names its constant (`COMPUTER_MOVE_DELAY`). Named delays are resolved against the file's module
+constants, and one that cannot be resolved is fatal rather than skipped — a missing delay is
+invisible downstream, which is the failure mode the extraction exists to end.
+
+**Added — the pickup haptic.** `DragDropChessBoard.tsx:351` fires one
+`Haptics.impactAsync(.Light)` when the user picks up a piece, after three guards: the square holds
+a piece, it belongs to the side to move, and it passes the colour filter. `_targetsFrom()` is those
+three conditions rolled into one, so the trigger transfers exactly. It fires on **pickup**, never
+on drop and never on a right or wrong answer. `navigator.vibrate` in `web-demo/` (a genuine no-op
+on desktop and iOS Safari — the call site is the point), and a `PuzzleHaptics` seam in
+`BiyaherongUI` so Phase G's views have somewhere defined to call.
+
+**Changed — matching your best now shows 🏆 NEW BEST.** `endStreakRun` compares with `>=`, not
+`>`. The RN screen ends a run on `currentStreak >= bestStreak`; its `>=` was compensating for the
+server bumping the row mid-run, and `bestBefore` removes the need for that compensation — but the
+user-visible rule, that equalling your record is celebrated, is the app's behaviour and is kept.
+
+A consequence worth recording: with `>=`, reading the live `bestStreak` instead of `bestBefore`
+becomes **provably equivalent** (`length >= max(b, length)` is true exactly when `length >= b`), so
+that mutant was removed rather than left as a false coverage hole. `bestBefore` is kept anyway,
+because it does not depend on `increment` raising the best to exactly that maximum.
+
+**Changed — six dead CSS custom properties removed.** Each was computed from the extraction and
+written to a property nothing read: the goal ring already hands its track colour straight to the
+SVG `stroke` attribute; the banner styles itself from per-state fills, not the bare palette pair;
+no screen renders a loading state, because every mode serves synchronously from the bundled corpus;
+and the thematic feedback row is one line, so its gap never applies. The extracted numbers stay
+asserted in the metrics layer — only the dead wiring went. The allowlist is down from thirteen to
+the seven the promotion dialog owns, which **Phase G** closes when it rebuilds that dialog.
+
+**Fixed — a vacuous assertion in the new haptic test.** It stubbed `global.navigator`, but
+`<chess-board>` runs inside a `vm` sandbox and reads the sandbox's. The negative case ("an empty
+square does not buzz") was passing because nothing could buzz at all. Stubbed on the sandbox now.
+
+**Tests.** `puzzle_screen_test.js` 426 → 455, `board_component_test.js` 142 → 149,
+`PuzzleMetricsSource` 430 → 498. Eleven new mutants covering the sound wiring, the four-key
+vocabulary, the per-mode chime table, each extracted delay and the haptic trigger — **74/74
+killed**, including the one that reverts the global's name.
+
+Gate: **22,574 assertions across 35 suites**, `swift_lint.js` clean on 74 files,
+`board_styles.json` still regenerates byte-identical.
+
+`web-demo/` updated — every mode is audible for the first time. The Swift **views** remain Phase G.
+
+### 2026-08-11 (feature) — Puzzle Hub, Phase E: Puzzle Streak and Puzzle Turbo
+
+The last two modes. All five are now live in `web-demo/`, on the same solver factory and the same
+extracted-metrics layer. Two real bugs fell out along the way, both found by tests rather than by
+anything visibly breaking.
+
+**Added — `TurboRun`, the run engine** (`Sources/BiyaherongCoachCore/TurboRun.swift` +
+`web-demo/js/turbo-run.js`, 82 assertions). `PuzzleRush` held `modes`, `bestScore` and `modeLabel`
+and nothing else, so the whole of Part 14.2 — three lives *across* puzzles, the running target
+rating, the score, the reason a run ended — existed in neither language. `PuzzleSession` could not
+hold it: it is a per-puzzle machine and a new one is built for every puzzle, so its `mistakes`
+counter resets each time.
+
+Every constant comes from `puzzle_styles.json`, and two of them read wrong from memory: the warmup
+is **5** puzzles where `StreakEngine`'s is 10, and a wrong answer still moves the target **up**, by
+10. It is a rush — it gets harder whatever you do, just more slowly when you miss.
+
+The clock is deliberately *not* accumulated from ticks. `secondsLeft(state, now)` derives the number
+from `startedAt`, so a delayed or dropped tick cannot make it drift; the interval only repaints.
+`formatClock` prints `3:00` with the minutes unpadded, and is separate from
+`PuzzleDisplay.formatTime`'s padded `03:00` on purpose — one function would silently change one of
+the two screens.
+
+**Added — Puzzle Streak** (Part 13), home and solver. The 46pt display, three stat cards, and
+**Recent Runs** where the leaderboard was. The resume modal only appears when a run is actually
+live. On failure: the result overlay, then "💡 Show Solution", which hides the overlay entirely,
+highlights the answer on the board and prints it as `E2 → E4` (with ` (=Q)` when the UCI promotes).
+A correct solve plays **no sound** — in a streak the reward is the next puzzle.
+
+**Added — Puzzle Turbo** (Part 14), mode select and run. Three tabs each carrying their own best,
+Recent Runs filtered by the selected tab, and a start button in the selected mode's colour (the
+source sets that inline, which is why the extraction shows no `backgroundColor` on it). The run has
+the four-band clock, three life dots, and the ✓/✕ feedback dot built from the extracted **signed**
+terms — `left` subtracts its radius term, `top` adds its own, and the board flip is asymmetric
+(the file mirrors for Black, the rank does not).
+
+**Fixed — the 🏆 NEW BEST badge could never appear.** `endStreakRun` compared the finished run
+against `state.streak.bestStreak`, but `StreakEngine.increment` raises that value on every solve
+*during* the run. By the time the run ended it had already been beaten by itself, so `isNewBest`
+was unreachable-false. `endStreakRun` now **requires** a `bestBefore` argument — the best as it
+stood when the run started — and throws without it, in both languages. My own earlier test had
+codified the wrong behaviour; that assertion is flipped.
+
+**Fixed — the Turbo clock would never have started on a resumed run.** `served()` guarded on
+`startedAt == nil && puzzlesServed == 1`. The second clause is redundant on a fresh run and wrong on
+a resumed one, where `puzzlesServed` picks up mid-count. It changed nothing today only because
+resume is infinite-only — it was a trap armed for whoever extended resume to a timed mode. Found by
+the mutation suite: the mutant that *removed* the clause survived, which is the suite telling you
+the clause does nothing. Now `startedAt == nil` alone, in both languages.
+
+**Changed — `<chess-board>` gained `highlightSolution(from, to)`**, additive, with
+`--hl-sol-from` / `--hl-sol-to`. `highlightLastMove` puts one class on both squares from a single
+custom property, and Part 13.3's reveal needs two tints so the move reads as a direction.
+`board_component_test.js` is the regression check and went 133 → 142.
+
+**Changed — `puzzle-board.js` exposes `schedule(fn, ms)`.** Turbo's 500 ms advance is returned in
+the wrong-move outcome but scheduled by the screen; a screen-owned `setTimeout` would survive
+`destroy()` and mount a puzzle behind the results overlay.
+
+**Changed — a scoreless rush run no longer writes a history row**, matching the rule
+`endStreakRun` already applied to a zero-length streak. An instant quit was polluting the last-ten
+list on the mode-select screen.
+
+**Changed — Turbo moved off the `pzt-` CSS prefix** to `pzr-` / `pzrr-`. Thematic already owned
+`pzt-`, so `.pzt-title`, `.pzt-card` and `.pzt-start` would have been shared between two unrelated
+screens.
+
+**Added — a CSS custom-property coverage check**, in `puzzle_screen_test.js`. There is no
+compiler and no browser in this gate, so a `var(--pzk-typo)` with no setter is invisible: it
+resolves to nothing and the rule silently falls back to the initial value, which means a screen can
+look finished and be laid out entirely by accident. It checks both directions across the `--pz*`
+namespace — an unset var is a hole, an unread setter is drift left behind by a rename. It found
+eighteen unread setters on its first run, none of them mine.
+
+**Fixed — the promotion dialog ignored the extraction entirely.** `puzzle-solver.js` computed all
+nine `--pz-promo-*` properties from `puzzle_styles.json` and `<chess-board>`'s shadow CSS read
+none of them, hardcoding its own scrim, radius and padding. So Phase D's fix for the two scrims
+(0.80 for Play/Daily/Thematic, **0.82** for Streak and Turbo) was asserted in the metrics layer and
+never reached a pixel — and the two modes shipping in this phase are exactly the two it was for.
+The shadow CSS now reads the five properties that map onto its structure, with the standalone look
+as fallbacks so Play and the Analysis Board are unchanged. The remaining eight are listed by name in
+the new check: closing them needs the dialog rebuilt to the extracted layout, which is Phase F.
+
+**Fixed — `TurboRun`'s suite was not in the gate.** It was reachable only from the mutation
+harness, so `js_goldens.js` could have gone green with the whole of Part 14.2 broken. Now
+registered.
+
+**Tests.** `puzzle_screen_test.js` 178 → 422, covering all nine web-demo screens, and it now brings
+forward two Part 22 acceptance checks: **no hostname, `fetch`, `XMLHttpRequest`, `WebSocket` or
+`EventSource` anywhere in the feature's seventeen files** — checked rather than assumed, because
+the RN source this was ported from really does call chess.com — and **no prefetch buffer**
+(`BUFFER_MAX` and friends are in `turboRun`'s constants and must not reach a screen; Turbo keeps one
+lookahead). Sixteen new mutants, aimed at the parts that read wrong at a glance: the `+10` on a
+miss, the 5-puzzle warmup, the 2500 ceiling, the three lives, the dot's two signs, the four clock
+bands, the tie between "out of lives" and "time up", and `end()`'s idempotence. **63/63 killed.**
+`replay_puzzle_core.js` 745 → 991 Swift constants checked against the JS.
+
+Gate: **22,468 assertions across 35 suites**, `swift_lint.js` clean on 74 files.
+
+`web-demo/` updated — Streak and Turbo are both reachable from the Hub. The Swift **views** are
+still Phase G; the presentation layer they will consume is written and replay-checked.
+
+### 2026-08-11 (feature) — Puzzle Hub, Phase D: Daily Puzzle and Thematic, and four latent bugs
+
+Two more modes live in `web-demo/`, and the shared solver plumbing they sit on. Before any of that,
+six gaps that phases B and C had left behind — found by reading the layers back rather than by
+anything failing.
+
+**Four latent bugs in what B and C shipped.**
+
+- **Fixed** — **the bottom panel offered Streak and Turbo a Retry that their own policy forbids.**
+  `bottomPanel(phase)` was written for Play and returned Retry / Solution / Next on `failed` for
+  every mode, while `WRONG_POLICY.streak.offersRetry` and `.turbo.offersRetry` are both `false`.
+  Two sources of truth for one fact, and the wrong one was the visible one. It now takes the mode
+  and **derives** the row from the policy, so they cannot drift again — plus `hasEnginePanel` and
+  `hasSaveSheet`, because the extraction shows only `playSolver` and `thematicSolver` have
+  `enginePanel*` keys and only `playSolver` has `savePuzzle*`. Offering those buttons elsewhere
+  would have been inventing UI.
+- **Fixed** — **one promotion scrim where the source has two.** Part 2 keeps them deliberately
+  distinct: Play/Daily/Thematic dim to 0.80, Streak and Turbo to 0.82. One value was encoded and
+  the other survived only in a comment.
+- **Fixed** — **`RushEndReason` was a free string in JS.** Swift has an enum, so a typo there is a
+  compile error; `'timesUp'` for `'timeUp'` would have passed silently here and reached the results
+  screen. Enumerated and gated.
+- **Fixed** — **`rushBest` was keyed by number in JS and by `String` in Swift.** JSON object keys
+  are strings, so a numeric key round-tripped to a string and the two languages disagreed about
+  whether `rushBest[3]` and `rushBest["3"]` were the same slot.
+
+**Two gaps where the code existed but nothing joined it.**
+
+- **Added** — **`web-demo/js/streak-engine.js`**, the twin of `Streak.swift`, which had none. That
+  is why nobody noticed that **`StreakEngine.increment` was dead code**: nothing called it, so
+  `currentStreak` was only ever written back to zero and `puzzleRating` never ramped at all. Both
+  halves are wired now, with `PuzzleProgress.recordStreakSolve` as the single caller. 38 assertions,
+  including the deliberate difficulty cliff — the ramp runs from puzzle #1 *through* the ten-puzzle
+  warmup, so the moment warmup ends the target is already 600 + 10×50 = 1100.
+- **Fixed** — **the anti-reroll lock had no writer and no reader.** `pendingPuzzleId` appeared
+  exactly twice in the whole JS tree: the seed, and the clear. Part 22.6 makes it an acceptance
+  criterion — leaving the Streak screen and returning must hand back the *identical* puzzle, or a
+  hard one can be rerolled by backing out. `lockStreakPuzzle` / `pendingStreakPuzzle` now exist in
+  both languages, and the round-trip is asserted.
+- **Fixed** — **Streak and Thematic solves credited nothing toward the daily goal.**
+  `countsTowardDailyGoal` returned `true` for both, but `recordSolve` was only ever reached from the
+  rated and daily paths. Two of the four modes Part 15.1 counts were silently not counting.
+- **Added** — run-history selectors (`recentStreakRuns`, `recentRushRuns`, `rushBestFor`) in both
+  languages. Both home screens replace a leaderboard with the user's own last ten runs and nothing
+  could read them.
+
+**The two new modes.**
+
+- **Added** — **`web-demo/js/puzzle-board.js`**, the plumbing every solver shares, as a **factory**.
+  `puzzle-solver.js` was an IIFE with twelve module-level variables: fine for one screen, wrong for
+  five, since two solvers alive at once would share `session`, `timers` and `engineToken`. The
+  factory owns the board, the rules adapter, the mount sequence, the submit pump and the engine;
+  the host supplies its own chrome, which is what genuinely differs between the modes and why the
+  RN source has four separate solver files.
+- **Added** — **Daily Puzzle** (Part 11): home with the hero, two stat cards, the How-it-works card
+  and a CTA that swaps for the solved card once today is done; solver with the theme summary, the
+  feedback banner (wrong auto-hides after 1300 ms, solved does not — it is the end state), the
+  instruction line and the Done button. The hero subtitle now reads **"always offline"**; the
+  original said "powered by Chess.com", which stopped being true when the deterministic local pool
+  replaced the API.
+- **Added** — **Thematic** (Part 12): the 3×4 grid, selection toggling, `Start {label} Puzzles`, and
+  a solver with one stat, a hint line, the feedback block and the engine panel at **3** lines where
+  Play shows 2. The premium gate, the lock overlay and the upgrade modal are deleted — and the
+  metrics suite asserts the lock overlay *was* in the source, so the removal stays a recorded
+  decision rather than something nobody noticed. **Thematic never touches Elo**: the screen is
+  asserted not to call `recordRatedAttempt`, and `recordThematicAttempt` is the only sink.
+- **Changed** — the tab shell routes all four new screens, and leaving any of them cancels its
+  timers and abandons its search through **one registry** rather than a growing `if` chain. That
+  chain is how the tab bar came to cancel only the rated solver.
+
+**Verification.** 21,842 assertions across 34 suites; **47/47 mutants killed** (up from 35), and the
+metrics layer now carries **430** source assertions against the extracted StyleSheets and **737**
+Swift-vs-JS expectations.
+
+Two of those numbers moved because the tooling was wrong, not the code: six mutants survived their
+first run purely because the harness ran only `puzzle_core_test.js` while their assertions lived in
+`puzzle-metrics.js` and `streak-engine.js`. The tests were there; the harness was the gap. It now
+runs every pure suite.
+
+The browser-load check earned its keep again: `streak-engine.js` was not in `index.html`, and the
+check named it the moment it existed.
+
+**Still to do on the iOS side.** No SwiftUI views this phase, as planned — the presentation layer
+they consume (`PuzzleMetrics.swift`, now with the four Daily/Thematic namespaces, the twelve themes
+and the Part 19 strings) is written and checked against the JS. `swift` is still not on PATH here.
+
+### 2026-08-11 (feature) — Puzzle Hub, Phases B and C: the extraction, the metrics layer, and three screens
+
+Phase A built the corpus and the pure logic. This is the first time any of it is on screen: the
+**Puzzle Hub**, **Play Puzzles Home** and the **Play Puzzles Solver**, live in `web-demo/`, with the
+Swift presentation layer written alongside them.
+
+- **Added** — **`tools/metrics/extract_puzzle_styles.js` → `puzzle_styles.json`** (committed).
+  An AST walk over all **eleven** RN puzzle screens: 442 style keys, 1,694 properties, 103 inline
+  overrides, 7 render functions, 66 distinct colours. Same machine as the Analysis Board's
+  extractor — which was refactored onto a shared `tools/metrics/rn_ast.js` first, with
+  `board_styles.json` regenerating **byte-identical** (`44631590cb95…`) as the proof that the move
+  was safe.
+
+  It exists because the spec is prose, and prose loses information. Three things it found that a
+  transcriber would have shipped wrong:
+  - **The "standard header" is not standard.** Part 1 describes one header at
+    `paddingTop 10, paddingBottom 6`. There is no shared header component: **eight distinct shapes
+    across eleven screens**, and the spec's numbers match only the Play Puzzles home. The hub is
+    `paddingVertical 10`; the solver is `8`. Encoded per screen, with an assertion that they stay
+    different so nobody "tidies" them into one constant.
+  - **"Next Puzzle →" has two margins, not one.** The spec gives it a top margin of 8. The source
+    has `marginBottom: 8` in the StyleSheet *and* an inline `marginTop: 8` at three call sites.
+  - **The mode tiles are hex bytes, not percentages.** Part 9.2 says "13% alpha" and "33% alpha";
+    the source writes `mode.color + '22'` and `+ '55'` — 13.33% and 33.33%.
+
+  Unresolved values are a **gate**, not a log: a number the evaluator cannot fold is a hole the
+  metrics layer will never see, so the script exits non-zero. The only expected class is
+  `PIECE_COMPONENTS`, which maps piece letters to SVG components rather than to measurements.
+- **Added** — **`PuzzleMetrics.swift` + `web-demo/js/puzzle-metrics.js`**, the presentation layer:
+  palette, hub, goal strip, home, stats, solver, engine panel, promotion, save sheet, typography,
+  and the Part 19 string catalog verbatim. Every constant is asserted against the extraction —
+  **242 source assertions** — and the screens contain no numeric literal at all.
+- **Added** — **`PuzzleStats.swift` + `web-demo/js/puzzle-stats.js`**: the Home screen's five
+  statistics as pure functions, because every one has an edge case that only appears on day one.
+  A sparkline with a single point (renders nothing — a one-point polyline is an invisible dot that
+  reads as a bug), a flat history (sits centred instead of clipping, which is what the ±25 y-margin
+  is for), an accuracy of 0/0, seven bars all at zero. **41 assertions.**
+  `PuzzleStats` stays Foundation-only: the pixel sizes are parameters and the UI passes them, so no
+  presentation constant leaks into Core. Asserted.
+- **Added** — **the Puzzle Hub** (Part 9): header, hero, the daily-goal strip, and five cards
+  distributed `space-evenly` so the spacing grows with the screen. Two Part 9.2 fixes: the accents
+  are **unified onto the screens' own colours** (the hub's Thematic/Turbo/Streak differed from the
+  screens they open), and it is **Puzzle Turbo everywhere** — the folder is named `puzzle-rush`,
+  the user-facing name never was.
+- **Added** — **the daily-goal strip** (Part 15.2): a 44pt SVG ring sweeping from 12 o'clock over
+  400 ms, swapping to ✅ and green on completion, with the streak pill only above zero. An SVG
+  `stroke-dashoffset` transition rather than a conic gradient, so the sweep is one property and
+  needs no repaint loop.
+- **Added** — **Play Puzzles Home** (Part 10.1). The original was a leaderboard with a Play button;
+  offline there are no other players, so it is the user's own statistics instead. **Day one shows
+  the rating card and one invitation**, not four blank charts — a decision, not an omission: an
+  empty sparkline over 0.0% accuracy over seven flat bars reads as a broken dashboard rather than
+  a new one.
+- **Added** — **the Play Puzzles Solver** (Parts 10.2/10.3), the screen the other four fall out of.
+  Five bands, and almost no logic of its own: `PuzzleSession` already owns validation and the five
+  wrong-move policies, `PuzzleSelection` picks the puzzle, `PuzzleProgress` moves the Elo. What is
+  left is DOM, timers and sound. Spec fixes carried: the info strip is **one enum** so "✅ Solved!"
+  and "💡 Viewing Solution" can never render together in a 34pt strip (#11); the clock is derived
+  from wall-clock and **restarts on Retry** (#2), which plays the game-start sound (#3); the rating
+  delta survives a retry (#c); the `↻` engine button genuinely re-runs (#4).
+- **Added** — the engine panel and arrows (Part 18), on `LocalEngine` through the existing
+  `engine-host`, so the solver shares the Analysis Board's Worker and frame budget. Arrows are
+  drawn inside the board component's own square-space viewBox, which is what makes fix #12
+  structural: in the RN source the board sits at x = 0 while the overlay is `alignItems: 'center'`,
+  and the two disagree by up to ~3.5px. Here they cannot.
+- **Changed** — **the Puzzles tab now opens the Puzzle Hub**, and the ten hand-made samples are
+  retired. They use the OPPOSITE move convention (`solution[0]` is the solver's; the corpus has
+  `moves[0]` belonging to the opponent), so the two could never share a solver.
+- **Added** — **`tools/qa/puzzle_screen_test.js`** (117 assertions): the three screens rendered
+  into a fake DOM, in **index.html's own script order**. Neither the logic suite nor the metrics
+  suite would notice a screen that throws on its first paint, renders no cards, or wires a button
+  to nothing — and those only happen in a browser, which this checkout cannot open. It also
+  asserts that every `--pz*` custom property the stylesheet reads is actually set, and that the
+  solver contains no hard-coded `px` and no user-facing string of its own.
+
+  It earned its keep twice on the first run: `analysis-engine.js` reads `CoachAI` **at load time**,
+  so omitting `ai.js` tested a load order the page does not use; and the six new scripts had been
+  inserted **before** their dependencies in `index.html`, which would have thrown in a browser and
+  nowhere else.
+- **Changed** — `replay_puzzle_core.js` grew from 187 to **530** Swift expectations, now covering
+  `PuzzleMetrics.swift` and `PuzzleStats.swift` constant by constant, plus the five hub cards' copy
+  and accents, the Part 19 strings, and the three fixes the metrics layer owns. It immediately
+  caught a real slip: the Swift's Streak card kept the hub's own `#FF6B35` instead of the unified
+  screen accent `#F4511E`, so four cards had been converted and one had not.
+- **Changed** — `DemoApp/.../BoardHelpers.swift` extracted from `PuzzleView.swift`. The four
+  piece-mutation helpers were always general; living in that file meant a second screen could not
+  reach them without depending on a retired one. The move also cleared a real name collision the
+  lint caught — `PuzzleVM.Phase` shadowed the public `PuzzleSession.Phase` at module scope, so any
+  public signature naming a phase failed the access check.
+
+**Still to do on the iOS side.** The SwiftUI **views** for these two screens
+(`PuzzleHubScreen`, `PuzzlePlayHomeScreen`, `PuzzleSolverScreen` + its VM) and the `PhoneView` /
+`AppShell` rewiring are **not written yet** — the Swift presentation *layer* they consume is, and
+is checked against the JS. They are the first item of the next pass. `swift` is still not on PATH
+here, so nothing Swift has been compiled; `swift build`, `swift run ParityRunner` and the metrics
+check await a Mac.
+
+### 2026-08-11 (feature) — Puzzle Hub, Phase A: the corpus, the solver core, the progress store
+
+The foundation the six Puzzle Hub screens sit on. No screens yet — this is the layer that is fully
+provable on this Windows checkout, and it is gated end to end.
+
+Most of the spec's arithmetic turned out to be **already ported and golden-pinned** to the real
+Laravel backend: the Elo (`PuzzleRatingEngine`), the three serving ladders (`PuzzleServing`), the
+streak ramp (`StreakEngine`), the rush best-score rule (`PuzzleRush`) and the goal streak
+(`DailyGoal`). None of it was rewritten. What was missing was the corpus, the solver state machine,
+a pool the ladders can run over a 93,000-row database, and somewhere to keep progress.
+
+- **Changed** — **the bundled corpus was rebuilt: 550,000 rows / 84 MB → 92,976 rows / 33.0 MB.**
+  The old `build_puzzles.py` imported everything and kept only FEN/Moves/Rating/Themes/OpeningTags.
+  That is unusable here on three counts: it dropped `Popularity` and `NbPlays`, which are the only
+  signal for picking the *good* 100k out of 550k; it stored themes as one space-separated string
+  with **no index**, so every thematic query scanned 550k rows (spec fix #15); and at 84 MB it was
+  most of the app download. It also had hardcoded macOS paths, which CLAUDE.md has flagged for
+  three phases. All four fixed.
+
+  Selection is the spec's Part 3.2 verbatim — 22 rating bands × the top 4,000 by
+  `popularity × log10(max(nb_plays,10))`, then theme quotas, the mate-in-1 warmup guarantee and the
+  rare-theme sweep. Deterministic: two runs produce byte-identical SQLite (`99f10832…`), which
+  needed the quality score quantised to an integer before it is ever used as a sort key — `log10`
+  is the one place a platform libm could reorder two rows — an explicit `lichess_id` tie-break on
+  every sort, and a splitmix64 Fisher–Yates instead of `random.shuffle` so the daily pool does not
+  depend on the CPython build.
+
+  Three findings worth recording:
+  - **92,976, not the spec's estimated 95,000–105,000.** Its own step-2 arithmetic fixes the base at
+    22 × 4,000 = 88,000 and every later step is a *floor*, not a target. The rules were implemented;
+    the prose was an over-estimate.
+  - **`anastasiaMate` (636 rows) is rare by the spec's rule but absent from its list of twelve.**
+    The build computes the rare set instead of reading the list, and says so when they disagree.
+  - **The spec's literal schema builds to 50 MB against its own 25–35 MB target.** `WITHOUT ROWID`
+    on the two theme tables closes the whole gap — a storage class, not a schema change; the
+    columns, constraints and every Part 7 query are identical. `puzzle_themes` 21.2 → 13.5 MB,
+    `theme_rating_index` 17.4 → 8.0 MB. Both composite keys are genuinely unique (432,507 rows,
+    432,507 distinct), so the PK is also a duplicate-theme guard the rowid version could not give.
+    Two of the spec's four indexes are now those primary keys and are not restated.
+
+  The generated DB stays **committed**, unlike `Goldens/`: `codemagic.yaml` builds the iOS app from
+  a clone of this repo alone and never sees the source CSV in the sibling Laravel repo.
+  _(web-demo: the same script now also emits a 1,912-puzzle slice — see below.)_
+- **Added** — **`PuzzleSession`** (+ `web-demo/js/puzzle-session.js`), the one solver core all five
+  modes configure. Pure: no timers, no sounds, no DB, no view. Every operation returns what should
+  happen next — "play the capture sound", "let the opponent reply in 500 ms", "the run is over" —
+  and the caller owns the clock, so the spec's `after(opponentDelay) { … }` closures become returned
+  numbers and all five modes are assertable with no test doubles. Carries the `moves[0]`-is-the-
+  opponent convention, the checkmate short-circuit, the five wrong-move policies as data, promotion
+  detection, retry, Solution, and the Save Puzzle PGN.
+- **Added** — **`PuzzleSelection`** (+ `web-demo/js/puzzle-store.js`), the same three ladders over an
+  abstract five-method pool, so the device answers each tier with an index seek instead of loading
+  the corpus into memory. `PuzzleServing` is untouched: `ArrayPool` implements the pool by calling
+  its pinned helpers, and the parity group asserts the two agree over **420** (centre, window,
+  theme, seen) combinations, which makes the reuse a proof rather than a claim.
+- **Fixed** — **exhausting one narrow theme no longer wipes non-repetition for every mode**
+  (spec fix #7). This landed in the *caller*, not the ladder, because the ladder never wiped
+  anything — it takes `seen` as an argument and REPORTS `didReset` as a flag. So the golden-pinned
+  engine stays byte-identical and `scopeForReset` decides between forgetting one theme, one rating
+  band, or (only when the corpus is genuinely exhausted) everything.
+- **Fixed** — **every date in this feature uses the local calendar** (spec fix #1). The original
+  computed dates with `toISOString()`, so in Manila the daily puzzle and every daily counter rolled
+  over at 8 a.m. while the UI said "midnight". Both languages also derive day numbers from calendar
+  fields rather than by differencing two local midnights: a DST transition makes a local day 23 or
+  25 hours long, which silently adds or drops a day from a streak.
+- **Added** — **`PuzzleProgress`** (+ `web-demo/js/puzzle-progress.js`): every Part 4 record shape,
+  field for field, as `Codable` structs with injected time. **Codable + JSON, not SwiftData** — the
+  app already persists the Analysis Board's library that way and a second stack would buy nothing
+  (recorded in PORTING_NOTES). Carries the rated ledger's first-attempt-only rule, `ThemeStat`,
+  drafts with a 24-hour TTL, and Part 15's `DailySolveCount`. Spec fixes #5, #6, #8, #9 and #13 are
+  structural here: every Streak and Turbo run exits through one function that takes the real end
+  reason, and `ratingHistory` takes the newest 30 where the server took the oldest.
+- **Added** — **`tools/qa/puzzle_corpus_check.js`** (124 assertions). The spec asks for the per-band
+  and per-theme counts to be logged "so regressions are visible"; a 60-line histogram is only
+  visible if someone reads it twice, so they are assertions instead. Its strongest check is not a
+  count: it replays whole puzzle lines through the engine the app solves with, and proves every
+  stored move is legal in the position it is played from. It also asserts the four hot queries
+  **SEEK** — spec fix #15 stated structurally, which no count could catch.
+- **Added** — `tools/qa/puzzle_core_test.js` (371), `tools/qa/replay_puzzle_core.js` (187), and the
+  three new ParityRunner groups `puzzle_session` / `puzzle_selection` / `puzzle_progress`. The
+  fixtures are real corpus rows emitted by `tools/qa/gen_puzzle_fixtures.js` with every expectation
+  **computed** by the JS, not typed — "extract, don't transcribe", the same rule the board metrics
+  follow.
+- **Added** — two mutation suites, `tools/qa/corpus_mutation_test.py` (**14/14 killed**) and
+  `tools/qa/puzzle_core_mutation_test.js` (**35/35 killed**). Several mutants are the original
+  server bugs reintroduced verbatim. They found five real holes in the new suites and one in an
+  older assumption:
+  - **The single most important property was being sampled, and the sample could not reach it.** A
+    mutant that made `moves[0]` the solver's on 5% of rows **survived**: the deep replay took
+    ids ≡ 1 (mod 154), always odd, and the mutation hit ids ≡ 0 (mod 20), always even, so the two
+    could not intersect by construction. The convention is now checked on **every** row, and the
+    replay samples by ordinal rather than by a fixed modulus.
+  - "the served rating is within 100" is satisfied by a ±50 window too, so a narrowed rated window
+    survived it; the window is now asserted by which ladder tier fired.
+  - the ladder fixtures had ids in rating order, so "lowest id" and "closest by ABS" coincided and
+    the three ladders were indistinguishable; and nothing sat on the window boundary, so
+    inclusive-vs-exclusive was invisible.
+  - the rating floor was exercised with a 401-rated user failing a 2800 — which costs ~0 points, so
+    the floor was never reached. It now fails an evenly-rated puzzle and actually lands on 400.
+- **Added** — a browser-load check inside `puzzle_core_test.js`. Twice in this rebuild a module has
+  referenced a global it never loaded and every Node suite stayed green while the real page threw
+  inside a click handler. The five new files are now evaluated in a bare `window` sandbox, in
+  index.html's order, and driven — so a `require`-only dependency cannot reach the browser.
+  _(web-demo: all five modules are wired into `index.html`.)_
+- **Changed** — `DemoApp/.../PuzzleStore.swift` rewritten for the new schema: read-only, the only
+  place in the app that writes SQL, plus `SQLitePuzzlePool`. Its tier-1/tier-2 queries return a
+  bounded random sample rather than every match — still a uniform pick once composed with a uniform
+  picker, and emptiness, the only thing the ladder branches on, is preserved exactly. The old
+  `themes LIKE '%theme%'` scan is gone. The existing Puzzles tab keeps working through a small
+  compatibility surface.
+
+**Three of the spec's premises were stale and are corrected in `docs/puzzle-hub.md`:** there is no
+embedded Stockfish (the engine panel will use `LocalEngine`, as the Analysis Board does); the
+`compareMoves` fix #10 warns about already exists in Core as a deliberate parity artifact, and
+nothing in this feature calls it; and fix #7 belongs in the caller.
+
+**Swift unverified by compilation** — `swift` is not on PATH here, so `swift build`,
+`swift run ParityRunner` and the three new group floors (600 / 1100 / 70) still need a Mac. The
+mitigation is `replay_puzzle_core.js`, which re-derives every fixture and constant table from the
+Swift source text and confirms them against the JS that has actually run; it caught two real
+defects on its first run — fixtures carrying the browser slice's renumbered ids instead of
+shipping-corpus ids, and a regex that silently skipped the `.turbo` policy row.
+
 ### 2026-08-10 (fix) — piece movement, made smooth
 
 Reported: moving a piece feels delayed and not smooth, "gusto ko kasing smooth ng chess.com at

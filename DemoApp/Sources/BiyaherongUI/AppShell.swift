@@ -7,13 +7,17 @@ import BiyaherongCoachCore
 
 enum Panel: String, CaseIterable, Identifiable {
     case phone = "Phone UI"
-    case puzzles = "Puzzles"
+    case puzzles = "Puzzle Hub"
     case play = "Play (Board)"
     case home = "Overview"
     case rating = "Puzzle Rating"
     case review = "Game Review"
     case tournament = "Tournament"
     case more = "Streak · Rush · Limits"
+    /// The retired ten hand-made puzzles. Kept reachable in the DEMO app only, for the
+    /// engine spot-check they were written for — the phone's Puzzles tab is the hub.
+    /// Mirrors `?dev=samples` in `web-demo`.
+    case samples = "Dev · Sample Puzzles"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -25,12 +29,15 @@ enum Panel: String, CaseIterable, Identifiable {
         case .review: return "magnifyingglass"
         case .tournament: return "trophy"
         case .more: return "flame"
+        case .samples: return "wrench.and.screwdriver"
         }
     }
 }
 
 struct RootView: View {
     @State private var selection: Panel? = .phone
+    /// One store for the sidebar's hub, so switching panels does not reset progress.
+    @StateObject private var puzzleStore = PuzzleHubStore()
     var body: some View {
         NavigationSplitView {
             List(Panel.allCases, selection: $selection) { p in
@@ -44,7 +51,11 @@ struct RootView: View {
             Group {
                 switch selection ?? .phone {
                 case .phone: PhoneView()
-                case .puzzles: PuzzleView()
+                // The hub, same as the phone's Puzzles tab. The ten hand-made samples live on
+                // at `.samples` — they are the engine spot-check they were written for, and they
+                // use the opposite move convention, so they cannot share this solver.
+                case .puzzles: PuzzleHubScreen(store: puzzleStore, onExit: {})
+                case .samples: PuzzleView()
                 case .play: PlayView()
                 case .home: HomeView()
                 case .rating: RatingView()

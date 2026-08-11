@@ -43,6 +43,15 @@ var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
 var WORKER = require(path.join(__dirname, 'worker_protocol_check.js'));
+var CORPUS = require(path.join(__dirname, 'puzzle_corpus_check.js'));
+var PUZCORE = require(path.join(__dirname, 'puzzle_core_test.js'));
+var RPUZ = require(path.join(__dirname, 'replay_puzzle_core.js'));
+var RVM  = require(path.join(__dirname, 'replay_puzzle_vm.js'));
+var PMET = require(path.join(JS, 'puzzle-metrics.js'));
+var PSTAT = require(path.join(JS, 'puzzle-stats.js'));
+var PSTREAK = require(path.join(JS, 'streak-engine.js'));
+var PTURBO  = require(path.join(JS, 'turbo-run.js'));
+var PSCREEN = require(path.join(__dirname, 'puzzle_screen_test.js'));
 
 function loadGolden(name) {
   var p = path.join(GOLDENS, name + '.json');
@@ -111,6 +120,35 @@ record('board layout invariants', LAYOUT.selfTest());
 // Where the search runs, and the frame budget it must respect when it runs in-thread.
 record('engine-host.selfTest', HOST.selfTest());
 record('engine frame budget', BUDGET.selfTest());
+// The bundled puzzle corpus: quotas, indexes, and every line replayed through the real engine.
+// Every later puzzle assertion is stated against this DB, so a bad corpus would make them all
+// pass while the app served nothing.
+record('puzzle corpus', CORPUS.selfTest());
+// The Puzzle Hub's pure layer — solver state machine, selection ladders, progress store. Written
+// and proven in JS first, then transliterated; these are the runs the Swift is checked against.
+record('puzzle core', PUZCORE.selfTest());
+// ...and the check that the transliteration did not drift.
+record('swift puzzle tables vs JS', RPUZ.selfTest());
+// The SCREENS' decisions, not just their constants. `swift_symbol_check.js` proves every name
+// resolves and `swift_lint.js` proves the brackets match; neither can tell whether a screen took
+// the right branch, which is the whole failure mode of porting eleven views without a compiler.
+record('swift puzzle screens vs JS', RVM.selfTest());
+// The Puzzle Hub's presentation layer, and the same layer asserted against the AST extraction of
+// the real RN StyleSheets. Nothing on these screens is a transcribed number.
+record('puzzle-metrics.selfTest', PMET.selfTest());
+record('puzzle-metrics vs RN source',
+       PMET.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'puzzle_styles.json'))));
+// The Home screen's charts, as pure functions — every one has a day-one edge case.
+record('puzzle-stats.selfTest', PSTAT.selfTest());
+// The Streak ramp's JS twin. It had none until Daily/Thematic landed, which is why
+// `StreakEngine.increment` sat dead in Swift with nothing to notice.
+record('streak-engine.selfTest', PSTREAK.selfTest());
+// Turbo's run engine — the lives, the ramp and the clock. It was reachable only from the
+// mutation harness, which meant the gate could go green with the whole of Part 14.2 broken.
+record('turbo-run.selfTest', PTURBO.selfTest());
+// The three screens rendered into a fake DOM. Neither the logic nor the metrics suite would
+// notice a screen that throws on its first paint or wires a button to nothing.
+record('puzzle screens', PSCREEN.selfTest());
 // The worker itself, driven through its real message protocol in a fake worker scope.
 // Async: it yields between depths exactly as it does in a browser, so the report waits.
 asyncSuites.push({ name: 'analysis worker protocol', mod: WORKER });

@@ -80,7 +80,8 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 
 - **Home** — ang landing dashboard: header, 3×2 grid ng anim na card, hourly na Taglish quote, at ang
   Donate / Membership banners. May Sky / Colorful na tema (pumili sa itaas ng phone).
-- **Puzzles** — 10 verified na sample mate puzzles na may ELO rating (K=32, floor 400).
+- **Puzzles** — ang **Puzzle Hub**: 5 mode cards + daily-goal ring. **Live na ang lahat ng lima** —
+  Play Puzzles, Daily Puzzle, Thematic, Streak at Turbo.
 - **Play** ⭐ — 5 coach opponents (Jaden Pogi 650 → Coach Pogi 2250). Tap-tap na paggalaw, promotion
   picker, undo, flip, sounds, spring animations, eval bar, at "pass & play" para 2-player.
 - **Profile** — rating, tier, stats, at ang 5 coaches. Naka-save sa `localStorage`.
@@ -174,6 +175,66 @@ Ang `solution` ay UCI moves na **kahalili** (ikaw, kalaban, ikaw, ...):
 ```
 Pagkatapos, buksan ang `index.html?selftest`... (o i-verify na tama). Lahat ng kasamang puzzle ay
 sinuri sa engine na tunay na checkmate.
+
+### ⚠️ RETIRADO NA ang lumang Puzzles tab
+
+Ang **Puzzles tab ay Puzzle Hub na** — 5 cards, tunay na 93k-puzzle corpus, may rating at daily
+goal. Ang 10 hand-made na sample sa ibaba ay hindi na naka-wire sa tab; nandiyan pa rin ang code
+para sa engine spot-check na pinagsulatan nila.
+
+Ang gumagana ngayon — **lahat ng limang mode**:
+
+- **Play Puzzles** — home na may stats, at solver na may Elo (K=32, floor 400), timer, Retry,
+  Solution, engine arrows, at Save Puzzle papuntang Analysis Board.
+- **Daily Puzzle** — home na may day-streak at total, at solver na may feedback banner. Pareho ang
+  puzzle sa lahat ng device sa parehong petsa, at **walang internet** ang kailangan.
+- **Thematic** — 12 tema sa 3×4 na grid, at solver na may 3 engine lines. **Hindi ito humahawak ng
+  rating** — practice lang, pero binibilang pa rin sa Theme Performance at sa daily goal.
+
+> 🔊 **May tunog na ngayon ang lahat ng mode.** Sa loob ng apat na phase ay *walang* tunog ang
+> Puzzle Hub — hinahanap ng limang screen ang isang global na `Sound`, pero `SoundManager`
+> ang totoong pangalan, kaya laging `null` ito at walang tumutunog. Ayos na. Buksan ang
+> volume.
+>
+> Ang tuntunin: **Play, Daily at Thematic** ay tumutunog kapag tama ka. Ang **Streak at Turbo** ay
+> hindi — tumutunog lang sila kapag *tapos na ang run*, dahil kung hindi ay tutunog ito nang
+> dose-dosenang beses sa isang run.
+
+- **Streak** 🔥 — sudden death: **isang mali, tapos na**. Home na may 46pt na counter, tatlong stat
+  card at **Recent Runs**. Sa solver: walang tunog kapag tama ka — ang gantimpala ay ang susunod na
+  puzzle. Kapag natalo ka: result overlay, ang 🏆 NEW BEST badge, at ang **💡 Show Solution** na
+  nagpapakita ng tamang move sa board (`E2 → E4`, dalawang kulay para makita ang direksyon).
+
+  **Subukan ito:** magsimula ng streak, tapos **umalis sa screen at bumalik** — *parehong puzzle* ang
+  babalik. Sinadya iyon (anti-reroll): hindi mo mareroll ang mahirap na puzzle sa pag-back out.
+
+- **Turbo** ⚡ — tatlong mode (∞ / 3 min / 5 min; **3 min ang default**), tatlong buhay, at ang
+  orasan na nagpapalit ng kulay: berde → **gold sa 30s** → **pula sa 10s**. Kapag mali ka, **hindi
+  bumabalik ang pyesa** — nananatili ito kung saan mo inilagay, may pulang ✕ sa ibabaw. Bawat
+  pagtatapos — ubos na buhay, ubos na oras, o quit — ay naitatala nang may **totoong dahilan**, kaya
+  "Out of Lives!" ang sinasabi kapag naubos ang buhay, hindi laging "Time's Up!".
+
+  **Subukan ito:** magsimula ng ∞ run, umalis sa gitna, at ibabalik ito ng **Resume** prompt. Sa
+  3-min naman, walang Resume — hindi mapa-pause ang orasan.
+
+### ⚠️ Dalawang magkaibang puzzle set — huwag paghaluin
+
+Ito ay para lang sa **lumang Puzzles tab**. Ang bagong **Puzzle Hub** ay gumagamit ng
+`js/puzzle-data.js` — **1,912 tunay na puzzle** na kinuha mula sa 92,976-puzzle na bundle ng app
+(`python tools/puzzlebank/build_puzzles.py` ang gumagawa nito; **huwag i-edit nang manu-mano**).
+
+Magkaiba ang convention nila, kaya hindi sila mapapalitan sa isa't isa:
+
+| | `puzzles.js` (luma) | `puzzle-data.js` (Puzzle Hub) |
+|---|---|---|
+| Sinong unang mag-move | **ikaw** — `solution[0]` ay sagot mo | **kalaban** — `moves[0]` ang setup move niya |
+| Sinong solver | kung sino ang naka-move sa `fen` | ang **kabaligtaran** ng naka-move sa `fen` |
+
+**Bakit slice lang sa browser:** 33 MB ang SQLite ng totoong app — hindi kayang i-load ng isang web
+page. Kaya ang browser ay may maliit na representative na piraso (bawat rating band, bawat theme,
+sapat na mate-in-1 para sa warmup, at isang taon ng daily puzzles). Pareho ang **logic**; ang laki
+lang ng corpus ang kulang. Sinasabi mismo ng file kung gaano kalaki ang tunay
+(`BiyaPuzzleData.corpusTotal`).
 
 ---
 

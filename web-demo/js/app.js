@@ -97,7 +97,12 @@
     TABS.forEach(function (t) {
       var b = el('button', 'tab' + (t.id === current ? ' active' : ''));
       b.innerHTML = '<span class="ico">' + t.ico + '</span><span class="lbl">' + t.lbl + '</span>';
-      b.onclick = function () { current = t.id; renderTabbar(); render(); };
+      b.onclick = function () {
+        // The solver owns timers and an in-flight search; leaving by the tab bar has to cancel
+        // both, or a stale opponent reply lands on whatever screen comes next.
+        leaveCurrentPuzzle();
+        current = t.id; renderTabbar(); render();
+      };
       tabbarEl.appendChild(b);
     });
   }
@@ -115,8 +120,19 @@
     else if (current === 'play') renderPlay();
     else if (current === 'profile') renderProfile();
     else if (current === 'analysis') renderAnalysis();
-    // NOTE: this trailing else silently renders Puzzles for any unknown id — a new screen MUST get
-    // its own branch above, or it will look like Puzzles with no error anywhere.
+    else if (current === 'puzzles') renderPuzzleHub();
+    else if (current === 'puzzle-play') renderPuzzlePlayHome();
+    else if (current === 'puzzle-solve') renderPuzzleSolver();
+    else if (current === 'puzzle-daily') renderDailyHome();
+    else if (current === 'puzzle-daily-solve') renderDailySolver();
+    else if (current === 'puzzle-thematic') renderThematicGrid();
+    else if (current === 'puzzle-thematic-solve') renderThematicSolver();
+    else if (current === 'puzzle-streak') renderStreakHome();
+    else if (current === 'puzzle-streak-solve') renderStreakSolver();
+    else if (current === 'puzzle-turbo') renderTurboHome();
+    else if (current === 'puzzle-turbo-run') renderTurboRun();
+    // NOTE: this trailing else silently renders the OLD sample-puzzle tab for any unknown id — a
+    // new screen MUST get its own branch above, or it will look like that with no error anywhere.
     else renderPuzzles();
   }
   function appCard() { return view.closest ? view.closest('.app-card') : view.parentNode; }
@@ -129,6 +145,109 @@
     BiyaAnalysisBoard.render(view, function () {
       current = 'home'; renderTabbar(); render();
     });
+  }
+
+  /* ======================================================================== *
+   *  PUZZLE HUB — see js/puzzle-hub.js, js/puzzle-home.js, js/puzzle-solver.js
+   *
+   *  The Puzzles TAB now opens the Hub. The ten hand-made samples in js/puzzles.js and the
+   *  `renderPuzzles()` screen below them are retired: they use the OPPOSITE move convention
+   *  (`solution[0]` is the solver's, where the corpus has `moves[0]` belonging to the opponent),
+   *  so the two cannot share a solver. They stay reachable at `?dev=samples` only, for the engine
+   *  spot-check they were originally written for.
+   * ======================================================================== */
+  function puzzleGo(id) { leaveCurrentPuzzle(); current = id; renderTabbar(); render(); }
+
+  function renderPuzzleHub() {
+    appCard().classList.add('an-mode');           // a pushed route: no tab bar, full height
+    BiyaPuzzleHub.render(view, function (mode) {
+      if (mode === 'play') puzzleGo('puzzle-play');
+      else if (mode === 'daily') puzzleGo('puzzle-daily');
+      else if (mode === 'thematic') puzzleGo('puzzle-thematic');
+      else if (mode === 'streak') puzzleGo('puzzle-streak');
+      else if (mode === 'turbo') puzzleGo('puzzle-turbo');
+    }, function () { puzzleGo('home'); });
+  }
+
+  function renderPuzzlePlayHome() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleHome.render(view, function () { puzzleGo('puzzle-solve'); },
+                          function () { puzzleGo('puzzles'); });
+  }
+
+  function renderPuzzleSolver() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleSolver.render(view, function () { puzzleGo('puzzle-play'); });
+  }
+
+  function renderDailyHome() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleDaily.renderHome(view, function () { puzzleGo('puzzle-daily-solve'); },
+                               function () { puzzleGo('puzzles'); });
+  }
+  function renderDailySolver() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleDaily.renderSolver(view, function () { puzzleGo('puzzle-daily'); });
+  }
+  function renderThematicGrid() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleThematic.renderGrid(view, function () { puzzleGo('puzzle-thematic-solve'); },
+                                  function () { puzzleGo('puzzles'); });
+  }
+  function renderThematicSolver() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleThematic.renderSolver(view, BiyaPuzzleThematic.selectedTheme(),
+                                    function () { puzzleGo('puzzle-thematic'); });
+  }
+
+  function renderStreakHome() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleStreak.renderHome(view, function () { puzzleGo('puzzle-streak-solve'); },
+                                function () { puzzleGo('puzzles'); });
+  }
+  function renderStreakSolver() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleStreak.renderSolver(view, function () { puzzleGo('puzzle-streak'); });
+  }
+
+  // Turbo's run needs two arguments the router has to carry across the transition: which mode was
+  // picked, and the draft being resumed (or null). Held here rather than inside the screen so a
+  // re-render of the same route — a tab-bar repaint, say — does not silently restart the run.
+  var turboLaunch = null;
+  function renderTurboHome() {
+    appCard().classList.add('an-mode');
+    BiyaPuzzleTurbo.renderHome(view, function (mode, draft) {
+      turboLaunch = { mode: mode, draft: draft };
+      puzzleGo('puzzle-turbo-run');
+    }, function () { puzzleGo('puzzles'); });
+  }
+  function renderTurboRun() {
+    appCard().classList.add('an-mode');
+    var L = turboLaunch || { mode: BiyaPuzzleMetrics.TURBO_DEFAULT_MODE, draft: null };
+    BiyaPuzzleTurbo.renderRun(view, L.mode, L.draft, function () {
+      turboLaunch = null;
+      puzzleGo('puzzle-turbo');
+    });
+  }
+
+  /**
+   * Every solver owns timers and an in-flight engine search, so ANY departure has to cancel them
+   * or a stale opponent reply lands on whatever screen comes next. One registry rather than a
+   * growing `if` chain — that chain is how the tab bar came to cancel only the rated solver.
+   */
+  var PUZZLE_LEAVERS = {
+    'puzzle-solve': function () { BiyaPuzzleSolver.leave(); },
+    'puzzle-daily-solve': function () { BiyaPuzzleDaily.leave(); },
+    'puzzle-thematic-solve': function () { BiyaPuzzleThematic.leave(); },
+    'puzzle-streak-solve': function () { BiyaPuzzleStreak.leave(); },
+    // Turbo's leave is not just a cancel: per Part 14.5 an infinite run saves a resumable draft
+    // and a timed one is RECORDED as `backgrounded`. Routing through here is what makes leaving
+    // mid-run count.
+    'puzzle-turbo-run': function () { BiyaPuzzleTurbo.leave(); },
+  };
+  function leaveCurrentPuzzle() {
+    var f = PUZZLE_LEAVERS[current];
+    if (f) f();
   }
 
   /* ======================================================================== *

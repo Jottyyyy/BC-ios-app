@@ -51,7 +51,8 @@ struct PhoneApp: View {
     /// Passed straight through to `HomeScreen`. Defaulted, so existing call sites are unaffected.
     var homeColorful: Bool = false
 
-    @StateObject private var puzzleVM = PuzzleVM()
+    /// The Puzzle Hub's state. One store for all five modes and every screen inside them.
+    @StateObject private var puzzleStore = PuzzleHubStore()
     @StateObject private var gameVM = ChessGameVM()
     @State private var tab = 0
     /// The Analysis Board is a pushed route in the original, with no tab bar — its seven bands
@@ -83,9 +84,14 @@ struct PhoneApp: View {
                     Group {
                         switch tab {
                         case 0: home(basis: basis)
-                        case 1: PuzzlesPhone(vm: puzzleVM)
+                        // The Puzzles tab is the HUB now, not the ten hand-made samples. Those
+                        // use the opposite move convention (`solution[0]` is the solver's, where
+                        // the corpus has `moves[0]` belonging to the opponent), so the two cannot
+                        // share a solver — which is why the old screen is retired to a dev entry
+                        // rather than adapted.
+                        case 1: PuzzleHubScreen(store: puzzleStore, onExit: { tab = 0 })
                         case 2: PlayPhone(vm: gameVM)
-                        default: ProfilePhone(vm: puzzleVM)
+                        default: ProfilePhone(store: puzzleStore)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -171,19 +177,88 @@ struct PhoneTitle: View {
     }
 }
 
+/// The Analysis Board's and Play's promotion picker: a row of square tiles, no labels.
+///
+/// Every number now comes from `AnalysisPromotion`, extracted from `board.tsx`. It used to be
+/// hand-typed — 46pt tiles where the source has 60, radius 8 where it has 12, `Theme.boardLight`
+/// where it has `#455A64`, and no title at all — while the extracted values sat unread. That is
+/// the same bug the web `<chess-board>` dialog had, in the other language.
+///
+/// **This is not the puzzle hub's dialog.** See `PuzzlePromotionOverlay`: the two share a purpose
+/// and not one measurement, so they are deliberately two views.
 struct PromotionOverlay: View {
     let color: PieceColor
     let onChoose: (PieceKind) -> Void
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach([PieceKind.queen, .rook, .bishop, .knight], id: \.self) { k in
-                Button { onChoose(k) } label: {
-                    PieceImage(piece: Piece(color, k), size: 40, shadow: false)
-                        .frame(width: 46, height: 46).background(Theme.boardLight, in: RoundedRectangle(cornerRadius: 8))
-                }.buttonStyle(.plain)
+        VStack(spacing: AnalysisPromotion.titleMarginBottom) {
+            Text(AnalysisPromotion.title)
+                .font(Theme.nunito(AnalysisPromotion.titleSize, .bold))
+                .foregroundStyle(AnalysisPromotion.titleColor)
+            HStack(spacing: AnalysisPromotion.optionsGap) {
+                ForEach(AnalysisPromotion.order, id: \.self) { k in
+                    Button { onChoose(k) } label: {
+                        PieceImage(piece: Piece(color, k),
+                                   size: AnalysisPromotion.optionSize, shadow: false)
+                            .frame(width: AnalysisPromotion.optionSize,
+                                   height: AnalysisPromotion.optionSize)
+                            .background(AnalysisPromotion.optionFill,
+                                        in: RoundedRectangle(cornerRadius: AnalysisPromotion.optionRadius))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
-        .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).shadow(radius: 16)
+        .padding(AnalysisPromotion.dialogPadding)
+        .background(AnalysisPromotion.dialogFill,
+                    in: RoundedRectangle(cornerRadius: AnalysisPromotion.dialogRadius))
+        .shadow(radius: AnalysisPromotion.elevation)
+    }
+}
+
+/// The puzzle hub's promotion picker: a vertical list of labelled, accent-filled rows.
+///
+/// Structurally different from `PromotionOverlay` because the source is: `promotionOption` in the
+/// puzzle screens is `flexDirection: 'row'` with a text label and the screen's accent as its fill,
+/// where `board.tsx` has an unlabelled 60pt square. Both are extracted; neither is a preference.
+///
+/// The scrim comes from `PuzzlePromotion.scrimFor(mode)` — Streak and Turbo dim to 0.82 where the
+/// other three use 0.80, which is the whole reason the extraction keeps two values.
+struct PuzzlePromotionOverlay: View {
+    let color: PieceColor
+    let mode: PuzzleSession.Mode
+    let onChoose: (PieceKind) -> Void
+
+    var body: some View {
+        ZStack {
+            PuzzlePromotion.scrimFor(mode).ignoresSafeArea()
+            VStack(spacing: PuzzlePromotion.optionsGap) {
+                Text(PuzzleStrings.promotionTitle)
+                    .font(Theme.nunito(PuzzlePromotion.titleSize, .bold))
+                    .foregroundStyle(PuzzlePalette.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.bottom, PuzzlePromotion.titleMarginBottom)
+                ForEach(PuzzlePromotion.order, id: \.self) { k in
+                    Button { onChoose(k) } label: {
+                        HStack(spacing: PuzzlePromotion.optionGap) {
+                            PieceImage(piece: Piece(color, k),
+                                       size: PuzzlePromotion.glyphSize, shadow: false)
+                            Text(PuzzlePromotion.label(k))
+                                .font(Theme.nunito(PuzzlePromotion.optionTextSize, .bold))
+                                .foregroundStyle(PuzzlePalette.textPrimary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(PuzzlePromotion.optionPadding)
+                        .background(PuzzlePromotion.accent(mode),
+                                    in: RoundedRectangle(cornerRadius: PuzzlePromotion.optionRadius))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(PuzzlePromotion.dialogPadding)
+            .frame(width: PuzzlePromotion.dialogWidth)
+            .background(PuzzlePalette.card,
+                        in: RoundedRectangle(cornerRadius: PuzzlePromotion.dialogRadius))
+        }
     }
 }
 
@@ -206,76 +281,11 @@ func phoneCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Con
     .padding(.horizontal, 18)
 }
 
-// ── Puzzles tab ──────────────────────────────────────────────────────────────
-
-struct PuzzlesPhone: View {
-    @ObservedObject var vm: PuzzleVM
-    private var accuracy: Double { vm.attempted == 0 ? 0 : Double(vm.solved) / Double(vm.attempted) }
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 13) {
-                PhoneTitle(title: "Puzzles")
-                HStack(spacing: 12) {
-                    RingGauge(value: accuracy, size: 74,
-                              center: vm.attempted == 0 ? "—" : "\(Int(round(accuracy * 100)))",
-                              caption: "% solved")
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Text("YOUR RATING").font(Theme.nunito(10, .semiBold)).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                            Spacer()
-                            Text("\(vm.userRating)").font(Theme.nunito(19, .bold)).foregroundStyle(Theme.violet)
-                        }
-                        Sparkline(values: vm.ratingHistory).frame(height: 40)
-                        Text(vm.puzzle.map { "Puzzle \($0.rating) · \(vm.solved) solved" } ?? " ")
-                            .font(Theme.nunito(11, .regular)).foregroundStyle(Theme.mutedForeground)
-                    }
-                    .padding(12)
-                    .background(Theme.muted, in: RoundedRectangle(cornerRadius: Theme.radius))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border, lineWidth: 1))
-                }.padding(.horizontal, 18)
-
-                phoneBoard(BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
-                                     lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
-                                     boardSize: 344, onTap: { vm.tap($0) }))
-                    .overlay { if vm.pendingPromotion != nil { PromotionOverlay(color: vm.sideToMove) { vm.choosePromotion($0) } } }
-
-                MoveRibbon(sans: vm.sanHistory).padding(.horizontal, 18)
-
-                VStack(spacing: 10) {
-                    statusLine
-                    Button(action: { vm.phase == .solving ? vm.finishSkip() : vm.next() }) {
-                        Label(vm.phase == .solving ? "Skip puzzle" : "Next puzzle",
-                              systemImage: vm.phase == .solving ? "forward.fill" : "arrow.right.circle.fill")
-                            .frame(maxWidth: .infinity).padding(.vertical, 11)
-                            .background(vm.phase == .solving ? AnyShapeStyle(Theme.muted) : AnyShapeStyle(Theme.violetGradient),
-                                        in: RoundedRectangle(cornerRadius: Theme.radius))
-                            .foregroundStyle(vm.phase == .solving ? Theme.foreground : Theme.onGold)
-                            .fontWeight(.semibold)
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, 18)
-                Spacer(minLength: 8)
-            }
-        }
-    }
-
-    private var statusLine: some View {
-        HStack {
-            switch vm.phase {
-            case .solved:
-                Label("Solved  +\(vm.lastDelta)", systemImage: "checkmark.seal.fill").foregroundStyle(Theme.positive)
-            case .failed:
-                Label("Missed  \(vm.lastDelta)", systemImage: "xmark.seal.fill").foregroundStyle(Theme.negative)
-                if let s = vm.correctSAN { Text("· best \(s)").foregroundStyle(Theme.mutedForeground) }
-            default:
-                Text(vm.message).foregroundStyle(Theme.mutedForeground)
-            }
-            Spacer()
-        }.font(Theme.nunito(14, .medium))
-    }
-}
-
-// ── Play tab ─────────────────────────────────────────────────────────────────
+// ── Puzzles tab ─────────────────────────────────────────────────────────────────
+//
+// `PuzzlesPhone` lived here and is gone: the tab shows `PuzzleHubScreen` now. The ten hand-made
+// samples it drew survive at `AppShell`'s `.samples` panel, which is the engine spot-check they
+// were written for. Two unreachable copies of a retired screen would be one too many.
 
 struct PlayPhone: View {
     @ObservedObject var vm: ChessGameVM
@@ -411,8 +421,16 @@ struct LearnPhone: View {
 // ── Profile tab ──────────────────────────────────────────────────────────────
 
 struct ProfilePhone: View {
-    @ObservedObject var vm: PuzzleVM
-    private var accuracy: Double { vm.attempted == 0 ? 0 : Double(vm.solved) / Double(vm.attempted) }
+    /// Reads the hub's store, not the retired sample solver — otherwise the profile would show a
+    /// rating and a solve count from a screen the user can no longer reach.
+    @ObservedObject var store: PuzzleHubStore
+    private var accuracy: Double {
+        // `PuzzleStats.accuracy` is the golden-tested one; it returns nil before any attempt.
+        guard let a = PuzzleStats.accuracy(store.state) else { return 0 }
+        return Double(a.solved) / Double(max(a.attempted, 1))
+    }
+    private var rating: Int { store.state.profile.rating }
+    private var solvedCount: Int { PuzzleStats.accuracy(store.state)?.solved ?? 0 }
     private let tierRows: [(String, Int)] = [("Expert", 2000), ("Advanced", 1600), ("Intermediate", 1200), ("Beginner", 800), ("Novice", 0)]
 
     var body: some View {
@@ -426,15 +444,15 @@ struct ProfilePhone: View {
                         .overlay(Circle().stroke(Theme.onGold.opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Biyahero").font(Theme.nunito(20, .bold)).foregroundStyle(Theme.onGold)
-                        Text(RatingTier.classify(vm.userRating)).font(Theme.nunito(14, .medium)).foregroundStyle(Theme.onGold.opacity(0.75))
-                        Text("\(vm.userRating) rating").font(Theme.nunito(21, .extraBold)).foregroundStyle(Theme.onGold)
+                        Text(RatingTier.classify(rating)).font(Theme.nunito(14, .medium)).foregroundStyle(Theme.onGold.opacity(0.75))
+                        Text("\(rating) rating").font(Theme.nunito(21, .extraBold)).foregroundStyle(Theme.onGold)
                     }
                     Spacer()
                 }
                 .padding(18).background(Theme.violetGradient, in: RoundedRectangle(cornerRadius: 18)).padding(.horizontal, 18)
 
                 HStack(spacing: 10) {
-                    StatTile(icon: "checkmark.seal.fill", value: "\(vm.solved)", label: "Solved", tint: Theme.positive)
+                    StatTile(icon: "checkmark.seal.fill", value: "\(solvedCount)", label: "Solved", tint: Theme.positive)
                     StatTile(icon: "target", value: vm.attempted == 0 ? "—" : "\(Int(round(accuracy * 100)))%", label: "Accuracy", tint: Theme.violet)
                     StatTile(icon: "flag.checkered", value: "\(vm.attempted)", label: "Attempts", tint: Theme.warning)
                 }.padding(.horizontal, 18)
@@ -455,8 +473,8 @@ struct ProfilePhone: View {
                         }.frame(height: 8)
                         ForEach(tierRows, id: \.0) { name, floor in
                             HStack {
-                                Circle().fill(RatingTier.classify(vm.userRating) == name ? AnyShapeStyle(Theme.violet) : AnyShapeStyle(Theme.border)).frame(width: 8, height: 8)
-                                Text(name).fontWeight(RatingTier.classify(vm.userRating) == name ? .semibold : .regular)
+                                Circle().fill(RatingTier.classify(rating) == name ? AnyShapeStyle(Theme.violet) : AnyShapeStyle(Theme.border)).frame(width: 8, height: 8)
+                                Text(name).fontWeight(RatingTier.classify(rating) == name ? .semibold : .regular)
                                 Spacer()
                                 Text("\(floor)+").foregroundStyle(Theme.mutedForeground)
                             }.font(Theme.nunito(15, .regular))

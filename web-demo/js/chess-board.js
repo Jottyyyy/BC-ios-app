@@ -25,14 +25,15 @@
  * ── Methods ───────────────────────────────────────────────────────────────
  *   setPosition(fen, { animate=true, lastMove:{from,to}|null, check:sq|null })
  *   getPosition()   flip()   clearSelection()
- *   highlightLastMove(from,to)   setCheck(sq|null)   showLegalTargets([sq])
+ *   highlightLastMove(from,to)   highlightSolution(from,to)   setCheck(sq|null)
+ *   showLegalTargets([sq])
  *
  * ── Events ────────────────────────────────────────────────────────────────
  *   'move'          detail { from, to, promotion, uci }  (after promotion pick)
  *   'square-select' detail { square }
  *
  * ── Theming (CSS custom properties; pierce the Shadow DOM) ─────────────────
- *   --board-light --board-dark --hl-last --hl-select --hl-check
+ *   --board-light --board-dark --hl-last --hl-select --hl-check --hl-sol-from --hl-sol-to
  *   --dot-color --ring-color --board-max --board-radius --coord-color
  *
  * Classic <script>, no modules — runs from file:// on Windows.
@@ -46,6 +47,13 @@
   var GLYPH = ['♟', '♞', '♝', '♜', '♛', '♚']; // pawn…king (solid)
   // Below this many CSS px a press is still a tap, so tap-to-move keeps working.
   var DRAG_THRESHOLD = 4;
+  // A light tap. The source asks for ImpactFeedbackStyle.Light, which has no duration to copy —
+  // the Web Vibration API only takes milliseconds, so this is the shortest buzz that registers.
+  var HAPTIC_LIGHT_MS = 10;
+  // The two dialogs word their own title. board.tsx:3241 vs puzzle-streak/puzzle.tsx:528.
+  var PROMO_TITLE_ROW = 'Promote to:';
+  var PROMO_TITLE_LIST = 'Choose Promotion';
+  var PROMO_LABELS = { 4: 'Queen', 3: 'Rook', 2: 'Bishop', 1: 'Knight' };
 
   // Minimal FEN → 64-array of {color,kind}|null. (Board is view-only; it does not
   // need full engine rules, just enough to place pieces.)
@@ -72,7 +80,11 @@
   var STYLE = [
     ':host{display:block;--_max:var(--board-max,640px);--_light:var(--board-light,#5BA3F5);--_dark:var(--board-dark,#2C4A73);',
     '--_last:var(--hl-last,rgba(253,176,34,.32));--_sel:var(--hl-select,rgba(253,176,34,.55));--_check:var(--hl-check,rgba(255,107,107,.5));',
-    '--_dot:var(--dot-color,rgba(255,255,255,.22));--_ring:var(--ring-color,rgba(255,255,255,.30));--_coord:var(--coord-color,#8BA3C7);}',
+    '--_dot:var(--dot-color,rgba(255,255,255,.22));--_ring:var(--ring-color,rgba(255,255,255,.30));--_coord:var(--coord-color,#8BA3C7);',
+    // Two tones, not one. Puzzle Streak's solution strip shows the correct move with a lighter
+    // FROM square and a stronger TO square, so `highlightLastMove`'s single `--hl-last` cannot
+    // express it. Additive: nothing that does not call `highlightSolution` sees any change.
+    '--_solfrom:var(--hl-sol-from,rgba(253,176,34,.65));--_solto:var(--hl-sol-to,rgba(253,176,34,.95));}',
     '.board{position:relative;width:100%;max-width:var(--_max);margin:0 auto;aspect-ratio:1/1;border-radius:var(--board-radius,12px);overflow:hidden;',
     'box-shadow:0 8px 22px rgba(0,0,0,.30);touch-action:manipulation;user-select:none;-webkit-user-select:none;}',
     '.squares{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);}',
@@ -80,6 +92,8 @@
     '.sq.light{background:var(--_light);}.sq.dark{background:var(--_dark);}',
     '.sq::before{content:"";position:absolute;inset:0;background:transparent;pointer-events:none;transition:background .12s ease;}',
     '.sq.last::before{background:var(--_last);}',
+    '.sq.solfrom::before{background:var(--_solfrom);}',
+    '.sq.solto::before{background:var(--_solto);}',
     '.sq.sel::before{background:var(--_sel);}',
     '.sq.check::before{background:radial-gradient(circle,var(--_check) 0%,var(--_check) 42%,transparent 74%);}',
     '.sq::after{content:"";position:absolute;pointer-events:none;opacity:0;transition:opacity .1s ease;}',
@@ -108,11 +122,29 @@
     '.piece .inner{width:100%;height:100%;transition:transform .2s ease,opacity .2s ease;filter:drop-shadow(0 2px 2px rgba(0,0,0,.34));}',
     '.piece .inner img,.piece .inner svg{width:100%;height:100%;display:block;}',
     '.piece.spawn .inner,.piece.dying .inner{transform:scale(.4);opacity:0;}',
-    '.promo{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,12,24,.55);z-index:9;}',
+    // The promotion dialog's look comes from the host's `--pz-promo-*` properties when the
+    // board is inside a puzzle screen. They INHERIT into the shadow tree, so the host sets
+    // them on the screen root and this reads them; the fallbacks are the standalone look
+    // (Play, the Analysis Board) and keep those unchanged. Before this, `puzzle-solver.js`
+    // computed all nine from the extraction and nothing read a single one — including the
+    // mode-specific scrim, so Streak and Turbo silently drew the 0.80 dim instead of 0.82.
+    '.promo{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--pz-promo-scrim,rgba(6,12,24,.55));z-index:9;}',
     '.promo.on{display:flex;}',
-    '.promo .card{background:rgba(26,41,66,.98);border:1px solid rgba(74,159,232,.30);border-radius:14px;padding:12px;box-shadow:0 18px 40px rgba(0,0,0,.5);',
+    '.promo .card{background:rgba(26,41,66,.98);border:1px solid var(--pz-promo-accent,rgba(74,159,232,.30));border-radius:var(--pz-promo-r,14px);padding:var(--pz-promo-pad,12px);box-shadow:0 18px 40px rgba(0,0,0,.5);',
     'display:flex;gap:8px;}',
-    '.promo .opt{width:15%;min-width:44px;aspect-ratio:1/1;background:var(--_light);border-radius:8px;cursor:pointer;padding:4%;box-sizing:border-box;border:0;}',
+    '.promo .promo-title{color:var(--pz-promo-title-c,#ECEFF1);font:700 var(--pz-promo-title-fs,16px)/1.2 inherit;',
+    'text-align:center;margin-bottom:var(--pz-promo-title-mb,16px);}',
+    '.promo .opts{display:flex;gap:var(--pz-promo-opt-gap-row,12px);}',
+    // The puzzle layout: a column of full-width labelled rows, sized in points rather than as a
+    // percentage of the board, because `promotionDialog` in the source has a fixed 280pt width.
+    '.promo .card.list{width:var(--pz-promo-w,280px);}',
+    '.promo .opts.list{flex-direction:column;gap:var(--pz-promo-gap,10px);}',
+    '.promo .opt{width:15%;min-width:44px;aspect-ratio:1/1;background:var(--_light);border-radius:var(--pz-promo-opt-r,8px);cursor:pointer;padding:4%;box-sizing:border-box;border:0;}',
+    '.promo .opts.list .opt{width:100%;aspect-ratio:auto;display:flex;align-items:center;justify-content:center;',
+    'gap:var(--pz-promo-opt-gap,12px);padding:var(--pz-promo-opt-pad,14px);background:var(--pz-promo-accent,#455A64);}',
+    '.promo .opt .glyph{width:100%;height:100%;}',
+    '.promo .opts.list .opt .glyph{width:var(--pz-promo-glyph,36px);height:var(--pz-promo-glyph,36px);flex:none;}',
+    '.promo .opt-label{color:#FFFFFF;font:700 var(--pz-promo-opt-fs,16px)/1 inherit;}',
     '.promo .opt img,.promo .opt svg{width:100%;height:100%;}',
     '.promo .opt:hover{outline:2px solid var(--hl-select,#FDB022);}'
   ].join('');
@@ -141,6 +173,7 @@
       this._selected = null;
       this._legalTargets = [];        // [{to, promotion|null}]
       this._lastMove = null;          // {from, to}
+      this._solution = null;          // {from, to} — the revealed answer, two-toned
       this._checkSq = null;
       this._pendingPromo = null;      // {from, to, color}
       this._built = false;
@@ -191,6 +224,11 @@
     set fen(v) { this.setPosition(v, { animate: false }); }
     get flipped() { return this._flipped; }
     set flipped(v) { this._flipped = !!v; this._relayout(); }
+    /** `'row'` (default, board.tsx) or `'list'` (the puzzle hub). See `_openPromo`. */
+    get promotionLayout() { return this._promoLayout === 'list' ? 'list' : 'row'; }
+    set promotionLayout(v) { this._promoLayout = (v === 'list') ? 'list' : 'row'; }
+    get haptics() { return this._haptics !== false; }
+    set haptics(v) { this._haptics = !!v; }
     get interactive() { return this._interactive; }
     set interactive(v) { this._interactive = !!v; if (!v) this.clearSelection(); }
     get rules() { return this._rules; }
@@ -388,7 +426,9 @@
 
     // ---- highlights / marks -------------------------------------------------
     _clearMarks() {
-      for (var k = 0; k < this._cells.length; k++) this._cells[k].classList.remove('last', 'sel', 'check', 'dot', 'cap');
+      for (var k = 0; k < this._cells.length; k++) {
+        this._cells[k].classList.remove('last', 'sel', 'check', 'dot', 'cap', 'solfrom', 'solto');
+      }
     }
     _applyMarks() {
       if (!this._built) return;
@@ -397,6 +437,11 @@
       if (this._lastMove) {
         if ((cell = this._cellBySq.get(this._lastMove.from))) cell.classList.add('last');
         if ((cell = this._cellBySq.get(this._lastMove.to))) cell.classList.add('last');
+      }
+      // Drawn after `last` so a revealed solution wins on a square the last move also touched.
+      if (this._solution) {
+        if ((cell = this._cellBySq.get(this._solution.from))) cell.classList.add('solfrom');
+        if ((cell = this._cellBySq.get(this._solution.to))) cell.classList.add('solto');
       }
       if (this._checkSq != null && (cell = this._cellBySq.get(this._checkSq))) cell.classList.add('check');
       if (this._selected != null && (cell = this._cellBySq.get(this._selected))) cell.classList.add('sel');
@@ -407,6 +452,14 @@
       });
     }
     highlightLastMove(from, to) { this._lastMove = (from == null ? null : { from: from, to: to }); this._applyMarks(); }
+    /**
+     * Show a revealed answer with a lighter origin and a stronger destination.
+     *
+     * Separate from `highlightLastMove` because that paints both squares one colour, and Puzzle
+     * Streak's solution strip (Part 13.3) needs 0.65 on the from-square and 0.95 on the to-square
+     * so the direction of the move reads at a glance. `highlightSolution(null)` clears it.
+     */
+    highlightSolution(from, to) { this._solution = (from == null ? null : { from: from, to: to }); this._applyMarks(); }
     setCheck(sq) { this._checkSq = (sq == null ? null : sq); this._applyMarks(); }
 
     // ---- interaction --------------------------------------------------------
@@ -577,6 +630,11 @@
       if (!targets.length) { this._rect = null; return; }  // not draggable — let the tap path run
       var rec = this._els.get(sq);
       if (!rec) { this._rect = null; return; }
+      // A light buzz on PICKUP, matching DragDropChessBoard.tsx:351 — after the guards and before
+      // the drag begins, never on drop and never on a right or wrong answer. `targets.length`
+      // above is the same three conditions the source checks one at a time: the square holds a
+      // piece, it belongs to the side to move, and it passes the screen's colour filter.
+      this._haptic();
       this._drag = {
         from: sq, el: rec.el, pointerId: e.pointerId, moved: false, targets: targets,
         x0: e.clientX, y0: e.clientY
@@ -585,6 +643,24 @@
       if (this._boardEl.setPointerCapture) {
         try { this._boardEl.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
       }
+    }
+
+    /**
+     * The one haptic the puzzle path uses: `Haptics.impactAsync(ImpactFeedbackStyle.Light)`.
+     *
+     * `navigator.vibrate` is the nearest web equivalent and is genuinely absent on desktop and on
+     * iOS Safari, so this is a no-op there — that is expected, not a fallback worth building. What
+     * matters is that the *call site* is right, because `ios/` will hit the same one through
+     * `PuzzleHaptics.onPickup`, and Android does feel it.
+     *
+     * Set `.haptics = false` to silence it; the property exists so a screen can opt out without
+     * anyone re-deriving the trigger condition somewhere else.
+     */
+    _haptic() {
+      if (this._haptics === false) return;
+      var nav = (typeof navigator !== 'undefined') ? navigator : null;
+      if (!nav || typeof nav.vibrate !== 'function') return;
+      try { nav.vibrate(HAPTIC_LIGHT_MS); } catch (err) { /* blocked by policy — ignore */ }
     }
 
     _onPointerMove(e) {
@@ -686,23 +762,53 @@
       this._pendingPromo = { from: from, to: to, color: color };
       this._openPromo(color);
     }
+    /**
+     * The promotion picker, in one of TWO layouts — because the source has two.
+     *
+     * `board.tsx` (the Analysis Board and Play) shows an unlabelled horizontal row of square
+     * tiles titled "Promote to:". The five puzzle screens show a vertical list of labelled,
+     * accent-filled rows titled "Choose Promotion". Every extracted measurement differs between
+     * them, so this cannot be one design with a different colour: `promotionOption` is a 60pt
+     * square in one and a `flexDirection: 'row'` with a text label in the other.
+     *
+     * Default is `'row'`, so Play and the Analysis Board render exactly as they always have.
+     * A puzzle screen sets `.promotionLayout = 'list'` and supplies the `--pz-promo-*`
+     * properties, which is what finally makes all nine of them read.
+     */
     _openPromo(color) {
-      var kinds = [4, 3, 2, 1]; // Queen, Rook, Bishop, Knight
+      var kinds = [4, 3, 2, 1]; // Queen, Rook, Bishop, Knight — fixed order, no cancel
       var self = this;
+      var list = this._promoLayout === 'list';
       this._promoEl.innerHTML = '';
-      var card = document.createElement('div'); card.className = 'card';
+      var card = document.createElement('div');
+      card.className = list ? 'card list' : 'card';
+
+      var title = document.createElement('div');
+      title.className = 'promo-title';
+      title.textContent = list ? PROMO_TITLE_LIST : PROMO_TITLE_ROW;
+      card.appendChild(title);
+
+      var opts = document.createElement('div');
+      opts.className = list ? 'opts list' : 'opts';
       kinds.forEach(function (kind) {
         var btn = document.createElement('button'); btn.className = 'opt'; btn.type = 'button';
-        var inner = document.createElement('div'); inner.style.width = '100%'; inner.style.height = '100%';
+        var inner = document.createElement('div'); inner.className = 'glyph';
         self._setPieceContent(inner, { color: color, kind: kind });
         btn.appendChild(inner);
+        if (list) {
+          var label = document.createElement('span');
+          label.className = 'opt-label';
+          label.textContent = PROMO_LABELS[kind];
+          btn.appendChild(label);
+        }
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           var p = self._pendingPromo; self._closePromo();
           if (p) self._commit(p.from, p.to, kind);
         });
-        card.appendChild(btn);
+        opts.appendChild(btn);
       });
+      card.appendChild(opts);
       this._promoEl.appendChild(card);
       this._promoEl.classList.add('on');
     }
