@@ -296,7 +296,7 @@ final class CoachStore: ObservableObject {
                     blackClassifications: annotated.blackClassifications,
                     moveEvaluations: annotated.moveEvaluations,
                     evalGraph: base.evalGraph,
-                    displayOrder: annotated.displayOrder,
+                    displayOrder: ReviewAnnotator.displayOrder,
                     total: plan.positions.count))
             }
         }

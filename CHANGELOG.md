@@ -9,6 +9,45 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-13 (fixed) — Restore the build after the engine/pairing/puzzle merge, and ship 1.0.5 (41)
+
+`main` did not compile after the Engine-settings / Play-vs-Coach / Pairing-Manager merge: 5 errors in
+`BiyaherongCoachCore` + `ParityRunner` and 30 in `BiyaherongUI`. Every one was a call site left behind by
+an API that moved, so the fixes are at the callers unless noted. **No behaviour was redesigned and nothing
+was stubbed out.** `web-demo/` needed no change — its twins already describe the intended behaviour, and
+they are what several of these fixes were derived from.
+
+**Core / harness**
+- `StreakEngine.State` now conforms to `Sendable`. The new `PuzzleProgressState` is `Sendable` and embeds
+  it, which is an error under Swift 6 strict concurrency. Its four stored properties are all `Int`/`Int?`,
+  so the conformance is free — every other public value type in Core already declares it.
+- Four `PuzzleProgress.endStreakRun` call sites in `ParityRunner` pass the now-required `bestBefore`
+  (`0`, `7`, `7`, `0` — the best as it stood when each run *started*, which is what the surrounding
+  assertions already expect).
+
+**UI**
+- `PuzzleModal`'s `let body: String` collided with `View.body`. Stored as `message` with an explicit init
+  that keeps the `body:` argument label, so all six call sites are untouched.
+- `PuzzleStats.ActivityBar` has no `fraction`: `activity()` already returns the final `height` in points,
+  floor and all. Dropped the local `barHeight` helper, which was applying that same floor a second time.
+- `ThemeRow.label`/`.fraction` → `.theme` and `.percent / 100`; the activity bar's day letter is derived
+  from `dayKey` through a UTC calendar, as `web-demo/js/puzzle-home.js` does.
+- `PuzzleStats.sparkline` returns an optional and is now unwrapped: under two attempts the box draws
+  nothing, matching the twin. `sparkWidth` is measured from a `GeometryReader`, **not** extracted — the
+  RN chart is `flex: 1`, so no such constant exists or should be invented.
+- `StandingsRow` carries only the `wins` its tie-break ladder consumes, so the standings table and the
+  share text read draws/losses from the player record.
+- `ProfilePhone` referenced a `vm` the refactor removed; the five sites now derive from `store`.
+- Also: `CoachProfile: Sendable`; `ReviewAnnotator.displayOrder` is static, not per-`Annotated`;
+  `Theme.c` → the existing `Theme_c` helper where `PuzzleThematicGrid.Theme` shadows it;
+  `TurboRun.start(...)` instead of hand-seeding `TurboRun.State`; a `#if os(iOS)` around the iOS-only
+  `.toolbar(.hidden, for: .navigationBar)` (iOS rendering is unchanged); and one type-checker timeout in
+  `PairingShareText.standings` split into named sub-expressions.
+
+**Shipped.** `1.0.5 (41)` uploaded to App Store Connect (delivery `3b686495-7db7-4eef-9925-5f1d526b5fa8`),
+`altool --validate-app` clean. `ios/project.yml` now records **41** — it had read `38` while the record
+was already at `40`, because every upload so far overrode it on the command line.
+
 ### 2026-08-13 (added) — A stronger analysis engine, and an Engine Settings panel to spend it
 
 The Analysis Board's engine got both halves of what was asked for: it plays better at the same

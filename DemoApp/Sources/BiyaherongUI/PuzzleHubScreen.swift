@@ -269,7 +269,13 @@ extension View {
     /// The pushed puzzle routes draw their own back control, matching the source. One modifier so
     /// eleven screens do not each repeat the two calls.
     func navigationBarBackTapHidden() -> some View {
-        self.navigationBarBackButtonHidden(true)
+        // `ToolbarPlacement.navigationBar` is iOS-only; the macOS demo hosts these routes inside
+        // `PhoneView`'s frame, which has no navigation bar to hide, so the back button is enough.
+        #if os(iOS)
+        return self.navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
+        #else
+        return self.navigationBarBackButtonHidden(true)
+        #endif
     }
 }

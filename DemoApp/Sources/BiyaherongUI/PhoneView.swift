@@ -482,6 +482,13 @@ struct ProfilePhone: View {
     }
     private var rating: Int { store.state.profile.rating }
     private var solvedCount: Int { PuzzleStats.accuracy(store.state)?.solved ?? 0 }
+    private var attempted: Int { PuzzleStats.accuracy(store.state)?.attempted ?? 0 }
+    /// Same window and ordering `PuzzleStats.sparkline` charts — the newest `sparkWindow` rows,
+    /// reversed to oldest-first — flattened to the `[Int]` this panel's `Sparkline` draws.
+    private var ratingHistory: [Int] {
+        PuzzleProgress.ratingHistory(store.state, limit: PuzzleStats.sparkWindow)
+            .reversed().map(\.ratingAfter)
+    }
     private let tierRows: [(String, Int)] = [("Expert", 2000), ("Advanced", 1600), ("Intermediate", 1200), ("Beginner", 800), ("Novice", 0)]
 
     var body: some View {
@@ -504,19 +511,19 @@ struct ProfilePhone: View {
 
                 HStack(spacing: 10) {
                     StatTile(icon: "checkmark.seal.fill", value: "\(solvedCount)", label: "Solved", tint: Theme.positive)
-                    StatTile(icon: "target", value: vm.attempted == 0 ? "—" : "\(Int(round(accuracy * 100)))%", label: "Accuracy", tint: Theme.violet)
-                    StatTile(icon: "flag.checkered", value: "\(vm.attempted)", label: "Attempts", tint: Theme.warning)
+                    StatTile(icon: "target", value: attempted == 0 ? "—" : "\(Int(round(accuracy * 100)))%", label: "Accuracy", tint: Theme.violet)
+                    StatTile(icon: "flag.checkered", value: "\(attempted)", label: "Attempts", tint: Theme.warning)
                 }.padding(.horizontal, 18)
 
                 phoneCard("Rating progress") {
-                    Sparkline(values: vm.ratingHistory).frame(height: 62)
+                    Sparkline(values: ratingHistory).frame(height: 62)
                 }
 
                 phoneCard("Tier") {
                     VStack(alignment: .leading, spacing: 10) {
                         GeometryReader { geo in
-                            let (lo, hi) = band(vm.userRating)
-                            let frac = max(0.02, min(1, Double(vm.userRating - lo) / Double(max(1, hi - lo))))
+                            let (lo, hi) = band(rating)
+                            let frac = max(0.02, min(1, Double(rating - lo) / Double(max(1, hi - lo))))
                             ZStack(alignment: .leading) {
                                 Capsule().fill(Theme.border).frame(height: 8)
                                 Capsule().fill(Theme.violetGradient).frame(width: geo.size.width * frac, height: 8)

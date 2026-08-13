@@ -16,7 +16,7 @@ struct PuzzleStreakHomeScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.streakTitle,
+            PuzzleScreenHeader(title: PuzzleStrings.streakTitle, subtitle: nil,
                                titleSize: PuzzleType.streakTitle, onBack: onExit) {
                 Text(PuzzleStrings.streakBadge)
                     .font(Theme.nunito(PuzzleType.streakBadge, .bold))

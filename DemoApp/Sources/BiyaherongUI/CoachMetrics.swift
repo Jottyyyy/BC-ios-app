@@ -853,7 +853,7 @@ public enum CoachAccent {
 ///
 /// `winMsg` / `loseMsg` are what the result card shows, so they are part of the roster rather
 /// than of `CoachStrings`: they vary per coach, and a missing one is a blank modal.
-public struct CoachProfile: Identifiable, Hashable {
+public struct CoachProfile: Identifiable, Hashable, Sendable {
     public let id: Int
     public let name: String
     public let role: String

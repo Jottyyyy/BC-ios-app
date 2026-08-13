@@ -10,13 +10,21 @@ struct PuzzlePlayHomeScreen: View {
     let onPlay: () -> Void
     let onExit: () -> Void
 
-    private var summary: PuzzleStats.Summary {
-        PuzzleStats.summary(store.state, now: PuzzleHubStore.nowMs())
+    /// Every Part 10.1 statistic in one call. The spark box is the only one that needs geometry —
+    /// in the source that chart is `flex: 1`, so its width is measured by whoever draws it rather
+    /// than extracted, which is why it arrives as a parameter instead of as a constant.
+    private func summary(sparkWidth: CGFloat) -> PuzzleStats.Summary {
+        PuzzleStats.summary(store.state, now: PuzzleHubStore.nowMs(),
+                            sparkWidth: Double(sparkWidth),
+                            sparkHeight: Double(PuzzleStatsStyle.sparkHeight),
+                            sparkYMargin: PuzzleStatsStyle.sparkYMargin,
+                            barMaxHeight: Double(PuzzleStatsStyle.barMaxHeight),
+                            barMinHeight: Double(PuzzleStatsStyle.barMinHeight))
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.homeTitle,
+            PuzzleScreenHeader(title: PuzzleStrings.homeTitle, subtitle: nil,
                                titleSize: PuzzleType.homeTitle, onBack: onExit) {
                 Text(PuzzleStrings.homeBadge)
                     .font(Theme.nunito(PuzzleType.homeBadge, .bold))
@@ -179,10 +187,12 @@ struct PuzzleStatsCards: View {
     }
 
     private var activityCard: some View {
-        let bars = PuzzleStats.activity(store.state, now: PuzzleHubStore.nowMs())
+        let bars = PuzzleStats.activity(store.state, now: PuzzleHubStore.nowMs(),
+                                        maxHeight: Double(PuzzleStatsStyle.barMaxHeight),
+                                        minHeight: Double(PuzzleStatsStyle.barMinHeight))
         return card(PuzzleStrings.activity) {
             HStack(alignment: .bottom, spacing: PuzzleStatsStyle.barRowMarginTop) {
-                ForEach(Array(bars.enumerated()), id: \.offset) { _, bar in
+                ForEach(bars, id: \.dayKey) { bar in
                     VStack(spacing: 0) {
                         Text("\(bar.count)")
                             .font(Theme.nunito(PuzzleStatsStyle.barCountSize, .regular))
@@ -190,8 +200,8 @@ struct PuzzleStatsCards: View {
                             .frame(height: PuzzleStatsStyle.barCountHeight)
                         RoundedRectangle(cornerRadius: PuzzleStatsStyle.barRadius)
                             .fill(PuzzlePalette.gold)
-                            .frame(width: PuzzleStatsStyle.barWidth, height: barHeight(bar))
-                        Text(bar.label)
+                            .frame(width: PuzzleStatsStyle.barWidth, height: CGFloat(bar.height))
+                        Text(dayInitial(bar.dayKey))
                             .font(Theme.nunito(PuzzleStatsStyle.barDaySize, .regular))
                             .foregroundStyle(PuzzlePalette.textSecondary)
                     }
@@ -201,11 +211,23 @@ struct PuzzleStatsCards: View {
         }
     }
 
-    /// The bar's own fraction, scaled between the extracted floor and ceiling. `PuzzleStats`
-    /// supplies `fraction`; the two heights are the only presentation here.
-    private func barHeight(_ bar: PuzzleStats.ActivityBar) -> CGFloat {
-        let span = PuzzleStatsStyle.barMaxHeight - PuzzleStatsStyle.barMinHeight
-        return PuzzleStatsStyle.barMinHeight + span * CGFloat(bar.fraction)
+    /// The first character of the localized short weekday, per Part 10.1.
+    ///
+    /// The key is read back through a UTC calendar rather than a hand-written date format, the way
+    /// `PuzzleProgress.dayNumber` reads it: the key is already a settled calendar day, so re-parsing
+    /// it in the device's zone could name the day before.
+    private func dayInitial(_ dayKey: String) -> String {
+        let p = dayKey.split(separator: "-").map { Int($0) ?? 0 }
+        guard p.count == 3 else { return "" }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        guard let d = utc.date(from: DateComponents(year: p[0], month: p[1], day: p[2])) else {
+            return ""
+        }
+        let symbols = Calendar.current.shortWeekdaySymbols
+        let weekday = utc.component(.weekday, from: d)          // 1 = Sunday, as the symbols index
+        guard weekday >= 1, weekday <= symbols.count else { return "" }
+        return String(symbols[weekday - 1].prefix(1))
     }
 
     private var themeCard: some View {
@@ -214,7 +236,7 @@ struct PuzzleStatsCards: View {
             VStack(alignment: .leading, spacing: PuzzleStatsStyle.cardPadding) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     HStack(spacing: PuzzleStatsStyle.cardPadding) {
-                        Text(row.label)
+                        Text(row.theme)
                             .font(Theme.nunito(PuzzleStatsStyle.themeNameSize, .regular))
                             .foregroundStyle(PuzzlePalette.textPrimary)
                         GeometryReader { geo in
@@ -223,7 +245,7 @@ struct PuzzleStatsCards: View {
                                     .fill(PuzzlePalette.cardAlt)
                                 RoundedRectangle(cornerRadius: PuzzleStatsStyle.themeTrackRadius)
                                     .fill(PuzzlePalette.gold)
-                                    .frame(width: geo.size.width * CGFloat(row.fraction))
+                                    .frame(width: geo.size.width * CGFloat(row.percent) / 100)
                             }
                         }
                         .frame(height: PuzzleStatsStyle.themeTrackHeight)
@@ -249,20 +271,24 @@ struct PuzzleSparkline: View {
 
     var body: some View {
         GeometryReader { geo in
-            let spark = PuzzleStats.sparkline(state,
-                                              width: Double(geo.size.width),
-                                              height: Double(geo.size.height))
-            Path { p in
-                guard let first = spark.points.first else { return }
-                p.move(to: CGPoint(x: first.x, y: first.y))
-                for pt in spark.points.dropFirst() {
-                    p.addLine(to: CGPoint(x: pt.x, y: pt.y))
+            // `nil` below two attempts: a one-point polyline is an invisible dot that reads as a
+            // bug, so the box draws nothing at all rather than a stray mark.
+            if let spark = PuzzleStats.sparkline(state,
+                                                 width: Double(geo.size.width),
+                                                 height: Double(geo.size.height),
+                                                 yMargin: PuzzleStatsStyle.sparkYMargin) {
+                Path { p in
+                    guard let first = spark.points.first else { return }
+                    p.move(to: CGPoint(x: first.x, y: first.y))
+                    for pt in spark.points.dropFirst() {
+                        p.addLine(to: CGPoint(x: pt.x, y: pt.y))
+                    }
                 }
+                .stroke(PuzzlePalette.gold,
+                        style: StrokeStyle(lineWidth: PuzzleStatsStyle.sparkStrokeWidth,
+                                           lineCap: .round, lineJoin: .round))
+                .frame(width: geo.size.width, height: geo.size.height)
             }
-            .stroke(PuzzlePalette.gold,
-                    style: StrokeStyle(lineWidth: PuzzleStatsStyle.sparkStrokeWidth,
-                                       lineCap: .round, lineJoin: .round))
-            .frame(width: geo.size.width, height: geo.size.height)
         }
         .padding(PuzzleStatsStyle.sparkPadding)
         .background(PuzzlePalette.cardAlt,
@@ -286,7 +312,7 @@ struct PuzzlePlaySolverScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.puzzle,
+            PuzzleScreenHeader(title: PuzzleStrings.puzzle, subtitle: nil,
                                titleSize: PuzzleType.dailySolverTitle,
                                onBack: { engine.leave(); onExit() }) {
                 Text(PuzzleDisplay.formatTime(elapsed))

@@ -500,7 +500,7 @@ public enum PuzzleThematicGrid {
     public static let startPaddingV: CGFloat = 16
     public static let startMarginH: CGFloat = 12
     public static let startMarginBottom: CGFloat = 8
-    public static let startDisabledFill = Theme.c(0x3A2A4A)
+    public static let startDisabledFill = Theme_c(0x3A2A4A)
     public static let startDisabledOpacity: Double = 0.6
 
     /// The twelve themes, from the source's own `THEMES` array.
