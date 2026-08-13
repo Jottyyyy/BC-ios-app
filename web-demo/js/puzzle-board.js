@@ -33,22 +33,47 @@ var BiyaPuzzleBoard = (function () {
   var HOST = isNode ? require('./engine-host.js')      : BiyaEngineHost;
   var AN   = isNode ? require('./analysis-engine.js')  : BiyaAnalysis;
 
-  /** The rules adapter `<chess-board>` needs to show legal targets. Shared by every mode. */
+  /**
+   * The rules adapter `<chess-board>` needs to show legal targets. Shared by every mode.
+   *
+   * ## Indices in, indices out
+   * The board speaks square INDICES — `e2` is `12` — and so does the engine. This adapter used to
+   * do the opposite on every count, and the result was that **no puzzle mode ever accepted a
+   * move**: it called `E.sqIndex(sq)` on a value that was already an index (which returns `null`),
+   * filtered `m.from === null`, and so reported zero legal targets for every square. A square with
+   * no targets cannot be tapped and cannot be dragged.
+   *
+   * It then returned `to` as a NAME where the board compares indices, so even a corrected filter
+   * would have marked nothing.
+   *
+   * Deliberately the same shape as `analysis.js`'s adapter, which has always worked. One
+   * convention, demonstrated by a screen that is known good, rather than a third invention.
+   */
   function rulesAdapter() {
     return {
       legalMovesFrom: function (fen, sq) {
         var pos = E.fromFEN(fen);
         if (!pos) return [];
-        var from = E.sqIndex(sq);
-        return E.legalMoves(pos).filter(function (m) { return m.from === from; })
-          .map(function (m) {
-            return {
-              to: E.sqName(m.to),
-              promotion: m.promotion == null ? null
-                                             : E.SAN_LETTER[m.promotion].toLowerCase(),
-            };
-          });
+        return E.legalMovesFrom(pos, sq).map(function (m) {
+          return { to: m.to, promotion: m.promotion };
+        });
       },
+    };
+  }
+
+  /**
+   * The board's `move` event carries indices and a numeric promotion kind; `PuzzleSession.submit`
+   * takes square NAMES and a promotion letter, because it builds a UCI string from them.
+   *
+   * That conversion has to happen exactly once, here at the boundary. Handing the indices straight
+   * through made `submit` compute `12 + 28` as arithmetic and call the result a move.
+   */
+  function moveFromEvent(detail) {
+    return {
+      from: E.sqName(detail.from),
+      to: E.sqName(detail.to),
+      promotion: detail.promotion == null ? null
+                                          : E.SAN_LETTER[detail.promotion].toLowerCase(),
     };
   }
 
@@ -173,8 +198,8 @@ var BiyaPuzzleBoard = (function () {
       self.el.promotionLayout = 'list';
       self.el.rules = rulesAdapter();
       self.el.addEventListener('move', function (ev) {
-        var d = ev.detail;
-        self.submit(d.from, d.to, d.promotion);
+        var m = moveFromEvent(ev.detail);
+        self.submit(m.from, m.to, m.promotion);
       });
       parent.appendChild(self.el);
       return self.el;
@@ -282,7 +307,7 @@ var BiyaPuzzleBoard = (function () {
     return self;
   }
 
-  return { create: create, rulesAdapter: rulesAdapter };
+  return { create: create, rulesAdapter: rulesAdapter, moveFromEvent: moveFromEvent };
 })();
 
 if (typeof module !== 'undefined' && module.exports) { module.exports = BiyaPuzzleBoard; }

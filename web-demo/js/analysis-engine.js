@@ -15,19 +15,25 @@
  *  - **Synchronous and deterministic.** Limits are depth and nodes, never wall-clock time, so a
  *    result is reproducible in a test. Cancellation and progress are callbacks; a caller that wants
  *    a deadline implements it inside `shouldCancel`. The Swift twin has the identical shape, which
- *    is what makes the two comparable.
- *  - **Scores are WHITE-relative at the boundary.** `CoachAI.evaluate` is side-to-move relative
+ *    is what makes the two comparable. Every accelerator below is deterministic too: the
+ *    transposition table is per-search and cleared by size, never by clock, so the same request
+ *    twice still returns byte-identical lines AND an identical node count.
+ *  - **Scores are WHITE-relative at the boundary.** `AnalysisEval.evaluate` is side-to-move relative
  *    (the same board scores +895 with White to move and -895 with Black), and so is negamax. The
  *    single flip happens at the root. Getting this wrong is the most bug-prone thing in the feature.
- *  - **MultiPV is free.** Every root move is searched with a fresh full window and no alpha
- *    propagation between root moves, so each one gets an exact score rather than a bound; the top-k
- *    lines fall out of sorting. That costs root cutoffs and buys exactness and simplicity.
- *  - **No transposition table, no killers, no history.** Performance, not correctness. Leaving them
- *    out also makes determinism true by construction.
- *  - **No Web Worker.** On file:// a document has an opaque origin, so Chrome throws when a worker
- *    is constructed, and the blob-URL workaround inherits the same origin. docs/web-demo.md states
- *    the contract: the AI runs on the main thread. `analyzeAsync` yields once before searching, the
- *    same trick `bestMoveAsync` uses so the UI can paint.
+ *  - **The evaluation is `analysis-eval.js`, not `CoachAI.evaluate`.** The coach's evaluation is
+ *    parity-pinned to the five personas and stays untouched; this one knows about game phase, pawn
+ *    structure, king safety and mobility. See that file's header for why they are separate.
+ *  - **The top-k lines carry EXACT scores; everything below them may carry a bound.** Root moves
+ *    that cannot enter the displayed top-k are searched against a null window and only re-searched
+ *    exactly if they beat the k-th best. The panel shows exact numbers, and the root gets its
+ *    cutoffs back. (Before, every root move got a full window — correct, and enormously wasteful.)
+ *  - **`analyzeSteps` is the core, and it keeps its state.** One depth per `next()`, over ONE
+ *    `Search` whose table, killers, history and root order survive between depths. `analyze` is a
+ *    thin driver over the same stepper, so the two can no longer disagree by construction.
+ *  - **No Web Worker in this file.** On file:// a document has an opaque origin, so Chrome throws
+ *    when a worker is constructed. `engine-host.js` owns that decision; here the search is a plain
+ *    synchronous function and `analyzeAsync` merely yields once before running it.
  *
  * Classic script, no ES modules, so it runs from file:// on Windows.
  */
@@ -37,6 +43,7 @@ var BiyaAnalysis = (function () {
   var isNode = (typeof module !== 'undefined' && module.exports);
   var E = isNode ? require('./engine.js') : Engine;
   var AI = isNode ? require('./ai.js') : CoachAI;
+  var EV = isNode ? require('./analysis-eval.js') : BiyaAnalysisEval;
 
   var MATE = AI.MATE;              // 1000000, matching ChessAI.mate
   var WIN = 1000000000;            // window bound, wider than MATE. CoachAI keeps its own private copy.
@@ -45,7 +52,32 @@ var BiyaAnalysis = (function () {
   var DELTA_MARGIN = 200;          // futility margin for delta pruning in quiescence
   var CANCEL_CHECK_INTERVAL = 2048;
 
-  var IDENTIFIER = 'local-negamax-v1';
+  // Bounds the recursion. Check extensions add a ply without spending one, so without this a
+  // perpetual-check line would recurse until the stack gave out.
+  var MAX_PLY = 64;
+
+  // Transposition table. `EXACT` is a true score, `LOWER` a fail-high bound, `UPPER` a fail-low one.
+  var TT_EXACT = 0, TT_LOWER = 1, TT_UPPER = 2;
+  /** Entry cap. Reached, the table is cleared wholesale — bounded memory, and still deterministic. */
+  var TT_MAX = 1 << 20;
+
+  // Null-move pruning: give the opponent a free move; if the position is still good enough to fail
+  // high, it was never worth searching properly. Forbidden in check, in a PV node, and — the
+  // zugzwang guard — when the side to move has nothing but pawns, where passing is not a concession.
+  var NULL_MIN_DEPTH = 3, NULL_R = 2, NULL_R_DEEP = 3, NULL_DEEP_DEPTH = 6;
+
+  // Late move reductions: moves ordered this late are rarely best, so search them shallower first
+  // and only pay full price if one surprises us. Captures, promotions, killers and checks are never
+  // reduced — those are exactly the moves that surprise.
+  var LMR_MIN_DEPTH = 3, LMR_MIN_MOVE = 3, LMR_WIDE_MOVE = 6, LMR_WIDE_DEPTH = 5;
+
+  /** History scores are halved rather than allowed to saturate an Int32 in a long search. */
+  var HISTORY_MAX = 1 << 24;
+
+  /** `analyze` drives the stepper; this only ever fires if the stepper stops terminating. */
+  var STEP_GUARD = 512;
+
+  var IDENTIFIER = 'local-negamax-v2';
 
   // ---- Tactical predicate ---------------------------------------------------
   // NOT `CoachAI.captureScore(...) >= 0`: that helper detects a capture purely by "is there a piece
@@ -67,6 +99,12 @@ var BiyaAnalysis = (function () {
     this.shouldCancel = shouldCancel || function () { return false; };
     this.nodes = 0;
     this.cancelled = false;
+    // Accelerators. All three live for the whole search — across depths, which is the point of
+    // iterative deepening — and die with it, so nothing leaks between two calls.
+    this.tt = new Map();                    // low 32 bits of the key -> entry (high half verifies)
+    this.killers = [];                      // ply -> [most recent, previous] quiet cutoff move
+    this.history = new Int32Array(64 * 64); // from*64+to -> how often it caused a cutoff
+    this.keyScratch = [0, 0];               // reused by `hash`, so nothing allocates per node
   }
 
   Search.prototype.outOfBudget = function () {
@@ -75,6 +113,85 @@ var BiyaAnalysis = (function () {
     if ((this.nodes % CANCEL_CHECK_INTERVAL) === 0 && this.shouldCancel()) { this.cancelled = true; return true; }
     return false;
   };
+
+  /**
+   * Order the moves: the table's move, then captures by MVV-LVA, then the killers, then whatever
+   * history says has been causing cutoffs. Ordering is the single largest lever on alpha-beta — a
+   * perfectly ordered search visits the square root of the nodes a badly ordered one does.
+   *
+   * The index tie-break is not decoration: `Array.prototype.sort` is not required to be stable for
+   * every input, and the Swift twin's `sort` definitely is not, so equal keys must be separated by
+   * something. This is the same guard `CoachAI.ordered` uses.
+   */
+  Search.prototype.order = function (moves, pos, ply, ttMove) {
+    var self = this;
+    var k = this.killers[ply];
+    var arr = moves.map(function (m, i) {
+      var s;
+      if (ttMove && E.moveEquals(m, ttMove)) s = 4000000;
+      else if (m.promotion != null) s = 3000000 + AI.material(m.promotion);
+      else {
+        var cap = AI.captureScore(pos, m);              // -1 when the move is not a capture
+        if (cap >= 0) s = 2000000 + cap;
+        else if (k && k[0] && E.moveEquals(m, k[0])) s = 1900000;
+        else if (k && k[1] && E.moveEquals(m, k[1])) s = 1890000;
+        else s = self.history[m.from * 64 + m.to];
+      }
+      return { m: m, i: i, k: s };
+    });
+    arr.sort(function (a, b) { return a.k !== b.k ? b.k - a.k : a.i - b.i; });
+    return arr.map(function (x) { return x.m; });
+  };
+
+  /** A quiet move that caused a cutoff is worth trying first next time, here and elsewhere. */
+  Search.prototype.remember = function (m, ply, depth) {
+    var k = this.killers[ply];
+    if (!k) { k = [null, null]; this.killers[ply] = k; }
+    if (!k[0] || !E.moveEquals(k[0], m)) { k[1] = k[0]; k[0] = m; }
+    var idx = m.from * 64 + m.to;
+    this.history[idx] += depth * depth;
+    if (this.history[idx] > HISTORY_MAX) {
+      for (var i = 0; i < this.history.length; i++) this.history[i] >>= 1;
+    }
+  };
+
+  /** Write this position's Zobrist key into the reusable scratch pair. */
+  Search.prototype.hash = function (pos) { EV.hash(pos, this.keyScratch); };
+
+  /**
+   * Mate scores are stored NODE-relative and used ROOT-relative.
+   *
+   * A mate score carries the distance to the mate, and the search expresses that as a distance from
+   * the ROOT (`-(MATE - ply)`). Two different paths reach the same position at different plies, so a
+   * root-relative score in a shared table is wrong for whoever probes it next. Storing `score + ply`
+   * makes it a distance from the node; probing subtracts the ply back out.
+   */
+  function toTT(score, ply) {
+    if (score > MATE_THRESHOLD) return score + ply;
+    if (score < -MATE_THRESHOLD) return score - ply;
+    return score;
+  }
+  function fromTT(score, ply) {
+    if (score > MATE_THRESHOLD) return score - ply;
+    if (score < -MATE_THRESHOLD) return score + ply;
+    return score;
+  }
+
+  Search.prototype.store = function (lo, hi, depth, score, flag, move, ply) {
+    if (this.cancelled) return;                 // a cut-short score is not a fact about the position
+    var e = this.tt.get(lo);
+    if (e && e.hi === hi && e.depth > depth) return;        // never overwrite a deeper result
+    if (!e && this.tt.size >= TT_MAX) this.tt.clear();      // bounded memory, deterministically
+    this.tt.set(lo, { hi: hi, depth: depth, score: toTT(score, ply), flag: flag, move: move });
+  };
+
+  /** The opponent gets a free move. Only ever reached where zugzwang has been ruled out. */
+  function makeNullMove(pos) {
+    var p = E.clone(pos);
+    p.sideToMove = E.opponent(pos.sideToMove);
+    p.enPassant = null;                          // the right to capture en passant does not survive
+    return p;
+  }
 
   /** Quiescence: only tactical moves, so the search does not stop in the middle of a trade. */
   Search.prototype.quiesce = function (pos, alpha, beta, qdepth) {
@@ -87,7 +204,7 @@ var BiyaAnalysis = (function () {
     // not "no moves". (ai.js's negamax tests terminal before depth for the same reason.)
     if (moves.length === 0) return inCheck ? -(MATE - qdepth) : 0;
 
-    var standPat = AI.evaluate(pos);
+    var standPat = EV.evaluate(pos);
     if (!inCheck) {
       if (standPat >= beta) return standPat;
       if (standPat > alpha) alpha = standPat;
@@ -121,31 +238,105 @@ var BiyaAnalysis = (function () {
    * Alpha-beta with a triangular principal-variation table. `line` is filled with the PV from this
    * node down. Depth guard is `<= 0`, not `=== 0` — ai.js's `=== 0` recurses forever on a negative
    * depth, which is only safe there because its one caller can never pass one.
+   *
+   * Everything beyond plain alpha-beta lives here: the table probe, the check extension, null-move
+   * pruning, principal-variation search, and late move reductions. Two rules keep them honest:
+   *
+   *  - **A PV node never takes a table cutoff and is never null-moved.** A table hit returns a score
+   *    with no moves attached, which would truncate the principal variation the panel displays; and
+   *    null-move pruning is a guess, which is fine for proving a branch is bad and not fine for the
+   *    line we are about to show the user.
+   *  - **A reduced search that beats alpha is always re-searched at full depth.** A reduction is
+   *    only ever allowed to *skip* work, never to decide anything.
    */
   Search.prototype.negamax = function (pos, depth, alpha, beta, ply, line) {
     line.length = 0;
     this.nodes++;
     if (this.outOfBudget()) return alpha;
 
+    var isPV = (beta - alpha) > 1;
+    var inCheck = E.isInCheck(pos, pos.sideToMove);
+    // Check extension: a forcing line is cheap to search and expensive to miss. Bounded by MAX_PLY,
+    // because an extension spends no depth and a perpetual check would otherwise never terminate.
+    if (inCheck && ply < MAX_PLY) depth += 1;
+
     var moves = E.legalMoves(pos);
-    if (moves.length === 0) return E.isInCheck(pos, pos.sideToMove) ? -(MATE - ply) : 0;
+    if (moves.length === 0) return inCheck ? -(MATE - ply) : 0;
     if (depth <= 0) return this.quiesce(pos, alpha, beta, ply);
 
-    var ord = AI.ordered(moves, pos);
-    var best = -WIN;
+    // ---- Table probe -------------------------------------------------------
+    this.hash(pos);
+    var lo = this.keyScratch[0], hi = this.keyScratch[1];
+    var alphaOrig = alpha;
+    var ttMove = null;
+    var e = this.tt.get(lo);
+    if (e && e.hi === hi) {
+      ttMove = e.move;                                  // useful for ordering at ANY depth
+      if (e.depth >= depth && !isPV) {
+        var ts = fromTT(e.score, ply);
+        if (e.flag === TT_EXACT) return ts;
+        if (e.flag === TT_LOWER) { if (ts > alpha) alpha = ts; }
+        else if (ts < beta) beta = ts;
+        if (alpha >= beta) return ts;
+      }
+    }
+
+    // ---- Null move ---------------------------------------------------------
+    if (!isPV && !inCheck && depth >= NULL_MIN_DEPTH
+        && EV.hasNonPawnMaterial(pos, pos.sideToMove)) {
+      var R = depth >= NULL_DEEP_DEPTH ? NULL_R_DEEP : NULL_R;
+      var nullLine = [];
+      var nullScore = -this.negamax(makeNullMove(pos), depth - 1 - R, -beta, -beta + 1,
+                                    ply + 1, nullLine);
+      if (this.cancelled) return alpha;
+      if (nullScore >= beta) {
+        // Never report a mate we have not actually found: a null-move cutoff proves "at least
+        // beta", and letting an unproven mate score escape would corrupt the table and the panel.
+        return nullScore > MATE_THRESHOLD ? beta : nullScore;
+      }
+    }
+
+    // ---- Moves -------------------------------------------------------------
+    var ord = this.order(moves, pos, ply, ttMove);
+    var best = -WIN, bestMove = null;
     var child = [];
     for (var i = 0; i < ord.length; i++) {
-      var score = -this.negamax(E.makeMove(pos, ord[i]), depth - 1, -beta, -alpha, ply + 1, child);
+      var m = ord[i];
+      var quiet = pos.squares[m.to] == null && m.promotion == null && !inCheck;
+      var next = E.makeMove(pos, m);
+      var score;
+      if (i === 0) {
+        // The first move gets the real window — it is the one most likely to be best.
+        score = -this.negamax(next, depth - 1, -beta, -alpha, ply + 1, child);
+      } else {
+        var red = 0;
+        if (quiet && depth >= LMR_MIN_DEPTH && i >= LMR_MIN_MOVE) {
+          red = 1 + ((i >= LMR_WIDE_MOVE && depth >= LMR_WIDE_DEPTH) ? 1 : 0);
+          if (red > depth - 1) red = depth - 1;
+        }
+        // Null window first: all we need to know is whether this move can beat alpha at all.
+        score = -this.negamax(next, depth - 1 - red, -alpha - 1, -alpha, ply + 1, child);
+        if (!this.cancelled && score > alpha && (red > 0 || isPV)) {
+          score = -this.negamax(next, depth - 1, -beta, -alpha, ply + 1, child);
+        }
+      }
       if (this.cancelled) return best > -WIN ? best : alpha;
       if (score > best) {
         best = score;
+        bestMove = m;
         line.length = 0;
-        line.push(ord[i]);
+        line.push(m);
         for (var j = 0; j < child.length; j++) line.push(child[j]);
       }
       if (best > alpha) alpha = best;
-      if (alpha >= beta) break;
+      if (alpha >= beta) {
+        if (quiet) this.remember(m, ply, depth);
+        break;
+      }
     }
+
+    var flag = best <= alphaOrig ? TT_UPPER : (best >= beta ? TT_LOWER : TT_EXACT);
+    this.store(lo, hi, depth, best, flag, bestMove, ply);
     return best;
   };
 
@@ -198,68 +389,26 @@ var BiyaAnalysis = (function () {
    * Analyse `pos`. Returns the final snapshot; `onProgress` receives one snapshot per completed
    * iterative-deepening iteration. A cancelled search keeps the last COMPLETED iteration, never a
    * half-finished one.
+   *
+   * A thin driver over `analyzeSteps`, which holds the actual search. The dependency used to point
+   * the other way — the stepper re-ran THIS function once per depth, always from depth 1, throwing
+   * away the previous iteration's table and move ordering every time. Inverting it means there is
+   * exactly one search path, so a stepped search and a one-shot search cannot disagree, and the
+   * shallow plies are no longer re-searched once per depth.
    */
   function analyze(pos, opts) {
     opts = opts || {};
-    var limits = {
-      maxDepth: opts.maxDepth || 4,
-      maxNodes: opts.maxNodes || 0,
-      multiPV: opts.multiPV || 1
-    };
     var onProgress = opts.onProgress || function () {};
-    var s = new Search(limits, opts.shouldCancel);
-
-    // Terminal positions never enter the search, which is what makes `mate !== 0` structural.
-    var outcome = E.terminalOutcome(pos, opts.historyKeys || []);
-    if (outcome.kind !== 'ongoing') {
-      var snap = {
-        fen: E.toFEN(pos), depth: 0, nodes: 0, lines: [],
-        isFinal: true, terminal: outcome, score: terminalScore(outcome)
-      };
-      onProgress(snap);
-      return snap;
+    var steps = analyzeSteps(pos, opts);
+    var last = null, guard = 0;
+    for (;;) {
+      var r = steps.next();
+      if (r.snapshot && r.snapshot !== last) { last = r.snapshot; onProgress(last); }
+      if (r.done) break;
+      if (++guard > STEP_GUARD) break;      // a stepper that never finishes is a bug, not a hang
     }
-
-    var rootMoves = AI.ordered(E.legalMoves(pos), pos);
-    var last = null;
-    var line = [];
-
-    for (var depth = 1; depth <= limits.maxDepth; depth++) {
-      var scored = [];
-      var aborted = false;
-      for (var i = 0; i < rootMoves.length; i++) {
-        // Fresh full window per root move: every root move gets an EXACT score, not a bound, so
-        // MultiPV needs no re-search. This mirrors what bestMove already does.
-        var sc = -s.negamax(E.makeMove(pos, rootMoves[i]), depth - 1, -WIN, WIN, 1, line);
-        if (s.cancelled) { aborted = true; break; }
-        scored.push({ move: rootMoves[i], score: sc, pv: [rootMoves[i]].concat(line) });
-      }
-      if (aborted) break;
-
-      scored.sort(function (a, b) { return b.score - a.score; });
-      var lines = [];
-      for (var k = 0; k < Math.min(limits.multiPV, scored.length); k++) {
-        lines.push({
-          rank: k + 1,
-          score: toEngineScore(scored[k].score, pos.sideToMove),
-          pv: scored[k].pv,
-          pvSAN: pvToSan(pos, scored[k].pv),
-          depth: depth
-        });
-      }
-      last = {
-        fen: E.toFEN(pos), depth: depth, nodes: s.nodes, lines: lines,
-        isFinal: false, terminal: null, score: lines.length ? lines[0].score : null
-      };
-      onProgress(last);
-      // Search the best root move first next iteration — the cheapest ordering win available.
-      rootMoves = scored.map(function (x) { return x.move; });
-      // A forced mate is the end of the story; deeper search cannot improve on it.
-      if (lines.length && lines[0].score.kind === 'mate') break;
-    }
-
     if (!last) {
-      last = { fen: E.toFEN(pos), depth: 0, nodes: s.nodes, lines: [], isFinal: true, terminal: null, score: null };
+      last = { fen: E.toFEN(pos), depth: 0, nodes: 0, lines: [], isFinal: true, terminal: null, score: null };
     }
     last.isFinal = true;
     return last;
@@ -273,49 +422,114 @@ var BiyaAnalysis = (function () {
   }
 
   /**
-   * Iterative deepening, one depth per call — the synchronous core behind `analyzeProgressive`.
+   * Iterative deepening, one depth per call — the synchronous core the whole feature runs on.
    *
-   * `analyzeAsync` yields once and then blocks for the WHOLE search, so on a live analysis board the
-   * page freezes until the deepest ply is done and a cancel cannot land. Driving one depth at a time
-   * lets the caller paint between iterations, show lines as they are found, and abandon instantly.
+   * Driving one depth at a time lets the caller paint between iterations, show lines as they are
+   * found, and abandon instantly. `engine-host.js` additionally resets a slice deadline before every
+   * `next()`, which is what keeps the in-thread `file://` path from freezing the page.
    *
-   * Implemented by re-running `analyze` with an increasing depth cap rather than by restructuring
-   * `analyze`'s own loop. That function is pinned by this file's golden assertions and by the Swift
-   * `search` parity group; iterative deepening is exponential, so re-searching the shallow plies
-   * costs a small constant factor, and a UI nicety does not justify touching a pinned search.
+   * **The `Search` is created once and lives across every depth** — its transposition table,
+   * killers, history and root ordering included. That is what iterative deepening is *for*: each
+   * iteration exists to order the next one. This used to build a fresh search per depth and discard
+   * all of it, which made the deepening a pure tax instead of a discount.
    *
    * Returns `{ next() -> { done, snapshot, depth } }`. `snapshot` is the deepest COMPLETED search so
    * far, never a half-finished one, and is null until the first depth completes.
    */
   function analyzeSteps(pos, opts) {
     opts = opts || {};
-    var maxDepth = opts.maxDepth || 4;
+    var limits = {
+      maxDepth: opts.maxDepth || 4,
+      maxNodes: opts.maxNodes || 0,
+      multiPV: opts.multiPV || 1
+    };
     var shouldCancel = opts.shouldCancel || function () { return false; };
+    var s = new Search(limits, shouldCancel);
+    // Terminal positions never enter the search, which is what makes `mate !== 0` structural.
+    var outcome = E.terminalOutcome(pos, opts.historyKeys || []);
+    var rootMoves = null;
     var depth = 0, best = null, finished = false;
+
+    /** One complete pass over the root moves at depth `d`. Returns null if it was cut short. */
+    function iterate(d) {
+      var scored = [];
+      var top = [];                        // the best `multiPV` EXACT scores so far, descending
+      var line = [];
+      for (var i = 0; i < rootMoves.length; i++) {
+        var m = rootMoves[i];
+        var next = E.makeMove(pos, m);
+        var sc, exact = true;
+        if (top.length < limits.multiPV) {
+          sc = -s.negamax(next, d - 1, -WIN, WIN, 1, line);
+        } else {
+          // This move can only matter if it reaches the k-th best score, and a null window answers
+          // exactly that for a fraction of the cost. Anything that does reach it is re-searched
+          // with a full window, so every DISPLAYED line still carries an exact score — while the
+          // moves that cannot be displayed stop costing a full-width search each.
+          var kth = top[limits.multiPV - 1];
+          sc = -s.negamax(next, d - 1, -kth, -kth + 1, 1, line);
+          if (s.cancelled) return null;
+          if (sc >= kth) sc = -s.negamax(next, d - 1, -WIN, WIN, 1, line);
+          else exact = false;              // an upper bound, and strictly below the k-th best
+        }
+        if (s.cancelled) return null;
+        scored.push({ move: m, score: sc, exact: exact, pv: [m].concat(line) });
+        if (exact) {
+          top.push(sc);
+          top.sort(function (a, b) { return b - a; });
+          if (top.length > limits.multiPV) top.length = limits.multiPV;
+        }
+      }
+      // Swift's `sort` is not stable, so ties break on the index the move arrived with — the same
+      // guard every ported sort in this repo carries, and the reason MultiPV order is reproducible.
+      var order = scored.map(function (_, i) { return i; });
+      order.sort(function (a, b) { return scored[b].score - scored[a].score || a - b; });
+      scored = order.map(function (i) { return scored[i]; });
+
+      var lines = [];
+      for (var k = 0; k < Math.min(limits.multiPV, scored.length); k++) {
+        lines.push({
+          rank: k + 1,
+          score: toEngineScore(scored[k].score, pos.sideToMove),
+          pv: scored[k].pv,
+          pvSAN: pvToSan(pos, scored[k].pv),
+          depth: d
+        });
+      }
+      // The best root move goes first next iteration — the cheapest ordering win there is.
+      rootMoves = scored.map(function (x) { return x.move; });
+      return {
+        fen: E.toFEN(pos), depth: d, nodes: s.nodes, lines: lines,
+        isFinal: false, terminal: null, score: lines.length ? lines[0].score : null
+      };
+    }
 
     return {
       next: function () {
-        if (finished || depth >= maxDepth || shouldCancel()) {
+        if (finished) return { done: true, snapshot: best, depth: depth };
+        if (outcome.kind !== 'ongoing') {
+          finished = true;
+          best = {
+            fen: E.toFEN(pos), depth: 0, nodes: 0, lines: [],
+            isFinal: true, terminal: outcome, score: terminalScore(outcome)
+          };
+          return { done: true, snapshot: best, depth: 0 };
+        }
+        if (depth >= limits.maxDepth || shouldCancel()) {
           finished = true;
           return { done: true, snapshot: best, depth: depth };
         }
+        if (rootMoves === null) rootMoves = AI.ordered(E.legalMoves(pos), pos);
         depth += 1;
-        var snap = analyze(pos, {
-          maxDepth: depth,
-          maxNodes: opts.maxNodes || 0,
-          multiPV: opts.multiPV || 1,
-          historyKeys: opts.historyKeys || [],
-          shouldCancel: shouldCancel
-        });
-        // A cancelled sub-search yields no lines; keep the last complete result instead.
-        if (snap.lines.length || snap.terminal) best = snap;
-        // Terminal positions and forced mates are the end of the story — deeper cannot improve.
-        // `snap.depth < depth` means the sub-search was cut short (cancelled, or it broke on a
-        // mate), so asking for more is wasted work AND would re-report the same snapshot.
-        if (snap.terminal || (snap.score && snap.score.kind === 'mate')
-            || snap.depth < depth || depth >= maxDepth) {
+        var snap = iterate(depth);
+        // A cut-short iteration is not a result: keep the last COMPLETE one.
+        if (snap === null) {
           finished = true;
+          return { done: true, snapshot: best, depth: depth };
         }
+        best = snap;
+        // A forced mate is the end of the story; deeper search cannot improve on it.
+        if ((snap.score && snap.score.kind === 'mate') || depth >= limits.maxDepth) finished = true;
         return { done: finished, snapshot: best, depth: depth };
       }
     };

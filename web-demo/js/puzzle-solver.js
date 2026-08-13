@@ -29,6 +29,9 @@ var BiyaPuzzleSolver = (function () {
   var HOST = isNode ? require('./engine-host.js')     : BiyaEngineHost;
   var ST   = isNode ? require('./analysis-store.js')  : BiyaAnalysisStore;
   var AN   = isNode ? require('./analysis-engine.js') : BiyaAnalysis;
+  // For the one shared rules adapter and the one index-to-name conversion. This screen predates
+  // the factory and carried its own copies of both, with the same bug in each.
+  var BOARD = isNode ? require('./puzzle-board.js')   : BiyaPuzzleBoard;
   // `SoundManager` is the global `sound.js` actually exports. Every puzzle screen used to
   // test `typeof Sound`, which is nothing, so `SND` was permanently null and not one of the
   // five modes ever made a sound. A `typeof X !== 'undefined'` guard degrades silently by
@@ -189,8 +192,9 @@ var BiyaPuzzleSolver = (function () {
   // ---- submitting -------------------------------------------------------------------------
   function onBoardMove(ev) {
     if (!session) return;
-    var d = ev.detail;
-    submit(d.from, d.to, d.promotion);
+    // Indices and a numeric kind out of the board; names and a letter into the session.
+    var m = BOARD.moveFromEvent(ev.detail);
+    submit(m.from, m.to, m.promotion);
   }
 
   function submit(from, to, promotion) {
@@ -492,18 +496,10 @@ var BiyaPuzzleSolver = (function () {
     var boardBand = el('div', 'pz-board');
     ui.board = document.createElement('chess-board');
     ui.board.setAttribute('draggable-pieces', '');
-    ui.board.rules = {
-      legalMovesFrom: function (fen, sq) {
-        var pos = E.fromFEN(fen);
-        if (!pos) return [];
-        var from = E.sqIndex(sq);
-        return E.legalMoves(pos).filter(function (m) { return m.from === from; })
-          .map(function (m) {
-            return { to: E.sqName(m.to),
-                     promotion: m.promotion == null ? null : E.SAN_LETTER[m.promotion].toLowerCase() };
-          });
-      },
-    };
+    // The SHARED adapter, not a second copy. This screen carried its own, with the same
+    // index-vs-name bug, so fixing one would have left the other broken — which is exactly
+    // how the two came to disagree in the first place.
+    ui.board.rules = BOARD.rulesAdapter();
     ui.board.addEventListener('move', onBoardMove);
     boardBand.appendChild(ui.board);
     root.appendChild(boardBand);

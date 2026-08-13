@@ -58,5 +58,21 @@ let package = Package(
             name: "PuzzleMetricsCheck",
             dependencies: ["BiyaherongUI"]
         ),
+        // The Pairing Manager's derived layer: the type/status colour maps and their fallbacks, the
+        // chess-notation score formatter, and the standings comparator. The raw constants are not
+        // re-checked here — tools/metrics/gen_pairing_metrics.js emits them and PairingMetrics.swift
+        // together with the JS twin, so there is no transcription step for them to drift across.
+        .executableTarget(
+            name: "PairingMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
+        // Play vs Coach's derived layer: the FOLDED avatar geometry (a fold that quietly produced
+        // two equal numbers would draw a ring with no halo and look almost right), the roster and
+        // its clamping, the accent lookup's fallback, and the unextracted constants — which are
+        // asserted so the invented list cannot grow without someone noticing.
+        .executableTarget(
+            name: "CoachMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
     ]
 )

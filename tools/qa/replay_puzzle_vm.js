@@ -244,6 +244,27 @@ function run() {
     }
   }
 
+  // ── 12b. The board is wired for TAP, not drag only ───────────────────────────────
+  //
+  // `PuzzleBoardBand` shipped with `selected: nil, legalTargets: [], onTap: { _ in }` and
+  // `lastMove: nil` — so on a phone, where tap-tap is how most people move, nothing happened, no
+  // legal-move dots appeared and the last move was never highlighted. The web had the mirror of
+  // this bug in its rules adapter; both are the same oversight in two languages.
+  {
+    const band = parts.slice(parts.indexOf('struct PuzzleBoardBand'));
+    expect(/selected: engine\.selected/.test(band), 'the board shows the selected square');
+    expect(/legalTargets: engine\.legalTargets/.test(band), 'and the legal-move dots');
+    expect(/lastMove: engine\.lastMove/.test(band), 'and the last move');
+    expect(/onTap: \{ sq in/.test(band), 'and taps reach the engine');
+    expect(!/onTap: \{ _ in \}/.test(band), 'rather than being swallowed');
+    const tap = funcBody(parts, 'tap');
+    expect(tap !== null, 'the engine has a tap handler');
+    expect(tap !== null && /legalTargets\.contains\(sq\)/.test(tap),
+      'which moves when the tapped square is a legal target');
+    expect(tap !== null && /if sq == sel \{ deselect\(\)/.test(tap),
+      'and deselects when the same square is tapped twice, like ChessGameVM.tap');
+  }
+
   // ── 13. No prefetch buffer anywhere (Part 7.6) ───────────────────────────────────
   for (const [name, src] of [['streak', streak], ['turbo', turbo], ['store', store]]) {
     for (const banned of ['BUFFER_MAX', 'BUFFER_REFILL', 'BUFFER_PARALLEL', 'prefetch']) {

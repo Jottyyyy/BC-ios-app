@@ -702,7 +702,197 @@ h.check(EngineScore.cp(-70).displayText == "-0.7", "displayText -0.7")
 h.check(EngineScore.cp(0).displayText == "+0.0", "displayText +0.0")
 h.check(EngineScore.mate(4).displayText == "M4", "displayText M4")
 h.check(EngineScore.mate(-3).displayText == "M-3", "displayText M-3")
-h.check(engine.identifier == "local-negamax-v1", "the engine identifies itself for review caching")
+h.check(engine.identifier == "local-negamax-v2", "the engine identifies itself for review caching")
+
+// Determinism at a size where the transposition table actually fills and is consulted. The smaller
+// check above would pass even if the table were never reached; this one would not.
+if let sharp = ChessPosition(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 0 6") {
+    let limits = SearchLimits(maxDepth: 6, maxNodes: 60000, multiPV: 3)
+    let a = engine.analyzeToCompletion(sharp, limits: limits)
+    let b = engine.analyzeToCompletion(sharp, limits: limits)
+    h.check(a.nodes == b.nodes, "a table-filling search is still node-for-node reproducible")
+    h.check(a.lines == b.lines, "and returns the identical lines")
+    h.check(a.nodes > 0, "and actually searched something (\(a.nodes) nodes)")
+    for l in a.lines {
+        var p = sharp, legal = true
+        for m in l.pv {
+            if !p.legalMoves().contains(m) { legal = false; break }
+            p = p.makeMove(m)
+        }
+        h.check(legal, "line \(l.rank)'s PV survives the accelerators intact")
+        h.check(!l.pv.isEmpty, "line \(l.rank) has a principal variation at all")
+    }
+}
+
+// The Engine Settings the Analysis Board drives the search with (☰ > Engine). Mirrors
+// `engine-settings.js`'s own suite; `tools/qa/replay_engine_settings.js` pins the two tables to each
+// other, and this proves the Swift side computes what those tables imply.
+h.begin("engine_settings")
+
+h.check(EngineSettings.presets.count == 5, "five presets")
+h.check(EngineSettings.presetIDs() == ["saver", "balanced", "strong", "maximum", "infinite"],
+        "weakest to strongest, got \(EngineSettings.presetIDs())")
+for i in 1 ..< EngineSettings.presets.count {
+    let p = EngineSettings.presets[i], q = EngineSettings.presets[i - 1]
+    h.check(p.maxDepth > q.maxDepth, "\(p.id) searches deeper than \(q.id)")
+    h.check(p.heat > q.heat, "\(p.id) runs hotter than \(q.id)")
+    h.check(p.multiPV >= q.multiPV, "\(p.id) shows at least as many lines as \(q.id)")
+    if p.thinkMs != EngineSettings.thinkInfinite {
+        h.check(p.thinkMs > q.thinkMs, "\(p.id) thinks for longer than \(q.id)")
+    }
+}
+h.check(EngineSettings.preset("infinite").thinkMs == EngineSettings.thinkInfinite,
+        "only Infinite has no deadline")
+h.check(EngineSettings.preset("infinite").maxDepth == EngineSettings.depthMax,
+        "Infinite is bounded by the depth ceiling, or it would never terminate")
+h.check(EngineSettings.preset("nonsense").id == EngineSettings.defaultPreset,
+        "an unknown preset id falls back rather than trapping")
+
+// The default IS what the board did before this setting existed.
+let bal = EngineSettings.resolve(EngineSettings.defaults())
+h.check(bal.thinkMs == 1200, "the default budget is still 1200ms, got \(bal.thinkMs)")
+h.check(bal.multiPV == 3, "the default is still three lines, got \(bal.multiPV)")
+h.check(bal.reviewMs == 200, "the default review budget is still 200ms, got \(bal.reviewMs)")
+h.check(bal.infinite == false, "and the default is not an unbounded search")
+h.check(bal.searchLimits.maxDepth == 12 && bal.searchLimits.multiPV == 3,
+        "the resolved SearchLimits carry the preset through")
+h.check(bal.reviewLimits.multiPV == 1, "a review always runs one line")
+
+// The review budget is DERIVED, not listed. If this drifts, one of the two numbers is wrong, and
+// the point of deriving it is that there is only one to get right.
+for (id, want) in [("saver", 120), ("balanced", 200), ("strong", 500),
+                   ("maximum", 1200), ("infinite", 1200)] {
+    let got = EngineSettings.resolve(EngineSettings.Value(preset: id, custom: false,
+                                                          multiPV: 0, maxDepth: 0, thinkMs: 0)).reviewMs
+    h.check(got == want, "\(id) review budget is \(want)ms, got \(got)")
+}
+h.check(EngineSettings.reviewBudget(EngineSettings.thinkInfinite) == EngineSettings.reviewMax,
+        "an infinite LIVE search still gives the REVIEW a finite budget — 41 positions cannot be unbounded")
+
+// Clamping: everything that reaches the engine has been through it.
+func clamped(_ v: EngineSettings.Value) -> EngineSettings.Value { EngineSettings.clamp(v) }
+let wild = EngineSettings.Value(preset: "nope", custom: true, multiPV: 99,
+                                maxDepth: 999, thinkMs: 999_999)
+let tame = clamped(wild)
+h.check(tame.preset == EngineSettings.defaultPreset, "an unknown preset id clamps to the default")
+h.check(tame.multiPV == EngineSettings.linesMax, "lines clamp to the maximum")
+h.check(tame.maxDepth == EngineSettings.depthMax, "depth clamps to the ceiling")
+h.check(tame.thinkMs == EngineSettings.thinkMax, "think time clamps to the maximum")
+let tiny = clamped(EngineSettings.Value(preset: "balanced", custom: true, multiPV: 0,
+                                        maxDepth: -5, thinkMs: 50))
+h.check(tiny.multiPV == EngineSettings.linesMin, "lines clamp to the minimum")
+h.check(tiny.maxDepth == EngineSettings.depthMin, "depth clamps to the floor")
+h.check(tiny.thinkMs == EngineSettings.thinkMin, "a too-small think time clamps UP, not to zero")
+h.check(clamped(EngineSettings.Value(preset: "balanced", custom: false, multiPV: 3,
+                                     maxDepth: 12, thinkMs: 0)).thinkMs == EngineSettings.thinkInfinite,
+        "zero survives clamping — it means infinite")
+
+// Custom overrides the preset, and only when it is switched on.
+let custom = EngineSettings.Value(preset: "saver", custom: true, multiPV: 5,
+                                  maxDepth: 20, thinkMs: 4000)
+let rc = EngineSettings.resolve(custom)
+h.check(rc.multiPV == 5 && rc.maxDepth == 20 && rc.thinkMs == 4000, "Advanced values win")
+h.check(rc.label == "Custom", "and the label says so")
+var off = custom; off.custom = false
+let ro = EngineSettings.resolve(off)
+h.check(ro.multiPV == 2 && ro.thinkMs == 500,
+        "with Advanced off the stored custom values are ignored, not merged")
+
+// Display.
+h.check(EngineSettings.timeText(1200) == "1.2s", "timeText 1.2s, got \(EngineSettings.timeText(1200))")
+h.check(EngineSettings.timeText(3000) == "3s", "a whole number of seconds drops the .0")
+h.check(EngineSettings.timeText(EngineSettings.thinkInfinite) == "∞", "infinite shows as the symbol")
+h.check(EngineSettings.presetSummary("balanced") == "1.2s · depth 12 · 3 lines",
+        "the Balanced summary line, got \(EngineSettings.presetSummary("balanced"))")
+h.check(EngineSettings.presetSummary("infinite") == "∞ · depth 30 · 4 lines",
+        "the Infinite summary line, got \(EngineSettings.presetSummary("infinite"))")
+
+// Warnings appear exactly where the heat is.
+func warn(_ id: String) -> String? {
+    EngineSettings.warning(EngineSettings.Value(preset: id, custom: false, multiPV: 0,
+                                                maxDepth: 0, thinkMs: 0))
+}
+h.check(warn("saver") == nil, "Battery Saver needs no warning")
+h.check(warn("balanced") == nil, "nor does Balanced")
+h.check(warn("strong") == EngineSettings.warningText, "Strong warns")
+h.check(warn("maximum") == EngineSettings.warningText, "Maximum warns")
+h.check(warn("infinite") == EngineSettings.infiniteWarningText,
+        "Infinite gets its own warning, because it needs to say how to stop it")
+
+// The panel model — everything the SwiftUI sheet draws, checked without a view.
+let panel = EngineSettings.panelModel(EngineSettings.defaults(), advancedOpen: false)
+h.check(panel.presets.count == 5, "the panel lists all five presets")
+h.check(panel.presets.filter { $0.active }.count == 1, "exactly one preset row is selected")
+h.check(panel.presets[1].active, "and it is Balanced by default")
+h.check(panel.advancedOpen == false, "Advanced starts closed")
+h.check(panel.advancedState == "OFF", "and says so")
+h.check(panel.warning == nil, "no warning on the default preset")
+h.check(panel.controls.map(\.key) == [EngineSettings.controlLines,
+                                      EngineSettings.controlDepth,
+                                      EngineSettings.controlThink],
+        "Lines, Max depth, Think time — in that order")
+h.check(panel.controls[0].kind == .segment && panel.controls[0].options == [1, 2, 3, 4, 5],
+        "Lines is a five-way segmented picker, not a slider")
+h.check(EngineSettings.panelModel(custom, advancedOpen: false).advancedOpen,
+        "a custom setting forces Advanced open — it is what is in effect")
+h.check(EngineSettings.panelModel(custom, advancedOpen: false).presets.allSatisfy { !$0.active },
+        "and no preset row is selected, because none is")
+let infPanel = EngineSettings.panelModel(
+    EngineSettings.Value(preset: "infinite", custom: false, multiPV: 0, maxDepth: 0, thinkMs: 0),
+    advancedOpen: false)
+h.check(infPanel.controls[2].value == infPanel.controls[2].min,
+        "Infinite sits at the very bottom of the Think time range")
+h.check(infPanel.controls[2].valueText == "∞", "and reads as the symbol")
+
+// The two edits the panel can make.
+h.check(EngineSettings.encode(EngineSettings.selectPreset(EngineSettings.defaults(), "strong"))
+        == "v1|strong|0|3|18|3000",
+        "picking a preset seeds the Advanced fields with its numbers")
+let edited = EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.controlLines, 5)
+h.check(edited.custom, "editing a control switches Advanced on")
+h.check(edited.multiPV == 5, "and takes the new value")
+h.check(edited.maxDepth == 12 && edited.thinkMs == 1200,
+        "while the other two keep whatever was in effect")
+h.check(EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.controlThink,
+                                    EngineSettings.thinkSliderMin).thinkMs == EngineSettings.thinkInfinite,
+        "the bottom of the Think time range is Infinite")
+h.check(EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.controlDepth, 999)
+        .maxDepth == EngineSettings.depthMax, "a control value is clamped like any other")
+
+// The encoding round-trips and survives everything it should.
+h.check(EngineSettings.encode(EngineSettings.defaults()) == "v1|balanced|0|3|12|1200",
+        "the canonical default document, got \(EngineSettings.encode(EngineSettings.defaults()))")
+for v in [EngineSettings.defaults(), custom,
+          EngineSettings.Value(preset: "infinite", custom: false, multiPV: 4,
+                               maxDepth: 30, thinkMs: 0)] {
+    h.check(EngineSettings.encode(EngineSettings.decode(EngineSettings.encode(v)))
+            == EngineSettings.encode(v), "round trip: \(EngineSettings.encode(v))")
+}
+for bad in ["", "garbage", "v9|balanced|0|3|12|1200", "v1|balanced|0|3"] {
+    h.check(EngineSettings.encode(EngineSettings.decode(bad))
+            == EngineSettings.encode(EngineSettings.defaults()),
+            "\"\(bad)\" decodes to the defaults rather than half-reading it")
+}
+h.check(EngineSettings.encode(EngineSettings.decode(nil))
+        == EngineSettings.encode(EngineSettings.defaults()), "nil decodes to the defaults")
+h.check(EngineSettings.encode(EngineSettings.decode("v1|balanced|0|99|99|99999"))
+        == "v1|balanced|0|5|30|30000", "out-of-range stored values are clamped on the way in")
+
+// Storage, through the injectable protocol the UI layer's UserDefaults adapter conforms to.
+final class MemoryStorage: EngineSettings.Storage {
+    var values: [String: String] = [:]
+    func get(_ key: String) -> String? { values[key] }
+    func set(_ key: String, _ value: String) { values[key] = value }
+    func remove(_ key: String) { values.removeValue(forKey: key) }
+}
+let mem = MemoryStorage()
+h.check(EngineSettings.load(mem).preset == EngineSettings.defaultPreset,
+        "an empty store loads the defaults")
+EngineSettings.save(EngineSettings.selectPreset(EngineSettings.defaults(), "strong"), mem)
+h.check(EngineSettings.load(mem).preset == "strong", "what was saved is what loads")
+h.check(mem.values[EngineSettings.storageKey] == "v1|strong|0|3|18|3000",
+        "stored under the versioned key in the canonical shape")
+
 
 // The bundled ECO opening book. Exercises the real OpeningBook(tsv:) parser against the real
 // shipped file (copied into Goldens/ by build_eco.php), then replays the oracle's sampled lines.
@@ -2744,7 +2934,8 @@ h.requireMinCounts([
     "rating": 390, "compare_moves": 6, "streak_target": 36, "streak_increment": 4, "streak_reset": 2,
     "daily_limits": 168, "daily_goal": 18, "game_review": 47, "classify": 88, "rating_tier": 14, "rush": 12,
     "perft": 17, "chess_ai": 2, "san_parse": 9000, "notation_extra": 30, "draw_rules": 30,
-    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 45,
+    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 55,
+    "engine_settings": 70,
     "eco": 1200, "review_book": 1500, "analysis_session": 200, "analysis_store": 80,
     "position_editor": 80,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,

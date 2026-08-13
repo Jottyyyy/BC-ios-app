@@ -702,7 +702,49 @@ in-repo search at multiPV 3: depth 4 costs **173 ms** in an endgame and **2794 m
 15× spread, on top of ~6× per ply. Any fixed `maxDepth` is therefore either unusably slow in sharp
 positions or needlessly shallow in quiet ones. A deadline inside `shouldCancel` (polled every 2048
 nodes) reaches depth 4+ where it is cheap, stops at 3 where it is not, and holds total wall time to
-within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth = 6` is only a ceiling.
+within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth` is only a ceiling.
+
+**Those two are now the BALANCED preset, not the only setting** (2026-08-13). `EngineSettings`
+introduces five presets and an Advanced section; `engineDeadlineMs` / `reviewDeadlineMs` /
+`AnalysisEngineLimits` remain as the defaults an untouched install runs on, and
+`AnalysisMetricsCheck` asserts they still equal `EngineSettings.resolve(EngineSettings.defaults())`
+so the two files cannot drift. The invented constants that came with it:
+
+| Constant | Value | Why |
+|---|---|---|
+| the five presets | 0.5 / 1.2 / 3 / 8 s and ∞ | **invented** — measured depths in `docs/engine-settings.md`; Balanced reproduces the old behaviour exactly |
+| `maxDepth` ceilings | `8 / 12 / 18 / 22 / 30` | **invented** — each set just above the depth its own budget reaches, so the ceiling binds only in cheap endgames |
+| `reviewDivisor` = 6, floor 120, ceiling 1200 | — | **invented** — the per-position review budget is DERIVED from the interactive one rather than listed, and the derivation reproduces all five intended values |
+| `thinkInfinite` = `0` | — | **invented** — no deadline at all. The depth ceiling is then the only thing that terminates the search, which is why every preset still carries one |
+| `linesMin/Max` 1–5, `depthMin/Max` 2–30, `thinkMin/Max` 0.2–30 s | — | **invented** — the Advanced ranges |
+| `thinkStep` = 100 ms, slider min = `thinkMin - thinkStep` | — | **invented** — Infinite is the bottom step of the Think time slider, so a slider and a separate Infinite toggle cannot disagree |
+| `biya.analysis.engine.v1` | — | **invented** — the storage key, versioned like `biya.coach.takeback.v1` |
+| `AnalysisEngineStyle.*` | — | **invented** — the panel's geometry. Named `…Style` and not `…Panel` because `AnalysisEnginePanel` is already the engine-LINES band on the board |
+
+**DELIBERATE DEVIATION — Infinite does not apply to Analyze Game.** A 41-position review with no
+per-position deadline would never finish, so `reviewBudget(0)` saturates at `reviewMax` (1200 ms)
+instead. The panel says so in its own warning text rather than leaving it to be discovered.
+
+**DELIBERATE DEVIATION — the analysis engine has its own evaluation.** `AnalysisEval` (tapered
+mid/endgame scoring, pawn structure, king safety, mobility, bishop pair, rook files, tempo) sits
+**beside** `ChessAI.evaluate`, exactly as `CoachEngine` sits beside `ChessAI`. `ChessAI.evaluate` is
+parity-pinned to the five coach personas and is **not modified**: it is still material plus one
+piece-square table, and the coaches play exactly as they did. `AnalysisEval` reuses `ChessAI`'s
+material values and midgame tables *by reference* rather than copying them, so the shared half
+cannot drift. Units and sign convention are unchanged (pawn = 100, side-to-move relative), which is
+what lets the eval bar, `classifyMove`'s thresholds and `ReviewAnnotator` keep working untouched.
+
+**The engine identifier moved to `local-negamax-v2`.** The search gained a transposition table,
+killers and history, principal-variation search, check extensions, null-move pruning and late move
+reductions. It is still deterministic — the table is per-search and cleared by size, never by clock —
+and `engine_strength_check.js` asserts both that and a solve-rate floor over the puzzle corpus,
+because null-move and LMR are the two features that can silently lose a tactic without failing any
+structural assertion.
+
+**Zobrist keys differ between the two languages, on purpose.** The JS twin splits every key into two
+32-bit halves because JavaScript's bitwise operators truncate to 32 bits; Swift uses one `UInt64`
+from SplitMix64. The table is a per-search accelerator that never reaches any output, so nothing
+compares the two, and forcing them to agree would buy nothing.
 
 **Why the review budget is 200 ms.** Same argument, per position. Measured on a 40-move game
 (41 positions) in Node: a fixed depth 3 costs **28 s**; with a per-position deadline, 100 ms gives
@@ -853,3 +895,364 @@ None. Every number on these four screens came out of `puzzle_styles.json`.
 | `AnalysisSession.engineRows` is also a static | The puzzle suggestions panel is the same panel, and it has no session to hang off. Duplicating the formatting would mean two places to get `pvPreview` and `displayText` right |
 | A mutation harness spanning two languages needs a **two-directory restore** | The per-mutant restore said `JS` after Swift files were added, so every Swift mutant was written into `web-demo/js/` as a stray while the real file kept its mutation. Four unrelated mutants then reported the same leaked failure. A restore that restores the wrong file reports kills that never happened |
 | A positional check is not a semantic one | The lock-ordering assertion passed a mutant that disabled the guard with `if false`, because the text order was unchanged. The replay now asserts the condition itself |
+| `<chess-board>` speaks square **indices**, everywhere | The engine does too. The puzzle rules adapter treated them as names — `E.sqIndex(12)` is `null` — so every square reported zero legal targets and **no puzzle mode accepted a move for five phases**. It now matches `analysis.js`'s adapter rather than inventing a third convention |
+| Indices become names at **one** boundary | `PuzzleSession.submit` builds a UCI by string concatenation, so handing it indices computed `12 + 28` as arithmetic. `BiyaPuzzleBoard.moveFromEvent` converts once, in the listener, and `puzzle-solver.js` uses it rather than its own copy |
+| A test that skips the component tests nothing | `board_component_test.js` drove the board with its *own* correct adapter and `puzzle_screen_test.js` called `submit()` with names directly, so both stayed green while the feature was dead. The end-to-end path — pointer → board → adapter → event → session — is now driven in `board_component_test.js`, which is where the real element lives |
+| Tap-to-move is not optional on a phone | `PuzzleBoardBand` shipped with `onTap: { _ in }`, `legalTargets: []` and `lastMove: nil`: drag worked and tapping did nothing. The mirror of the web bug, in the other language |
+| Selection clears on mount, retry and every submit | A stale selection ring would let the next tap submit from a square whose piece has already moved |
+| Polish lives in a `--pzx-*` namespace | Transitions, press states and focus rings are not in the RN StyleSheets — React Native gets them from its components — so they are ours to choose. Keeping them out of `--pz*` means the CSS-var coverage check still treats the extracted properties as extracted |
+| `PuzzleHub.pressOpacity` is finally read | Extracted in Phase C and unused until now, in both languages. The dim on press is the source's value; the scale alongside it is motion, which the extraction cannot express |
+| `prefers-reduced-motion` is honoured | Every animation added is decoration, and someone who has asked the OS for less movement should get none of it |
+| No loading state, again | The plan called for one and it was dropped on inspection: serving is synchronous from the bundled corpus, so the state cannot occur. Building it would be inventing UI for something no user can see — the same reason `--pz-loading-*` were deleted in Phase F |
+
+## Pairing engine (Book Two, spec 1.7–1.9)
+
+### Deviations from the spec's acceptance criteria
+
+Both are deliberate, and both are because the criterion as written is **stricter than FIDE and not
+satisfiable by any conforming engine**. See `docs/pairing-engine.md` for the worked reasoning.
+
+- **Criterion 5, `|whites − blacks| ≤ 1` at the end of a Swiss.** Asserted as FIDE C.04.1 actually
+  requires it: spread `≤ 2`, and never three of the same colour in a row. After round 1 of a
+  12-player event where every White wins, six players share the history `[White]` and are each
+  other's only same-score opponents — three of them must take White again no matter how they are
+  paired. The Berger round robin *does* meet `≤ 1`, and is asserted at that strength.
+- **Criterion 6, "no player floats down twice running."** FIDE relaxes this when no candidate
+  satisfies it, and spec 1.7.6 says so itself. Asserted for fields of ten or more, at most one
+  unavoidable occurrence per tournament, plus direct unit tests on `chooseFloater` and on the cost
+  ordering `refloat > score` that produces the preference.
+
+### Invented constants — the priority ladder
+
+No PHP counterpart exists (the server has no cost function). The **ordering** is FIDE's; the values
+are chosen only to separate the terms, and are exported as `P.costs` so the tests assert the order.
+
+| Constant | Value | Rule it encodes |
+|---|---|---|
+| `COST_REPEAT` | `1e7` | never re-pair two players while any alternative exists |
+| `COST_COLOR_ABSOLUTE` | `5e4` | C.04.1 absolute: spread past ±2, or a third colour running |
+| `COST_REFLOAT` | `1.2e4` | above a score point — pair out of bracket rather than float twice |
+| `COST_SCORE` | `1e4` | per point of score difference between the two players |
+| `COST_COLOR_UNIT` | `1e2` | per unit of leftover colour imbalance |
+| `NODE_BUDGET` | `200000` | branch-and-bound cutoff; above it the search returns its best so far |
+
+### Decisions
+
+- **Colour is priced on the imbalance a pairing LEAVES BEHIND, not on preference.** Preference is
+  only ever a proxy for balance; matching on the proxy while assigning colours on the real thing is
+  how the two came to disagree during development. One function, `bestOrientation`, is used by both.
+- **Berger colours are assigned by a balancing pass, not derived from the rotation index.** Deriving
+  them from the index is what the PHP does on board 1 and it does not balance — it handed one player
+  White in all six games of a 7-player event. Ties in the pass go to whoever had Black last, then to
+  id, so a schedule is reproducible.
+- **Warnings are read off the result, not recorded during the search**, so a warning can never
+  describe a pairing the engine did not actually make.
+- **`chooseBye`'s bottom-bracket filter is provably a no-op** given the current score-descending
+  ordering (brute-forced over 287,712 cases). Kept because it states the rule and stops being a
+  no-op if the ordering changes; its mutant was removed rather than left as a false survivor.
+
+## Pairing Manager — store and metrics (spec §1.1–1.6, §1.10)
+
+### Deviations
+
+- **SwiftData `@Model` → plain `Codable`.** Spec §1.1 declares four `@Model` classes. There is no
+  SwiftData anywhere in this repo, and a `ModelContainer` is unreachable from every harness on this
+  checkout, so the document is plain `Codable` JSON — the same decision already recorded for
+  `AnalysisStore`/`AnalysisLibraryFile`. It is what lets the browser twin hold the identical shape
+  in `localStorage` and both languages assert one canonical document.
+- **"Results are locked when finished" admits one exception: clearing.** §1.10 says finished
+  tournaments lock, and §1.5/§7 #23 add a Clear Result action. Taken literally the two cannot both
+  hold: finishing is *caused* by the last result being entered, so a typo on the deciding board
+  would lock instantly and Clear Result could never reach it. Implemented as: once finished, a
+  result may not be **changed** to a different result, but it may be **cleared**, which returns the
+  tournament to `.ongoing` and restores ordinary editing. Clearing is the deliberate "I got that
+  wrong" action, so it is precisely the one that should survive the lock.
+- **Aggregates are recomputed, never patched.** The server incremented counters in `applyResult`
+  and decremented them in `reverseResult`. Three of the §7 defects (#11, #12, #17) are that pair
+  drifting apart. `pairing-store.js` rebuilds every derived field from the rounds after each
+  mutation, so there is no second representation to disagree — which is also why `clearResult` is
+  the same code path as `setResult` with `'pending'`.
+- **Status is computed, never stored** (§1.10 asks for this explicitly).
+
+### Invented constants
+
+| Constant | Value | Why |
+|---|---|---|
+| `LIMITS.nameMax` | 100 | §1.3 caps the name field; no RN counterpart (the server truncated at 255) |
+| `LIMITS.roundsMin/Max` | 1 / 30 | §1.3's clamp. The RN screen turned a typed `0` into 3 silently and let `99` reach a 422 |
+| `LIMITS.ratingMin/Max` | 0 / 3000 | the range the bulk parser already enforced (`[id].tsx:173`) |
+| `STR.lockedTitle` / `lockedBody` | — | §1.4 says to *say* players are locked instead of silently refetching; no source string existed |
+| `STR.deletedTitle` / `deletedBody` | — | §7 #19's empty state for a deleted tournament |
+
+### Extraction notes
+
+- `tools/metrics/extract_tournament_styles.js` needed two capabilities the puzzle extractor lacks:
+  **two StyleSheets per file** (`[id].tsx` has `styles` + `shareStyles`, and the puzzle version
+  hard-exits on anything but one), and a **colour-map walker**. The latter matters —
+  `collectRenderFunction` returns `{}` for `getTypeColor`/`getStatusColor` because they are pure
+  `condition → string literal` maps with no style values in them, so the six colours that decide
+  what a SWISS badge and an ONGOING dot look like would otherwise have been the only hand-typed
+  numbers in the feature. They are now extracted as ordered `when → value` lists, because the order
+  is the semantics: any status that is neither ongoing nor finished is gold.
+- The detail screen keeps its **own** copy of the type→colour mapping as a plain ternary
+  (`[id].tsx:400`). Both copies are extracted and `selfTestSource` asserts they agree, rather than
+  assuming it.
+- Confirmed mechanically: there is **no shared header** — 2 distinct shapes across the 3 screens
+  (`paddingVertical` 12 / 12 / 10), matching the same finding in the puzzle port.
+
+## Pairing Manager — the Swift half
+
+### The metrics are generated, not transcribed
+
+`tools/metrics/gen_pairing_metrics.js` emits `PairingMetrics.swift`, `PairingStrings.swift` and the
+JS geometry region from one source in one pass. This departs from the puzzle layer, which
+hand-writes its Swift constants and relies on `replay_puzzle_core.js` to notice drift. Both are
+defensible; the generator is better here because it removes the transcription step entirely rather
+than checking it afterwards, and `replay_pairing.js` becomes a second opinion — which is what caught
+nothing this time but is exactly what would catch a generator bug.
+
+The generator is a **gate, not a convenience**: it exits non-zero if the list and detail screens
+disagree about the type colours, if an inline standings width is absent from the source, or if the
+JS grows an interpolating string it has no Swift shape for.
+
+### Swift's unstable sort — one site, not four
+
+Recorded because the earlier note in this file overstated it. Four JS comparators were flagged as
+relying on V8's stable sort. Three of them are already total orders:
+
+| Site | Final key | Verdict |
+|---|---|---|
+| `pairingOrder` | `seed`, which is unique | total — no tie-break needed |
+| the two round-1 folds | `seed` | total |
+| `finish`'s board ordering | `min(rank)` of the pair; ranks unique, no shared players | total |
+| **`bergerSchedule`'s board sort** | **a bye flag — every non-bye board ties** | **needs an explicit index tie-break** |
+
+Only the last one has one, and the reason is written beside it. Adding tie-breaks to the other three
+would have been dead code that looked like diligence.
+
+### `AppLogo` was never needed
+
+Spec 1.2–1.4 call for `AppLogo(30)` and this was planned as a new component. `HomeLogo(size:)`
+(`HomeParts.swift:90`) already is it: circular, gold `strokeBorder` (not `stroke` — RN and CSS draw
+borders inside the box), glow applied after the clip so it is not clipped away.
+
+### Invented constants — Swift side
+
+All mirror the JS and are asserted equal by `replay_pairing.js`: `PairingLimits.longPressMs` (500,
+the iOS convention; RN's `onLongPress` default is not a number anywhere in the source),
+`PairingLimits.roundSelectorGap` (6, lives in a `contentContainerStyle` the AST walker does not
+collect), and `PairingCols.sb` (mirrors `bch`; spec 1.4 adds a Sonneborn-Berger column the RN table
+never had).
+
+### The offline guarantee is now checked
+
+`replay_pairing.js` greps every `Pairing*.swift` for `URLSession`, `URLRequest` and any `http(s)://`.
+Book Two §0.1 and Phase 8 criterion 2 both state this as a rule; it costs three lines to make it a
+test instead of a promise.
+
+## Pairing Manager — the Core document, and one thing the engine cannot do
+
+### Zero-point byes are not modelled
+
+Both published FIDE fixtures (`tools/qa/fide_dutch_test.js`) use TRF's `0000 - Z`: a pre-assigned
+**zero-point bye**, awarded to a player who is unavailable for a round. This engine has no concept
+of one. It allocates a bye itself, always worth a full point, and offers no way to mark a player
+unavailable, to request a bye in advance, or to score one at zero.
+
+The fixtures encode the Z the only way they can — in C5 by leaving that player out of the round, in
+C9 by carrying the round as a `nil` colour plus an already-had-a-bye flag. Both are faithful to what
+the Z means for those positions, and both pass. But the general feature is missing, and a real
+arbiter would eventually want it.
+
+### The document is one shape described twice, and that is checked
+
+`PairingDocument.State` and the JS `pairing-store.js` document must agree key-for-key, because the
+claim is that the browser's localStorage document and the app's `pairing.json` are the same
+document. `replay_pairing.js` builds a populated document in JS, reads the Swift `CodingKeys` out of
+the source, and compares both directions.
+
+This is checked rather than trusted because the failure is silent: `JSONDecoder` drops an unknown key
+and defaults a missing one, so a drifted document decodes to something plausible and wrong.
+
+Two consequences worth keeping:
+
+- **`Round.floats` is `[String: Float3]`, not `[Int: Float3]`.** `JSONEncoder` writes an Int-keyed
+  dictionary as a flat *array* of alternating keys and values, not as an object, so the Int-keyed
+  version would emit a document the JS twin cannot read. `RoundResult.floats` stays Int-keyed
+  because it never leaves memory.
+- Swift's `...ID` spelling maps to the JSON's `...Id` (`nextID` → `nextId`,
+  `opponentIDs` → `opponentIds`), matching `AnalysisLibrary`'s convention and the JS keys.
+
+## Pairing Manager — the SwiftUI screens
+
+### Deferred: the ImageRenderer share card (spec §1.6)
+
+§1.6 defines two things — a rendered card at width 360, and a plain-text fallback. The text ships;
+the image does not. It needs its own off-screen render path and consumes the ~39 `PairingShare`
+constants, which are extracted and generated but not yet read by anything. It is also the one part
+of this feature whose output nothing on this checkout can look at, which is why it went last and
+then did not fit. Recorded as remaining spec, not as a decision.
+
+### Invented, Swift side
+
+- `PairingLimits.bulkEditorHeight = 160` — spec §1.5 gives the bulk-add editor this height, but the
+  RN screen uses a plain multiline `TextInput` with no height in its StyleSheet. Genuinely invented.
+- The presentation timing for the Pairing overlay reuses `AnalysisTiming.screenPresentSeconds`, and
+  its background reuses the extracted `PairingList.containerBackgroundColor`. Neither
+  `PairingTiming` nor `PairingPalette.screenBg` exists, and inventing two constants to avoid sharing
+  two would have been worse.
+
+### Extracted after all: the white piece dot
+
+`colorDot` in the RN StyleSheet carries only geometry — the fill is applied per side at the call
+site as an inline style. Rather than retype `#FAFAFA`, `gen_pairing_metrics.js` reads it out of
+`inlineStyles` and **fails if it is not there**, emitting `PairingDots.white`.
+
+## Play vs Coach — the browser screens
+
+### The extractor could not see a function declaration
+
+`RN.findNamedFunctions` matched only `const f = (…) => …`. `CoachCard` in `play-coach/index.tsx` is
+a function **declaration**, so its avatar geometry — `avatarSize`, `ringSize = avatarSize + 6`,
+`haloSize = ringSize + 10` — was never collected and `renderConstants` came back `{}` for that
+screen. Nothing failed: the numbers were simply absent, and the stylesheet reached for hand-typed
+pixels instead. The walker now handles both forms, and `gen_coach_metrics.js` folds the extracted
+signed terms into six `cardSize` constants rather than restating the arithmetic.
+
+This is the same failure the *unresolved gate* exists to prevent, one level up: the gate catches a
+value the evaluator cannot fold, but not a function it never looked inside.
+
+### The roster is extracted, not transcribed — because the transcription was wrong
+
+`coach-select.js` first carried a hand-typed roster: `Jaden/Jade/Jude/Julie` at 800/1200/1600/2000/
+2400. The real `COACH_DATA` — and spec §2.14's own table, which agrees with it — is
+`Jaden Pogi/Pretty Jade/Handsome Jude/Mommy Julie/Coach Pogi` at 800/1500/1800/2000/2500. Four names
+and three ratings wrong, in a file that had passed review, because the two correct sources were
+never compared to the incorrect one.
+
+`gen_coach_metrics.js` now emits the whole roster (`MET.COACHES`, `CoachRoster`/`CoachProfile`),
+including `winMsg`/`loseMsg`, which are not decoration: `coach-game.js`'s `evaluate` puts them
+straight into the result card. The JS suite pins the roster against the **spec table** and the
+generator pins it field-by-field against the **extraction** — two independent transcriptions of one
+source, checked against each other.
+
+### `modalBtn` has no background, and that is correct
+
+`play.tsx` writes `[styles.modalBtn, { backgroundColor: coach.accentColor }]`. The five accent
+colours are emitted as `MET.ACCENTS` / `CoachAccent` and applied inline, the same way. A background
+in the stylesheet would have been an invention that also happened to be wrong for four coaches.
+
+### Deferred: the Review button (spec §2.10)
+
+`resultCard` renders **Review** only when its host passes `onReview`. The offline review is a screen
+of its own and is not built; §2.14 has its copy (`gameReview`, `startReview`, `analyzing`,
+`accuracy`, `results`) but not a placeholder, and inventing one to fill an inert button would have
+put words in the app that the spec does not contain. Recorded as remaining spec, not as a decision.
+
+### Deleted: the sample Play tab
+
+The pre-port demo had its own Play screen with its own coach table (`js/ai.js` `Coaches`), its own
+undo and its own game state. It was **removed**, not left unreachable — two Play tabs disagreeing
+about who the coaches are is precisely what the extraction exists to prevent. `js/ai.js` itself
+stays: `CoachAI.evaluate` is still used by the Analysis Board, and `Coaches` still decorates the
+Profile tab's avatar row.
+
+## Play vs Coach — the Swift half
+
+### A duplicate type had been sitting in the repo, uncompiled
+
+`gen_coach_metrics.js` emits `public enum CoachSelect`. `CoachSelect.swift` declared
+`struct CoachSelect: View` — the pre-port sample screen. Two top-level types of one name in one
+module is a redeclaration error, and nothing caught it because `swift build` runs on a Mac and this
+checkout has no compiler.
+
+The view is renamed `LegacyCoachSelect` rather than the generated enum, so the metrics keep the
+symmetric `CoachSelect` / `CoachPlay` naming the docs and the generator use. `swift_symbol_check.js`
+now reports duplicate top-level types, which is the real fix: the rename is one instance, the check
+is the class.
+
+### The sample Play tab is NOT retired on the Swift side
+
+The browser twin deleted its equivalent outright. Swift cannot yet, because `BoardView` — the board
+every screen in the app renders — lives in `PlayView.swift` alongside the retired screen, and
+`LegacyCoachSelect` is still reached from `PlayView` and `PhoneView`. Retiring the pair means
+extracting `BoardView` into its own file first, which is a refactor that wants a compiler. The new
+flow is therefore an overlay reached from the Home tile, exactly as the Pairing Manager is.
+
+### Invented, Swift side
+
+All in `CoachLayout.swift`, and asserted by `CoachMetricsCheck` + `replay_coach.js` so the list
+cannot grow silently. Four are DERIVED from extracted constants rather than chosen —
+`sectionGap` (`titleSub.marginTop`), `stripGap` (`moveStripContent.gap`), `disabledOpacity`
+(`navBtnDisabled.opacity`) and `premoveChipInset` (`premoveChip.paddingHorizontal`) — and the replay
+pins each derivation, so replacing one with a bare number fails.
+
+Genuinely invented:
+
+- `rosterColumns` — three flexible grid columns. RN lays the five cards out as two explicit rows
+  (`row1`, `row2`); a `LazyVGrid` reproduces that without hard-coding which coach sits where.
+- `boardAspect = 1` — the board is square. RN derives it from `BOARD_SIZE`; stating the ratio lets
+  it track the device instead of the reference width.
+- `oneStep = 1`, `lastRankWhite = 7`, `lastRankBlack = 0` — named only so no view body contains a
+  bare number for the metrics check to trip over.
+- `enabledOpacity = 1`.
+- `scrimOpacity = 0.55` — RN renders a `Modal` with its own dimming, so there is nothing to extract.
+  Matches the value the Puzzle Hub's prompts already use rather than being a second opinion.
+- `defaultPromotion = "q"` — spec §7 #32 is that the RN premove ALWAYS auto-queened. A tap on a
+  promotion square still defaults to a queen, but the value is carried through
+  `CoachTurn.Premove.promotion` explicitly, so a picker can be added without touching the mechanism.
+- `CoachGlyph`'s five characters — icons that happen to be characters, kept out of `CoachStrings`
+  because that file is generated from §2.14, which is copy. The browser twin writes the same five
+  as literals.
+
+### The reply is paced, not delayed
+
+`CoachStore.askCoach` waits `think - alreadySpent`, not `think`. Written the other way the think
+time is ADDED to the search and every coach becomes slower than the spec says; the JS twin does the
+same subtraction, and a mutant pins it in both.
+
+## Play vs Coach — the game review (§2.10)
+
+### Four things this feature nearly reimplemented
+
+The accuracy bands, the one-decimal accuracy format, the ten classification colours and their
+symbol-bearing labels all already existed in `analysis-metrics.js` and
+`AnalysisReview` / `AnalysisTables`, in both languages, because the Analysis Board has its own
+review rows. The first draft of `coach-review.js` wrote all four again — the colours as ten hex
+values typed into `coach.css`. They are delegated now.
+
+Worth stating as a rule: when a new screen needs a table, look for it in the screen that already
+shows the same data. Two copies of the classification colours would have diverged the first time
+one was tuned.
+
+### The eval graph came from a third file
+
+Spec §2.10 states the graph's fill (`#1A2740`), radius, the two advantage fills, the centre line and
+the curve in prose. All of them are literals on SVG attributes in `components/EvalGraph.tsx` — not a
+StyleSheet, so `collectInlineStyles` could not see them. `collectSvgAttrs` was added for exactly
+this, and the extractor now walks that file plus the `height={60}` at the call site in `play.tsx`.
+`CLAMP = 500` is read as well, so `coach-review.js` no longer restates it.
+
+### The review card border is a hex alpha BYTE
+
+`play.tsx`: `[styles.reviewModalCard, { borderColor: coach.accentColor + '30' }]`. `'30'` is
+appended to a hex string, so it is 0x30/255 ≈ 19 % — which is what the spec's "accent @ 19 %" means.
+Read as "30 %" the border is nearly twice as strong. The Pairing Manager already shipped this exact
+confusion once in a badge tint, so both languages keep the byte and divide:
+`CoachLayout.accentBorderAlphaByte = 0x30`.
+
+### The hand-off is an argument, not a capture
+
+§7 #28 is not a typo, it is a shape. The RN `handleGameReview` was a `useCallback` whose dependency
+list named `moveRecords` but not `reviewData`, so the closure kept the `null` it was created with
+and the Analysis Board received an empty classification array on every hand-off ever made.
+`handoff(game, summary)` takes the summary as a parameter; there is nothing to capture, and it
+returns nil rather than an empty payload when the summary is missing. Two mutants keep it that way.
+
+### A cancelled review is discarded, never shortened
+
+`reviewSteps` / `ReviewAnnotator.Evaluator` leave their evaluations SHORT when cancelled, and
+`isFinished` is true for a cancelled walk. Both languages therefore guard on `isComplete` /
+`res.complete` and close the modal: a partial review would report an accuracy computed over half a
+game, and nothing on screen would say so.
+

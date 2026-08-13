@@ -121,7 +121,7 @@ struct PuzzlePlayHomeScreen: View {
                             radius: PuzzlePlayHome.playShadowRadius,
                             y: PuzzlePlayHome.playShadowY)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
         }
         .padding(.horizontal, PuzzlePlayHome.bottomPaddingH)
         .padding(.top, PuzzlePlayHome.bottomPaddingTop)

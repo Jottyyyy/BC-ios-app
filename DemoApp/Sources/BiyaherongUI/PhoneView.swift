@@ -58,6 +58,15 @@ struct PhoneApp: View {
     /// The Analysis Board is a pushed route in the original, with no tab bar — its seven bands
     /// cannot spare the height. It therefore covers the whole phone rather than living in a tab.
     @State private var showAnalysis = false
+    /// The Pairing Manager is a pushed route too, for the same reason: it is reached from a Home
+    /// tile, not a tab, and its three tabs of its own leave no room for the app's.
+    @StateObject private var pairingStore = PairingStore()
+    @State private var showPairing = false
+    /// Play vs Coach, presented the same way and for the same reason: three screens of its own,
+    /// reached from the Home tile. It is NOT the Play tab — that still shows the pre-port sample
+    /// screen, which cannot be retired until `BoardView` is lifted out of `PlayView.swift`.
+    @StateObject private var coachStore = CoachStore()
+    @State private var showCoach = false
 
     // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
     // make the memberwise initializer private, so only the file-local no-argument form would be
@@ -107,6 +116,39 @@ struct PhoneApp: View {
                     .background(AnalysisPalette.screenBg)
                     .transition(.move(edge: .bottom))
                 }
+                if showPairing {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        PairingRootScreen(store: pairingStore, onExit: { showPairing = false })
+                    }
+                    // `PairingPalette` has no screenBg and there is no PairingTiming; rather than
+                    // invent two constants, the extracted screen fill and the Analysis Board's
+                    // present timing are reused deliberately.
+                    .background(PairingList.containerBackgroundColor)
+                    .transition(.move(edge: .bottom))
+                }
+                if showCoach {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        CoachRootScreen(store: coachStore, onExit: { showCoach = false })
+                            // Spec 2.10's hand-off: Start Review closes Play vs Coach and opens
+                            // the Analysis Board on the reviewed game, classifications and all.
+                            .onChange(of: coachStore.pendingHandoff) { _, payload in
+                                guard payload != nil else { return }
+                                showCoach = false
+                                withAnimation(.easeInOut(
+                                    duration: AnalysisTiming.screenPresentSeconds)) {
+                                    showAnalysis = true
+                                }
+                            }
+                    }
+                    .background(CoachSelect.containerBackgroundColor)
+                    .transition(.move(edge: .bottom))
+                }
             }
             .frame(width: shell.size.width, height: shell.size.height)
         }
@@ -127,7 +169,16 @@ struct PhoneApp: View {
                            showAnalysis = true
                        }
                    },
-                   onPlayCoach: { tab = 2 })
+                   onPlayCoach: {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showCoach = true
+                       }
+                   },
+                   onPairing: {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showPairing = true
+                       }
+                   })
     }
 
     private var statusBar: some View {
@@ -292,7 +343,7 @@ struct PlayPhone: View {
     private var coachLevel: Int { (Coaches.all.firstIndex { $0.id == vm.coach?.id } ?? 0) + 1 }
 
     var body: some View {
-        if vm.started { gameView } else { CoachSelect(vm: vm) }
+        if vm.started { gameView } else { LegacyCoachSelect(vm: vm) }
     }
 
     private var gameView: some View {

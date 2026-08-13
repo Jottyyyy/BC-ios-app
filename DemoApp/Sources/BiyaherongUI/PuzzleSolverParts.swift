@@ -24,6 +24,11 @@ final class PuzzleSolverEngine: ObservableObject {
     /// Set when a promotion is pending; the screen shows `PuzzlePromotionOverlay` on it.
     @Published var pendingPromotion: (from: String, to: String)?
     @Published private(set) var solutionHighlight: [Int: Color] = [:]
+    /// Tap-to-move state. Without these the board only accepted drags, showed no legal-move dots
+    /// and highlighted no selection — the whole tap path was missing, which on a phone is the way
+    /// most people actually move a piece.
+    @Published private(set) var selected: Int?
+    @Published private(set) var legalTargets: Set<Int> = []
     /// Engine suggestions, shown after a Solution reveal on the two modes that have a panel.
     /// `EngineRow` is the Analysis Board's own row type — same panel, same shape, one definition.
     @Published private(set) var engineLines: [EngineRow] = []
@@ -54,6 +59,7 @@ final class PuzzleSolverEngine: ObservableObject {
         alive = true
         puzzle = p
         session = PuzzleSession.create(puzzle: p.session, mode: mode)
+        deselect()
         solutionHighlight = [:]
         play(.gameStart)
         after(PuzzleSession.opponentDelayMs(mode)) { [weak self] in
@@ -83,6 +89,7 @@ final class PuzzleSolverEngine: ObservableObject {
         }
         let out = s.submit(from: from, to: to, promotion: promotion)
         session = s
+        deselect()
         switch out {
         case .illegal, .ignored:
             return
@@ -110,6 +117,41 @@ final class PuzzleSolverEngine: ObservableObject {
         }
     }
 
+    /// Tap-to-move, the same shape as `ChessGameVM.tap` (PlayView.swift:75): tap a piece to
+    /// select it, tap it again to deselect, tap a legal target to move, tap another of your own
+    /// pieces to switch selection.
+    ///
+    /// Promotion is not special-cased here — `submit` already raises `pendingPromotion` when the
+    /// move needs a piece, so both input paths go through one decision.
+    func tap(_ sq: Int) {
+        guard interactive, let s = session else { return }
+        if let sel = selected {
+            if sq == sel { deselect(); return }
+            if legalTargets.contains(sq) {
+                deselect()
+                submit(from: sel, to: sq)
+                return
+            }
+            selectPiece(sq, in: s)
+            return
+        }
+        selectPiece(sq, in: s)
+    }
+
+    private func selectPiece(_ sq: Int, in s: PuzzleSession.State) {
+        guard let p = s.position.squares[sq], p.color == s.position.sideToMove else {
+            deselect()
+            return
+        }
+        selected = sq
+        legalTargets = Set(s.position.legalMoves(from: sq).map { $0.to })
+    }
+
+    private func deselect() {
+        selected = nil
+        legalTargets = []
+    }
+
     func choosePromotion(_ kind: PieceKind) {
         guard let p = pendingPromotion else { return }
         pendingPromotion = nil
@@ -119,6 +161,7 @@ final class PuzzleSolverEngine: ObservableObject {
     func retry() {
         guard var s = session else { return }
         let r = s.retry()
+        deselect()
         session = s
         cancel()
         alive = true
@@ -159,7 +202,11 @@ final class PuzzleSolverEngine: ObservableObject {
             let local = LocalEngine()
             _ = local.analyze(
                 position,
-                limits: EngineLimits(maxDepth: AnalysisEngineLimits.maxDepth,
+                // `SearchLimits`, not `EngineLimits` — there is no such type, and this line has
+                // never compiled. The puzzle hint panel keeps the DEFAULT limits deliberately: the
+                // Analysis Board's preset is that screen's setting, not this one's, and the hint
+                // here already has its own 3 s budget.
+                limits: SearchLimits(maxDepth: AnalysisEngineLimits.maxDepth,
                                      multiPV: AnalysisEngineLimits.multiPV),
                 historyKeys: [],
                 shouldCancel: { Date() > deadline },
@@ -216,10 +263,13 @@ final class PuzzleSolverEngine: ObservableObject {
         return piecesFrom(s.position)
     }
 
-    var lastMoveSquares: (from: Int, to: Int)? {
+    /// The last move as the board wants it. The session stores square NAMES; `BoardView` takes a
+    /// `Move`, so the conversion lives here rather than at the call site — which previously just
+    /// passed `nil` and so never highlighted anything.
+    var lastMove: Move? {
         guard let lm = session?.lastMove,
               let f = Square.index(lm.from), let t = Square.index(lm.to) else { return nil }
-        return (f, t)
+        return Move(from: f, to: t, promotion: nil)
     }
 
     var checkSquare: Int? {
@@ -300,7 +350,7 @@ struct PuzzleScreenHeader<Trailing: View>: View {
                     .foregroundStyle(PuzzlePalette.textPrimary)
                     .frame(width: PuzzleSolverStyle.backBtnW, height: PuzzleSolverStyle.backBtnH)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             VStack(spacing: PuzzleDailySolver.headerSubMarginTop) {
                 Text(title)
                     .font(Theme.nunito(titleSize, .bold))
@@ -337,13 +387,17 @@ struct PuzzleBoardBand: View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
             BoardView(pieces: engine.pieces,
-                      selected: nil,
-                      legalTargets: [],
-                      lastMove: nil,   // drawn from `solutionHighlight` and the session instead
+                      selected: engine.selected,
+                      legalTargets: engine.legalTargets,
+                      lastMove: engine.lastMove,
                       flipped: engine.session?.flipped ?? false,
                       checkSquare: engine.checkSquare,
                       boardSize: side,
-                      onTap: { _ in },
+                      onTap: { sq in
+                          guard engine.interactive else { return }
+                          Haptics.play(.pickUp)
+                          engine.tap(sq)
+                      },
                       customHighlights: engine.solutionHighlight,
                       onDragMove: { from, to in
                           guard engine.interactive else { return }
@@ -418,7 +472,7 @@ struct PuzzleBottomPanel: View {
                     .stroke(fill == nil ? PuzzleSolverStyle.retryBorderColor : .clear,
                             lineWidth: PuzzleSolverStyle.retryBorder))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
     }
 }
 
@@ -534,6 +588,33 @@ struct PuzzleModal: View {
                 .background(fill,
                             in: RoundedRectangle(cornerRadius: PuzzleTurboRun.modalBtnRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
     }
+}
+
+/// Press feedback for every puzzle button.
+///
+/// SwiftUI's `.plain` style is completely inert on press, so a tap gave no acknowledgement at all
+/// — on a phone that reads as "did it register?" and people tap twice. The dim comes from
+/// `PuzzleHub.pressOpacity`, which the extraction has always carried and nothing had ever read;
+/// the scale is motion, which the RN StyleSheets cannot express and so is ours.
+///
+/// The web twin does the same thing in `app.css`'s polish layer.
+struct PuzzlePressStyle: ButtonStyle {
+    /// Cards are large, so they take a gentler squeeze than a button does.
+    var scale: CGFloat = 0.975
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? PuzzleHub.pressOpacity : 1)
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(.easeOut(duration: PuzzlePress.duration), value: configuration.isPressed)
+    }
+}
+
+/// Motion timings. Not extracted — the RN source has no transitions at all — so they live in one
+/// place rather than as numbers inside view bodies.
+enum PuzzlePress {
+    static let duration: Double = 0.12
+    static let cardScale: CGFloat = 0.99
 }

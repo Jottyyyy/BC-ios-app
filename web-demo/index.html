@@ -9,6 +9,7 @@
   <link rel="icon" href="assets/brand/favicon.png" />
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/pairing.css" />
 </head>
 
 <body>
@@ -103,10 +104,16 @@
   <script src="js/eco-data.js"></script>
   <script src="js/movetree.js"></script>
   <script src="js/pgn.js"></script>
+  <!-- The analysis engine's own evaluation and Zobrist keys. Reads ai.js for the midgame tables it
+       shares, and analysis-engine.js reads THIS at load time, so it sits between the two. -->
+  <script src="js/analysis-eval.js"></script>
   <script src="js/analysis-engine.js"></script>
   <script src="js/review.js"></script>
   <script src="js/opening-book.js"></script>
   <script src="js/analysis-metrics.js"></script>
+  <!-- The engine strength presets (☰ > Engine). Read by analysis.js and cross-checked by
+       analysis-metrics.js's self-test; neither needs it at load time, so it sits here. -->
+  <script src="js/engine-settings.js"></script>
   <!-- Decides where the search runs: a Worker when served, in-thread from file://.
        Must load after engine.js / analysis-engine.js / ai.js, before analysis.js and app.js. -->
   <script src="js/engine-host.js"></script>
@@ -129,6 +136,33 @@
   <!-- Streak before Turbo: Turbo reuses its relativeDate for the run history. -->
   <script src="js/puzzle-streak.js"></script>
   <script src="js/puzzle-turbo.js"></script>
+  <!-- The Pairing Manager. Order is load-bearing: pairing-store reads BiyaPairing at LOAD time
+       (not inside a function), so the engine must already be defined, and all three screens read
+       the metrics. -->
+  <script src="js/pairing-engine.js"></script>
+  <script src="js/pairing-metrics.js"></script>
+  <script src="js/pairing-store.js"></script>
+  <script src="js/pairing-list.js"></script>
+  <script src="js/pairing-create.js"></script>
+  <script src="js/pairing-detail.js"></script>
+  <!-- Play vs Coach. Order is load-bearing: coach-game reads BiyaCoachGame's engine at load time,
+       coach-strings is read by every screen, and coach-play reads coach-turn.
+       These are LOADED but not yet ROUTED — app.js still shows the old sample Play tab. Loading
+       them first is what lets `coach_screen_test.js` exercise them in the page's own order; the
+       route is repointed once the stylesheet exists, so the screens never appear unstyled. -->
+  <script src="js/coach-engine.js"></script>
+  <script src="js/coach-book.js"></script>
+  <script src="js/coach-game.js"></script>
+  <script src="js/coach-metrics.js"></script>
+  <script src="js/coach-strings.js"></script>
+  <!-- The offline game review: an adapter over review.js, which is already the parity port
+       of GameReviewController. Must load after it and before the screen that opens the
+       modal. -->
+  <script src="js/coach-review.js"></script>
+  <script src="js/coach-turn.js"></script>
+  <script src="js/coach-select.js"></script>
+  <script src="js/coach-color.js"></script>
+  <script src="js/coach-play.js"></script>
   <script src="js/app.js"></script>
   <script src="js/device.js"></script>
 </body>

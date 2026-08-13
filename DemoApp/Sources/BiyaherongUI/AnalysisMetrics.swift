@@ -1014,10 +1014,50 @@ enum AnalysisTiming {
     static var screenPresentSeconds: Double { Double(screenPresentMs) / 1000 }
 }
 
-/// Search limits for the live board. `maxDepth` is a ceiling; the deadline is what usually binds.
+/// Default search limits for the live board — the **Balanced** preset, for an install where nobody
+/// has opened ☰ > Engine. `maxDepth` is a ceiling; the deadline is what usually binds, and only a
+/// nearly-empty board ever reaches the ceiling at all.
+///
+/// The ceiling used to be 6, which the search began hitting in three of the six benchmark positions
+/// once it grew a transposition table. A ceiling the engine reaches is a ceiling doing the
+/// budgeting, which is exactly the deadline's job.
+///
+/// These are asserted against `EngineSettings.resolve(EngineSettings.defaults())` in
+/// `AnalysisMetricsCheck`, so the two files cannot drift apart.
 enum AnalysisEngineLimits {
-    static let maxDepth = 6
+    static let maxDepth = 12
     static let multiPV = 3
+}
+
+/// The Engine Settings panel (☰ > Engine).
+///
+/// INVENTED, all of it: nothing in the RN source has this screen. Laid out like the Autoplay Speed
+/// sheet it sits beside in the same ☰ section, so there is one bottom-sheet idiom, not two. Twin of
+/// `ENGINE_PANEL` in `web-demo/js/analysis-metrics.js`.
+enum AnalysisEngineStyle {
+    static let rowHeight: CGFloat = 52          // a preset row: name on top, summary under it
+    static let rowGap: CGFloat = 8
+    static let rowRadius: CGFloat = 10
+    static let rowPaddingH: CGFloat = 12
+    static let dotSize: CGFloat = 16            // the selected-preset radio
+    static let dotInset: CGFloat = 10
+    static let nameSize: CGFloat = 15
+    static let summarySize: CGFloat = 12
+    static let warningSize: CGFloat = 12
+    static let warningGap: CGFloat = 10
+    static let sectionGap: CGFloat = 14
+    static let advancedRowHeight: CGFloat = 44  // label left, value right, control under
+    static let advancedLabelSize: CGFloat = 13
+    static let advancedValueSize: CGFloat = 13
+    /// The height reserved for the slider row. Both platforms use the NATIVE slider, which draws its
+    /// own track — so there is no track height or radius here, because nothing would read one.
+    static let thumbSize: CGFloat = 18
+    static let segmentHeight: CGFloat = 30      // the Lines picker, buttons rather than a track
+    static let segmentGap: CGFloat = 6
+    static let segmentRadius: CGFloat = 8
+    /// The radio's ring, and the outline on the selected row. Not a new colour: the same 2pt the
+    /// autoplay grid already uses for `active`.
+    static let selectionStroke: CGFloat = 2
 }
 
 // MARK: - Typography

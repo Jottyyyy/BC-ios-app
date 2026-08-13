@@ -36,7 +36,7 @@ struct PuzzleThematicGridScreen: View {
                         Button { selected = (selected == theme.id) ? nil : theme.id } label: {
                             card(theme)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PuzzlePressStyle())
                     }
                 }
                 .padding(.horizontal, PuzzleThematicGrid.gridPaddingH)
@@ -94,7 +94,7 @@ struct PuzzleThematicGridScreen: View {
                             in: RoundedRectangle(cornerRadius: PuzzleThematicGrid.startRadius))
                 .opacity(selected == nil ? PuzzleThematicGrid.startDisabledOpacity : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
         .disabled(selected == nil)
         .padding(.horizontal, PuzzleThematicGrid.startMarginH)
         .padding(.bottom, PuzzleThematicGrid.startMarginBottom)

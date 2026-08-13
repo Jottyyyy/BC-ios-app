@@ -25,7 +25,9 @@ var JS = path.join(ROOT, 'web-demo', 'js');
 var E = require(path.join(JS, 'engine.js'));
 var T = require(path.join(JS, 'movetree.js'));
 var P = require(path.join(JS, 'pgn.js'));
+var EVAL = require(path.join(JS, 'analysis-eval.js'));
 var A = require(path.join(JS, 'analysis-engine.js'));
+var ESET = require(path.join(JS, 'engine-settings.js'));
 var V = require(path.join(JS, 'review.js'));
 var B = require(path.join(JS, 'opening-book.js'));
 var MET = require(path.join(JS, 'analysis-metrics.js'));
@@ -42,9 +44,29 @@ var SKEYS = require(path.join(__dirname, 'swift_source_keys.js'));
 var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
+var STRENGTH = require(path.join(__dirname, 'engine_strength_check.js'));
+var RENGINE = require(path.join(__dirname, 'replay_engine_settings.js'));
 var WORKER = require(path.join(__dirname, 'worker_protocol_check.js'));
 var CORPUS = require(path.join(__dirname, 'puzzle_corpus_check.js'));
 var PUZCORE = require(path.join(__dirname, 'puzzle_core_test.js'));
+var PAIRING = require(path.join(__dirname, 'pairing_test.js'));
+var PMETRICS = require(path.join(ROOT, 'web-demo', 'js', 'pairing-metrics.js'));
+var PSTORE = require(path.join(ROOT, 'web-demo', 'js', 'pairing-store.js'));
+var PSCREENS = require(path.join(__dirname, 'pairing_screen_test.js'));
+var RPAIR = require(path.join(__dirname, 'replay_pairing.js'));
+var FIDE = require(path.join(__dirname, 'fide_dutch_test.js'));
+var COACH = require(path.join(ROOT, 'web-demo', 'js', 'coach-engine.js'));
+var CBOOK = require(path.join(ROOT, 'web-demo', 'js', 'coach-book.js'));
+var CGAME = require(path.join(ROOT, 'web-demo', 'js', 'coach-game.js'));
+var CMET = require(path.join(ROOT, 'web-demo', 'js', 'coach-metrics.js'));
+var CSTR = require(path.join(ROOT, 'web-demo', 'js', 'coach-strings.js'));
+var CSEL = require(path.join(ROOT, 'web-demo', 'js', 'coach-select.js'));
+var CCOL = require(path.join(ROOT, 'web-demo', 'js', 'coach-color.js'));
+var CTURN = require(path.join(ROOT, 'web-demo', 'js', 'coach-turn.js'));
+var CPLAY = require(path.join(ROOT, 'web-demo', 'js', 'coach-play.js'));
+var CSCREEN = require(path.join(__dirname, 'coach_screen_test.js'));
+var CREVIEW = require(path.join(__dirname, '..', '..', 'web-demo', 'js', 'coach-review.js'));
+var RCOACH = require(path.join(__dirname, 'replay_coach.js'));
 var RPUZ = require(path.join(__dirname, 'replay_puzzle_core.js'));
 var RVM  = require(path.join(__dirname, 'replay_puzzle_vm.js'));
 var PMET = require(path.join(JS, 'puzzle-metrics.js'));
@@ -93,7 +115,9 @@ function harness() {
 record('engine.selfTest', E.selfTest());
 record('movetree.selfTest', T.selfTest());
 record('pgn.selfTest', P.selfTest());
+record('analysis-eval.selfTest', EVAL.selfTest());
 record('analysis-engine.selfTest', A.selfTest());
+record('engine-settings.selfTest', ESET.selfTest());
 record('review.selfTest', V.selfTest());
 record('opening-book.selfTest', B.selfTest());
 record('analysis-metrics.selfTest', MET.selfTest());
@@ -120,6 +144,8 @@ record('board layout invariants', LAYOUT.selfTest());
 // Where the search runs, and the frame budget it must respect when it runs in-thread.
 record('engine-host.selfTest', HOST.selfTest());
 record('engine frame budget', BUDGET.selfTest());
+record('engine strength', STRENGTH.selfTest());
+record('swift engine settings vs JS', RENGINE.selfTest());
 // The bundled puzzle corpus: quotas, indexes, and every line replayed through the real engine.
 // Every later puzzle assertion is stated against this DB, so a bad corpus would make them all
 // pass while the app served nothing.
@@ -127,6 +153,28 @@ record('puzzle corpus', CORPUS.selfTest());
 // The Puzzle Hub's pure layer — solver state machine, selection ladders, progress store. Written
 // and proven in JS first, then transliterated; these are the runs the Swift is checked against.
 record('puzzle core', PUZCORE.selfTest());
+record('pairing engine', PAIRING.selfTest());
+record('pairing store', PSTORE.selfTest());
+record('pairing screens', PSCREENS.selfTest());
+record('swift pairing vs JS', RPAIR.selfTest());
+record('published FIDE pairings', FIDE.selfTest());
+record('coach engine', COACH.selfTest());
+record('coach opening book', CBOOK.selfTest());
+record('coach game state', CGAME.selfTest());
+record('coach strings', CSTR.selfTest());
+record('coach select', CSEL.selfTest());
+record('coach colour select', CCOL.selfTest());
+record('coach turn controller', CTURN.selfTest());
+record('coach game screen', CPLAY.selfTest());
+record('coach screens', CSCREEN.selfTest());
+record('coach review', CREVIEW.selfTest());
+record('swift coach vs JS', RCOACH.selfTest());
+record('coach-metrics vs RN source',
+       CMET.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'coach_styles.json'))));
+record('coach book legality', CBOOK.selfTestLegality(require(path.join(ROOT, 'web-demo', 'js', 'engine.js'))));
+record('pairing-metrics.selfTest', PMETRICS.selfTest());
+record('pairing-metrics vs RN source',
+       PMETRICS.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'tournament_styles.json'))));
 // ...and the check that the transliteration did not drift.
 record('swift puzzle tables vs JS', RPUZ.selfTest());
 // The SCREENS' decisions, not just their constants. `swift_symbol_check.js` proves every name

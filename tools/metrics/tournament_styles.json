@@ -1,0 +1,2566 @@
+{
+  "_generated": "tools/metrics/extract_tournament_styles.js — do not hand-edit",
+  "_note": "The REAL StyleSheet numbers for the Pairing Manager. Spec §1.2–1.6 prose is secondary; where they disagree the deviation is recorded in PORTING_NOTES.md.",
+  "shareCard": {
+    "_note": "The share card is captured off-screen at `left: -9999` and rasterised at `SHARE_CARD_WIDTH * PixelRatio.get()`. The WIDTH is the design constant; the pixel ratio is the device. Only the former belongs in the metrics layer.",
+    "_source": "app/(app)/user/tournaments/[id].tsx",
+    "width": 360,
+    "referenceDevice": {
+      "width": 390,
+      "height": 844,
+      "pixelRatio": 3
+    }
+  },
+  "headers": {
+    "_note": "Spec §1.2/§1.3 say `h 16 / v 12` and §1.4 says `h 16 / v 10`. There is no shared header component — 2 distinct shapes across 3 screens. Encode per screen.",
+    "variants": {
+      "list": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingHorizontal": 16,
+        "paddingVertical": 12,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(253,176,34,0.08)"
+      },
+      "create": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingHorizontal": 16,
+        "paddingVertical": 12,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(253,176,34,0.08)"
+      },
+      "detail": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingHorizontal": 16,
+        "paddingVertical": 10,
+        "borderBottomWidth": 1,
+        "borderBottomColor": "rgba(253,176,34,0.08)"
+      }
+    }
+  },
+  "palette": {
+    "_note": "Every colour literal in the four StyleSheets (three screens, plus the share card), by use count.",
+    "_distinct": 32,
+    "counts": {
+      "#FDB022": 30,
+      "#FFFFFF": 23,
+      "#8BA3C7": 22,
+      "#0F1A2E": 16,
+      "#5A7090": 15,
+      "#253552": 12,
+      "#1A2942": 11,
+      "#00BFA5": 7,
+      "rgba(253,176,34,0.08)": 4,
+      "rgba(91,163,245,0.08)": 4,
+      "#FF8F00": 3,
+      "#1E88E5": 2,
+      "rgba(253,176,34,0.1)": 2,
+      "rgba(253,176,34,0.12)": 2,
+      "rgba(26,41,66,0.5)": 2,
+      "rgba(91,163,245,0.1)": 2,
+      "rgba(91,163,245,0.12)": 2,
+      "#1A1A2E": 1,
+      "#3A5070": 1,
+      "#5BA3F5": 1,
+      "#D32F2F": 1,
+      "#FAFAFA": 1,
+      "rgba(0,0,0,0.7)": 1,
+      "rgba(0,191,165,0.06)": 1,
+      "rgba(0,191,165,0.3)": 1,
+      "rgba(211,47,47,0.15)": 1,
+      "rgba(253,176,34,0.06)": 1,
+      "rgba(253,176,34,0.2)": 1,
+      "rgba(253,176,34,0.25)": 1,
+      "rgba(255,143,0,0.06)": 1,
+      "rgba(255,143,0,0.08)": 1,
+      "rgba(255,143,0,0.2)": 1
+    }
+  },
+  "delays": {
+    "_note": "Every setTimeout/setInterval with a literal delay. In this feature they are the waits before capturing the off-screen share card — the only timing the Pairing Manager has.",
+    "byScreen": {
+      "detail": [
+        {
+          "call": "setTimeout",
+          "ms": 150,
+          "msRef": null,
+          "callee": "r",
+          "abort": false,
+          "line": 326
+        },
+        {
+          "call": "setTimeout",
+          "ms": 150,
+          "msRef": null,
+          "callee": "r",
+          "abort": false,
+          "line": 370
+        }
+      ]
+    }
+  },
+  "screens": {
+    "list": {
+      "_spec": "1.2",
+      "_source": "app/(app)/user/tournaments/index.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#0F1A2E"
+        },
+        "header": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingHorizontal": 16,
+          "paddingVertical": 12,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "rgba(253,176,34,0.08)"
+        },
+        "backBtn": {
+          "width": 40,
+          "height": 40,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backArrow": {
+          "fontSize": 22,
+          "color": "#FDB022",
+          "fontWeight": "600"
+        },
+        "headerCenter": {
+          "flex": 1,
+          "alignItems": "center"
+        },
+        "headerTitle": {
+          "fontSize": 18,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "letterSpacing": 0.5
+        },
+        "headerSub": {
+          "fontSize": 11,
+          "color": "#8BA3C7",
+          "marginTop": 2,
+          "letterSpacing": 0.3
+        },
+        "center": {
+          "flex": 1,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "paddingBottom": 80
+        },
+        "emptyIcon": {
+          "fontSize": 64,
+          "color": "#253552",
+          "marginBottom": 12
+        },
+        "emptyTitle": {
+          "fontSize": 18,
+          "fontWeight": "700",
+          "color": "#5BA3F5",
+          "marginBottom": 4
+        },
+        "emptySub": {
+          "fontSize": 13,
+          "color": "#8BA3C7"
+        },
+        "list": {
+          "paddingHorizontal": 14,
+          "paddingTop": 10,
+          "paddingBottom": 90
+        },
+        "card": {
+          "backgroundColor": "#1A2942",
+          "borderRadius": 14,
+          "padding": 14,
+          "marginBottom": 10,
+          "borderWidth": 1,
+          "borderColor": "rgba(91,163,245,0.08)"
+        },
+        "cardHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "marginBottom": 8,
+          "gap": 6
+        },
+        "cardChevron": {
+          "fontSize": 20,
+          "color": "#5A7090",
+          "marginLeft": "auto"
+        },
+        "typeBadge": {
+          "paddingHorizontal": 8,
+          "paddingVertical": 3,
+          "borderRadius": 6,
+          "borderWidth": 1
+        },
+        "typeText": {
+          "fontSize": 10,
+          "fontWeight": "800",
+          "letterSpacing": 1
+        },
+        "statusDot": {
+          "width": 7,
+          "height": 7,
+          "borderRadius": 4,
+          "marginLeft": 4,
+          "marginRight": 2
+        },
+        "statusText": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "letterSpacing": 0.5
+        },
+        "cardName": {
+          "fontSize": 16,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "marginBottom": 10
+        },
+        "cardStats": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "backgroundColor": "#0F1A2E",
+          "borderRadius": 10,
+          "paddingVertical": 8,
+          "paddingHorizontal": 4
+        },
+        "stat": {
+          "flex": 1,
+          "alignItems": "center"
+        },
+        "statValue": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FDB022"
+        },
+        "statLabel": {
+          "fontSize": 10,
+          "color": "#8BA3C7",
+          "marginTop": 2,
+          "fontWeight": "500"
+        },
+        "statDivider": {
+          "width": 1,
+          "height": 24,
+          "backgroundColor": "#253552"
+        },
+        "fab": {
+          "position": "absolute",
+          "left": 14,
+          "right": 14,
+          "backgroundColor": "#FDB022",
+          "borderRadius": 14,
+          "paddingVertical": 14,
+          "flexDirection": "row",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "gap": 8,
+          "elevation": 8,
+          "shadowColor": "#FDB022",
+          "shadowOffset": {
+            "width": 0,
+            "height": 4
+          },
+          "shadowOpacity": 0.35,
+          "shadowRadius": 8
+        },
+        "fabIcon": {
+          "fontSize": 22,
+          "fontWeight": "800",
+          "color": "#0F1A2E"
+        },
+        "fabText": {
+          "fontSize": 15,
+          "fontWeight": "800",
+          "color": "#0F1A2E",
+          "letterSpacing": 0.5
+        },
+        "hintText": {
+          "fontSize": 11,
+          "color": "#3A5070",
+          "textAlign": "center",
+          "paddingBottom": 8,
+          "fontStyle": "italic"
+        },
+        "freeBanner": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "space-between",
+          "backgroundColor": "rgba(253,176,34,0.08)",
+          "borderRadius": 10,
+          "marginHorizontal": 14,
+          "marginTop": 8,
+          "marginBottom": 2,
+          "paddingHorizontal": 14,
+          "paddingVertical": 10,
+          "borderWidth": 1,
+          "borderColor": "rgba(253,176,34,0.25)"
+        },
+        "freeBannerText": {
+          "fontSize": 12,
+          "color": "#FDB022",
+          "fontWeight": "600",
+          "flex": 1
+        },
+        "freeBannerCta": {
+          "fontSize": 13,
+          "color": "#FDB022",
+          "fontWeight": "800",
+          "marginLeft": 8
+        }
+      },
+      "shareStyles": null,
+      "moduleConstants": {},
+      "renderConstants": {
+        "renderItem": {
+          "TouchableOpacity[0].style": {
+            "text": "styles.card",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.card",
+                "ref": "styles.card",
+                "ratio": 1
+              }
+            ]
+          },
+          "TouchableOpacity[0].activeOpacity": {
+            "text": "0.85",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "0.85",
+                "value": 0.85
+              }
+            ]
+          },
+          "TouchableOpacity[0].onPress": {
+            "text": "() => router.push(`/(app)/user/tournaments/${item.id}`)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => router.push(`/(app)/user/tournaments/${item.id}`)"
+              }
+            ]
+          },
+          "TouchableOpacity[0].onLongPress": {
+            "text": "() => deleteTournament(item.id, item.name)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => deleteTournament(item.id, item.name)"
+              }
+            ]
+          },
+          "View[0].style": {
+            "text": "styles.cardHeader",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardHeader",
+                "ref": "styles.cardHeader",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[1].style": {
+            "text": "[styles.typeBadge, { backgroundColor: getTypeColor(item.type) + '22', borderColor: getTypeColor(item.type) }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.typeBadge, { backgroundColor: getTypeColor(item.type) + '22', borderColor: getTypeColor(item.type) }]"
+              }
+            ]
+          },
+          "Text[0].style": {
+            "text": "[styles.typeText, { color: getTypeColor(item.type) }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.typeText, { color: getTypeColor(item.type) }]"
+              }
+            ]
+          },
+          "View[2].style": {
+            "text": "[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]"
+              }
+            ]
+          },
+          "Text[1].style": {
+            "text": "[styles.statusText, { color: getStatusColor(item.status) }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.statusText, { color: getStatusColor(item.status) }]"
+              }
+            ]
+          },
+          "Text[2].style": {
+            "text": "styles.cardChevron",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardChevron",
+                "ref": "styles.cardChevron",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[3].style": {
+            "text": "styles.cardName",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardName",
+                "ref": "styles.cardName",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[3].numberOfLines": {
+            "text": "1",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "1",
+                "value": 1
+              }
+            ]
+          },
+          "View[3].style": {
+            "text": "styles.cardStats",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardStats",
+                "ref": "styles.cardStats",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[4].style": {
+            "text": "styles.stat",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.stat",
+                "ref": "styles.stat",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[4].style": {
+            "text": "styles.statValue",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statValue",
+                "ref": "styles.statValue",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[5].style": {
+            "text": "styles.statLabel",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statLabel",
+                "ref": "styles.statLabel",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[5].style": {
+            "text": "styles.statDivider",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statDivider",
+                "ref": "styles.statDivider",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[6].style": {
+            "text": "styles.stat",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.stat",
+                "ref": "styles.stat",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[6].style": {
+            "text": "styles.statValue",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statValue",
+                "ref": "styles.statValue",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[7].style": {
+            "text": "styles.statLabel",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statLabel",
+                "ref": "styles.statLabel",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[7].style": {
+            "text": "styles.statDivider",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statDivider",
+                "ref": "styles.statDivider",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[8].style": {
+            "text": "styles.stat",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.stat",
+                "ref": "styles.stat",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[8].style": {
+            "text": "styles.statValue",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statValue",
+                "ref": "styles.statValue",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[9].style": {
+            "text": "styles.statLabel",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.statLabel",
+                "ref": "styles.statLabel",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "getStatusColor": {},
+        "getTypeColor": {}
+      },
+      "colorMaps": {
+        "getStatusColor": [
+          {
+            "when": "s === 'ongoing'",
+            "value": "#00BFA5"
+          },
+          {
+            "when": "s === 'finished'",
+            "value": "#8BA3C7"
+          },
+          {
+            "when": "else",
+            "value": "#FDB022"
+          }
+        ],
+        "getTypeLabel": [
+          {
+            "when": "t === 'swiss'",
+            "value": "SWISS"
+          },
+          {
+            "when": "else",
+            "value": "ROUND ROBIN"
+          }
+        ],
+        "getTypeColor": [
+          {
+            "when": "t === 'swiss'",
+            "value": "#00BFA5"
+          },
+          {
+            "when": "else",
+            "value": "#FF8F00"
+          }
+        ]
+      },
+      "inlineStyles": {
+        "View[1].backgroundColor": {
+          "text": "getTypeColor(item.type) + '22'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getTypeColor(item.type)"
+            },
+            {
+              "sign": 1,
+              "text": "'22'"
+            }
+          ]
+        },
+        "View[1].borderColor": {
+          "text": "getTypeColor(item.type)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getTypeColor(item.type)"
+            }
+          ]
+        },
+        "Text[0].color": {
+          "text": "getTypeColor(item.type)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getTypeColor(item.type)"
+            }
+          ]
+        },
+        "View[2].backgroundColor": {
+          "text": "getStatusColor(item.status)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getStatusColor(item.status)"
+            }
+          ]
+        },
+        "Text[1].color": {
+          "text": "getStatusColor(item.status)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getStatusColor(item.status)"
+            }
+          ]
+        },
+        "TouchableOpacity[3].bottom": {
+          "text": "insets.bottom + 16",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "insets.bottom",
+              "ref": "insets.bottom",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "16",
+              "value": 16
+            }
+          ]
+        }
+      },
+      "delays": []
+    },
+    "create": {
+      "_spec": "1.3",
+      "_source": "app/(app)/user/tournaments/create.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#0F1A2E"
+        },
+        "header": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingHorizontal": 16,
+          "paddingVertical": 12,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "rgba(253,176,34,0.08)"
+        },
+        "backBtn": {
+          "width": 40,
+          "height": 40,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backArrow": {
+          "fontSize": 22,
+          "color": "#FDB022",
+          "fontWeight": "600"
+        },
+        "headerTitle": {
+          "flex": 1,
+          "fontSize": 18,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "textAlign": "center"
+        },
+        "body": {
+          "flex": 1
+        },
+        "bodyContent": {
+          "padding": 16
+        },
+        "label": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#8BA3C7",
+          "letterSpacing": 1,
+          "textTransform": "uppercase",
+          "marginBottom": 8
+        },
+        "input": {
+          "backgroundColor": "#1A2942",
+          "borderRadius": 12,
+          "paddingHorizontal": 14,
+          "paddingVertical": 13,
+          "fontSize": 16,
+          "color": "#FFFFFF",
+          "borderWidth": 1,
+          "borderColor": "rgba(91,163,245,0.12)"
+        },
+        "typeRow": {
+          "flexDirection": "row",
+          "gap": 10
+        },
+        "typeCard": {
+          "flex": 1,
+          "backgroundColor": "#1A2942",
+          "borderRadius": 14,
+          "padding": 14,
+          "borderWidth": 2,
+          "borderColor": "transparent"
+        },
+        "typeCardActive": {
+          "borderColor": "#00BFA5",
+          "backgroundColor": "rgba(0,191,165,0.06)"
+        },
+        "typeCardActiveRR": {
+          "borderColor": "#FF8F00",
+          "backgroundColor": "rgba(255,143,0,0.06)"
+        },
+        "typeIcon": {
+          "width": 36,
+          "height": 36,
+          "borderRadius": 10,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginBottom": 10
+        },
+        "typeIconText": {
+          "fontSize": 18,
+          "fontWeight": "900",
+          "color": "#FFFFFF"
+        },
+        "typeName": {
+          "fontSize": 15,
+          "fontWeight": "800",
+          "color": "#8BA3C7",
+          "marginBottom": 4
+        },
+        "typeNameActive": {
+          "color": "#00BFA5"
+        },
+        "typeNameActiveRR": {
+          "color": "#FF8F00"
+        },
+        "typeDesc": {
+          "fontSize": 11,
+          "color": "#5A7090",
+          "lineHeight": 15
+        },
+        "roundsRow": {
+          "flexDirection": "row",
+          "gap": 8,
+          "alignItems": "center"
+        },
+        "roundBtn": {
+          "width": 44,
+          "height": 44,
+          "borderRadius": 12,
+          "backgroundColor": "#1A2942",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "borderWidth": 1,
+          "borderColor": "rgba(91,163,245,0.1)"
+        },
+        "roundBtnActive": {
+          "backgroundColor": "#00BFA5",
+          "borderColor": "#00BFA5"
+        },
+        "roundBtnText": {
+          "fontSize": 16,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "roundBtnTextActive": {
+          "color": "#FFFFFF"
+        },
+        "roundInput": {
+          "flex": 1,
+          "backgroundColor": "#1A2942",
+          "borderRadius": 12,
+          "paddingHorizontal": 14,
+          "paddingVertical": 10,
+          "fontSize": 16,
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "borderWidth": 1,
+          "borderColor": "rgba(91,163,245,0.12)"
+        },
+        "hint": {
+          "fontSize": 11,
+          "color": "#5A7090",
+          "marginTop": 8
+        },
+        "rrNote": {
+          "marginTop": 20,
+          "backgroundColor": "rgba(255,143,0,0.08)",
+          "borderRadius": 12,
+          "padding": 14,
+          "borderWidth": 1,
+          "borderColor": "rgba(255,143,0,0.2)"
+        },
+        "rrNoteText": {
+          "fontSize": 12,
+          "color": "#FF8F00",
+          "lineHeight": 18
+        },
+        "footer": {
+          "paddingHorizontal": 16,
+          "paddingTop": 12,
+          "borderTopWidth": 1,
+          "borderTopColor": "rgba(91,163,245,0.08)"
+        },
+        "createBtn": {
+          "backgroundColor": "#FDB022",
+          "borderRadius": 14,
+          "paddingVertical": 15,
+          "alignItems": "center",
+          "elevation": 4,
+          "shadowColor": "#FDB022",
+          "shadowOffset": {
+            "width": 0,
+            "height": 3
+          },
+          "shadowOpacity": 0.3,
+          "shadowRadius": 6
+        },
+        "createBtnDisabled": {
+          "opacity": 0.6
+        },
+        "createBtnText": {
+          "fontSize": 16,
+          "fontWeight": "800",
+          "color": "#0F1A2E",
+          "letterSpacing": 0.5
+        }
+      },
+      "shareStyles": null,
+      "moduleConstants": {},
+      "renderConstants": {},
+      "colorMaps": {},
+      "inlineStyles": {
+        "Text[3].marginTop": {
+          "text": "20",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "20",
+              "value": 20
+            }
+          ]
+        },
+        "View[2].backgroundColor": {
+          "text": "type === 'swiss' ? '#00BFA5' : '#253552'",
+          "condition": "type === 'swiss'",
+          "whenTrue": {
+            "text": "'#00BFA5'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#00BFA5'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "'#253552'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#253552'"
+              }
+            ]
+          }
+        },
+        "View[3].backgroundColor": {
+          "text": "type === 'round_robin' ? '#FF8F00' : '#253552'",
+          "condition": "type === 'round_robin'",
+          "whenTrue": {
+            "text": "'#FF8F00'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#FF8F00'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "'#253552'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#253552'"
+              }
+            ]
+          }
+        },
+        "Text[10].marginTop": {
+          "text": "20",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "20",
+              "value": 20
+            }
+          ]
+        },
+        "View[6].paddingBottom": {
+          "text": "insets.bottom + 16",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "insets.bottom",
+              "ref": "insets.bottom",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "16",
+              "value": 16
+            }
+          ]
+        }
+      },
+      "delays": []
+    },
+    "detail": {
+      "_spec": "1.4 / 1.5 / 1.6",
+      "_source": "app/(app)/user/tournaments/[id].tsx",
+      "_bindings": [
+        "styles",
+        "shareStyles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#0F1A2E"
+        },
+        "center": {
+          "flex": 1,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "header": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingHorizontal": 16,
+          "paddingVertical": 10,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "rgba(253,176,34,0.08)"
+        },
+        "backBtn": {
+          "width": 40,
+          "height": 40,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backArrow": {
+          "fontSize": 22,
+          "color": "#FDB022",
+          "fontWeight": "600"
+        },
+        "headerCenter": {
+          "flex": 1,
+          "alignItems": "center"
+        },
+        "headerTitle": {
+          "fontSize": 16,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "headerMeta": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 8,
+          "marginTop": 3
+        },
+        "headerBadge": {
+          "paddingHorizontal": 6,
+          "paddingVertical": 2,
+          "borderRadius": 4,
+          "borderWidth": 1
+        },
+        "headerBadgeText": {
+          "fontSize": 9,
+          "fontWeight": "800",
+          "letterSpacing": 0.8
+        },
+        "headerRounds": {
+          "fontSize": 11,
+          "color": "#8BA3C7",
+          "fontWeight": "700"
+        },
+        "tabs": {
+          "flexDirection": "row",
+          "paddingHorizontal": 14,
+          "paddingTop": 10,
+          "paddingBottom": 6,
+          "gap": 4
+        },
+        "tab": {
+          "flex": 1,
+          "paddingVertical": 8,
+          "borderRadius": 10,
+          "alignItems": "center",
+          "backgroundColor": "#1A2942"
+        },
+        "tabActive": {
+          "backgroundColor": "#FDB022"
+        },
+        "tabText": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#8BA3C7"
+        },
+        "tabTextActive": {
+          "color": "#0F1A2E"
+        },
+        "tabBody": {
+          "paddingHorizontal": 14,
+          "paddingTop": 8,
+          "paddingBottom": 100
+        },
+        "playerRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "backgroundColor": "#1A2942",
+          "borderRadius": 10,
+          "padding": 10,
+          "marginBottom": 6
+        },
+        "playerSeed": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 8,
+          "backgroundColor": "#253552",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginRight": 10
+        },
+        "playerSeedText": {
+          "fontSize": 12,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "playerInfo": {
+          "flex": 1
+        },
+        "playerName": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "playerRating": {
+          "fontSize": 11,
+          "color": "#FDB022",
+          "fontWeight": "600",
+          "marginTop": 1
+        },
+        "playerScore": {
+          "fontSize": 16,
+          "fontWeight": "800",
+          "color": "#FDB022",
+          "marginLeft": 8
+        },
+        "removeBtn": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 14,
+          "backgroundColor": "rgba(211,47,47,0.15)",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginLeft": 8
+        },
+        "removeBtnText": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#D32F2F"
+        },
+        "playerActions": {
+          "flexDirection": "row",
+          "paddingHorizontal": 14,
+          "paddingTop": 10,
+          "paddingBottom": 16,
+          "gap": 8,
+          "borderTopWidth": 1,
+          "borderTopColor": "rgba(91,163,245,0.08)"
+        },
+        "actionBtn": {
+          "flex": 1,
+          "backgroundColor": "#FDB022",
+          "borderRadius": 12,
+          "paddingVertical": 13,
+          "alignItems": "center"
+        },
+        "actionBtnText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#0F1A2E"
+        },
+        "actionBtnSecondary": {
+          "backgroundColor": "transparent",
+          "borderWidth": 1.5,
+          "borderColor": "#FDB022"
+        },
+        "actionBtnSecondaryText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FDB022"
+        },
+        "roundSelector": {
+          "maxHeight": 44,
+          "marginBottom": 4,
+          "marginTop": 4
+        },
+        "roundTab": {
+          "paddingHorizontal": 16,
+          "paddingVertical": 8,
+          "borderRadius": 10,
+          "backgroundColor": "#1A2942",
+          "alignItems": "center",
+          "flexDirection": "row",
+          "gap": 5
+        },
+        "roundTabActive": {
+          "backgroundColor": "#FDB022"
+        },
+        "roundTabCompleted": {
+          "borderWidth": 1,
+          "borderColor": "rgba(0,191,165,0.3)"
+        },
+        "roundTabText": {
+          "fontSize": 13,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "roundTabTextActive": {
+          "color": "#0F1A2E"
+        },
+        "roundCompleteDot": {
+          "width": 6,
+          "height": 6,
+          "borderRadius": 3,
+          "backgroundColor": "#00BFA5"
+        },
+        "roundShareBtn": {
+          "paddingHorizontal": 14,
+          "paddingVertical": 8,
+          "borderRadius": 10,
+          "backgroundColor": "#1E88E5",
+          "alignItems": "center",
+          "justifyContent": "center"
+        },
+        "roundShareBtnText": {
+          "fontSize": 13,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "pairingCard": {
+          "backgroundColor": "#1A2942",
+          "borderRadius": 12,
+          "padding": 12,
+          "marginBottom": 6,
+          "flexDirection": "row",
+          "alignItems": "center"
+        },
+        "boardNum": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 8,
+          "backgroundColor": "#253552",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginRight": 10
+        },
+        "boardNumText": {
+          "fontSize": 12,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "pairingPlayers": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center"
+        },
+        "pairingPlayer": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 6
+        },
+        "colorDot": {
+          "width": 10,
+          "height": 10,
+          "borderRadius": 5
+        },
+        "pairingPlayerName": {
+          "flex": 1,
+          "fontSize": 13,
+          "fontWeight": "600",
+          "color": "#FFFFFF"
+        },
+        "pairingScore": {
+          "fontSize": 12,
+          "fontWeight": "800",
+          "color": "#FDB022",
+          "minWidth": 20,
+          "textAlign": "center",
+          "flexShrink": 0
+        },
+        "winnerName": {
+          "color": "#FDB022",
+          "fontWeight": "800"
+        },
+        "resultBadge": {
+          "paddingHorizontal": 10,
+          "paddingVertical": 4,
+          "borderRadius": 8,
+          "marginHorizontal": 6,
+          "minWidth": 44,
+          "alignItems": "center"
+        },
+        "resultPending": {
+          "backgroundColor": "#253552"
+        },
+        "resultDone": {
+          "backgroundColor": "rgba(253,176,34,0.12)"
+        },
+        "resultText": {
+          "fontSize": 11,
+          "fontWeight": "800"
+        },
+        "resultTextPending": {
+          "color": "#5A7090"
+        },
+        "resultTextDone": {
+          "color": "#FDB022"
+        },
+        "byeText": {
+          "fontSize": 13,
+          "fontWeight": "600",
+          "color": "#8BA3C7",
+          "fontStyle": "italic"
+        },
+        "generateWrap": {
+          "paddingHorizontal": 14,
+          "paddingTop": 10,
+          "paddingBottom": 16,
+          "borderTopWidth": 1,
+          "borderTopColor": "rgba(91,163,245,0.08)"
+        },
+        "generateBtn": {
+          "backgroundColor": "#00BFA5",
+          "borderRadius": 12,
+          "paddingVertical": 14,
+          "alignItems": "center",
+          "elevation": 4,
+          "shadowColor": "#00BFA5",
+          "shadowOffset": {
+            "width": 0,
+            "height": 3
+          },
+          "shadowOpacity": 0.3,
+          "shadowRadius": 6
+        },
+        "generateBtnText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "letterSpacing": 0.3
+        },
+        "finishedBanner": {
+          "marginHorizontal": 14,
+          "marginBottom": 16,
+          "backgroundColor": "rgba(253,176,34,0.1)",
+          "borderRadius": 12,
+          "paddingVertical": 14,
+          "alignItems": "center",
+          "borderWidth": 1,
+          "borderColor": "rgba(253,176,34,0.2)"
+        },
+        "finishedText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FDB022",
+          "letterSpacing": 0.5
+        },
+        "standingsHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingVertical": 8,
+          "paddingHorizontal": 4,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "#253552",
+          "marginBottom": 4
+        },
+        "shCol": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "color": "#5A7090",
+          "letterSpacing": 0.5
+        },
+        "standingsRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingVertical": 8,
+          "paddingHorizontal": 4,
+          "borderRadius": 8
+        },
+        "standingsRowAlt": {
+          "backgroundColor": "rgba(26,41,66,0.5)"
+        },
+        "standingsRowFirst": {
+          "backgroundColor": "rgba(253,176,34,0.06)"
+        },
+        "rankCol": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 8,
+          "backgroundColor": "#253552",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "rankColFirst": {
+          "backgroundColor": "#FDB022"
+        },
+        "rankText": {
+          "fontSize": 12,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "rankTextFirst": {
+          "color": "#0F1A2E"
+        },
+        "standingsName": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "standingsRating": {
+          "fontSize": 10,
+          "color": "#5A7090",
+          "marginTop": 1
+        },
+        "standingsVal": {
+          "width": 42,
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#8BA3C7",
+          "textAlign": "center"
+        },
+        "standingsPts": {
+          "color": "#FDB022",
+          "fontWeight": "800"
+        },
+        "standingsShareBtn": {
+          "backgroundColor": "#1E88E5",
+          "borderRadius": 12,
+          "paddingVertical": 12,
+          "alignItems": "center",
+          "marginTop": 16
+        },
+        "standingsShareBtnText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "emptyTab": {
+          "paddingVertical": 40,
+          "alignItems": "center"
+        },
+        "emptyTabText": {
+          "fontSize": 13,
+          "color": "#5A7090",
+          "textAlign": "center"
+        },
+        "modalOverlay": {
+          "flex": 1,
+          "backgroundColor": "rgba(0,0,0,0.7)",
+          "justifyContent": "center",
+          "paddingHorizontal": 20
+        },
+        "modalCard": {
+          "backgroundColor": "#1A2942",
+          "borderRadius": 18,
+          "padding": 20,
+          "borderWidth": 1,
+          "borderColor": "rgba(253,176,34,0.1)"
+        },
+        "modalTitle": {
+          "fontSize": 18,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "marginBottom": 4
+        },
+        "modalSub": {
+          "fontSize": 12,
+          "color": "#8BA3C7",
+          "marginBottom": 16
+        },
+        "modalLabel": {
+          "fontSize": 11,
+          "fontWeight": "700",
+          "color": "#5A7090",
+          "letterSpacing": 0.5,
+          "textTransform": "uppercase",
+          "marginBottom": 6,
+          "marginTop": 12
+        },
+        "modalInput": {
+          "backgroundColor": "#0F1A2E",
+          "borderRadius": 10,
+          "paddingHorizontal": 14,
+          "paddingVertical": 12,
+          "fontSize": 15,
+          "color": "#FFFFFF",
+          "borderWidth": 1,
+          "borderColor": "rgba(91,163,245,0.1)"
+        },
+        "modalActions": {
+          "flexDirection": "row",
+          "gap": 10,
+          "marginTop": 20
+        },
+        "modalCancel": {
+          "flex": 1,
+          "paddingVertical": 13,
+          "borderRadius": 12,
+          "borderWidth": 1.5,
+          "borderColor": "#5A7090",
+          "alignItems": "center"
+        },
+        "modalCancelText": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#8BA3C7"
+        },
+        "modalConfirm": {
+          "flex": 1,
+          "paddingVertical": 13,
+          "borderRadius": 12,
+          "backgroundColor": "#FDB022",
+          "alignItems": "center"
+        },
+        "modalConfirmText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#0F1A2E"
+        },
+        "resultPlayers": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "gap": 12,
+          "marginBottom": 20
+        },
+        "resultPlayerWhite": {
+          "flex": 1,
+          "fontSize": 15,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "textAlign": "right"
+        },
+        "resultVs": {
+          "fontSize": 12,
+          "fontWeight": "600",
+          "color": "#5A7090"
+        },
+        "resultPlayerBlack": {
+          "flex": 1,
+          "fontSize": 15,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "resultButtons": {
+          "gap": 8
+        },
+        "resultBtn": {
+          "borderRadius": 12,
+          "paddingVertical": 14,
+          "alignItems": "center"
+        },
+        "resultBtnWhite": {
+          "backgroundColor": "#FAFAFA"
+        },
+        "resultBtnDraw": {
+          "backgroundColor": "#253552"
+        },
+        "resultBtnBlack": {
+          "backgroundColor": "#1A1A2E"
+        },
+        "resultBtnTextDark": {
+          "fontSize": 18,
+          "fontWeight": "900",
+          "color": "#0F1A2E"
+        },
+        "resultBtnTextLight": {
+          "fontSize": 18,
+          "fontWeight": "900",
+          "color": "#FFFFFF"
+        },
+        "resultBtnSub": {
+          "fontSize": 11,
+          "color": "#5A7090",
+          "marginTop": 2,
+          "fontWeight": "600"
+        },
+        "resultCancelBtn": {
+          "marginTop": 12,
+          "paddingVertical": 12,
+          "alignItems": "center"
+        },
+        "resultCancelText": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#5A7090"
+        }
+      },
+      "shareStyles": {
+        "offscreen": {
+          "position": "absolute",
+          "left": -9999,
+          "top": 0
+        },
+        "card": {
+          "width": 360,
+          "backgroundColor": "#0F1A2E",
+          "borderRadius": 16,
+          "overflow": "hidden",
+          "padding": 20
+        },
+        "cardHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 10,
+          "marginBottom": 10
+        },
+        "cardLogo": {
+          "width": 32,
+          "height": 32,
+          "borderRadius": 16,
+          "borderWidth": 2,
+          "borderColor": "#FDB022"
+        },
+        "cardBrand": {
+          "fontSize": 13,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "letterSpacing": 1
+        },
+        "goldLine": {
+          "height": 2,
+          "backgroundColor": "#FDB022",
+          "borderRadius": 1,
+          "marginBottom": 14
+        },
+        "cardTournament": {
+          "fontSize": 16,
+          "fontWeight": "800",
+          "color": "#FFFFFF",
+          "marginBottom": 4
+        },
+        "cardSubtitle": {
+          "fontSize": 12,
+          "color": "#8BA3C7",
+          "fontWeight": "600",
+          "marginBottom": 14
+        },
+        "cardBody": {
+          "gap": 4
+        },
+        "pairingRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "backgroundColor": "#1A2942",
+          "borderRadius": 8,
+          "padding": 8
+        },
+        "pairingBoard": {
+          "width": 24,
+          "height": 24,
+          "borderRadius": 6,
+          "backgroundColor": "#253552",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginRight": 8
+        },
+        "pairingBoardText": {
+          "fontSize": 11,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "pairingContent": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center"
+        },
+        "pairingLeft": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 5
+        },
+        "pairingRight": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "flex-end",
+          "gap": 5
+        },
+        "colorDot": {
+          "width": 8,
+          "height": 8,
+          "borderRadius": 4
+        },
+        "pairingName": {
+          "fontSize": 12,
+          "fontWeight": "600",
+          "color": "#FFFFFF",
+          "flexShrink": 1
+        },
+        "winnerText": {
+          "color": "#FDB022",
+          "fontWeight": "800"
+        },
+        "byeText": {
+          "flex": 1,
+          "fontSize": 12,
+          "fontWeight": "600",
+          "color": "#8BA3C7",
+          "fontStyle": "italic"
+        },
+        "resultBadge": {
+          "paddingHorizontal": 8,
+          "paddingVertical": 3,
+          "borderRadius": 6,
+          "marginHorizontal": 4,
+          "minWidth": 38,
+          "alignItems": "center"
+        },
+        "resultPending": {
+          "backgroundColor": "#253552"
+        },
+        "resultDone": {
+          "backgroundColor": "rgba(253,176,34,0.12)"
+        },
+        "resultText": {
+          "fontSize": 10,
+          "fontWeight": "800"
+        },
+        "resultTextPending": {
+          "color": "#5A7090"
+        },
+        "resultTextDone": {
+          "color": "#FDB022"
+        },
+        "tableHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingVertical": 6,
+          "paddingHorizontal": 4,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "#253552",
+          "marginBottom": 2
+        },
+        "thText": {
+          "fontSize": 9,
+          "fontWeight": "700",
+          "color": "#5A7090",
+          "letterSpacing": 0.5
+        },
+        "tableRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingVertical": 6,
+          "paddingHorizontal": 4,
+          "borderRadius": 6
+        },
+        "tableRowAlt": {
+          "backgroundColor": "rgba(26,41,66,0.5)"
+        },
+        "rankBadge": {
+          "width": 22,
+          "height": 22,
+          "borderRadius": 6,
+          "backgroundColor": "#253552",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginRight": 4
+        },
+        "rankBadgeFirst": {
+          "backgroundColor": "#FDB022"
+        },
+        "rankText": {
+          "fontSize": 10,
+          "fontWeight": "800",
+          "color": "#8BA3C7"
+        },
+        "rankTextFirst": {
+          "color": "#0F1A2E"
+        },
+        "tdName": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "paddingRight": 4
+        },
+        "tdVal": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#8BA3C7",
+          "textAlign": "center"
+        },
+        "tdPts": {
+          "color": "#FDB022",
+          "fontWeight": "800"
+        },
+        "cardFooter": {
+          "marginTop": 14,
+          "alignItems": "center",
+          "gap": 2
+        },
+        "footerHashtags": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "color": "#5A7090",
+          "letterSpacing": 0.5
+        },
+        "footerUrl": {
+          "fontSize": 10,
+          "fontWeight": "600",
+          "color": "#8BA3C7"
+        }
+      },
+      "moduleConstants": {},
+      "renderConstants": {
+        "parseBulkLine": {
+          "trimmed": {
+            "text": "line.trim()",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "line.trim()"
+              }
+            ]
+          },
+          "parts": {
+            "text": "trimmed.split(/\\s+/)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "trimmed.split(/\\s+/)"
+              }
+            ]
+          },
+          "last": {
+            "text": "parts[parts.length - 1]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "parts[parts.length - 1]"
+              }
+            ]
+          },
+          "rating": {
+            "text": "parseInt(last, 10)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "parseInt(last, 10)"
+              }
+            ]
+          },
+          "return.name": {
+            "text": "trimmed",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "trimmed",
+                "ref": "trimmed",
+                "ratio": 1
+              }
+            ]
+          },
+          "return.ncfp_rating": {
+            "text": "rating",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "rating",
+                "ref": "rating",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "buildRoundText": {
+          "pairings": {
+            "text": "[...currentRoundData.pairings].sort((a, b) => a.board_number - b.board_number)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[...currentRoundData.pairings].sort((a, b) => a.board_number - b.board_number)"
+              }
+            ]
+          },
+          "lines": {
+            "text": "pairings.map(p => { if (p.is_bye) { return `Bd ${p.board_number}: ${p.white_player?.name ?? '?'} — BYE`; } const resultStr = p.result === 'pending' ? 'vs' : p.result === '1-0' ? '1-0' : p.result === '0-1' ? '0-1' : '½-½'; return `Bd ${p.board_number}: ${p.white_player?.name ?? '?'} ${resultStr} ${p.black_player?.name ?? '?'}`; })",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "pairings.map(p => { if (p.is_bye) { return `Bd ${p.board_number}: ${p.white_player?.name ?? '?'} — BYE`; } const resultStr = p.result === 'pending' ? 'vs' : p.result === '1-0' ? '1-0' : p.result === '0-1' ? '0-1' : '½-½'; return `Bd ${p.board_number}: ${p.white_player?.name ?? '?'} ${resultStr} ${p.black_player?.name ?? '?'}`; })"
+              }
+            ]
+          },
+          "resultStr": {
+            "text": "p.result === 'pending' ? 'vs' : p.result === '1-0' ? '1-0' : p.result === '0-1' ? '0-1' : '½-½'",
+            "condition": "p.result === 'pending'",
+            "whenTrue": {
+              "text": "'vs'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'vs'"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "p.result === '1-0' ? '1-0' : p.result === '0-1' ? '0-1' : '½-½'",
+              "condition": "p.result === '1-0'",
+              "whenTrue": {
+                "text": "'1-0'",
+                "terms": [
+                  {
+                    "sign": 1,
+                    "text": "'1-0'"
+                  }
+                ]
+              },
+              "whenFalse": {
+                "text": "p.result === '0-1' ? '0-1' : '½-½'",
+                "condition": "p.result === '0-1'",
+                "whenTrue": {
+                  "text": "'0-1'",
+                  "terms": [
+                    {
+                      "sign": 1,
+                      "text": "'0-1'"
+                    }
+                  ]
+                },
+                "whenFalse": {
+                  "text": "'½-½'",
+                  "terms": [
+                    {
+                      "sign": 1,
+                      "text": "'½-½'"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "typeLabel": {
+            "text": "tournament.type === 'swiss' ? 'Swiss' : 'Round Robin'",
+            "condition": "tournament.type === 'swiss'",
+            "whenTrue": {
+              "text": "'Swiss'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'Swiss'"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'Round Robin'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'Round Robin'"
+                }
+              ]
+            }
+          }
+        },
+        "buildStandingsText": {
+          "sorted": {
+            "text": "[...tournament.players].sort((a, b) => { if (b.score !== a.score) return b.score - a.score; if (b.buchholz !== a.buchholz) return b.buchholz - a.buchholz; if (b.sonneborn_berger !== a.sonneborn_berger) return b.sonneborn_berger - a.sonneborn_berger; return b.wins - a.wins; })",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[...tournament.players].sort((a, b) => { if (b.score !== a.score) return b.score - a.score; if (b.buchholz !== a.buchholz) return b.buchholz - a.buchholz; if (b.sonneborn_berger !== a.sonneborn_berger) return b.sonneborn_berger - a.sonneborn_berger; return b.wins - a.wins; })"
+              }
+            ]
+          },
+          "lines": {
+            "text": "sorted.map((p, idx) => { const rank = String(idx + 1).padStart(2, ' '); const score = p.score % 1 === 0 ? `${p.score}.0` : `${p.score}`; return `${rank}. ${p.name} ${score} ${p.wins}W ${p.draws}D ${p.losses}L`; })",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "sorted.map((p, idx) => { const rank = String(idx + 1).padStart(2, ' '); const score = p.score % 1 === 0 ? `${p.score}.0` : `${p.score}`; return `${rank}. ${p.name} ${score} ${p.wins}W ${p.draws}D ${p.losses}L`; })"
+              }
+            ]
+          },
+          "rank": {
+            "text": "String(idx + 1).padStart(2, ' ')",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "String(idx + 1).padStart(2, ' ')"
+              }
+            ]
+          },
+          "score": {
+            "text": "p.score % 1 === 0 ? `${p.score}.0` : `${p.score}`",
+            "condition": "p.score % 1 === 0",
+            "whenTrue": {
+              "text": "`${p.score}.0`",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "`${p.score}.0`"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "`${p.score}`",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "`${p.score}`"
+                }
+              ]
+            }
+          },
+          "typeLabel": {
+            "text": "tournament.type === 'swiss' ? 'Swiss' : 'Round Robin'",
+            "condition": "tournament.type === 'swiss'",
+            "whenTrue": {
+              "text": "'Swiss'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'Swiss'"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'Round Robin'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'Round Robin'"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "colorMaps": {
+        "typeColor": [
+          {
+            "when": "tournament.type === 'swiss'",
+            "value": "#00BFA5"
+          },
+          {
+            "when": "else",
+            "value": "#FF8F00"
+          }
+        ]
+      },
+      "inlineStyles": {
+        "View[4].borderColor": {
+          "text": "typeColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "typeColor",
+              "ref": "typeColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[2].color": {
+          "text": "typeColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "typeColor",
+              "ref": "typeColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[6].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[12].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[18].backgroundColor": {
+          "text": "'#FAFAFA'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#FAFAFA'"
+            }
+          ]
+        },
+        "Text[21].textAlign": {
+          "text": "'right'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'right'"
+            }
+          ]
+        },
+        "View[21].backgroundColor": {
+          "text": "'#1A2942'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#1A2942'"
+            }
+          ]
+        },
+        "View[21].borderWidth": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[21].borderColor": {
+          "text": "'#5A7090'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#5A7090'"
+            }
+          ]
+        },
+        "ScrollView[1].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "Text[25].width": {
+          "text": "28",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "28",
+              "value": 28
+            }
+          ]
+        },
+        "Text[26].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "Text[27].width": {
+          "text": "42",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "42",
+              "value": 42
+            }
+          ]
+        },
+        "Text[27].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[28].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[28].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[29].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[29].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[30].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[30].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[31].width": {
+          "text": "36",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "36",
+              "value": 36
+            }
+          ]
+        },
+        "Text[31].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "View[28].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[28].paddingRight": {
+          "text": "4",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "4",
+              "value": 4
+            }
+          ]
+        },
+        "Text[36].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[37].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[38].width": {
+          "text": "30",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "30",
+              "value": 30
+            }
+          ]
+        },
+        "Text[39].width": {
+          "text": "36",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "36",
+              "value": 36
+            }
+          ]
+        },
+        "TextInput[3].height": {
+          "text": "160",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "160",
+              "value": 160
+            }
+          ]
+        },
+        "TextInput[3].textAlignVertical": {
+          "text": "'top'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'top'"
+            }
+          ]
+        },
+        "View[43].backgroundColor": {
+          "text": "'#FAFAFA'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#FAFAFA'"
+            }
+          ]
+        },
+        "Text[59].textAlign": {
+          "text": "'right'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'right'"
+            }
+          ]
+        },
+        "View[46].backgroundColor": {
+          "text": "'#1A2942'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#1A2942'"
+            }
+          ]
+        },
+        "View[46].borderWidth": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[46].borderColor": {
+          "text": "'#5A7090'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#5A7090'"
+            }
+          ]
+        },
+        "Text[65].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[66].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "Text[67].width": {
+          "text": "36",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "36",
+              "value": 36
+            }
+          ]
+        },
+        "Text[67].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[68].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[68].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[69].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[69].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[70].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[70].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[71].width": {
+          "text": "32",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "32",
+              "value": 32
+            }
+          ]
+        },
+        "Text[71].textAlign": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[73].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "Text[74].width": {
+          "text": "36",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "36",
+              "value": 36
+            }
+          ]
+        },
+        "Text[75].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[76].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[77].width": {
+          "text": "26",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "26",
+              "value": 26
+            }
+          ]
+        },
+        "Text[78].width": {
+          "text": "32",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "32",
+              "value": 32
+            }
+          ]
+        },
+        "Text[89].color": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        },
+        "Text[91].color": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        }
+      },
+      "delays": [
+        {
+          "call": "setTimeout",
+          "ms": 150,
+          "msRef": null,
+          "callee": "r",
+          "abort": false,
+          "line": 326
+        },
+        {
+          "call": "setTimeout",
+          "ms": 150,
+          "msRef": null,
+          "callee": "r",
+          "abort": false,
+          "line": 370
+        }
+      ]
+    }
+  }
+}

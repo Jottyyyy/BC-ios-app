@@ -485,6 +485,10 @@ var BiyaAnalysisMetrics = (function () {
     // 15x across position types (endgame d4 = 173ms, midgame d4 = 2794ms), so a fixed depth is
     // either too slow somewhere or too shallow everywhere. A deadline gives depth 4+ in quiet
     // positions and stops at 3 in sharp ones, and bounds total wall time to within ~15ms.
+    // These two are now the BALANCED preset's numbers rather than the only numbers: the user picks
+    // a preset in ☰ > Engine and `engine-settings.js` resolves it. They stay here as the defaults an
+    // untouched install runs on, and `selfTest` asserts they still equal that preset, so the two
+    // files cannot drift apart.
     engineDeadline: 1200,
     // INVENTED: wall-clock budget for ONE position of a game review. At 200ms a 40-move game takes
     // ~9s in Node and ~18s in the browser, which lands inside the original's own "This may take
@@ -507,8 +511,43 @@ var BiyaAnalysisMetrics = (function () {
     // search still reaches depth 2 in sharp midgames and depth 5 in quiet endgames.
     inlineSearchBudget: 80
   };
-  /** Search limits for the live board. maxDepth is a ceiling; the deadline is what usually binds. */
-  var ENGINE_LIMITS = { maxDepth: 6, multiPV: 3 };
+  /**
+   * Default search limits for the live board — the Balanced preset, for an install where nobody has
+   * opened ☰ > Engine. `maxDepth` is a ceiling; the deadline is what usually binds, and only a
+   * nearly-empty board ever reaches the ceiling at all.
+   *
+   * The ceiling used to be 6, which the search hit in three of the six benchmark positions once it
+   * grew a transposition table. A ceiling the engine reaches is a ceiling that is doing the
+   * budgeting, which is exactly what the deadline is for.
+   */
+  var ENGINE_LIMITS = { maxDepth: 12, multiPV: 3 };
+
+  // ---- The Engine Settings panel ---------------------------------------------
+  // INVENTED, all of it: nothing in the RN source has this screen. Laid out like the Autoplay Speed
+  // sheet it sits beside in the same ☰ section, so there is one bottom-sheet idiom, not two.
+  var ENGINE_PANEL = {
+    rowHeight: 52,          // one preset row: name on top, summary under it
+    rowGap: 8,
+    rowRadius: 10,
+    rowPaddingH: 12,
+    dotSize: 16,            // the selected-preset radio
+    dotInset: 10,
+    nameSize: 15,
+    summarySize: 12,
+    warningSize: 12,
+    warningGap: 10,
+    sectionGap: 14,
+    advancedRowHeight: 44,  // one Advanced control: label left, value right, track under
+    advancedLabelSize: 13,
+    advancedValueSize: 13,
+    // The height reserved for the slider row. Both platforms use the NATIVE range control, which
+    // draws its own track — so there is no track height or radius here, because nothing would read
+    // one. (There was, briefly; `board_layout_check.js` caught them as dead on the first run.)
+    thumbSize: 18,
+    segmentHeight: 30,      // the Lines picker, which is buttons rather than a track
+    segmentGap: 6,
+    segmentRadius: 8
+  };
 
   // ---- Typography (the real StyleSheet sizes, not eyeballed) -------------------
   // Every one of these is asserted against board_styles.json in selfTestSource, which is the whole
@@ -702,8 +741,8 @@ var BiyaAnalysisMetrics = (function () {
       'the per-chunk slice is well under the whole-search deadline, or slicing would do nothing');
     expect(TIMINGS.longPressDelay === 400, 'long-press delay is 400ms');
     expect(TIMINGS.uiCoalesce === 100, 'engine progress coalesces to 100ms');
-    expect(TIMINGS.engineDeadline === 1200, 'one interactive search gets 1200ms');
-    expect(TIMINGS.reviewDeadline === 200, 'one reviewed position gets 200ms');
+    expect(TIMINGS.engineDeadline === 1200, 'one interactive search gets 1200ms by default');
+    expect(TIMINGS.reviewDeadline === 200, 'one reviewed position gets 200ms by default');
 
     // 12. The review modal's two pure functions
     expect(accuracyColor(100) === '#4CAF50', 'a perfect game is green');
@@ -724,8 +763,38 @@ var BiyaAnalysisMetrics = (function () {
     expect(RESULT_OPTIONS.join(' ') === '* 1-0 0-1 1/2-1/2', 'the four result options, in order');
     expect(resultLabel('*') === 'No Result (*)', 'the star renders as "No Result (*)"');
     expect(resultLabel('1-0') === '1-0', 'the others render as themselves');
-    expect(ENGINE_LIMITS.multiPV === 3, 'the board shows three engine lines');
-    expect(ENGINE_LIMITS.maxDepth === 6, 'depth 6 is the ceiling the deadline rarely reaches');
+    expect(ENGINE_LIMITS.multiPV === 3, 'the board shows three engine lines by default');
+    expect(ENGINE_LIMITS.maxDepth === 12, 'depth 12 is the default ceiling the deadline rarely reaches');
+
+    // 11b. The defaults above ARE the Balanced preset. Two files carrying the same four numbers is
+    // exactly how they drift, so the agreement is asserted rather than assumed. Resolved lazily:
+    // engine-settings.js loads after this file in the browser, and neither needs the other at load.
+    var ES = (typeof module !== 'undefined' && module.exports)
+      ? require('./engine-settings.js')
+      : (typeof BiyaEngineSettings !== 'undefined' ? BiyaEngineSettings : null);
+    if (ES) {
+      var balanced = ES.resolve(ES.defaults());
+      expect(balanced.thinkMs === TIMINGS.engineDeadline,
+        'the default deadline is the Balanced preset\'s think time');
+      expect(balanced.reviewMs === TIMINGS.reviewDeadline,
+        'the default review budget is the Balanced preset\'s');
+      expect(balanced.maxDepth === ENGINE_LIMITS.maxDepth,
+        'the default ceiling is the Balanced preset\'s');
+      expect(balanced.multiPV === ENGINE_LIMITS.multiPV,
+        'the default line count is the Balanced preset\'s');
+      expect(TIMINGS.inlineSearchBudget * 2 < ES.preset('saver').thinkMs,
+        'even the coolest preset leaves room for more than one in-thread slice');
+    } else {
+      failures.push('engine-settings.js was not loaded, so the defaults could not be cross-checked');
+    }
+
+    // 11c. The Engine Settings panel.
+    expect(ENGINE_PANEL.rowHeight > ENGINE_PANEL.advancedRowHeight,
+      'a preset row is taller than an Advanced row — it carries two lines of text');
+    expect(ENGINE_PANEL.nameSize > ENGINE_PANEL.summarySize, 'the preset name outranks its summary');
+    expect(ENGINE_PANEL.thumbSize <= ENGINE_PANEL.advancedRowHeight,
+      'the slider fits inside the row that holds it');
+    expect(ENGINE_PANEL.dotSize < ENGINE_PANEL.rowHeight, 'the radio dot fits inside its row');
 
     return {
       passed: passed, failures: failures, ok: failures.length === 0,
@@ -1276,7 +1345,7 @@ var BiyaAnalysisMetrics = (function () {
     MOVE_ANNOTATIONS: MOVE_ANNOTATIONS, POSITION_ANNOTATIONS: POSITION_ANNOTATIONS,
     EVAL_SYMBOLS: EVAL_SYMBOLS, evalSymbol: evalSymbol,
     AUTOPLAY_SPEEDS: AUTOPLAY_SPEEDS, DEFAULT_AUTOPLAY_SPEED: DEFAULT_AUTOPLAY_SPEED,
-    TIMINGS: TIMINGS, ENGINE_LIMITS: ENGINE_LIMITS, TYPE: TYPE,
+    TIMINGS: TIMINGS, ENGINE_LIMITS: ENGINE_LIMITS, ENGINE_PANEL: ENGINE_PANEL, TYPE: TYPE,
     REVIEW: REVIEW, GRAPH_STYLE: GRAPH_STYLE,
     LIBRARY: LIBRARY, RESULT_OPTIONS: RESULT_OPTIONS, resultLabel: resultLabel,
     MENU: MENU, menuWidth: menuWidth, EDIT: EDIT, MODALS: MODALS,

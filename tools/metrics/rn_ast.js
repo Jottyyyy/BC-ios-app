@@ -292,7 +292,15 @@ function collectRenderFunction(ts, body) {
   return found;
 }
 
-/** Find named `const f = (…) => …` render helpers by name. */
+/**
+ * Find named render helpers by name — both `const f = (…) => …` and `function f(…) { … }`.
+ *
+ * The declaration form was missing until the Play vs Coach extraction, and the omission was
+ * invisible in the way this repo cares about: `CoachCard` is a function DECLARATION, so its
+ * `avatarSize` / `ringSize = avatarSize + 6` / `haloSize = ringSize + 10` were never collected and
+ * `renderConstants` came back `{}` for that screen. Nothing failed — the numbers simply were not
+ * there to be used, and the stylesheet reached for hand-typed pixels instead.
+ */
 function findNamedFunctions(ts, sf, names) {
   const out = {};
   (function visit(node) {
@@ -301,6 +309,11 @@ function findNamedFunctions(ts, sf, names) {
         && node.initializer
         && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
       out[node.name.text] = collectRenderFunction(ts, node.initializer.body);
+      return;
+    }
+    if (ts.isFunctionDeclaration(node) && node.name && ts.isIdentifier(node.name)
+        && names.indexOf(node.name.text) !== -1 && node.body) {
+      out[node.name.text] = collectRenderFunction(ts, node.body);
       return;
     }
     ts.forEachChild(node, visit);

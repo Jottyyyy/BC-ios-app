@@ -50,6 +50,23 @@ final class AnalysisVM: ObservableObject {
     /// Non-empty while the branch picker is up (board.tsx:1506-1516).
     @Published var branchOptions: [MoveNode] = []
 
+    /// How hard the engine may work (☰ > Engine).
+    ///
+    /// Unlike every view-state property above it this one PERSISTS: a preset is a deliberate choice
+    /// about battery, and having to make it again after every launch would be its own bug. Written
+    /// through on `didSet`, the same shape `CoachStore.allowTakeBack` uses.
+    @Published var engineSettings: EngineSettings.Value {
+        didSet {
+            guard engineSettings != oldValue else { return }
+            EngineSettings.save(engineSettings, engineStorage)
+            scheduleAnalysis()          // show the new setting working, immediately
+        }
+    }
+    /// Whether the Advanced disclosure is expanded. Not persisted — it is a disclosure, not a
+    /// setting, and `EngineSettings.panelModel` forces it open whenever a custom value is in effect.
+    @Published var engineAdvancedOpen = false
+    private let engineStorage: EngineSettings.Storage
+
     // MARK: - Phase 11 view state
 
     /// The ☰ sidebar.
@@ -81,6 +98,7 @@ final class AnalysisVM: ObservableObject {
         case annotate(nodeID: Int, san: String, nag: Int)
         case variation(AnalysisSession.VariationInfo)
         case autoplaySpeed
+        case engineSettings
     }
     @Published var sheet: Sheet?
     @Published var saveFields = AnalysisSaveFields()
@@ -107,7 +125,9 @@ final class AnalysisVM: ObservableObject {
     private var searchToken: CancelToken?
     private var autoplayTask: Task<Void, Never>?
 
-    init() {
+    /// `storage` is injected so a harness can drive the engine settings without touching the real
+    /// defaults — the same reason `CoachStore` takes one.
+    init(engineStorage: EngineSettings.Storage = AnalysisDefaultsStorage()) {
         // `AnalysisSession.init?` fails only on an unparseable FEN, and this one is the library's
         // own constant. A precondition states that rather than papering over it with a fallback.
         guard let s = AnalysisSession(initialFEN: ChessPosition.startFEN,
@@ -115,6 +135,10 @@ final class AnalysisVM: ObservableObject {
             preconditionFailure("ChessPosition.startFEN must parse")
         }
         session = s
+        self.engineStorage = engineStorage
+        // Assigned before any other work: `didSet` does not fire during initialisation, so loading
+        // here cannot trigger the save-and-reanalyse that a later assignment would.
+        self.engineSettings = EngineSettings.load(engineStorage)
         rebuildPieces()
         refresh()
         loadLibrary()
@@ -532,8 +556,12 @@ final class AnalysisVM: ObservableObject {
         reviewToken = token
         reviewState = .running(completed: 0, total: plan.positions.count)
 
-        let limits = SearchLimits(maxDepth: AnalysisEngineLimits.maxDepth, multiPV: 1)
-        let budget = Double(AnalysisTiming.reviewDeadlineMs) / 1000
+        // The preset scales the review too — it is where the heat actually is, since a 40-move game
+        // is 41 searches rather than one. Infinite is the exception: `reviewMs` saturates instead,
+        // because an unbounded per-position search over 41 positions would never finish.
+        let resolved = EngineSettings.resolve(engineSettings)
+        let limits = resolved.reviewLimits
+        let budget = Double(resolved.reviewMs) / 1000
         let book = OpeningBookLoader.shared
 
         // Only value types cross: `Evaluator` is Sendable precisely so the whole walk can run off
@@ -630,10 +658,15 @@ final class AnalysisVM: ObservableObject {
         searchToken = token
         // The deadline is what actually bounds the search: measured cost is ~6x per ply and varies
         // 15x by position type, so a fixed depth is either too slow somewhere or too shallow
-        // everywhere. `AnalysisEngineLimits.maxDepth` is only a ceiling.
-        let deadline = Date().addingTimeInterval(Double(AnalysisTiming.engineDeadlineMs) / 1000)
-        let limits = SearchLimits(maxDepth: AnalysisEngineLimits.maxDepth,
-                                  multiPV: AnalysisEngineLimits.multiPV)
+        // everywhere. `maxDepth` is only a ceiling. Both come from the user's chosen preset.
+        let resolved = EngineSettings.resolve(engineSettings)
+        let limits = resolved.searchLimits
+        // Infinite has no deadline at all: only the token stops it, which the 💡 button, every
+        // position change and leaving the screen all bump. `maxDepth` is then the sole guarantee
+        // that the search terminates — which is why every preset still carries one.
+        let deadline: Date? = resolved.infinite
+            ? nil
+            : Date().addingTimeInterval(Double(resolved.thinkMs) / 1000)
         session.analyzing = true
         analyzing = true
 
@@ -646,7 +679,11 @@ final class AnalysisVM: ObservableObject {
                 searchPosition,
                 limits: limits,
                 historyKeys: keys,
-                shouldCancel: { token.isCancelled || Date() > deadline },
+                shouldCancel: {
+                    if token.isCancelled { return true }
+                    guard let deadline else { return false }     // Infinite: the token is the clock
+                    return Date() > deadline
+                },
                 onProgress: { snap in
                     // One hop per completed depth, so lines appear as they are found rather than
                     // all at once when the deadline expires.
@@ -701,6 +738,9 @@ final class AnalysisVM: ObservableObject {
                     self.showArrows.toggle()
                     self.refresh()
                 },
+                AnalysisMenuItem("⚙️", "Engine  " + EngineSettings.resolve(engineSettings).label) {
+                    [weak self] in self?.sheet = .engineSettings
+                },
                 AnalysisMenuItem("⏱️", "Autoplay Speed") { [weak self] in self?.sheet = .autoplaySpeed },
                 AnalysisMenuItem("🎨", "Board Theme  " + theme.label) { [weak self] in
                     self?.cycleTheme()
@@ -711,6 +751,27 @@ final class AnalysisVM: ObservableObject {
 
     func openMenu() { menuOpen = true }
     func closeMenu() { menuOpen = false }
+
+    // MARK: - ⚙️ Engine settings
+    //
+    // Three one-liners, because every decision — which rows exist, what they say, which control has
+    // which range, what a new value does to the stored one — is in `EngineSettings`, where it can be
+    // asserted in Node and shared with the browser twin. The panel that draws them is
+    // `AnalysisEngineSettings.swift`.
+
+    var enginePanel: EngineSettings.PanelModel {
+        EngineSettings.panelModel(engineSettings, advancedOpen: engineAdvancedOpen)
+    }
+
+    func selectEnginePreset(_ id: String) {
+        engineSettings = EngineSettings.selectPreset(engineSettings, id)
+    }
+
+    func setEngineControl(_ key: String, _ value: Int) {
+        engineSettings = EngineSettings.applyControl(engineSettings, key, value)
+    }
+
+    func toggleEngineAdvanced() { engineAdvancedOpen = !enginePanel.advancedOpen }
 
     /// 🔁 New Game (handleReset:1526) — and it clears the draft, as the source does.
     func newGame() {

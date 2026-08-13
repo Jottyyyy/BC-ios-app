@@ -174,7 +174,7 @@ struct PlayView: View {
 
     var body: some View {
         if vm.started { gameContent }
-        else { CoachSelect(vm: vm).frame(maxWidth: 560).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top) }
+        else { LegacyCoachSelect(vm: vm).frame(maxWidth: 560).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top) }
     }
 
     private var gameContent: some View {

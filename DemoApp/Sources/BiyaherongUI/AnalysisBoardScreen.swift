@@ -335,6 +335,15 @@ struct AnalysisBoardScreen: View {
             AnalysisAutoplaySpeedSheet(current: vm.autoplaySpeed,
                                        onPick: { vm.autoplaySpeed = $0; vm.closeSheet() },
                                        onClose: { vm.closeSheet() })
+        case .engineSettings:
+            // Deliberately stays open after a change, unlike the autoplay sheet: picking a preset is
+            // something you compare, and the engine re-runs behind the sheet so the effect is
+            // visible in the panel's own summary lines.
+            AnalysisEngineSettingsSheet(model: vm.enginePanel,
+                                        onPickPreset: { vm.selectEnginePreset($0) },
+                                        onSetControl: { vm.setEngineControl($0, $1) },
+                                        onToggleAdvanced: { vm.toggleEngineAdvanced() },
+                                        onClose: { vm.closeSheet() })
         case nil:
             EmptyView()
         }

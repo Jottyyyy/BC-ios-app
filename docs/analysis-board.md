@@ -223,10 +223,21 @@ with `await MainActor.run` hops — the shape `ChessGameVM.maybeBotMove` already
 because `shouldCancel` is a plain synchronous closure called on the search thread.
 
 **A deadline bounds the search, not a depth cap.** Measured in the browser, cost is ~6× per ply and
-varies **15× by position type** — endgame depth 4 is 173 ms, midgame depth 4 is 2794 ms. Any fixed
-depth is therefore too slow somewhere or too shallow everywhere. A 1200 ms budget inside
-`shouldCancel` reaches depth 4+ in quiet positions, stops at 3 in sharp ones, and holds total wall
-time to within ~15 ms of the budget. `AnalysisEngineLimits.maxDepth` is only a ceiling.
+varies **15× by position type**. Any fixed depth is therefore too slow somewhere or too shallow
+everywhere, so the budget is wall-clock, enforced inside `shouldCancel`, and
+`AnalysisEngineLimits.maxDepth` is only a ceiling.
+
+**That budget is now the user's choice** — ☰ > Engine, five presets from Battery Saver (0.5 s) to
+Infinite, plus Advanced controls. `AnalysisTiming.engineDeadlineMs` and `AnalysisEngineLimits` are
+the *Balanced* preset's numbers, which is what an install runs on until someone opens the panel; the
+live search and Analyze Game both read `EngineSettings.resolve(...)` instead. **Infinite has no
+deadline at all** (`shouldCancel` falls back to the cancel token alone, and `maxDepth` is what
+guarantees termination) and does not apply to Analyze Game. See
+[`engine-settings.md`](engine-settings.md).
+
+Measured at 1200 ms, after the search grew a transposition table, PVS, extensions, null-move and
+LMR, and the evaluation grew a game phase: mean depth over the six benchmark positions went from
+**3.83 to 5.00**, and the sharpest of them from depth 2 to depth 4.
 
 ### In the browser: a Worker when it can, sliced when it cannot
 
@@ -296,9 +307,13 @@ In the browser the stepper measures 207–232 ms per position — on budget. A 4
 inside the original's own "This may take 20–30 seconds" promise (`board.tsx:3831`), but with a real
 progress bar rather than a static string.
 
-**Depth 2–3 classification is coarse.** The thresholds in `classifyMove` were written for a depth-12
-Stockfish; at depth 2 the evals are noisy, so "mistake" versus "blunder" is not trustworthy. That is
-a property of the interim engine, not of the port, and it goes away when Stockfish lands.
+**Shallow classification is coarse.** The thresholds in `classifyMove` were written for a depth-12
+Stockfish, so at the depths a 200 ms budget reaches, "mistake" versus "blunder" is not fully
+trustworthy. This is better than it was — the same budget now searches deeper and evaluates with
+`AnalysisEval` rather than material-plus-one-table — and a user who wants a trustworthy review can
+raise the preset, since the per-position budget scales with it (Maximum gives each position 1200 ms).
+It remains a property of the interim engine rather than of the port, and goes away when Stockfish
+lands.
 
 `evaluate(_:engine:limits:)` is deliberately **left in place** — it is right for a headless harness,
 and `review_book` and `tools/qa/review_demo.js` still use it.

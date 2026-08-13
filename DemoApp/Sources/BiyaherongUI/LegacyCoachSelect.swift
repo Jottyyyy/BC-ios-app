@@ -2,7 +2,16 @@ import SwiftUI
 import BiyaherongCoachCore
 
 /// Pre-game "choose your opponent" screen: the coach roster as a ranked challenge ladder.
-struct CoachSelect: View {
+///
+/// **Legacy.** This is the pre-port sample screen, built on `ChessAI`'s `Coaches` rather than the
+/// extracted `CoachRoster`. The real Play vs Coach flow is `CoachScreens.swift`. It is renamed
+/// rather than deleted because `BoardView` — which every other board in the app uses — still lives
+/// in `PlayView.swift` alongside its sibling; retiring the pair means extracting that first.
+///
+/// The rename itself was forced: the generated `CoachMetrics.swift` declares `public enum
+/// CoachSelect`, so two types of that name were in one module — a hard compile error that had been
+/// sitting here unnoticed, because nothing on this checkout compiles Swift.
+struct LegacyCoachSelect: View {
     @ObservedObject var vm: ChessGameVM
     @State private var selectedId: String
     @State private var asWhite = true

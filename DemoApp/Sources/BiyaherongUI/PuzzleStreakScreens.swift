@@ -147,7 +147,7 @@ struct PuzzleStreakHomeScreen: View {
                     .background(PuzzleStreakHome.shareFill,
                                 in: RoundedRectangle(cornerRadius: PuzzleStreakHome.shareRadius))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             Button { if live { showResume = true } else { onStart() } } label: {
                 Text(live ? PuzzleStrings.streakResumeStart : PuzzleStrings.streakStart)
                     .font(Theme.nunito(PuzzleStreakHome.startSize, .bold))
@@ -157,7 +157,7 @@ struct PuzzleStreakHomeScreen: View {
                     .background(PuzzleStreakHome.startFill,
                                 in: RoundedRectangle(cornerRadius: PuzzleStreakHome.startRadius))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
         }
         .padding(.horizontal, PuzzleStreakHome.bottomPaddingH)
         .padding(.top, PuzzleStreakHome.bottomPaddingTop)
@@ -223,7 +223,7 @@ struct PuzzleStreakSolverScreen: View {
                     .frame(width: PuzzleStreakSolver.backBtnW,
                            height: PuzzleStreakSolver.backBtnH)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             Spacer()
             Text(PuzzleStrings.streakRunScore(store.state.streak.currentStreak))
                 .font(Theme.nunito(PuzzleStreakSolver.counterSize, .bold))
@@ -332,7 +332,7 @@ struct PuzzleStreakSolverScreen: View {
                             .padding(.top, PuzzleStreakSolver.backToMenuMarginTop)
                             .padding(.vertical, PuzzleStreakSolver.backToMenuPaddingV)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PuzzlePressStyle())
                 }
                 .padding(PuzzleStreakSolver.boxPadding)
                 .background(PuzzlePalette.card,
@@ -356,7 +356,7 @@ struct PuzzleStreakSolverScreen: View {
                 .background(fill,
                             in: RoundedRectangle(cornerRadius: PuzzleStreakSolver.btnRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
     }
 
     /// The revealed move, printed `E2 → E4` over a two-toned board highlight.
@@ -401,7 +401,7 @@ struct PuzzleStreakSolverScreen: View {
                 .background(fill,
                             in: RoundedRectangle(cornerRadius: PuzzleStreakSolver.stripBtnRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
     }
 
     // MARK: - Flow

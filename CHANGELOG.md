@@ -9,6 +9,556 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-13 (added) — A stronger analysis engine, and an Engine Settings panel to spend it
+
+The Analysis Board's engine got both halves of what was asked for: it plays better at the same
+budget, and how much budget it gets is now the user's choice.
+
+**Added — ☰ > Engine.** Five presets, weakest and coolest first, plus an Advanced section
+(Lines 1–5, Max depth 2–30, Think time 0.2–30 s, whose bottom step *is* Infinite).
+
+| Preset | Think time | Depth ceiling | Lines | Review / position |
+|---|---|---|---|---|
+| Battery Saver | 0.5 s | 8 | 2 | 120 ms |
+| **Balanced** (default) | 1.2 s | 12 | 3 | 200 ms |
+| Strong | 3 s | 18 | 3 | 500 ms |
+| Maximum | 8 s | 22 | 4 | 1200 ms |
+| Infinite | until stopped | 30 | 4 | 1200 ms |
+
+Balanced is exactly what the board did before, so an install where nobody opens the panel behaves as
+it always has — only stronger. The per-position review budget is **derived** (`thinkMs / 6`, clamped
+120–1200) rather than listed, which reproduces every value in that column from one number. Infinite
+has no deadline at all and deliberately **does not apply to Analyze Game**; 41 unbounded searches
+would never finish, so that budget saturates instead. Persisted under `biya.analysis.engine.v1`.
+
+**Added — `analysis-eval.js` / `AnalysisEval.swift`, an evaluation the analysis engine owns.** The
+old one was material plus one piece-square table, borrowed from the coach. The new one adds tapered
+mid/endgame scoring, pawn structure (doubled, isolated, passed), king safety, mobility, the bishop
+pair, rooks on open files and tempo. **`ChessAI.evaluate` is untouched** — it is parity-pinned to the
+five coach personas, so the coaches play exactly as they did; the new one sits beside it exactly as
+`CoachEngine` sits beside `ChessAI`, and reuses its material values and midgame tables *by
+reference* so the shared half cannot drift. Same units, same sign convention, so the eval bar,
+`classifyMove` and `ReviewAnnotator` needed no change at all.
+
+**Changed — the search (`local-negamax-v1` → `v2`).** Transposition table, killer moves and history,
+principal-variation search, check extensions, null-move pruning, late move reductions, and MultiPV
+that stops paying for a full-window search on root moves it will never display. `analyzeSteps`
+became the core rather than a wrapper that re-ran `analyze` from depth 1 on every step, so the
+table, killers, history and root ordering now survive between depths — which is what iterative
+deepening is for.
+
+**Measured**, at the same 1200 ms budget, over the six positions `engine_budget_check.js` uses:
+
+| | before | after |
+|---|---|---|
+| mean depth | 3.83 | **5.00** |
+| sharpest position ("queens on") | 2 | **4** |
+| corpus tactics at 120k nodes | 105/120 (87.5%) | **115/120 (95.8%)** |
+| tactics nodes/sec | 38.1k | **60.8k** |
+
+Battery Saver at 0.5 s reaches mean depth 5.17 — deeper than the *old* engine managed in 1.2 s.
+
+**Added — `tools/qa/engine_strength_check.js`**, wired into `js_goldens.js`. Null-move pruning and
+LMR both decide, on a guess, not to look at a move; a guess that goes bad throws nothing and fails
+no structural assertion, it just stops seeing combinations. So the gate replays 120 corpus puzzles
+(sampled deterministically across the whole rating range) at a fixed **node** budget — reproducible
+on any machine, unlike a clock — with a floor of 108, plus a mate-is-reported-as-mate check and a
+determinism check. **Added — `tools/qa/replay_engine_settings.js`**, 142 Swift expectations checked
+against the JS, in the established `replay_*` shape for Swift this checkout cannot compile.
+
+**Changed — `board_layout_check.js`** now also checks that every `--an-eng-*` custom property the
+stylesheet reads is set from `MET.ENGINE_PANEL`, and vice versa. It earned its keep on the first
+run, catching `--an-eng-track-h` and `--an-eng-track-r` as dead: both platforms use the native
+slider, which draws its own track, so those two numbers described nothing. Removed.
+
+**Fixed — `PuzzleSolverParts.swift:205` called `EngineLimits(maxDepth:multiPV:)`.** There is no such
+type anywhere in the repo; it is `SearchLimits`. The line has never compiled and would have failed
+the next `swift build` on a Mac. The puzzle hint panel keeps the *default* limits deliberately — the
+Analysis Board's preset is that screen's setting, not the Puzzle Hub's.
+
+**Docs** — new [`docs/engine-settings.md`](docs/engine-settings.md); `docs/analysis-board.md`'s
+engine-budget and review-classification sections updated; `PORTING_NOTES.md` records every invented
+constant above and three deliberate deviations (Infinite excluded from Analyze Game, the separate
+evaluation, and the two languages' Zobrist tables differing on purpose).
+
+**`web-demo/` was updated** — it is where all of this was written and proven first, as `CLAUDE.md`
+requires: the panel is at ☰ > Engine there too, `engine-settings.js` and `analysis-eval.js` are the
+sources the Swift was transliterated from, and the panel is shared as *data*
+(`EngineSettings.panelModel`) rather than reimplemented, so the two cannot drift.
+
+**Not done:** `ChessPosition.legalMoves()` still filters by calling `applyRaw` on every pseudo-legal
+move — a full board copy per candidate, at every node, and the single largest nodes-per-second win
+still available. It is safe to attempt because `perft` verifies move generation exactly, but it is a
+change to the parity core and belongs in its own commit, not folded into this one.
+
+### 2026-08-12 (added) — Offline game review. Phase 2 step E complete; §2.10 shipped in both languages.
+
+**Added**
+- **`web-demo/js/coach-review.js`** + **`Sources/BiyaherongCoachCore/CoachReview.swift`** — the
+  adapter, in both languages. The classification maths is NOT rewritten: `review.js` /
+  `GameReview` is already the parity port of `GameReviewController`, pinned by 303 golden cases.
+  What is new is `planFromGame` (records → the `{positions, moves, nodes, keys}` shape those
+  already consume), the modal's derived values, and `handoff`.
+- **The review modal**, in `coach-play.js` and `CoachScreens.swift`: a determinate
+  `Analyzing… {done}/{total}` bar, the accuracy columns, the eval curve, the classification rows
+  and the two actions.
+- **`loadReviewedGame` on the Analysis Board** — the hand-off seam. Queued rather than applied,
+  because the caller switches tabs and repaints in the same turn; `render` consumes it on the way
+  in, so the order of those two calls cannot matter.
+
+**Fixed — §7 #28, the empty classification array.** The RN hand-off shipped
+`moveEvaluations: []` *every single time*: `handleGameReview` read `reviewData` but its memoised
+dependency list named only `moveRecords`, so the callback closed over `null` forever. `handoff`
+takes the summary as an ARGUMENT and returns nil rather than an empty payload — there is no
+captured variable left to go stale.
+
+**Fixed — §2.10's orientation defect.** The RN modal ordered the accuracy columns
+White-left/Black-right and the classification rows user-left/opponent-right, so playing Black put
+the coach's accuracy directly above your own move counts. `columns()` is now the single source of
+that ordering and both halves read it; two mutants pin it in each language.
+
+**Changed — four duplications removed rather than written.**
+- The accuracy bands, the one-decimal format, the ten classification colours and their labels
+  already existed in `analysis-metrics.js` / `AnalysisReview` + `AnalysisTables`, in both
+  languages. The first draft of this feature reimplemented all four — including ten hex values
+  hand-typed into `coach.css`. They are now delegated, and the stylesheet tints inline from the
+  shared table.
+- `GRAPH_CLAMP_CP` reads the component's own `CLAMP` instead of restating 500.
+
+**Changed — the eval graph is extracted, not transcribed.** Spec §2.10 states the graph's fill,
+radius, both advantage fills, the centre line and the curve in prose. Every one is a literal on an
+SVG attribute in `components/EvalGraph.tsx`, which `collectSvgAttrs` now lifts — a new walk over a
+third file, plus its call-site `height={60}` in `play.tsx`. Ten values, none retyped.
+
+**The review card's border is `accentColor + '30'`** — the accent with a hex alpha BYTE appended,
+which is §2.10's "accent @ 19 %". Read as a percentage it would be almost twice as strong; the
+Pairing Manager shipped exactly that confusion once in a badge tint, so both languages keep the
+byte and divide.
+
+**Verification.** `coach-review` 62 assertions · `CoachScreens` 121 · `ReplayCoach` **270** ·
+twelve new mutants, **159/159 killed** (was 147). Gate: **29,168 assertions across 56 suites**;
+107 Swift files sound, 2,975 references and 132 types resolve.
+
+### 2026-08-12 (added) — Play vs Coach: the Swift half. Phase 2 D4 complete.
+
+**Added — the Core domain, which did not exist in Swift at all.**
+- **`CoachEngine.swift`** — the level table, `pickIndex`/`pickMove` with an injected RNG, the
+  think-time pacer and the 1 s movetime cap. Sits BESIDE `ChessAI` exactly as `PairingEngine` sits
+  beside `TournamentEngine`; spec §2.2 is explicit that strength is depth + MultiPV + a client-side
+  randomiser, with no Elo cap and no blunder chance.
+- **`CoachGame.swift`** — the record, threefold on the first three FEN fields, the six result
+  lines, insufficient material, and the per-level seven-day draft behind an injected `Storage`.
+- **`CoachTurn.swift`** — the generation counter, the premove, the shared nav rule, take-back.
+- **`CoachBook.swift`** + generated **`CoachBookData.swift`** — the lookup is transliterated; the
+  63 repertoire rows and two junk pools are EMITTED from `coach-book.js` by the new
+  `tools/metrics/gen_coach_book.js`, so the two languages hold one book rather than two readings
+  of one.
+
+**Added — the UI.**
+- **`CoachStore.swift`** — the reply loop. The generation token also drives the engine's
+  `shouldCancel`, so resigning mid-search stops the *search* rather than discarding its answer.
+  The wait is **paced**, not added: it runs down whatever the search already spent, which is what
+  makes §2.13's 300 ms floor a floor.
+- **`CoachScreens.swift`** — Coach Select, Colour Select and the game, with the resign prompt.
+- **`CoachLayout.swift`** — the twelve values that are NOT extracted, plus the five nav glyphs, in
+  one file so they can be counted. Four of the twelve are *derived* from extracted constants and
+  the replay pins the derivation.
+- **`CoachMetricsCheck.swift`** + a `swift run CoachMetricsCheck` target.
+- **`PhoneView`** — a `showCoach` overlay in the same shape as `showPairing`; the Home tile's
+  `onPlayCoach` now presents it instead of switching to the sample Play tab.
+
+**Fixed — a duplicate type that could never have compiled.** The generated `CoachMetrics.swift`
+declares `public enum CoachSelect`, and `CoachSelect.swift` declared a `struct CoachSelect: View`.
+Two top-level types of one name in one module is a redeclaration error, and it had been sitting in
+the repo since the metrics were generated, because nothing on this checkout compiles Swift. The
+legacy view is renamed `LegacyCoachSelect` (in `LegacyCoachSelect.swift`), and
+**`swift_symbol_check.js` now reports duplicate top-level types** so the class of error cannot
+recur.
+
+**Not retired: the sample Play tab.** Its Swift twin cannot go the way the browser one did, because
+`BoardView` — which every board in the app uses — lives inside `PlayView.swift` alongside it.
+Extracting that first is its own change; recorded in `PORTING_NOTES.md`.
+
+**Verification.** New **`tools/qa/replay_coach.js`**: 239 Swift expectations against the JS twin —
+the level and think-time tables, `pickIndex`'s five branches, every book row matched by
+(level, side, history), the draft contract, insufficient material branch for branch, and a
+**branch-structure section** for the screens and the store (§7 #24/#25/#27/#33/#34, the book before
+the engine, the cancellable search, the paced reply, and no numeric literal in any view body).
+Sixteen new Swift mutants prove it bites — **147/147 killed** (was 131). Gate: **29,033 assertions
+across 55 suites**; 106 Swift files sound, 2,829 references and 131 types resolve.
+
+### 2026-08-12 (added) — Play vs Coach: the three browser screens, wired. Phase 2 D3 complete.
+
+**Added**
+- **`web-demo/css/coach.css`** — the stylesheet for all three screens, written against a live audit
+  rather than before one. Prefixes `--cgs-` / `--cgc-` / `--cgp-`, plus a `--cgx-` polish namespace
+  that touches no extracted value.
+- **`auditAppWiring()` in `coach_screen_test.js`** — reads `app.js` as source and asserts the routes
+  exist, that **every callback the game screen offers is supplied**, that both generation guards are
+  present, and that the retired sample Play tab is gone. 82 assertions in that suite now.
+- **The wiring itself** — `app.js` gained the Play vs Coach loop: Coach Select as the Play tab,
+  Colour Select and the game as pushed routes, the coach's reply through `BiyaEngineHost` with the
+  book consulted first, the paced reply, the premove, resign/take-back/rematch, and the draft
+  written after every half-move. The **sample play screen it replaced was deleted** (245 lines,
+  its own coach table, its own undo) rather than left unreachable.
+- **`docs/play-vs-coach.md`**.
+
+**Fixed — five defects in the game screen's board wiring, none of which any suite could see.**
+`<chess-board>` dispatches a `'move'` CustomEvent with NUMERIC square indexes; the screen assigned
+`.onmove` (never fires), built its UCI as `detail.from + detail.to` (arithmetic, not concatenation),
+set `flipped="0"` (the component is attribute-truthy, so the board was upside down for White), passed
+algebraic squares to `highlightLastMove` (the cell map is index-keyed, so no highlight), and never set
+`.rules` (so no piece was selectable and **no move could be made at all**). The fake board node in
+`coach_screen_test.js` is now a **contract mock** — it throws on algebraic squares and emits the
+component's real event detail — and five mutants keep it honest.
+
+**Fixed — the coach roster was transcribed, and was wrong.** `coach-select.js` had a hand-typed
+roster with **three of five ratings** and **four of five names** wrong. The spec table (§2.14) and
+the RN `COACH_DATA` agreed with each other; only the transcription disagreed. The generator now
+emits the roster whole — name, role, tagline, the four in-game lines, accent colour, rating — as
+`MET.COACHES` and `CoachRoster`/`CoachProfile` in Swift. `winMsg`/`loseMsg` were not decorative:
+`evaluate` puts them straight into the result card, so without them it rendered `undefined`.
+
+**Fixed — an extraction hole that made the stylesheet invent numbers.** `findNamedFunctions` only
+matched `const f = () => …`, and `CoachCard` is a function *declaration*, so its
+`avatarSize → ringSize = +6 → haloSize = +10` chain was never collected and `renderConstants` came
+back empty. `rn_ast.js` now handles both forms; the generator **folds** the extracted signed terms
+into six `cardSize` constants that ride on the SELECT sheet, so JS, Swift and the CSS audit all get
+them with no new plumbing.
+
+**Changed**
+- The five coach accent colours are emitted as `MET.ACCENTS` / `CoachAccent`. `play.tsx` styles the
+  primary modal button as `[styles.modalBtn, { backgroundColor: coach.accentColor }]`, which is why
+  that block has no background of its own — the demo now applies it inline the same way.
+- The **Review button renders only when the host passes `onReview`**. §2.10 is a screen of its own
+  and is not built; the alternative was a placeholder modal with copy §2.14 does not have.
+
+**Verification.** `js_goldens.js` **28,794 assertions across 54 suites**. The mutation harness now
+runs all seven coach suites and carries nine new Play vs Coach mutants — **131/131 killed** (was
+122/122). Swift: 96 files sound, 2,540 references and 124 types resolve.
+
+**Not verified in a browser.** The automation extension could not reach a local server from this
+checkout, so the wiring is covered by the source audit above rather than by a real page load. Noted
+in `docs/play-vs-coach.md`.
+
+### 2026-08-12 (added) — Pairing Manager: the SwiftUI screens. Phase 1 complete.
+
+**Added**
+- **`PairingStore.swift`** — the observable document plus its file I/O: one `mutate` funnel so no
+  screen holds `inout` access and persistence cannot be forgotten, atomic writes to
+  `Biyaherong/pairing.json`, and a corrupt file degrading to an empty document rather than a screen
+  that will not open.
+- **`PairingScreens.swift`** — the `NavigationStack` root, the tournament list (type badges, status
+  dots, the stats strip, long-press delete) and the create screen (format cards, round presets, the
+  live round recommendation that replaced the free-plan notice).
+- **`PairingDetailScreens.swift`** — Players / Rounds / Standings, the round selector, the pairing
+  boards with their result badges, the engine's warnings surfaced as ⚠ Pairing Notes, and the
+  standings table with the SB column the RN app computed and never showed.
+- **`PairingModals.swift`** — Add Player, Bulk Add with a live count, and Enter Result with
+  **Clear Result**.
+- **`PhoneView` wiring** — a `showPairing` overlay in the same shape as `showAnalysis`.
+  `HomeScreen.onPairing` has existed since the tile was drawn and was never passed; it is now.
+- **A branch-structure section in `replay_pairing.js`** — a SwiftUI body cannot be run or compared
+  value-for-value here, but the decisions inside it can be pinned. **1,101 Swift expectations**
+  (up from 1,069), and seven new mutants prove they bite. **122/122 killed.**
+
+**Two of my own checks were wrong, and the mutants found both.**
+- The layout-literal scan only looked at a modifier's FIRST argument, so `.padding(.bottom, 10)`
+  walked straight past it. It now scans the whole argument list, anchored after `(`, `,` or `:` so a
+  digit inside an identifier (`buchholzCut1`, `Float3`) is not mistaken for a literal.
+- `funcBody`'s regex was `'func\s+'` in a JS string, where `\s` is just `s` — it matched nothing, so
+  the "every mutation persists" assertion was vacuously passing.
+
+**Two constants that had to be honest about their source.** The white piece dot is an inline style in
+the RN source, not a StyleSheet entry, so the generator now reads `#FAFAFA` out of `inlineStyles` and
+fails if it is absent. The bulk editor's height of 160 is **not** in the RN source at all — that
+screen uses a plain multiline input — so it is recorded as invented.
+
+**Deferred, and recorded as deferred:** the `ImageRenderer` share card from §1.6. The plain-text
+share — which the spec itself defines as the fallback, and which carries no URL (§7 #22) — ships via
+`ShareLink`.
+
+Gate: **26,804 assertions across 43 suites**, **122/122 mutants**, 94 Swift files structurally
+sound, 2,535 symbol references resolving.
+
+### 2026-08-12 (added) — Pairing Manager: the Core document, and criterion 4 answered
+
+**Acceptance criterion 4 is met.** "Feed the engine a published FIDE Dutch example and match the
+official pairings" was the last open one, and I had flagged in advance that cost-based matching might
+diverge from FIDE's transposition/exchange walk. It does not:
+
+```
+dutch_2025_C5   expected 1 5 | 3 2 | 6 0    got 1 5 | 3 2 | 6 0    no warnings
+dutch_2025_C9   expected 2 1 | 3 5 | 4 0    got 2 1 | 3 5 | 4 0    no warnings
+```
+
+Board for board, colour for colour, and the bye to the right player both times — including the case
+where the nominal Dutch pairing is blocked by a rematch, and the case where the bye must skip a
+player who already had one.
+
+**Added**
+- **`tools/qa/fide_dutch_test.js`** — both cases as a committed golden, with each source TRF quoted
+  verbatim so the reconstruction is auditable rather than trusted, and the `bbpPairings` Apache-2.0
+  provenance recorded. The official FIDE Handbook chapter C.04.3 turns out to contain **no worked
+  example at all** — it is purely normative — which is why the corpus comes from an independent
+  engine instead.
+- **`Sources/BiyaherongCoachCore/PairingDocument.swift`** — the pure Core store: create, players
+  with dense seeds, bulk parsing, generation, results, computed status, standings, encode/decode.
+  Document types are nested inside the enum, because `TournamentPlayer`/`TournamentRound`/
+  `TournamentPairing` belong to the PHP port and must keep those names.
+- **Document-shape verification in `replay_pairing.js`** — it builds a real document in JS and reads
+  the Swift `CodingKeys` out of the source, then compares the two key sets in both directions, plus
+  every enum raw value. **1,069 Swift expectations** now confirmed (up from 1,030). This matters
+  because the failure mode is the quiet kind: `JSONDecoder` drops an unknown key and defaults a
+  missing one, so a mismatched document decodes to something plausible and wrong.
+- Five Core mutants, and a **fix to the mutation harness**: `dirFor` resolved every `.swift` to the
+  UI directory, so a Core mutant would have been written into the wrong folder as a stray file while
+  the real one kept its text — the same failure this harness suffered once before on its restore
+  line. It now looks the file up.
+
+**One assertion of mine was wrong, and the mutants caught it.** The check that `Round.floats` is
+`[String:]` and not `[Int:]` — which matters because `JSONEncoder` writes an Int-keyed map as a flat
+*array* the JS twin cannot read — was matching a **local** `var floats` inside `generate` rather than
+the stored property. It passed while the mutant flipped the real declaration. Now anchored on
+`public var`.
+
+Gate: **26,772 assertions across 43 suites**, **115/115 mutants**, 90 Swift files sound, 1,951
+symbol references resolve.
+
+**Still to come:** the SwiftUI screens, `PairingStore`/`PairingLibraryFile`, and the `PhoneView`
+wiring. `docs/pairing-manager.md` tracks it.
+
+### 2026-08-12 (added) — Pairing Manager: the Swift engine, generated metrics, and the replay
+
+**Added**
+- **`tools/metrics/gen_pairing_metrics.js`** — emits `PairingMetrics.swift` (774 constants),
+  `PairingStrings.swift` (110 strings, 17 interpolating) **and** the JS geometry region, all from
+  `tournament_styles.json` in one pass. The puzzle layer hand-writes its Swift constants and leans on
+  the replay to spot drift; here there is no transcription step between the two languages for a typo
+  to live in, which is what "EXTRACT, DON'T TRANSCRIBE" asks for. The generator refuses to run if the
+  list and detail screens disagree about the type colours, if an inline column width is missing from
+  the source, or if the JS grows an interpolating string it cannot shape.
+- **`Sources/BiyaherongCoachCore/PairingEngine.swift`** — the Foundation-only twin of the JS engine:
+  colour preference, the pairing order, byes, downfloats, minimum-cost matching, Berger schedules and
+  the four tie-breaks. Sits **beside** `TournamentEngine`, which stays pinned to the PHP goldens.
+- **`tools/qa/replay_pairing.js`** — **1,030 Swift expectations confirmed against the JS**: the cost
+  ladder and its ordering, the preference and colour raw values, all ~750 extracted constants, the
+  colour maps, and the string tables in both directions with copy compared as well as keys.
+- **`PairingMetricsCheck.swift`** + its target and shim — asserts the derived logic only.
+- A **JS metrics-key check** in the screen suite: every `MET.X.y` and `T.key` the three screens
+  reference must exist. Proven non-vacuous by injecting `T.tournamnets` and watching it fail.
+- **`swift_symbol_check.js` now covers `Pairing*`** — references went from 1,910 to 1,939, so the new
+  Swift is being name-checked rather than merely looking clean because nothing was looking.
+
+**One correction to my own plan.** I had recorded that four sorts needed explicit index tie-breaks
+because Swift's sort is unstable and V8's is not. Re-reading them, three already end in a unique
+`seed` or rank comparison, so they are total orders and an added tie-break would be dead code. Only
+one genuinely needs it: Berger's board sort keys on a bye flag, so every non-bye board ties, and
+without the offset the boards would come out in an arbitrary order. That one has it, with the reason
+written next to it.
+
+**Also corrected:** the plan said to build an `AppLogo`. `HomeLogo(size:)` already exists and does
+exactly what spec 1.2–1.4 describe — circular, gold `strokeBorder`, glow applied after the clip.
+
+Gate: **26,726 assertions across 42 suites**, **110/110 mutants**, 89 Swift files structurally sound.
+
+**Still to come:** the SwiftUI screens and `PairingDocument.swift`, and the FIDE golden. The status
+table in `docs/pairing-manager.md` tracks them.
+
+### 2026-08-11 (added) — Pairing Manager: the three browser screens, and it is reachable at last
+
+The feature existed only in Node: `index.html` had no pairing script tag at all, so none of the
+engine, metrics or store work was visible to anyone. It is now a working screen you can click from
+the Home tile.
+
+**Added**
+- **`web-demo/js/pairing-{list,create,detail}.js`** — Tournament List, Create, and Detail with
+  Players / Rounds / Standings, four modals (Add Player, Bulk Add, Enter Result, **Clear Result**)
+  and plain-text share. Stateless about data: every mutation goes through the store and the screen
+  repaints from the document.
+- **`web-demo/css/pairing.css`** — its own stylesheet. Every value is a `var(--pg…)` pushed from
+  the extraction; the polish layer mirrors `--pzx-*` without touching an extracted value.
+- **`tools/qa/pairing_screen_test.js`** — 120 assertions rendering all three screens into a headless
+  DOM, including a full click-through: create → bulk add → generate → enter → clear → share.
+- **`MET.applyAll`** — a mechanical CSS-var pusher. Hand-writing one `set()` per value would be 748
+  lines and 748 chances to omit one silently, so a whole block converts to
+  `--<prefix>-<block>-<prop>`. Nothing can be forgotten because nothing is chosen.
+- Ten screen mutants. **110/110 killed.**
+
+**Fixed** — the screen-level §7 defects: #14 rank-1 gold on screen as well as in the share image ·
+#15 the seed chip shows `player.seed` · #18 delete confirms before mutating · #19 an empty state for
+a deleted tournament · #20 an exhaustive result badge · #21 local-calendar dates · #22 no URL in the
+share text.
+
+**Three things the checks caught that review had not:**
+- The `--pg` audit rejected three vars I had invented. The gap between the two players on a pairing
+  row is on `pairingPlayer`, not `pairingPlayers`; `standingsPts` inherits its size from
+  `standingsVal`; and the **standings column widths are inline styles**, which the block walker
+  cannot see — `standingsVal.width` is 42 for every column, wrong for five of the six. They are now
+  extracted from `inlineStyles` and asserted there.
+- The seed mutant **survived**, and it was right to. While the players list is in seed order with
+  dense seeds, the row index and the seed are the same number, so fix #15 was unobservable. The list
+  now sorts by score once play starts — which is what the RN screen did, and the situation the bug
+  actually shipped in — and the mutant dies.
+- Two more survivors were unfalsifiable rather than uncovered, and are documented as such: sorting a
+  freshly-parsed array in place changes nothing, and the blank-name path is guarded twice
+  independently. The second pointed at a real hole — the store's own guard had no test — so that is
+  what is mutated now.
+
+Gate: **25,695 assertions across 41 suites**, **110/110 mutants killed**.
+**Still to come:** the Swift half (`PairingMetrics.swift`, `PairingEngine.swift`,
+`replay_pairing.js`, the SwiftUI screens) and the FIDE published-example golden. The status table in
+`docs/pairing-manager.md` tracks it.
+
+### 2026-08-11 (added) — Pairing Manager: style extraction, metrics layer, document store
+
+The second slice of Book Two Phase 1. The engine landed earlier today; this is everything the
+screens will stand on. **No screens yet** — see the status table in `docs/pairing-manager.md`.
+
+**Added**
+- **`tools/metrics/extract_tournament_styles.js`** — third AST extractor, over the three real RN
+  tournament screens. 196 style blocks / 748 properties, **zero unresolved**. Two new capabilities:
+  two StyleSheets per file (`[id].tsx` has `styles` + `shareStyles`), and a colour-map walker. The
+  latter closed a real hole — `getTypeColor`/`getStatusColor` are pure condition-to-literal maps
+  that the style-oriented walker returns `{}` for, so the six colours behind every badge and status
+  dot would have been the only hand-typed numbers in the feature.
+- **`web-demo/js/pairing-metrics.js`** — 17 behavioural + 1,196 source assertions. The style blocks
+  were generated from the extraction rather than retyped, and `selfTestSource()` compares every
+  property back to the JSON on each run.
+- **`web-demo/js/pairing-store.js`** — the document: create/delete, players with stable dense seeds,
+  bulk add, generation, results, computed status, standings. 67 assertions, 9 mutants.
+
+**Fixed** — §7 defects now answered in the store, each with a mutant that must die: #1 duplicate
+seeds after removal · #7 bye on board 1 from round 2 · #12 bye points awarded after the tie-break
+pass · #17 results editable after `finished` · #23 no way to clear a result.
+
+**Also fixed, found by writing the tests rather than by review** — my own first version of the
+finished-lock guard read `status === FINISHED && result === PENDING`, which is **dead code**:
+finished means zero pending boards, so it could never fire. It looked like a lock and locked
+nothing. Replaced with a real rule, and the deviation it forces is documented — a literal
+"results are locked" cannot coexist with Clear Result, since finishing is *caused* by the last
+result being entered.
+
+**Deviations** (`PORTING_NOTES.md`): SwiftData `@Model` becomes plain `Codable` (there is no
+SwiftData in this repo and a `ModelContainer` is unreachable from every harness here); the
+finished-lock exception above; aggregates recomputed rather than patched.
+
+Gate: **25,553 assertions across 40 suites**, **101/101 mutants killed**. `web-demo/` gained the two
+new pure modules; no screen is wired to them yet.
+
+### 2026-08-11 (added) — Pairing engine: FIDE Dutch Swiss, Berger round robin, tie-breaks
+
+First piece of Book Two. `web-demo/js/pairing-engine.js` is a pure, dependency-free pairing engine
+covering spec 1.7–1.9, and `tools/qa/pairing_test.js` (1,560 assertions) is its proof. Wired into
+`js_goldens.js`; ten mutants added to the mutation suite.
+
+**Added**
+- **`web-demo/js/pairing-engine.js`** — colour preference (absolute/strong/mild/none), the pairing
+  ranking (deliberately *not* the standings order), bye assignment, score brackets with downfloat
+  bookkeeping, minimum-cost matching, Berger round-robin schedules, and the four tie-breaks
+  (Buchholz, Buchholz Cut-1, Sonneborn-Berger, direct encounter) behind one exported comparator.
+- **`tools/qa/pairing_test.js`** — property tests over whole simulated tournaments (5/6/7/12/30
+  players × four result patterns), not one worked example.
+
+**Fixed** — the four shipping-server bugs the spec names, each now a mutant that must die:
+- **The silent repeat pairing** (`TournamentController.php:558`, `$bestMatch = $unpaired[0]`). A
+  rematch is now the last resort *and* always carries a `repeatPairing` warning.
+- **Round-robin colours alternating on board 1 only** (line 658) — gave one player White in all six
+  games of a 7-player event. Colours are now assigned by a balancing pass over the Berger schedule.
+- **`hasRatings` true when a single entrant is rated** (line 422, `->count() > 0`) — now ≥ 50 %.
+- **No float bookkeeping at all** — the engine now prices a repeat downfloat above a point of score
+  difference, so it pairs slightly out of bracket rather than float the same player twice running.
+
+**Also fixed, found by the mutation suite rather than by review** — five mutants survived the first
+run, and each was a real hole: the repeat-pairing warning was never exercised (six players over five
+rounds is a *complete* round robin, so no repeat is ever forced — it now runs seven), the floater
+filter's two-round lookback was untested, the cost ladder's ordering was untestable at tournament
+granularity, and Buchholz counted undecided games. 92/92 mutants now killed.
+
+**Not** mirrored into a UI yet — this change is engine + tests only. The Pairing Manager screens
+(web-demo and SwiftUI) are the next step. Swift twin not yet written; see `docs/pairing-engine.md`.
+
+### 2026-08-11 (fix) — no puzzle mode ever accepted a move, and UI polish
+
+The user could not move a piece on any puzzle screen. The cause is older than it looks: **no puzzle
+mode has accepted a move since Phase B.** Five modes, seven phases, 22,690 green assertions, and
+the feature was unplayable.
+
+**Fixed — the rules adapter spoke names where the board speaks indices.**
+`<chess-board>` uses square indices (`e2` is `12`), and so does the engine. The puzzle adapter did
+the opposite on every count:
+
+```js
+var from = E.sqIndex(sq);                 // sq is ALREADY an index; E.sqIndex(12) === null
+E.legalMoves(pos).filter(m => m.from === from)   // === null, so ALWAYS []
+  .map(m => ({ to: E.sqName(m.to) }));    // NAMES, where the board compares indices
+```
+
+Every square reported zero legal targets, which is exactly "you cannot pick up or tap a piece."
+It now matches `analysis.js`'s adapter, which has always worked — one convention, demonstrated by a
+screen known to be good, rather than a third invention.
+
+**Fixed — the move event was handed straight to the session.** The board's `move` carries indices
+and a numeric promotion kind; `PuzzleSession.submit` takes square names and a letter, because it
+builds a UCI **by string concatenation** — so `12 + 28` was evaluated as arithmetic and every move
+was illegal. A single `moveFromEvent` now converts at the boundary.
+
+Both bugs existed **twice**: `puzzle-solver.js` carried its own copy of the adapter and the
+listener. It now uses the shared ones, so fixing one cannot leave the other broken again.
+
+#### Why 22,690 assertions missed it
+
+`board_component_test.js` drove the board with its **own** correct adapter. `puzzle_screen_test.js`
+rendered the screens and then called `solver.submit('e2','e4')` **directly with names**, skipping
+the board entirely — its `<chess-board>` is a stub, and the file says so. Two green suites, one
+dead feature, and nothing anywhere drove a move the way a person does.
+
+**Added the missing path** to `board_component_test.js`, which is where the real component lives:
+pointer → board → adapter → `move` event → conversion → `PuzzleSession`. Tap-tap and drag, plus a
+wrong move (which must arrive as *wrong*, not *illegal* — otherwise a mistake would silently cost
+nothing) and a run through the factory's own listener. 149 → 164 assertions.
+
+Reverting either bug now produces nine self-explaining failures, the first being **"tapping the
+piece selects it"** — the user's exact symptom. Two mutants pin them: **83/83 killed.**
+
+**Fixed — the same gap in the Swift, in mirror image.** `PuzzleBoardBand` shipped with
+`selected: nil`, `legalTargets: []`, `onTap: { _ in }` and `lastMove: nil`: drag worked, but
+tap-to-move did nothing, no legal-move dots appeared and the last move was never highlighted. On a
+phone that is the main way people move. `PuzzleSolverEngine` gained `selected`, `legalTargets` and
+`tap(_:)`, following `ChessGameVM.tap`, and the selection clears on mount, retry and every submit
+so a stale ring cannot submit from a square whose piece has moved. `replay_puzzle_vm.js` asserts
+all of it — 109 → 117.
+
+#### UI polish — nothing extracted was touched
+
+Every colour, size, radius and spacing still comes from `puzzle_styles.json`; all ~1,000 parity
+assertions stay green. What was added is what the RN StyleSheets cannot carry, in a separate
+`--pzx-*` namespace so the extracted properties stay clearly extracted:
+
+- **Press feedback on all 22 buttons and cards**, finally reading `PuzzleHub.pressOpacity` — an
+  extracted value that had sat unused since Phase C. Cards take a gentler squeeze than buttons.
+- **Hover** on pointer devices only, **`:focus-visible` rings** for keyboards.
+- **Entrances** — screens rise, overlays fade, dialogs and result numbers pop; run-history rows
+  stagger so a list reads as filling rather than repainting.
+- **Depth** — modals and overlays now sit above cards instead of sharing one plane.
+- **Larger touch targets** on the strip and tab buttons, raising only the hit area and never the
+  painted box.
+- **`prefers-reduced-motion`** honoured throughout. Not optional: all of the above is decoration.
+
+Mirrored into Swift as `PuzzlePressStyle`, applied to all 22 buttons.
+
+**One planned item was dropped on inspection.** The plan called for a loading state, and the
+`--pz-loading-*` properties were to come back for it. Serving is synchronous from the bundled
+corpus, so that state cannot occur — building it would be inventing UI for something the user can
+never see, which is the same argument that removed those properties in Phase F.
+
+Gate: **22,713 assertions across 36 suites** · 83/83 mutants · 164 board assertions · 117 screen
+decisions · lint clean on 84 files · 1,909 member references resolve.
+
+**Still unverified in a browser by me** — the Chrome I can reach runs on a different machine and
+cannot see this checkout. Open `web-demo/index.html`, go to Puzzles → Play Puzzles, and move a
+piece; then the other four modes.
+
 ### 2026-08-11 (feature) — Puzzle Hub, Phase G complete: the app runs the hub
 
 The last nine SwiftUI screens, the shell rewiring, and both safety nets. All five modes are now

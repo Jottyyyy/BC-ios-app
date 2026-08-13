@@ -687,6 +687,153 @@ function selfTest() {
     }
   }
 
+
+  // ---- the PUZZLE path, end to end ---------------------------------------------------------
+  //
+  // pointer -> board -> rules adapter -> `move` event -> index/name conversion -> PuzzleSession.
+  //
+  // This is the test whose absence let a real bug live through five phases: **no puzzle mode ever
+  // accepted a move.** The adapter treated the board's square INDICES as names (`E.sqIndex(12)` is
+  // `null`), so every square reported zero legal targets and nothing could be picked up; and the
+  // `move` event's indices went straight into `submit`, which builds a UCI by string concatenation
+  // and so computed `12 + 28`.
+  //
+  // Neither existing suite could see it. This file drove the board with its OWN correct adapter,
+  // and `puzzle_screen_test.js` called `solver.submit('e2','e4')` directly with names, skipping the
+  // board entirely. Two green suites, one dead feature. So this drives the real component through
+  // the real adapter into a real session.
+  {
+    var PB = require(path.join(ROOT, 'web-demo', 'js', 'puzzle-board.js'));
+    var PS = require(path.join(ROOT, 'web-demo', 'js', 'puzzle-session.js'));
+    var ENG = require(path.join(ROOT, 'web-demo', 'js', 'engine.js'));
+
+    // A real corpus puzzle. `moves[0]` is the OPPONENT's setup move (Part 5.1), so the solver's
+    // first answer is `moves[1]`.
+    var PUZ = {
+      id: 1, fen: '7k/4R2p/1p2p2P/2pp1r2/8/P4p1K/1PP5/8 b - - 1 37',
+      moves: ['f3f2', 'e7e8', 'f5f8', 'e8f8'], rating: 400, themes: ['endgame'], openingTags: [],
+    };
+    var session = PS.create(PUZ, 'play');
+    PS.applySetupMove(session);                       // play moves[0]; now it is the solver's turn
+
+    var board = new Board();
+    board.rules = PB.rulesAdapter();                  // the SHARED adapter, not a local one
+    board.setAttribute('draggable-pieces', '');
+    board.connectedCallback();
+    board._boardEl._rect = { left: 0, top: 0, width: SIZE, height: SIZE };
+    board.setPosition(ENG.toFEN(session.position), { animate: false });
+
+    var expected = PUZ.moves[1];                      // 'e7e8'
+    var fromSq = ENG.sqIndex(expected.slice(0, 2));
+    var toSq = ENG.sqIndex(expected.slice(2, 4));
+
+    // 1. The adapter must actually report targets. Zero here IS the original bug.
+    var targets = board.rules.legalMovesFrom(board.getPosition(), fromSq);
+    check(targets.length > 0,
+      'the shared adapter reports legal targets for the solver`s piece, got ' + targets.length);
+    check(targets.every(function (t) { return typeof t.to === 'number'; }),
+      'and reports them as INDICES, which is what the board compares');
+    check(targets.some(function (t) { return t.to === toSq; }),
+      'including the square the solution moves to');
+
+    // 2. Tap-tap: selecting must mark the square, and the second tap must fire `move`.
+    var moves = [];
+    board.addEventListener('move', function (e) { moves.push(e.detail); });
+    clickSquare(board, fromSq);
+    check(board._selected === fromSq, 'tapping the piece selects it');
+    check(board._legalTargets.length > 0, 'and its legal targets are marked on the board');
+    clickSquare(board, toSq);
+    check(moves.length === 1, 'tapping the target fires exactly one move event, got ' + moves.length);
+
+    // 3. The conversion, then the session — the last link in the chain.
+    //
+    // Guarded: when the adapter is broken no move event fires at all, and a thrown TypeError here
+    // would bury the assertion that actually explains why.
+    var m = moves.length ? PB.moveFromEvent(moves[0]) : { from: '', to: '', promotion: null };
+    check(m.from === expected.slice(0, 2) && m.to === expected.slice(2, 4),
+      'moveFromEvent turns the indices into square names: ' + m.from + m.to);
+    var out = PS.submit(session, m.from, m.to, m.promotion);
+    check(out.kind === 'correct',
+      'and the session accepts it as the solution, got "' + out.kind + '"');
+
+    // 4. The same by DRAG, on a fresh board — the other input path shares the adapter but not the
+    //    code path, and only one of the two was ever exercised.
+    var s2 = PS.create(PUZ, 'play');
+    PS.applySetupMove(s2);
+    var d = new Board();
+    d.rules = PB.rulesAdapter();
+    d.setAttribute('draggable-pieces', '');
+    d.connectedCallback();
+    d._boardEl._rect = { left: 0, top: 0, width: SIZE, height: SIZE };
+    d.setPosition(ENG.toFEN(s2.position), { animate: false });
+    var dragged = [];
+    d.addEventListener('move', function (e) { dragged.push(e.detail); });
+    pointer(d, 'pointerdown', fromSq);
+    check(!!d._drag, 'pointerdown on the solver`s piece arms a drag');
+    pointer(d, 'pointermove', toSq);
+    pointer(d, 'pointerup', toSq);
+    check(dragged.length === 1, 'and dropping it fires one move, got ' + dragged.length);
+    var dm = dragged.length ? PB.moveFromEvent(dragged[0])
+                            : { from: '', to: '', promotion: null };
+    check(PS.submit(s2, dm.from, dm.to, dm.promotion).kind === 'correct',
+      'which the session also accepts');
+
+    // 5. A WRONG move must reach the session as a wrong move, not as an illegal one — otherwise a
+    //    mistake would silently do nothing instead of costing a life.
+    var s3 = PS.create(PUZ, 'play');
+    PS.applySetupMove(s3);
+    var legal = ENG.legalMoves(s3.position).filter(function (mv) {
+      return ENG.moveUci(mv) !== expected;
+    });
+    check(legal.length > 0, 'the position has another legal move to try');
+    var bad = PB.moveFromEvent({ from: legal[0].from, to: legal[0].to,
+                                 promotion: legal[0].promotion });
+    check(PS.submit(s3, bad.from, bad.to, bad.promotion).kind === 'wrong',
+      'a different legal move is WRONG, not illegal');
+
+    // 6. Through the FACTORY's own listener, not just its helper.
+    //
+    // The steps above call `moveFromEvent` directly, which proves the conversion is right but not
+    // that anything uses it — a mutant reverting `attach()` to pass `ev.detail` straight through
+    // survived exactly that gap. So this drives `BiyaPuzzleBoard.create().attach()` and lets the
+    // real listener carry the event into the real session.
+    var madeBoard = null;
+    var savedDoc = global.document;
+    global.document = {
+      createElement: function (tag) {
+        if (tag !== 'chess-board') return { appendChild: function () {}, setAttribute: function () {} };
+        madeBoard = new Board();
+        madeBoard.connectedCallback();
+        madeBoard._boardEl._rect = { left: 0, top: 0, width: SIZE, height: SIZE };
+        return madeBoard;
+      },
+    };
+    try {
+      // `onCorrect` rather than moveIndex: a correct answer defers the opponent's reply behind a
+      // timer, so the index does not move synchronously. The callback is the real proof that the
+      // listener carried the event all the way into the session.
+      var correct = [];
+      var solver = PB.create({ mode: 'play',
+                               onCorrect: function (o) { correct.push(o); } });
+      solver.attach({ appendChild: function () {} });
+      check(madeBoard !== null, 'the factory built a real <chess-board>');
+      solver.mount(PUZ);
+      // `mount` defers the opponent's setup move behind the mode's delay; apply it directly so the
+      // test stays synchronous, then repaint so the board matches the session.
+      PS.applySetupMove(solver.session);
+      solver.paint();
+      madeBoard.dispatchEvent(new CE('move', {
+        bubbles: true, detail: { from: fromSq, to: toSq, promotion: null },
+      }));
+      check(correct.length === 1,
+        'a move event on the factory`s own board reaches the session as CORRECT — the listener '
+        + 'converts indices to names, got ' + correct.length + ' correct outcome(s)');
+      solver.destroy();
+    } finally {
+      if (savedDoc === undefined) delete global.document; else global.document = savedDoc;
+    }
+  }
+
   return report();
 }
 

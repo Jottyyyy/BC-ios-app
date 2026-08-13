@@ -186,6 +186,10 @@
   global.Coaches = { all: COACHES, ratingFloor: RATING_FLOOR, ratingCeiling: RATING_CEILING };
   global.CoachAI = {
     MATE: MATE, WIN: WIN,
+    // MATERIAL and PST are exported READ-ONLY, for `analysis-eval.js` to reuse as its midgame
+    // tables. Re-typing 6x64 numbers into a second file is exactly the transcription this repo
+    // bans; sharing the array means the two can never drift. Nothing may mutate them.
+    MATERIAL: MATERIAL, PST: PST,
     material: material, evaluate: evaluate, negamax: negamax,
     ordered: ordered, captureScore: captureScore,
     bestMove: bestMove, bestMoveAsync: bestMoveAsync, mulberry32: mulberry32

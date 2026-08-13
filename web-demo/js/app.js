@@ -25,8 +25,6 @@
   function el(tag, cls, html) { var d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
   function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-  var MAT_W = [1, 3, 3, 5, 9, 0];
-  var COLORCLASS = { good: 'good', bad: 'bad', warn: 'warn' };
 
   var rulesAdapter = {
     legalMovesFrom: function (fen, sq) {
@@ -48,7 +46,6 @@
       + 'onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'<span class=&quot;mono-init&quot;>' + init + '</span>\'">'
       + '</span>';
   }
-  function strengthPct(rating) { return clamp((rating - C.ratingFloor) / (C.ratingCeiling - C.ratingFloor) * 100, 4, 100); }
 
   // simple SVG icons (stroke=currentColor)
   var ICON = {
@@ -120,6 +117,11 @@
     else if (current === 'play') renderPlay();
     else if (current === 'profile') renderProfile();
     else if (current === 'analysis') renderAnalysis();
+    else if (current === 'coach-color') renderCoachColor();
+    else if (current === 'coach-game') renderCoachGame();
+    else if (current === 'pairing') renderPairingList();
+    else if (current === 'pairing-create') renderPairingCreate();
+    else if (current === 'pairing-detail') renderPairingDetail();
     else if (current === 'puzzles') renderPuzzleHub();
     else if (current === 'puzzle-play') renderPuzzlePlayHome();
     else if (current === 'puzzle-solve') renderPuzzleSolver();
@@ -248,6 +250,58 @@
   function leaveCurrentPuzzle() {
     var f = PUZZLE_LEAVERS[current];
     if (f) f();
+    // The coach game owns an in-flight search and a pending timer; leaving by the tab bar has to
+    // cancel both, or a reply lands on a screen the user has already left (spec 7 #25/#26).
+    if (current === 'coach-game') coachLeave();
+  }
+
+  /* ======================================================================== *
+   *  PAIRING MANAGER — see js/pairing-{list,create,detail}.js
+   *
+   *  Three pushed routes reached from the Home tile. No PUZZLE_LEAVERS entry: unlike the solvers
+   *  these screens own no timers and no in-flight search, so there is nothing to cancel on the way
+   *  out — the document is written on every mutation, not on exit.
+   * ======================================================================== */
+
+  /**
+   * Which tournament the detail screen is showing.
+   *
+   * Router-scoped, not screen-scoped, for the same reason `turboLaunch` is: `render()` runs again
+   * on every repaint, and a screen that re-read its own argument from itself would lose it.
+   */
+  var pairingOpenId = null;
+
+  function pairingGo(id) { current = id; renderTabbar(); render(); }
+
+  /** The document, loaded fresh each paint and saved by whoever mutates it. */
+  function pairingDoc() { return BiyaPairingStore.load(); }
+
+  function renderPairingList() {
+    appCard().classList.add('an-mode');           // a pushed route: no tab bar, full height
+    BiyaPairingList.render(view, pairingDoc(), {
+      onOpen: function (id) { pairingOpenId = id; pairingGo('pairing-detail'); },
+      onCreate: function () { pairingGo('pairing-create'); },
+      onExit: function () { current = 'home'; renderTabbar(); render(); },
+      onChanged: render,
+    });
+  }
+
+  function renderPairingCreate() {
+    appCard().classList.add('an-mode');
+    BiyaPairingCreate.render(view, {
+      onCreated: function (id) { pairingOpenId = id; pairingGo('pairing-detail'); },
+      onExit: function () { pairingGo('pairing'); },
+    });
+  }
+
+  function renderPairingDetail() {
+    appCard().classList.add('an-mode');
+    // A tournament deleted from under the screen shows the empty state rather than a blank box or
+    // a permanent spinner (spec 7 #19).
+    BiyaPairingDetail.render(view, pairingOpenId, {
+      onExit: function () { pairingGo('pairing'); },
+      onChanged: render,
+    });
   }
 
   /* ======================================================================== *
@@ -261,247 +315,353 @@
       else if (action === 'playCoach') { current = 'play'; renderTabbar(); render(); }
       else if (action === 'analysis') { current = 'analysis'; renderTabbar(); render(); }
       else if (action === 'avatar') { current = 'profile'; renderTabbar(); render(); }
+      // home.js has emitted 'pairing' since the tile was drawn; there was simply nothing here to
+      // catch it.
+      else if (action === 'pairing') pairingGo('pairing');
     });
   }
 
   /* ======================================================================== *
-   *  PLAY TAB
+   *  PLAY VS COACH — see js/coach-{engine,book,game,turn,select,color,play}.js
+   *
+   *  The Play tab, and the three screens behind it: Coach Select -> Colour
+   *  Select -> the game. Everything with a decision in it lives in those
+   *  modules and is tested there; what is here is the loop that joins them —
+   *  ask the coach, wait, apply, repaint.
+   *
+   *  This REPLACED a sample play screen that predated the port. That screen had
+   *  its own coach table (js/ai.js `Coaches`), its own undo and its own game
+   *  state; keeping both would have meant two Play tabs disagreeing about who
+   *  the coaches are, which is exactly what the extraction exists to prevent.
+   *
+   *  The generation counter is the whole concurrency story (spec 7 #25/#26/
+   *  #27/#29). Every asynchronous reply carries the token it started with and
+   *  is dropped unless the token still matches, so resigning, starting a new
+   *  game, taking a move back or opening a review all cancel an in-flight
+   *  search by construction rather than by remembering to.
    * ======================================================================== */
-  var play = { started: false, coach: C.all[2], humanColor: E.WHITE, passAndPlay: false, pos: null, fens: [], sans: [], flipped: false, thinking: false, over: false, boardEl: null, ui: null };
 
-  function renderPlay() { if (!play.started) renderCoachSelect(); else renderGame(); }
+  /**
+   * Router-scoped, for the same reason `pairingOpenId` is: `render()` runs again on every repaint,
+   * so a screen cannot hold anything itself. `ctl` in particular MUST outlive a repaint — it is the
+   * counter that lets a resigned game refuse a reply that is still in the air.
+   */
+  var coachTab = { level: 1, profile: null, game: null, ctl: null,
+                   // The review's own state, router-scoped for the same reason: the modal is
+                   // redrawn by `render()` on every progress tick.
+                   review: null };
 
-  function renderCoachSelect() {
-    view.scrollTop = 0; view.innerHTML = '';   // leaf renderers own their clear (direct callers bypass render())
-    view.appendChild(el('div', 'screen-head', '<h1 class="screen-title">Play</h1>'));
-    var intro = el('div', 'wrap-x');
-    intro.appendChild(el('div', null, '<div style="font-weight:800;font-size:17px">Choose your opponent</div><div class="hint" style="margin:4px 0 14px">Every coach has a strength rating. Beat stronger ones to climb.</div>'));
-    view.appendChild(intro);
+  function coachGo(id) { current = id; renderTabbar(); render(); }
 
-    var list = el('div', 'coach-list wrap-x');
-    C.all.forEach(function (coach) {
-      var card = el('button', 'coach-card' + (!play.passAndPlay && play.coach === coach ? ' sel' : ''));
-      card.innerHTML =
-        coachAvatarHTML(coach) +
-        '<div class="body">' +
-        '<div class="row1"><span class="cname">' + coach.name + '</span><span class="title-badge">' + coach.title + '</span></div>' +
-        '<div class="blurb">' + coach.blurb + '</div>' +
-        '<div class="row"><span class="chip">♙ ' + coach.favoriteOpening + '</span></div>' +
-        '<div class="strength-bar" style="margin-top:9px"><span style="width:' + strengthPct(coach.rating) + '%"></span></div>' +
-        '</div>' +
-        '<div class="rating-big"><b>' + coach.rating + '</b><span>rating</span></div>';
-      card.onclick = function () { play.coach = coach; play.passAndPlay = false; renderPlay(); };
-      list.appendChild(card);
-    });
-    // pass & play
-    var pnp = el('button', 'coach-card' + (play.passAndPlay ? ' sel' : ''));
-    pnp.innerHTML = '<span class="avatar" style="--size:66px"><span class="mono-init" style="font-size:24px">✌️</span></span>'
-      + '<div class="body"><div class="row1"><span class="cname">Pass & play</span></div><div class="blurb">Two players on one device — no coach.</div></div>';
-    pnp.onclick = function () { play.passAndPlay = true; renderPlay(); };
-    list.appendChild(pnp);
-    view.appendChild(list);
-
-    // footer controls
-    var foot = el('div', 'wrap-x stack'); foot.style.marginTop = '16px';
-    var colorRow = el('div', 'row');
-    colorRow.innerHTML = '<span class="muted tiny" style="margin-right:2px">Play as</span>';
-    var seg = el('div', 'segmented');
-    ['White', 'Black'].forEach(function (label, i) {
-      var b = el('button', play.humanColor === i ? 'active' : '', label);
-      b.onclick = function () { play.humanColor = i; renderPlay(); };
-      seg.appendChild(b);
-    });
-    colorRow.appendChild(seg);
-    if (!play.passAndPlay) foot.appendChild(colorRow);
-    var startBtn = el('button', 'btn btn-gold', play.passAndPlay ? 'Start pass & play' : 'Play vs ' + play.coach.name);
-    startBtn.style.width = '100%';
-    startBtn.onclick = startGame;
-    foot.appendChild(startBtn);
-    view.appendChild(foot);
+  /** The one place the game screen is drawn, so every mutation ends the same way. */
+  function coachPaint() {
+    if (current !== 'coach-game') return;
+    render();
   }
 
-  function startGame() {
-    play.started = true; play.over = false; play.thinking = false;
-    play.pos = E.start();
-    play.fens = [E.toFEN(play.pos)]; play.sans = [];
-    play.flipped = (play.humanColor === E.BLACK && !play.passAndPlay);
-    store.gamesPlayed++; save();
-    SND.playGameStart();
-    renderGame();
-    if (!play.passAndPlay && play.pos.sideToMove !== play.humanColor) maybeCoachMove();
+  function coachProfile(level) { return BiyaCoachSelect.coachAt(level); }
+
+  // ---- The three screens --------------------------------------------------------------------------
+
+  /**
+   * The Play tab root.
+   *
+   * Keeps the tab bar — it is a tab here, where the original reaches it as a pushed route from
+   * Home. The two screens behind it are pushed and hide the bar, as the Pairing screens do.
+   */
+  function renderPlay() {
+    BiyaCoachSelect.render(view, {
+      onPick: function (level) { coachTab.level = level; coachGo('coach-color'); },
+      onExit: function () { current = 'home'; renderTabbar(); render(); },
+    });
   }
 
-  function renderGame() {
-    view.scrollTop = 0; view.innerHTML = '';
-    // header
-    var head = el('div', 'wrap-x'); head.style.paddingTop = '4px';
-    var hrow = el('div', 'coach-header');
-    if (play.passAndPlay) {
-      hrow.innerHTML = '<span class="avatar"><span class="mono-init">✌️</span></span><div><div class="name">Pass & play</div><div class="sub"><span class="muted tiny">Two players</span></div></div>';
-    } else {
-      var dots = '<span class="strength-dots">';
-      var lvl = C.all.indexOf(play.coach) + 1;
-      for (var i = 1; i <= 5; i++) dots += '<i class="' + (i <= lvl ? 'on' : '') + '"></i>';
-      dots += '</span>';
-      hrow.innerHTML = coachAvatarHTML(play.coach) +
-        '<div class="grow"><div class="name">' + play.coach.name + '</div><div class="sub"><span class="title-badge">' + play.coach.title + '</span>' + dots + '</div></div>' +
-        '<div class="rating"><b class="mono">' + play.coach.rating + '</b><span>rating</span></div>';
+  function renderCoachColor() {
+    appCard().classList.add('an-mode');
+    BiyaCoachColor.render(view, coachTab.level, coachProfile(coachTab.level).name, {
+      onStart: coachStart,
+      onExit: function () { coachGo('play'); },
+    });
+  }
+
+  function renderCoachGame() {
+    appCard().classList.add('an-mode');
+    BiyaCoachPlay.render(view, coachTab.game, coachTab.ctl, coachTab.profile, {
+      onMove: coachUserMove,
+      onSeek: coachSeek,
+      onResign: coachAskResign,
+      onTakeBack: coachTakeBack,
+      onNewGame: coachRematch,
+      onReview: coachStartReview,
+      onExit: function () { coachLeave(); coachGo('play'); },
+    });
+    if (coachTab.review) coachDrawReviewModal();
+  }
+
+  /**
+   * The Game Review modal, redrawn on every progress tick.
+   *
+   * It is appended to the screen root rather than kept across repaints because `render()` clears
+   * the view — the same reason `coachTab.review` lives on the router and not in the modal.
+   */
+  function coachDrawReviewModal() {
+    var root = view.children[0];
+    if (!root) return;
+    BiyaCoachPlay.reviewModal(root, coachTab.review, {
+      onCancel: coachCancelReview,
+      onStartReview: coachHandOffReview,
+      onNewGame: function () { coachTab.review = null; coachRematch(); },
+    });
+  }
+
+  // ---- Starting, leaving --------------------------------------------------------------------------
+
+  /**
+   * `start` is `coach-color.js`'s `resolveStart` result: `{ resume, userColor, draft }`.
+   *
+   * Spec 7 #33 is that Continue must honour the colour you tapped, and that decision is already
+   * made — it is a pure function over there, tested there. This only obeys it.
+   */
+  function coachStart(start) {
+    var G = BiyaCoachGame;
+    coachTab.profile = coachProfile(coachTab.level);
+    coachTab.ctl = BiyaCoachTurn.create();
+    coachTab.game = (start && start.resume && start.draft)
+      ? start.draft
+      : G.newGame(coachTab.level, start ? start.userColor : G.WHITE);
+    // Spec 7 #34: a restored game starts as a game, sound and all. The RN path dropped straight
+    // back onto the board with whatever modal state the last session had left behind.
+    if (SND && SND.playGameStart) SND.playGameStart();
+    if (!start || !start.resume) { store.gamesPlayed++; save(); }
+    coachGo('coach-game');
+    coachAskCoach();
+  }
+
+  /**
+   * Leaving the game screen for any reason.
+   *
+   * Invalidating is not politeness: without it the reply in flight lands on a board the user is no
+   * longer looking at, and — because the game object outlives the screen — actually records a move
+   * (spec 7 #25/#26).
+   */
+  function coachLeave() {
+    if (coachTab.ctl) BiyaCoachTurn.invalidate(coachTab.ctl);
+  }
+
+  // ---- The user's move ----------------------------------------------------------------------------
+
+  function coachUserMove(uci) {
+    var G = BiyaCoachGame;
+    if (!BiyaCoachTurn.canUserMove(coachTab.game, coachTab.ctl)) return;
+    if (!coachApply(uci)) return;
+    if (G.isOver(coachTab.game)) { coachPaint(); return; }
+    coachPaint();
+    coachAskCoach();
+  }
+
+  /**
+   * Record one half-move, sound it, evaluate the position and persist the draft.
+   *
+   * Returns false on an illegal move rather than throwing: the board only ever offers legal moves,
+   * but a premove is by definition made in a position that has since changed.
+   */
+  function coachApply(uci) {
+    var G = BiyaCoachGame;
+    var before = E.fromFEN(G.liveFen(coachTab.game));
+    var mv = before && E.parseUci(before, uci);
+    if (!mv) return false;
+    var rec = G.record(coachTab.game, uci);
+    if (!rec) return false;
+    var after = E.fromFEN(G.liveFen(coachTab.game));
+    var status = E.status(after);
+    if (SND && SND.playForMove) {
+      // The engine's move is `{from, to, promotion}` and carries no flags, so both facts are read
+      // off the position it was made in. En passant is a pawn changing file onto an empty square.
+      var moved = before.squares[mv.from];
+      var diagonal = ((mv.from & 7) !== (mv.to & 7));
+      SND.playForMove({
+        status: status,
+        capture: !!before.squares[mv.to] || (moved && moved.kind === E.PAWN && diagonal),
+        castle: !!(moved && moved.kind === E.KING && Math.abs((mv.to & 7) - (mv.from & 7)) === 2),
+      });
     }
-    head.appendChild(hrow);
-    var change = el('button', 'link-btn', '← Change opponent'); change.style.marginTop = '10px';
-    change.onclick = function () { play.started = false; renderPlay(); };
-    head.appendChild(change);
-    view.appendChild(head);
-
-    // board + eval bar
-    var row = el('div', 'board-row');
-    var evalBar = el('div', 'eval-bar', '<div class="fill" style="height:50%"></div><div class="mid"></div>');
-    var board = document.createElement('chess-board');
-    board.setAttribute('coordinates', 'true');
-    board.rules = rulesAdapter;
-    board.flipped = play.flipped;
-    board.addEventListener('move', onGameMove);
-    row.appendChild(evalBar); row.appendChild(board);
-    view.appendChild(row);
-    play.boardEl = board;
-
-    // status / material / ribbon
-    var status = el('div', 'status-line');
-    var material = el('div', 'material');
-    var ribbon = el('div', 'move-ribbon');
-    view.appendChild(status); view.appendChild(material); view.appendChild(ribbon);
-
-    // controls
-    var ctrl = el('div', 'wrap-x'); ctrl.style.marginTop = '8px';
-    var brow = el('div', 'btn-row');
-    var newBtn = el('button', 'btn btn-gold grow', 'New game'); newBtn.onclick = function () { startGame(); };
-    var undoBtn = el('button', 'icon-btn'); undoBtn.innerHTML = ICON.undo; undoBtn.title = 'Undo'; undoBtn.onclick = undo;
-    var flipBtn = el('button', 'icon-btn'); flipBtn.innerHTML = ICON.flip; flipBtn.title = 'Flip board'; flipBtn.onclick = function () { play.flipped = !play.flipped; play.boardEl.flipped = play.flipped; };
-    brow.appendChild(newBtn); brow.appendChild(undoBtn); brow.appendChild(flipBtn);
-    ctrl.appendChild(brow);
-    // thinking pill
-    var pillWrap = el('div', 'center'); pillWrap.style.marginTop = '10px';
-    var pill = el('div', 'pill'); pill.style.display = 'none';
-    pill.innerHTML = '<span class="spin"></span><span class="txt"></span>';
-    pillWrap.appendChild(pill); ctrl.appendChild(pillWrap);
-    view.appendChild(ctrl);
-
-    play.ui = { evalFill: evalBar.querySelector('.fill'), status: status, material: material, ribbon: ribbon, undo: undoBtn, pill: pill };
-    // initial paint
-    play.boardEl.setPosition(E.toFEN(play.pos), { animate: false, lastMove: null, check: checkSquare(play.pos) });
-    play.boardEl.interactive = canHumanMove();
-    refreshGameUI();
+    G.applyEvaluation(coachTab.game, coachTab.profile);
+    if (G.isOver(coachTab.game) && coachTab.game.outcome === 'win') { store.wins++; save(); }
+    G.saveDraft(coachTab.game, null, Date.now());
+    return true;
   }
 
-  function checkSquare(pos) {
-    var st = E.status(pos);
-    if (st === 'check' || st === 'checkmate') return E.kingSquare(pos, pos.sideToMove);
-    return null;
-  }
-  function canHumanMove() { return !play.over && !play.thinking && (play.passAndPlay || play.pos.sideToMove === play.humanColor); }
+  // ---- The coach's reply --------------------------------------------------------------------------
 
-  function onGameMove(e) {
-    if (!canHumanMove()) return;
-    var m = findMove(play.pos, e.detail.from, e.detail.to, e.detail.promotion);
-    if (m) applyMove(m);
-  }
+  /**
+   * Ask the coach for a move, if it is the coach's move to make.
+   *
+   * The book is consulted first and falls through SILENTLY when it has nothing legal to offer
+   * (spec 2.3) — a hard-coded line meeting a real board must never be able to crash or pass.
+   */
+  function coachAskCoach() {
+    var G = BiyaCoachGame, T = BiyaCoachTurn, CE = BiyaCoachEngine;
+    if (!T.shouldCoachMove(coachTab.game, coachTab.ctl)) return;
 
-  function applyMove(m) {
-    var pos = play.pos, mover = pos.squares[m.from];
-    var castle = mover.kind === E.KING && Math.abs((m.to & 7) - (m.from & 7)) === 2;
-    var capture = pos.squares[m.to] != null || (mover.kind === E.PAWN && m.to === pos.enPassant);
-    var sanStr = E.san(pos, m);
-    var next = E.makeMove(pos, m);
-    play.pos = next; play.fens.push(E.toFEN(next)); play.sans.push(sanStr);
-    var st = E.status(next);
-    SND.playForMove({ status: st, capture: capture, castle: castle });
-    play.boardEl.setPosition(E.toFEN(next), { lastMove: { from: m.from, to: m.to }, check: checkSquare(next) });
-    refreshGameUI();
-    if (st === 'checkmate' || st === 'stalemate') { onGameOver(st); return; }
-    maybeCoachMove();
-  }
+    var token = T.begin(coachTab.ctl);
+    var pos = E.fromFEN(G.liveFen(coachTab.game));
+    if (!pos) { T.settle(coachTab.ctl, token); return; }
 
-  function maybeCoachMove() {
-    if (play.passAndPlay || play.over) { play.boardEl.interactive = canHumanMove(); return; }
-    if (play.pos.sideToMove === play.humanColor) { play.boardEl.interactive = true; return; }
-    play.thinking = true; play.boardEl.interactive = false;
-    showThinking(true);
-    var snapshot = play.pos;
-    // Through the host, not CoachAI directly: `bestMoveAsync` was `setTimeout(0)` plus a fully
-    // synchronous search, so the board froze while the coach thought. On a served page this now
-    // runs on a worker thread; from file:// it falls back to exactly the old call.
-    Promise.all([EngineHost.bestMove(play.pos, play.coach), delay(380)]).then(function (res) {
-      play.thinking = false; showThinking(false);
-      if (play.pos !== snapshot || play.over) { play.boardEl.interactive = canHumanMove(); return; } // state changed (new game/undo)
-      var m = res[0];
-      if (!m) { play.boardEl.interactive = canHumanMove(); return; }
-      applyMove(m);
+    var isLegal = function (u) { return !!E.parseUci(pos, u); };
+    var book = BiyaCoachBook.bookMove(coachTab.level, G.sanHistory(coachTab.game), isLegal, Math.random);
+    var limits = CE.searchLimits(coachTab.level);
+    var think = CE.thinkTimeMs(coachTab.level, pieceCount(pos), Math.random);
+    var startedAt = Date.now();
+    coachPaint();                       // the header switches to "thinking" on this repaint
+
+    var chosen = book
+      ? Promise.resolve(book)
+      : EngineHost.analyzeProgressive(pos, {
+          maxDepth: limits.depth,
+          multiPV: limits.multiPV,
+          // The cancel the generation counter buys: a resign mid-search stops the search itself,
+          // not merely its result.
+          shouldCancel: function () { return !T.accepts(coachTab.ctl, token); },
+        }).then(function (snap) {
+          if (!snap || !snap.lines || !snap.lines.length) return null;
+          var line = CE.pickMove(snap.lines, coachTab.level, Math.random);
+          return (line && line.pv && line.pv.length) ? E.moveUci(line.pv[0]) : null;
+        });
+
+    chosen.then(function (uci) {
+      if (!T.accepts(coachTab.ctl, token)) return;         // resigned, restarted, taken back, reviewed
+      // On-device the search answers in milliseconds; the pacer is what keeps the coach from
+      // replying before the user's own piece has finished moving.
+      var wait = Math.max(0, think - (Date.now() - startedAt));
+      setTimeout(function () {
+        if (!T.settle(coachTab.ctl, token)) return;
+        if (uci) coachApply(uci);
+        coachAfterCoachMove();
+      }, wait);
     });
   }
 
-  function onGameOver(st) {
-    play.over = true; play.boardEl.interactive = false;
-    if (st === 'checkmate') {
-      var winner = play.pos.sideToMove === E.WHITE ? E.BLACK : E.WHITE;
-      if (!play.passAndPlay && winner === play.humanColor) { store.wins++; save(); }
-    }
-    refreshGameUI();
-  }
-
-  function showThinking(on) {
-    if (!play.ui) return;
-    play.ui.pill.style.display = on ? 'inline-flex' : 'none';
-    if (on) play.ui.pill.querySelector('.txt').textContent = play.coach.name + ' is thinking…';
-  }
-
-  function undo() {
-    if (play.thinking || play.fens.length <= 1) return;
-    play.fens.pop(); play.sans.pop();
-    play.pos = E.fromFEN(play.fens[play.fens.length - 1]);
-    // if it landed on the coach's move, pop once more so it's the human's turn
-    if (!play.passAndPlay && play.fens.length > 1 && play.pos.sideToMove !== play.humanColor) {
-      play.fens.pop(); play.sans.pop();
-      play.pos = E.fromFEN(play.fens[play.fens.length - 1]);
-    }
-    play.over = false;
-    var lm = null; // best-effort: no last-move highlight after undo
-    play.boardEl.setPosition(E.toFEN(play.pos), { lastMove: lm, check: checkSquare(play.pos) });
-    play.boardEl.interactive = canHumanMove();
-    refreshGameUI();
-  }
-
-  function refreshGameUI() {
-    if (!play.ui) return;
-    // status
-    var pos = play.pos, st = E.status(pos), side = pos.sideToMove === E.WHITE ? 'White' : 'Black';
-    var txt = side + ' to move', cls = '';
-    if (st === 'checkmate') { txt = 'Checkmate — ' + (pos.sideToMove === E.WHITE ? 'Black' : 'White') + ' wins'; cls = 'warn'; }
-    else if (st === 'stalemate') { txt = 'Stalemate — draw'; cls = 'warn'; }
-    else if (st === 'check') { txt = side + ' to move — Check!'; cls = 'bad'; }
-    play.ui.status.className = 'status-line ' + cls; play.ui.status.textContent = txt;
-    // material
-    var w = 0, b = 0;
-    for (var s = 0; s < 64; s++) { var p = pos.squares[s]; if (!p) continue; if (p.color === E.WHITE) w += MAT_W[p.kind]; else b += MAT_W[p.kind]; }
-    var diff = w - b;
-    play.ui.material.innerHTML = diff === 0 ? '<span>Material even</span>'
-      : '<span class="adv">' + (diff > 0 ? 'White' : 'Black') + ' +' + Math.abs(diff) + '</span>';
-    // eval bar
-    var pct;
-    if (st === 'checkmate') pct = (pos.sideToMove === E.WHITE) ? 0 : 100;
-    else if (st === 'stalemate') pct = 50;
-    else { var ev = CA.evaluate(pos); var whiteEv = pos.sideToMove === E.WHITE ? ev : -ev; pct = R.evalToWinPct(whiteEv); }
-    play.ui.evalFill.style.height = clamp(pct, 2, 98) + '%';
-    // ribbon
-    var rib = play.ui.ribbon; rib.innerHTML = '';
-    if (!play.sans.length) rib.appendChild(el('span', 'empty', 'No moves yet'));
-    else play.sans.forEach(function (sanStr, i) {
-      var chip = el('span', 'move-chip' + (i === play.sans.length - 1 ? ' latest' : ''));
-      chip.innerHTML = (i % 2 === 0 ? '<span class="num">' + (i / 2 + 1) + '.</span>' : '') + sanStr;
-      rib.appendChild(chip);
+  /** The premove, if one is queued and still legal in the position that actually arrived. */
+  function coachAfterCoachMove() {
+    var G = BiyaCoachGame, T = BiyaCoachTurn;
+    var pos = E.fromFEN(G.liveFen(coachTab.game));
+    var uci = T.consumePremove(coachTab.ctl, coachTab.game, function (u) {
+      return !!(pos && E.parseUci(pos, u));
     });
-    rib.scrollLeft = rib.scrollWidth;
-    play.ui.undo.disabled = play.fens.length <= 1 || play.thinking;
+    if (uci && coachApply(uci)) {
+      coachPaint();
+      coachAskCoach();
+      return;
+    }
+    coachPaint();
   }
+
+  function pieceCount(pos) {
+    var n = 0;
+    for (var s = 0; s < 64; s++) if (pos.squares[s]) n++;
+    return n;
+  }
+
+  // ---- The buttons --------------------------------------------------------------------------------
+
+  /** Reviewing pauses the coach (spec 7 #27) — invalidating is what pauses it. */
+  function coachSeek(index) {
+    BiyaCoachGame.setReviewIndex(coachTab.game, index);
+    if (!BiyaCoachGame.isLive(coachTab.game)) coachLeave();
+    coachPaint();
+    // Back to live with the coach still to move: pick the game up where it was left.
+    if (BiyaCoachGame.isLive(coachTab.game)) coachAskCoach();
+  }
+
+  /** Spec 7 #24: resign asks first. The screen raises it; the prompt is the caller's. */
+  function coachAskResign() {
+    var root = view.children[0];
+    if (!root) return;
+    BiyaCoachPlay.resignPrompt(root, coachTab.profile ? coachTab.profile.name : '', function () {
+      coachLeave();
+      BiyaCoachGame.resign(coachTab.game, coachTab.profile);
+      BiyaCoachGame.saveDraft(coachTab.game, null, Date.now());
+      coachPaint();
+    });
+  }
+
+  /**
+   * Spec 2.10 — analyse the whole game on the embedded engine, then classify.
+   *
+   * The generation counter guards this too: a review started and then abandoned by resigning or
+   * starting a new game must not paint its result over whatever is on screen by then.
+   */
+  function coachStartReview() {
+    if (!coachTab.game || !BiyaCoachReview.isReviewable(coachTab.game)) return;
+    var token = BiyaCoachTurn.invalidate(coachTab.ctl);
+    var total = BiyaCoachReview.planFromGame(coachTab.game).positions.length;
+    coachTab.review = { running: true, done: 0, total: total, cancelled: false,
+                        userColor: coachTab.game.userColor,
+                        accent: BiyaCoachMetrics.ACCENTS[coachTab.level] };
+    coachPaint();
+    var mine = coachTab.review;
+    BiyaCoachReview.run(coachTab.game, {
+      onProgress: function (done) {
+        if (coachTab.review !== mine || !BiyaCoachTurn.accepts(coachTab.ctl, token)) return;
+        coachTab.review.done = done;
+        coachPaint();
+      },
+      shouldCancel: function () {
+        return coachTab.review !== mine || !BiyaCoachTurn.accepts(coachTab.ctl, token);
+      },
+    }).then(function (summary) {
+      if (coachTab.review !== mine || !BiyaCoachTurn.accepts(coachTab.ctl, token)) return;
+      // A cancelled run resolves null and leaves its evaluations SHORT; closing is the only honest
+      // response, because a partial review would report an accuracy over half a game.
+      if (!summary) { coachTab.review = null; coachPaint(); return; }
+      coachTab.review = { running: false, summary: summary,
+                          userColor: coachTab.game.userColor,
+                          accent: BiyaCoachMetrics.ACCENTS[coachTab.level] };
+      coachPaint();
+    });
+  }
+
+  function coachCancelReview() {
+    coachTab.review = null;
+    coachPaint();
+  }
+
+  /**
+   * Hand the reviewed game to the Analysis Board.
+   *
+   * Spec 7 #28: the RN hand-off always shipped an empty `moveEvaluations` array, because its
+   * memoised callback's dependency list omitted `reviewData`. `handoff` takes the summary as an
+   * argument, so there is no captured variable that can go stale — and it returns null rather than
+   * an empty hand-off if one is somehow missing.
+   */
+  function coachHandOffReview() {
+    var payload = BiyaCoachReview.handoff(coachTab.game, coachTab.review
+                                                       && coachTab.review.summary);
+    coachTab.review = null;
+    if (!payload) { coachPaint(); return; }
+    coachLeave();
+    current = 'analysis';
+    renderTabbar();
+    render();
+    if (BiyaAnalysisBoard && BiyaAnalysisBoard.loadReviewedGame) {
+      BiyaAnalysisBoard.loadReviewedGame(payload);
+    }
+  }
+
+  function coachTakeBack() {
+    var allowed = BiyaCoachSelect.takeBackEnabled();
+    if (!BiyaCoachTurn.takeBack(coachTab.game, coachTab.ctl, allowed)) return;
+    BiyaCoachGame.saveDraft(coachTab.game, null, Date.now());
+    coachPaint();
+    coachAskCoach();
+  }
+
+  function coachRematch() {
+    coachLeave();
+    BiyaCoachGame.clearDraft(coachTab.level, null);
+    coachStart({ resume: false, userColor: coachTab.game.userColor, draft: null });
+  }
+
 
   /* ======================================================================== *
    *  PROFILE TAB

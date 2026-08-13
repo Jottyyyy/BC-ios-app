@@ -115,6 +115,32 @@ expect(JS.includes("el('div', 'an-statusline')"), 'and analysis.js renders it');
 expect(!/an-status-left/.test(CSS + JS),
   'the old combined status/toolbar wrapper is gone from both files');
 
+// ---- the Engine Settings panel's custom properties ---------------------------
+//
+// The panel's stylesheet reads `var(--an-eng-…)` and `applyMetricsVars()` sets them from
+// `MET.ENGINE_PANEL`. Nothing else connects the two: a typo on either side is a silently
+// unstyled panel, and `metrics_key_check.js` reads JS and Swift, not stylesheets. So check the
+// two lists against each other in both directions — the same failure mode as the board band
+// above, one layer along.
+{
+  const read = new Set([...CSS.matchAll(/var\((--an-eng-[a-z0-9-]+)\)/g)].map((m) => m[1]));
+  const set = new Set([...JS.matchAll(/set\('(--an-eng-[a-z0-9-]+)'/g)].map((m) => m[1]));
+  expect(read.size > 0, 'the stylesheet reads some --an-eng-* properties at all');
+  for (const name of read) {
+    expect(set.has(name),
+      `app.css reads ${name} but analysis.js never sets it — the panel would draw unstyled`);
+  }
+  for (const name of set) {
+    expect(read.has(name), `analysis.js sets ${name} but no rule reads it — dead metric`);
+  }
+  // And every value it sets comes out of the metrics module, not a literal.
+  const engineVars = /var EP = MET\.ENGINE_PANEL;/.test(JS);
+  expect(engineVars, 'the panel\'s numbers come from MET.ENGINE_PANEL, not from literals');
+  const literals = [...JS.matchAll(/set\('--an-eng-[a-z0-9-]+',\s*(\d)/g)];
+  expect(literals.length === 0,
+    `no --an-eng-* property may be set from a literal, found ${literals.length}`);
+}
+
 const result = {
   passed,
   failures,

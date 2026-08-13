@@ -52,7 +52,7 @@ struct PuzzleHubScreen: View {
                     .foregroundStyle(PuzzlePalette.textPrimary)
                     .frame(width: PuzzleHub.backBtnW, height: PuzzleHub.backBtnH)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             Text(PuzzleStrings.hubTitle)
                 .font(Theme.nunito(PuzzleType.hubTitle, .bold))
                 .foregroundStyle(PuzzlePalette.textPrimary)
@@ -88,7 +88,7 @@ struct PuzzleHubScreen: View {
         VStack(spacing: PuzzleHub.cardGap) {
             ForEach(PuzzleHub.modes) { mode in
                 Button { open(mode.id) } label: { PuzzleModeCard(mode: mode) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PuzzlePressStyle(scale: PuzzlePress.cardScale))
             }
         }
         .padding(.horizontal, PuzzleHub.cardsPaddingH)

@@ -80,7 +80,7 @@ struct PuzzleTurboHomeScreen: View {
             HStack(spacing: PuzzleTurboHome.tabGap) {
                 ForEach(PuzzleTurboModes.all, id: \.minutes) { m in
                     Button { selected = m.minutes } label: { tab(m) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PuzzlePressStyle())
                 }
             }
         }
@@ -171,7 +171,7 @@ struct PuzzleTurboHomeScreen: View {
                     .background(PuzzleTurboHome.shareFill,
                                 in: RoundedRectangle(cornerRadius: PuzzleTurboHome.shareRadius))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             Button(action: start) {
                 Text(PuzzleStrings.turboStart(selected))
                     .font(Theme.nunito(PuzzleTurboHome.startSize, .bold))
@@ -186,7 +186,7 @@ struct PuzzleTurboHomeScreen: View {
                             radius: PuzzleTurboHome.startShadowRadius,
                             y: PuzzleTurboHome.startShadowY)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
         }
         .padding(.horizontal, PuzzleTurboHome.bottomPaddingH)
         .padding(.top, PuzzleTurboHome.bottomPaddingTop)
@@ -276,7 +276,7 @@ struct PuzzleTurboRunScreen: View {
                     .frame(width: PuzzleTurboRun.quitBtnW, height: PuzzleTurboRun.quitBtnH,
                            alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             Spacer()
             Text(TurboRun.formatClock(secondsLeft))
                 .font(Theme.nunito(PuzzleTurboRun.timerSize, .bold))
@@ -425,7 +425,7 @@ struct PuzzleTurboRunScreen: View {
                         .background(PuzzleTurboRun.shareFill,
                                     in: RoundedRectangle(cornerRadius: PuzzleTurboRun.shareRadius))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PuzzlePressStyle())
                 .padding(.bottom, PuzzleTurboRun.shareMarginBottom)
                 Button { onExit() } label: {
                     Text(PuzzleStrings.turboBack)
@@ -436,7 +436,7 @@ struct PuzzleTurboRunScreen: View {
                         .background(PuzzleTurboRun.doneFill,
                                     in: RoundedRectangle(cornerRadius: PuzzleTurboRun.doneRadius))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PuzzlePressStyle())
             }
             .padding(PuzzleTurboRun.finishedPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

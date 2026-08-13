@@ -138,7 +138,7 @@ struct PuzzleDailyHomeScreen: View {
                         radius: PuzzleDailyHome.startShadowRadius,
                         y: PuzzleDailyHome.startShadowY)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PuzzlePressStyle())
         .padding(.horizontal, PuzzleDailyHome.contentPaddingH)
         .padding(.bottom, PuzzleDailyHome.contentPaddingBottom)
     }
@@ -234,7 +234,7 @@ struct PuzzleDailySolverScreen: View {
                     .background(PuzzlePalette.correct,
                                 in: RoundedRectangle(cornerRadius: PuzzleDailySolver.doneRadius))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PuzzlePressStyle())
             .padding(.horizontal, PuzzleDailySolver.doneMarginH)
             .padding(.top, PuzzleDailySolver.doneMarginTop)
         }

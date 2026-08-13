@@ -233,9 +233,39 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(AnalysisTiming.inlineSearchBudgetMs * 2 < AnalysisTiming.engineDeadlineMs,
            "the per-chunk slice is well under the whole-search deadline, or slicing would do nothing")
     expect(AnalysisTiming.uiCoalesceMs == 100, "engine progress coalesces to 100ms")
-    expect(AnalysisTiming.engineDeadlineMs == 1200, "one interactive search gets 1200ms")
-    expect(AnalysisEngineLimits.multiPV == 3, "the board shows three engine lines")
-    expect(AnalysisEngineLimits.maxDepth == 6, "depth 6 is the ceiling the deadline rarely reaches")
+    expect(AnalysisTiming.engineDeadlineMs == 1200, "one interactive search gets 1200ms by default")
+    expect(AnalysisEngineLimits.multiPV == 3, "the board shows three engine lines by default")
+    expect(AnalysisEngineLimits.maxDepth == 12,
+           "depth 12 is the default ceiling the deadline rarely reaches")
+
+    // ── 11b. Those defaults ARE the Balanced preset ──
+    // Two files carrying the same four numbers is exactly how they drift, so the agreement is
+    // asserted rather than assumed. `AnalysisEngineLimits` stays as the name the views read.
+    let balanced = EngineSettings.resolve(EngineSettings.defaults())
+    expect(balanced.thinkMs == AnalysisTiming.engineDeadlineMs,
+           "the default deadline is the Balanced preset's think time")
+    expect(balanced.reviewMs == AnalysisTiming.reviewDeadlineMs,
+           "the default review budget is the Balanced preset's")
+    expect(balanced.maxDepth == AnalysisEngineLimits.maxDepth,
+           "the default ceiling is the Balanced preset's")
+    expect(balanced.multiPV == AnalysisEngineLimits.multiPV,
+           "the default line count is the Balanced preset's")
+    expect(AnalysisTiming.inlineSearchBudgetMs * 2 < EngineSettings.preset("saver").thinkMs,
+           "even the coolest preset leaves room for more than one in-thread slice")
+    expect(balanced.infinite == false, "and the default is not an unbounded search")
+
+    // ── 11c. The Engine Settings panel ──
+    expect(AnalysisEngineStyle.rowHeight > AnalysisEngineStyle.advancedRowHeight,
+           "a preset row is taller than an Advanced row — it carries two lines of text")
+    expect(AnalysisEngineStyle.nameSize > AnalysisEngineStyle.summarySize,
+           "the preset name outranks its summary")
+    expect(AnalysisEngineStyle.thumbSize <= AnalysisEngineStyle.advancedRowHeight,
+           "the slider fits inside the row that holds it")
+    expect(AnalysisEngineStyle.dotSize < AnalysisEngineStyle.rowHeight,
+           "the radio dot fits inside its row")
+    expect(EngineSettings.presets.count == 5, "five presets")
+    expect(EngineSettings.panelModel(EngineSettings.defaults(), advancedOpen: false).controls.count == 3,
+           "three Advanced controls")
 
     // ── 12. Typography, straight from the `styles` block of board_styles.json ──
     expectNear(AnalysisType.headerTitle, 16, "the header title is 16 (NOT sidebarStyles' 20)")

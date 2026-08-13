@@ -1,0 +1,3646 @@
+{
+  "_generated": "tools/metrics/extract_coach_styles.js — do not hand-edit",
+  "_note": "The REAL StyleSheet numbers for Play vs Coach. Spec 2.5-2.8 prose is secondary; where they disagree the deviation is recorded in PORTING_NOTES.md.",
+  "geometry": {
+    "_formula": "BOARD_SIZE = floor(screenWidthPx / 8) * 8 / pixelRatio;  SQUARE_SIZE = BOARD_SIZE / 8",
+    "_note": "The same component the Analysis Board and the puzzle solvers use. The metrics layer keeps the FORMULA; these numbers are the reference device only.",
+    "referenceDevice": {
+      "width": 390,
+      "height": 844,
+      "pixelRatio": 3
+    },
+    "BOARD_SIZE": 389.3333333333333,
+    "SQUARE_SIZE": 48.666666666666664
+  },
+  "headers": {
+    "_note": "0 distinct header shapes across 0 screens. Encode per screen — the same finding as the puzzle and tournament ports.",
+    "variants": {}
+  },
+  "palette": {
+    "_note": "Every colour literal in the extracted StyleSheets, by use count.",
+    "_distinct": 71,
+    "counts": {
+      "#FFFFFF": 24,
+      "#FDB022": 14,
+      "rgba(255,255,255,0.08)": 6,
+      "rgba(255,255,255,0.4)": 4,
+      "#D4E8F8": 3,
+      "rgba(253, 176, 34, 0.3)": 3,
+      "rgba(255,255,255,0.2)": 3,
+      "rgba(255,255,255,0.5)": 3,
+      "#07111F": 2,
+      "#0D1B30": 2,
+      "#1E293B": 2,
+      "#4CAF50": 2,
+      "rgba(255,255,255,0.04)": 2,
+      "rgba(255,255,255,0.06)": 2,
+      "rgba(255,255,255,0.1)": 2,
+      "rgba(255,255,255,0.15)": 2,
+      "rgba(255,255,255,0.45)": 2,
+      "rgba(255,255,255,0.65)": 2,
+      "rgba(255,255,255,0.7)": 2,
+      "#00CFFF": 1,
+      "#00E5FF": 1,
+      "#070E20": 1,
+      "#0F1520": 1,
+      "#0F2545": 1,
+      "#1A2942": 1,
+      "#1A3560": 1,
+      "#1B3050": 1,
+      "#2C3A50": 1,
+      "#4A90E2": 1,
+      "#64748B": 1,
+      "#78350F": 1,
+      "#7F1D1D": 1,
+      "#8BA3C7": 1,
+      "#94A3B8": 1,
+      "#CBD5E1": 1,
+      "#EFF3F8": 1,
+      "#FDE68A": 1,
+      "#FFCDD2": 1,
+      "rgba(0, 140, 255, 0.1)": 1,
+      "rgba(0, 160, 255, 0.07)": 1,
+      "rgba(0, 200, 255, 0.1)": 1,
+      "rgba(0, 220, 255, 0.95)": 1,
+      "rgba(0, 80, 200, 0.16)": 1,
+      "rgba(0,0,0,0.15)": 1,
+      "rgba(0,0,0,0.3)": 1,
+      "rgba(0,0,0,0.35)": 1,
+      "rgba(0,0,0,0.7)": 1,
+      "rgba(0,0,0,0.8)": 1,
+      "rgba(10, 25, 55, 0.97)": 1,
+      "rgba(120, 120, 120, 0.5)": 1,
+      "rgba(253, 176, 34, 0.1)": 1,
+      "rgba(253, 176, 34, 0.12)": 1,
+      "rgba(253, 176, 34, 0.35)": 1,
+      "rgba(253, 176, 34, 0.9)": 1,
+      "rgba(253,176,34,0.15)": 1,
+      "rgba(255, 193, 7, 0.2)": 1,
+      "rgba(255, 193, 7, 0.5)": 1,
+      "rgba(255, 80, 80, 0.3)": 1,
+      "rgba(255,255,255,0.05)": 1,
+      "rgba(255,255,255,0.12)": 1,
+      "rgba(255,255,255,0.28)": 1,
+      "rgba(255,255,255,0.3)": 1,
+      "rgba(255,255,255,0.35)": 1,
+      "rgba(255,255,255,0.55)": 1,
+      "rgba(255,255,255,0.6)": 1,
+      "rgba(255,255,255,0.78)": 1,
+      "rgba(255,255,255,0.85)": 1,
+      "rgba(4, 16, 48, 0.65)": 1,
+      "rgba(4, 20, 60, 0.5)": 1,
+      "rgba(8, 20, 50, 0.97)": 1,
+      "rgba(80, 80, 80, 0.07)": 1
+    }
+  },
+  "sound": {
+    "_note": "Spec 2.11. Recorded from the source rather than the prose, because three puzzle sound names were wrong precisely because nothing checked them against anything.",
+    "byScreen": {
+      "play": [
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 710
+        },
+        {
+          "call": "playSound",
+          "key": "check",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 711
+        },
+        {
+          "call": "playSound",
+          "key": "castling",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 712
+        },
+        {
+          "call": "playSound",
+          "key": "capture",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 713
+        },
+        {
+          "call": "playSound",
+          "key": "move",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 714
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 779
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "makeComputerMove",
+          "line": 785
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 825
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 859
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "makeComputerMove",
+          "line": 865
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "applyUserMoveInternal",
+          "line": 913
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "applyUserMoveInternal",
+          "line": 919
+        },
+        {
+          "call": "playSound",
+          "key": "gameStart",
+          "arg": null,
+          "enclosing": "startGame",
+          "line": 968
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "PlayCoachGameScreen",
+          "line": 1930
+        }
+      ]
+    }
+  },
+  "delays": {
+    "_note": "Every setTimeout/setInterval with a literal delay. Spec 2.12 names four uncleared ones as defects, so this list is evidence and not decoration.",
+    "byScreen": {
+      "play": [
+        {
+          "call": "setTimeout",
+          "ms": 80,
+          "msRef": null,
+          "callee": "applyUserMoveInternal",
+          "abort": false,
+          "line": 791
+        },
+        {
+          "call": "setTimeout",
+          "ms": 80,
+          "msRef": null,
+          "callee": "applyUserMoveInternal",
+          "abort": false,
+          "line": 874
+        },
+        {
+          "call": "setTimeout",
+          "ms": 300,
+          "msRef": null,
+          "callee": "makeComputerMove",
+          "abort": false,
+          "line": 972
+        },
+        {
+          "call": "setTimeout",
+          "ms": 400,
+          "msRef": null,
+          "callee": "makeComputerMove",
+          "abort": false,
+          "line": 1019
+        },
+        {
+          "call": "setTimeout",
+          "ms": 15000,
+          "msRef": null,
+          "callee": "controller.abort",
+          "abort": true,
+          "line": 1288
+        }
+      ]
+    }
+  },
+  "screens": {
+    "coachSelect": {
+      "_spec": "2.5",
+      "_source": "app/(app)/user/play-coach/index.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#070E20"
+        },
+        "bgGlowA": {
+          "position": "absolute",
+          "width": 585,
+          "height": 585,
+          "borderRadius": 292.5,
+          "backgroundColor": "rgba(0, 80, 200, 0.16)",
+          "bottom": -280.8,
+          "left": -97.5
+        },
+        "bgGlowB": {
+          "position": "absolute",
+          "width": 380.25,
+          "height": 380.25,
+          "borderRadius": 190.125,
+          "backgroundColor": "rgba(0, 140, 255, 0.1)",
+          "bottom": -128.7,
+          "left": 4.875
+        },
+        "scroll": {
+          "paddingBottom": 36
+        },
+        "backBtn": {
+          "width": 44,
+          "height": 44,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginTop": 8,
+          "marginLeft": 10
+        },
+        "backIcon": {
+          "fontSize": 26,
+          "color": "#FFFFFF"
+        },
+        "titleBlock": {
+          "alignItems": "center",
+          "paddingHorizontal": 24,
+          "paddingBottom": 22,
+          "paddingTop": 4
+        },
+        "titleTopRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "marginBottom": 4
+        },
+        "knightDecor": {
+          "fontSize": 16,
+          "color": "#FFFFFF",
+          "opacity": 0.85
+        },
+        "titleSmall": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "letterSpacing": 2
+        },
+        "titleLarge": {
+          "fontSize": 30,
+          "fontWeight": "900",
+          "color": "#FDB022",
+          "textAlign": "center",
+          "lineHeight": 35,
+          "letterSpacing": 0.8,
+          "textTransform": "uppercase"
+        },
+        "chessPieceAccent": {
+          "fontSize": 22,
+          "color": "#FDB022",
+          "marginTop": 2,
+          "marginBottom": 2
+        },
+        "titleSub": {
+          "fontSize": 13,
+          "color": "rgba(255,255,255,0.85)",
+          "marginTop": 6,
+          "textAlign": "center",
+          "lineHeight": 18
+        },
+        "row1": {
+          "flexDirection": "row",
+          "justifyContent": "space-around",
+          "alignItems": "flex-end",
+          "paddingHorizontal": 4,
+          "marginBottom": 6
+        },
+        "row2": {
+          "flexDirection": "row",
+          "justifyContent": "center",
+          "alignItems": "flex-end",
+          "paddingHorizontal": 31.2,
+          "gap": 16,
+          "marginBottom": 22
+        },
+        "coachCard": {
+          "flex": 1,
+          "alignItems": "center",
+          "paddingHorizontal": 4,
+          "paddingBottom": 4
+        },
+        "coachCardFeatured": {
+          "flex": 1.15
+        },
+        "glowHalo": {
+          "justifyContent": "center",
+          "alignItems": "center",
+          "backgroundColor": "rgba(0, 160, 255, 0.07)",
+          "marginBottom": 8
+        },
+        "glowHaloFeatured": {
+          "backgroundColor": "rgba(0, 200, 255, 0.1)"
+        },
+        "glowHaloLocked": {
+          "backgroundColor": "rgba(80, 80, 80, 0.07)"
+        },
+        "cyanRing": {
+          "justifyContent": "center",
+          "alignItems": "center",
+          "borderWidth": 2.5,
+          "borderColor": "rgba(0, 220, 255, 0.95)",
+          "backgroundColor": "rgba(4, 20, 60, 0.5)",
+          "shadowColor": "#00CFFF",
+          "shadowOffset": {
+            "width": 0,
+            "height": 0
+          },
+          "shadowOpacity": 0.9,
+          "shadowRadius": 8,
+          "elevation": 6
+        },
+        "cyanRingFeatured": {
+          "borderWidth": 3,
+          "borderColor": "#00E5FF",
+          "shadowRadius": 14,
+          "shadowOpacity": 1
+        },
+        "cyanRingLocked": {
+          "borderColor": "rgba(120, 120, 120, 0.5)",
+          "shadowOpacity": 0.2
+        },
+        "lockOverlay": {
+          "position": "absolute",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "backgroundColor": "rgba(0,0,0,0.35)"
+        },
+        "lockIcon": {
+          "fontSize": 22
+        },
+        "premiumTag": {
+          "backgroundColor": "rgba(253,176,34,0.15)",
+          "borderRadius": 8,
+          "paddingHorizontal": 8,
+          "paddingVertical": 3,
+          "borderWidth": 1,
+          "borderColor": "#FDB022",
+          "marginTop": 2
+        },
+        "premiumTagText": {
+          "fontSize": 9,
+          "color": "#FDB022",
+          "fontWeight": "700",
+          "letterSpacing": 0.5
+        },
+        "coachName": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "marginBottom": 1
+        },
+        "coachNameFeatured": {
+          "fontSize": 16,
+          "fontWeight": "900"
+        },
+        "coachNameLocked": {
+          "color": "rgba(255,255,255,0.45)"
+        },
+        "coachRole": {
+          "fontSize": 10,
+          "color": "#FDB022",
+          "textAlign": "center",
+          "fontWeight": "600"
+        },
+        "coachRoleFeatured": {
+          "fontSize": 12
+        },
+        "coachRating": {
+          "fontSize": 10,
+          "color": "#8BA3C7",
+          "fontWeight": "700",
+          "textAlign": "center",
+          "marginTop": 1
+        },
+        "coachRatingFeatured": {
+          "fontSize": 12,
+          "color": "#FDB022"
+        },
+        "coachDesc": {
+          "fontSize": 9,
+          "color": "rgba(255,255,255,0.55)",
+          "textAlign": "center",
+          "marginTop": 1
+        },
+        "settingsRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "space-between",
+          "marginHorizontal": 24,
+          "marginBottom": 18,
+          "backgroundColor": "rgba(255,255,255,0.06)",
+          "borderRadius": 14,
+          "paddingHorizontal": 18,
+          "paddingVertical": 12,
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.08)"
+        },
+        "settingsLabel": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "footer": {
+          "alignItems": "center",
+          "paddingHorizontal": 20,
+          "paddingTop": 4
+        },
+        "footerBold": {
+          "fontSize": 21,
+          "fontWeight": "900",
+          "color": "#FDB022",
+          "textAlign": "center",
+          "marginBottom": 5
+        },
+        "footerLight": {
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.65)",
+          "fontStyle": "italic",
+          "textAlign": "center",
+          "letterSpacing": 1.5
+        }
+      },
+      "extraStyles": null,
+      "moduleConstants": {
+        "REGULAR_SIZE": 80,
+        "FEATURED_SIZE": 108
+      },
+      "renderConstants": {
+        "CoachCard": {
+          "avatarSize": {
+            "text": "coach.featured ? FEATURED_SIZE : REGULAR_SIZE",
+            "condition": "coach.featured",
+            "whenTrue": {
+              "text": "FEATURED_SIZE",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "FEATURED_SIZE",
+                  "ref": "FEATURED_SIZE",
+                  "ratio": 1
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "REGULAR_SIZE",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "REGULAR_SIZE",
+                  "ref": "REGULAR_SIZE",
+                  "ratio": 1
+                }
+              ]
+            }
+          },
+          "ringSize": {
+            "text": "avatarSize + 6",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "avatarSize",
+                "ref": "avatarSize",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "6",
+                "value": 6
+              }
+            ]
+          },
+          "haloSize": {
+            "text": "ringSize + 10",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "ringSize",
+                "ref": "ringSize",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "10",
+                "value": 10
+              }
+            ]
+          },
+          "TouchableOpacity[0].style": {
+            "text": "[styles.coachCard, coach.featured && styles.coachCardFeatured]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.coachCard, coach.featured && styles.coachCardFeatured]"
+              }
+            ]
+          },
+          "TouchableOpacity[0].activeOpacity": {
+            "text": "0.75",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "0.75",
+                "value": 0.75
+              }
+            ]
+          },
+          "TouchableOpacity[0].onPress": {
+            "text": "() => { if (locked) { router.push('/(app)/user/premium'); } else { router.push({ pathname: '/(app)/user/play-coach/play', params: { level: String(coach.id), allowTakeBack: allowTakeBack ? '1' : '0' }, }); } }",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => { if (locked) { router.push('/(app)/user/premium'); } else { router.push({ pathname: '/(app)/user/play-coach/play', params: { level: String(coach.id), allowTakeBack: allowTakeBack ? '1' : '0' }, }); } }"
+              }
+            ]
+          },
+          "View[0].style": {
+            "text": "[ styles.glowHalo, { width: haloSize, height: haloSize, borderRadius: haloSize / 2 }, coach.featured && styles.glowHaloFeatured, locked && styles.glowHaloLocked, ]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[ styles.glowHalo, { width: haloSize, height: haloSize, borderRadius: haloSize / 2 }, coach.featured && styles.glowHaloFeatured, locked && styles.glowHaloLocked, ]"
+              }
+            ]
+          },
+          "View[1].style": {
+            "text": "[ styles.cyanRing, { width: ringSize, height: ringSize, borderRadius: ringSize / 2 }, coach.featured && styles.cyanRingFeatured, locked && styles.cyanRingLocked, ]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[ styles.cyanRing, { width: ringSize, height: ringSize, borderRadius: ringSize / 2 }, coach.featured && styles.cyanRingFeatured, locked && styles.cyanRingLocked, ]"
+              }
+            ]
+          },
+          "Image[0].source": {
+            "text": "coach.image",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "coach.image",
+                "ref": "coach.image",
+                "ratio": 1
+              }
+            ]
+          },
+          "Image[0].style": {
+            "text": "[ { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }, locked && { opacity: 0.4 }, ]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[ { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }, locked && { opacity: 0.4 }, ]"
+              }
+            ]
+          },
+          "Image[0].resizeMode": {
+            "text": "cover",
+            "literal": "cover"
+          },
+          "View[2].style": {
+            "text": "[styles.lockOverlay, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.lockOverlay, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]"
+              }
+            ]
+          },
+          "Text[0].style": {
+            "text": "styles.lockIcon",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.lockIcon",
+                "ref": "styles.lockIcon",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[1].style": {
+            "text": "[styles.coachName, coach.featured && styles.coachNameFeatured, locked && styles.coachNameLocked]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.coachName, coach.featured && styles.coachNameFeatured, locked && styles.coachNameLocked]"
+              }
+            ]
+          },
+          "View[3].style": {
+            "text": "styles.premiumTag",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.premiumTag",
+                "ref": "styles.premiumTag",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[2].style": {
+            "text": "styles.premiumTagText",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.premiumTagText",
+                "ref": "styles.premiumTagText",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[3].style": {
+            "text": "[styles.coachRole, coach.featured && styles.coachRoleFeatured]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.coachRole, coach.featured && styles.coachRoleFeatured]"
+              }
+            ]
+          },
+          "Text[4].style": {
+            "text": "[styles.coachRating, coach.featured && styles.coachRatingFeatured]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.coachRating, coach.featured && styles.coachRatingFeatured]"
+              }
+            ]
+          },
+          "Text[5].style": {
+            "text": "styles.coachDesc",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.coachDesc",
+                "ref": "styles.coachDesc",
+                "ratio": 1
+              }
+            ]
+          }
+        }
+      },
+      "colorMaps": {},
+      "inlineStyles": {
+        "View[0].width": {
+          "text": "haloSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "haloSize",
+              "ref": "haloSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[0].height": {
+          "text": "haloSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "haloSize",
+              "ref": "haloSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[0].borderRadius": {
+          "text": "haloSize / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "haloSize / 2",
+              "ref": "haloSize",
+              "ratio": 0.5
+            }
+          ]
+        },
+        "View[1].width": {
+          "text": "ringSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "ringSize",
+              "ref": "ringSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].height": {
+          "text": "ringSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "ringSize",
+              "ref": "ringSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].borderRadius": {
+          "text": "ringSize / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "ringSize / 2",
+              "ref": "ringSize",
+              "ratio": 0.5
+            }
+          ]
+        },
+        "Image[0].width": {
+          "text": "avatarSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize",
+              "ref": "avatarSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "Image[0].height": {
+          "text": "avatarSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize",
+              "ref": "avatarSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "Image[0].borderRadius": {
+          "text": "avatarSize / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize / 2",
+              "ref": "avatarSize",
+              "ratio": 0.5
+            }
+          ]
+        },
+        "View[2].width": {
+          "text": "avatarSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize",
+              "ref": "avatarSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].height": {
+          "text": "avatarSize",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize",
+              "ref": "avatarSize",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].borderRadius": {
+          "text": "avatarSize / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "avatarSize / 2",
+              "ref": "avatarSize",
+              "ratio": 0.5
+            }
+          ]
+        }
+      },
+      "soundCalls": [],
+      "delays": []
+    },
+    "play": {
+      "_spec": "2.6 / 2.7 / 2.8",
+      "_source": "app/(app)/user/play-coach/play.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#07111F"
+        },
+        "backBtn": {
+          "width": 44,
+          "height": 44,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backIcon": {
+          "fontSize": 26,
+          "color": "#FFFFFF"
+        },
+        "selTopGlow": {
+          "position": "absolute",
+          "top": 0,
+          "left": 0,
+          "right": 0,
+          "height": 429.00000000000006,
+          "borderBottomLeftRadius": 214.50000000000003,
+          "borderBottomRightRadius": 214.50000000000003
+        },
+        "selScroll": {
+          "paddingBottom": 36
+        },
+        "selIntroBlock": {
+          "alignItems": "center",
+          "paddingHorizontal": 24,
+          "paddingTop": 4,
+          "paddingBottom": 18
+        },
+        "selHalo": {
+          "width": 136,
+          "height": 136,
+          "borderRadius": 68,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "backgroundColor": "rgba(0,0,0,0.15)",
+          "shadowOffset": {
+            "width": 0,
+            "height": 0
+          },
+          "shadowOpacity": 0.45,
+          "shadowRadius": 22,
+          "elevation": 10,
+          "marginBottom": 10
+        },
+        "selRing": {
+          "width": 120,
+          "height": 120,
+          "borderRadius": 60,
+          "borderWidth": 3,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "backgroundColor": "rgba(4, 16, 48, 0.65)",
+          "shadowOffset": {
+            "width": 0,
+            "height": 0
+          },
+          "shadowOpacity": 0.9,
+          "shadowRadius": 14,
+          "elevation": 8
+        },
+        "selAvatarImg": {
+          "width": 112,
+          "height": 112,
+          "borderRadius": 56
+        },
+        "starsRow": {
+          "flexDirection": "row",
+          "gap": 5,
+          "marginBottom": 8
+        },
+        "star": {
+          "fontSize": 22
+        },
+        "selName": {
+          "fontSize": 27,
+          "fontWeight": "900",
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "marginBottom": 3
+        },
+        "selRole": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "textAlign": "center",
+          "marginBottom": 4
+        },
+        "selTagline": {
+          "fontSize": 11,
+          "color": "rgba(255,255,255,0.4)",
+          "textAlign": "center",
+          "letterSpacing": 0.3,
+          "marginBottom": 10
+        },
+        "selRatingBadge": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 6,
+          "backgroundColor": "rgba(255,255,255,0.06)",
+          "borderRadius": 12,
+          "paddingHorizontal": 14,
+          "paddingVertical": 5,
+          "marginBottom": 14,
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.1)"
+        },
+        "selRatingLabel": {
+          "fontSize": 11,
+          "fontWeight": "700",
+          "color": "rgba(255,255,255,0.45)",
+          "letterSpacing": 1
+        },
+        "selRatingValue": {
+          "fontSize": 16,
+          "fontWeight": "900",
+          "letterSpacing": 0.5
+        },
+        "selBubbleWrap": {
+          "width": "100%",
+          "alignItems": "center"
+        },
+        "selTriangle": {
+          "width": 0,
+          "height": 0,
+          "borderLeftWidth": 11,
+          "borderRightWidth": 11,
+          "borderBottomWidth": 14,
+          "borderLeftColor": "transparent",
+          "borderRightColor": "transparent",
+          "marginBottom": -1
+        },
+        "selBubble": {
+          "width": "100%",
+          "backgroundColor": "rgba(8, 20, 50, 0.97)",
+          "borderRadius": 18,
+          "borderWidth": 1,
+          "paddingHorizontal": 20,
+          "paddingVertical": 16
+        },
+        "selBubbleText": {
+          "fontSize": 13,
+          "color": "#D4E8F8",
+          "lineHeight": 21,
+          "fontStyle": "italic",
+          "textAlign": "center"
+        },
+        "colorSection": {
+          "paddingHorizontal": 20,
+          "paddingBottom": 16,
+          "gap": 14
+        },
+        "colorLabel": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "letterSpacing": 1,
+          "opacity": 0.9
+        },
+        "colorRow": {
+          "flexDirection": "row",
+          "gap": 12
+        },
+        "colorCard": {
+          "flex": 1,
+          "borderRadius": 20,
+          "paddingVertical": 24,
+          "alignItems": "center",
+          "gap": 6,
+          "borderWidth": 2
+        },
+        "colorCardWhite": {
+          "backgroundColor": "#EFF3F8",
+          "borderColor": "#CBD5E1"
+        },
+        "colorCardBlack": {
+          "backgroundColor": "#0F1520",
+          "borderColor": "#2C3A50"
+        },
+        "kingW": {
+          "fontSize": 44,
+          "color": "#1E293B"
+        },
+        "colorNameW": {
+          "fontSize": 17,
+          "fontWeight": "800",
+          "color": "#1E293B"
+        },
+        "colorHintW": {
+          "fontSize": 11,
+          "color": "#64748B"
+        },
+        "kingB": {
+          "fontSize": 44,
+          "color": "#FFFFFF"
+        },
+        "colorNameB": {
+          "fontSize": 17,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "colorHintB": {
+          "fontSize": 11,
+          "color": "#94A3B8"
+        },
+        "savedGameBanner": {
+          "marginHorizontal": 20,
+          "marginTop": 4,
+          "marginBottom": 8,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 8,
+          "backgroundColor": "rgba(253, 176, 34, 0.1)",
+          "borderRadius": 12,
+          "borderWidth": 1,
+          "borderColor": "rgba(253, 176, 34, 0.35)",
+          "paddingHorizontal": 14,
+          "paddingVertical": 10
+        },
+        "savedGameIcon": {
+          "fontSize": 16
+        },
+        "savedGameText": {
+          "flex": 1,
+          "fontSize": 12,
+          "color": "rgba(253, 176, 34, 0.9)",
+          "fontWeight": "600"
+        },
+        "playHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingHorizontal": 10,
+          "paddingTop": 6,
+          "paddingBottom": 6
+        },
+        "playHeaderCenter": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "gap": 10
+        },
+        "headerAvatarRing": {
+          "width": 42,
+          "height": 42,
+          "borderRadius": 21,
+          "borderWidth": 2,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "overflow": "hidden"
+        },
+        "headerAvatarImg": {
+          "width": 38,
+          "height": 38,
+          "borderRadius": 19
+        },
+        "headerName": {
+          "fontSize": 15,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "headerRole": {
+          "fontSize": 11,
+          "fontWeight": "600",
+          "marginTop": 1
+        },
+        "colorBadge": {
+          "paddingHorizontal": 10,
+          "paddingVertical": 5,
+          "borderRadius": 12,
+          "minWidth": 74,
+          "alignItems": "center"
+        },
+        "colorBadgeW": {
+          "backgroundColor": "rgba(255,255,255,0.1)",
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.28)"
+        },
+        "colorBadgeB": {
+          "backgroundColor": "rgba(0,0,0,0.3)",
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.15)"
+        },
+        "colorBadgeText": {
+          "fontSize": 11,
+          "fontWeight": "600",
+          "color": "#FFFFFF"
+        },
+        "talkStrip": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "backgroundColor": "rgba(255,255,255,0.04)",
+          "marginHorizontal": 12,
+          "marginBottom": 4,
+          "borderRadius": 14,
+          "paddingHorizontal": 12,
+          "paddingVertical": 8,
+          "borderWidth": 1,
+          "gap": 10,
+          "minHeight": 50
+        },
+        "talkAvatarRing": {
+          "width": 40,
+          "height": 40,
+          "borderRadius": 20,
+          "borderWidth": 2,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "flexShrink": 0,
+          "overflow": "hidden"
+        },
+        "talkAvatarImg": {
+          "width": 36,
+          "height": 36,
+          "borderRadius": 18
+        },
+        "talkRight": {
+          "flex": 1,
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 8
+        },
+        "talkSpinner": {
+          "flexShrink": 0
+        },
+        "talkText": {
+          "flex": 1,
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.78)",
+          "fontStyle": "italic",
+          "lineHeight": 18
+        },
+        "premoveChip": {
+          "backgroundColor": "rgba(255, 193, 7, 0.2)",
+          "borderRadius": 8,
+          "paddingHorizontal": 8,
+          "paddingVertical": 4,
+          "borderWidth": 1,
+          "borderColor": "rgba(255, 193, 7, 0.5)"
+        },
+        "premoveChipText": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "color": "#FDB022"
+        },
+        "gameOverChip": {
+          "paddingHorizontal": 12,
+          "paddingVertical": 6,
+          "borderRadius": 10,
+          "flexShrink": 0
+        },
+        "gameOverChipText": {
+          "fontSize": 11,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "modalOverlay": {
+          "flex": 1,
+          "backgroundColor": "rgba(0,0,0,0.7)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "modalCard": {
+          "backgroundColor": "#0D1B30",
+          "borderRadius": 22,
+          "paddingVertical": 24,
+          "paddingHorizontal": 28,
+          "alignItems": "center",
+          "width": 334,
+          "borderWidth": 1,
+          "gap": 6
+        },
+        "modalAvatarRing": {
+          "width": 68,
+          "height": 68,
+          "borderRadius": 34,
+          "borderWidth": 3,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "overflow": "hidden",
+          "marginBottom": 4
+        },
+        "modalAvatarImg": {
+          "width": 60,
+          "height": 60,
+          "borderRadius": 30
+        },
+        "modalResultEmoji": {
+          "fontSize": 32
+        },
+        "modalResultLabel": {
+          "fontSize": 22,
+          "fontWeight": "900",
+          "textAlign": "center"
+        },
+        "modalResultText": {
+          "fontSize": 13,
+          "fontWeight": "600",
+          "textAlign": "center",
+          "lineHeight": 20,
+          "paddingHorizontal": 4,
+          "opacity": 0.85
+        },
+        "modalActions": {
+          "flexDirection": "row",
+          "gap": 10,
+          "marginTop": 10
+        },
+        "modalBtn": {
+          "paddingHorizontal": 24,
+          "paddingVertical": 11,
+          "borderRadius": 14,
+          "minWidth": 100,
+          "alignItems": "center"
+        },
+        "modalBtnText": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "modalBtnOutline": {
+          "backgroundColor": "transparent",
+          "borderWidth": 1.5,
+          "borderColor": "rgba(255,255,255,0.2)"
+        },
+        "modalBtnTextOutline": {
+          "fontSize": 14,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "modalReviewBtn": {
+          "marginTop": 6,
+          "paddingHorizontal": 28,
+          "paddingVertical": 11,
+          "borderRadius": 14,
+          "backgroundColor": "rgba(255,255,255,0.08)",
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.2)"
+        },
+        "modalReviewBtnText": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#D4E8F8"
+        },
+        "reviewModalCard": {
+          "backgroundColor": "#0D1B30",
+          "borderRadius": 22,
+          "paddingVertical": 20,
+          "paddingHorizontal": 20,
+          "width": 350,
+          "borderWidth": 1,
+          "maxHeight": "85%"
+        },
+        "reviewModalTitle": {
+          "fontSize": 16,
+          "fontWeight": "900",
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "letterSpacing": 2,
+          "marginBottom": 14
+        },
+        "reviewLoadingWrap": {
+          "alignItems": "center",
+          "paddingVertical": 40,
+          "gap": 12
+        },
+        "reviewLoadingText": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "reviewLoadingHint": {
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.4)"
+        },
+        "reviewPlayersRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "marginBottom": 12
+        },
+        "reviewPlayerCol": {
+          "flex": 1,
+          "alignItems": "center",
+          "gap": 2
+        },
+        "reviewPlayerLabel": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "rgba(255,255,255,0.7)",
+          "marginBottom": 2
+        },
+        "reviewAccuracyValue": {
+          "fontSize": 28,
+          "fontWeight": "900"
+        },
+        "reviewAccuracyLabel": {
+          "fontSize": 10,
+          "fontWeight": "600",
+          "color": "rgba(255,255,255,0.35)",
+          "letterSpacing": 1,
+          "textTransform": "uppercase"
+        },
+        "reviewDivider": {
+          "width": 1,
+          "height": 50,
+          "backgroundColor": "rgba(255,255,255,0.12)",
+          "marginHorizontal": 12
+        },
+        "reviewGraphWrap": {
+          "alignItems": "center",
+          "marginBottom": 14
+        },
+        "reviewClassificationsBlock": {
+          "gap": 5,
+          "marginBottom": 16
+        },
+        "reviewClassRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "gap": 8
+        },
+        "reviewClassCount": {
+          "fontSize": 15,
+          "fontWeight": "800",
+          "width": 30,
+          "textAlign": "center"
+        },
+        "reviewClassDot": {
+          "width": 8,
+          "height": 8,
+          "borderRadius": 4
+        },
+        "reviewClassLabel": {
+          "fontSize": 13,
+          "fontWeight": "600",
+          "color": "rgba(255,255,255,0.7)",
+          "width": 90,
+          "textAlign": "center"
+        },
+        "reviewModalActions": {
+          "flexDirection": "row",
+          "gap": 10
+        },
+        "reviewStartBtn": {
+          "flex": 1,
+          "paddingVertical": 13,
+          "borderRadius": 14,
+          "alignItems": "center"
+        },
+        "reviewStartBtnText": {
+          "fontSize": 15,
+          "fontWeight": "900",
+          "color": "#FFFFFF"
+        },
+        "reviewNewGameBtn": {
+          "flex": 1,
+          "paddingVertical": 13,
+          "borderRadius": 14,
+          "backgroundColor": "rgba(255,255,255,0.08)",
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.2)",
+          "alignItems": "center"
+        },
+        "reviewNewGameBtnText": {
+          "fontSize": 15,
+          "fontWeight": "800",
+          "color": "#FFFFFF"
+        },
+        "moveStrip": {
+          "maxHeight": 36,
+          "marginHorizontal": 12,
+          "marginBottom": 4
+        },
+        "moveStripContent": {
+          "alignItems": "center",
+          "paddingHorizontal": 4,
+          "gap": 2
+        },
+        "movePairGroup": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 1
+        },
+        "movePairNum": {
+          "fontSize": 11,
+          "color": "rgba(255,255,255,0.3)",
+          "paddingHorizontal": 3,
+          "fontFamily": "Menlo"
+        },
+        "moveToken": {
+          "paddingHorizontal": 6,
+          "paddingVertical": 4,
+          "borderRadius": 6,
+          "backgroundColor": "transparent"
+        },
+        "moveTokenActive": {
+          "backgroundColor": "#FDB022"
+        },
+        "moveTokenText": {
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.65)",
+          "fontFamily": "Menlo"
+        },
+        "moveTokenTextActive": {
+          "color": "#07111F",
+          "fontWeight": "700"
+        },
+        "navBar": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "center",
+          "paddingHorizontal": 12,
+          "paddingVertical": 6,
+          "gap": 4
+        },
+        "navBtn": {
+          "width": 44,
+          "height": 34,
+          "borderRadius": 8,
+          "backgroundColor": "rgba(255,255,255,0.08)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "navBtnDisabled": {
+          "opacity": 0.3
+        },
+        "navBtnText": {
+          "fontSize": 16,
+          "color": "#FFFFFF"
+        },
+        "navLiveBtn": {
+          "flex": 1,
+          "height": 34,
+          "borderRadius": 8,
+          "backgroundColor": "#1A3560",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginHorizontal": 4
+        },
+        "navLiveBtnText": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#FDB022"
+        },
+        "navLiveIndicator": {
+          "flex": 1,
+          "height": 34,
+          "borderRadius": 8,
+          "backgroundColor": "rgba(255,255,255,0.04)",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "marginHorizontal": 4,
+          "flexDirection": "row",
+          "gap": 5
+        },
+        "navLiveDot": {
+          "width": 7,
+          "height": 7,
+          "borderRadius": 4,
+          "backgroundColor": "#4CAF50"
+        },
+        "navLiveLabel": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "color": "#4CAF50",
+          "letterSpacing": 1
+        },
+        "openingPanel": {
+          "position": "absolute",
+          "left": 12,
+          "right": 12,
+          "bottom": 60,
+          "zIndex": 100,
+          "maxHeight": 280,
+          "backgroundColor": "rgba(10, 25, 55, 0.97)",
+          "borderRadius": 14,
+          "borderWidth": 1,
+          "borderColor": "rgba(253, 176, 34, 0.3)",
+          "padding": 12
+        },
+        "openingPanelHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "space-between",
+          "marginBottom": 8
+        },
+        "openingPanelTitle": {
+          "fontSize": 13,
+          "fontWeight": "800",
+          "color": "#FDB022"
+        },
+        "openingPanelActions": {
+          "flexDirection": "row",
+          "gap": 8,
+          "alignItems": "center"
+        },
+        "openingRefreshBtn": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 7,
+          "backgroundColor": "rgba(255,255,255,0.08)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "openingRefreshText": {
+          "fontSize": 16,
+          "color": "#FDB022"
+        },
+        "openingCloseBtn": {
+          "width": 28,
+          "height": 28,
+          "borderRadius": 7,
+          "backgroundColor": "rgba(255,255,255,0.08)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "openingCloseText": {
+          "fontSize": 14,
+          "color": "rgba(255,255,255,0.6)"
+        },
+        "openingLoadingRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 8,
+          "paddingVertical": 8
+        },
+        "openingLoadingText": {
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.5)"
+        },
+        "openingNameBadge": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 6,
+          "marginBottom": 8,
+          "backgroundColor": "rgba(253, 176, 34, 0.12)",
+          "borderRadius": 8,
+          "paddingHorizontal": 10,
+          "paddingVertical": 5
+        },
+        "openingNameEco": {
+          "fontSize": 11,
+          "fontWeight": "800",
+          "color": "#FDB022"
+        },
+        "openingNameText": {
+          "fontSize": 11,
+          "fontWeight": "600",
+          "color": "#D4E8F8",
+          "flex": 1
+        },
+        "openingStatsBlock": {
+          "marginBottom": 8
+        },
+        "openingStatsLabel": {
+          "fontSize": 10,
+          "color": "rgba(255,255,255,0.4)",
+          "marginBottom": 4
+        },
+        "openingBar": {
+          "height": 8,
+          "borderRadius": 4,
+          "flexDirection": "row",
+          "overflow": "hidden",
+          "marginBottom": 4
+        },
+        "openingBarSeg": {
+          "height": 8
+        },
+        "openingBarLegend": {
+          "flexDirection": "row",
+          "justifyContent": "space-between"
+        },
+        "openingBarLegendText": {
+          "fontSize": 10,
+          "fontWeight": "600"
+        },
+        "openingMovesBlock": {
+          "marginTop": 2
+        },
+        "openingMovesTitle": {
+          "fontSize": 11,
+          "fontWeight": "700",
+          "color": "rgba(255,255,255,0.5)",
+          "marginBottom": 6,
+          "letterSpacing": 0.5
+        },
+        "openingMoveRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingVertical": 4,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "rgba(255,255,255,0.05)",
+          "gap": 8
+        },
+        "openingMoveSan": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "width": 44,
+          "fontFamily": "Menlo"
+        },
+        "openingMoveStats": {
+          "flex": 1,
+          "fontSize": 11,
+          "color": "rgba(255,255,255,0.5)"
+        },
+        "openingMoveRating": {
+          "fontSize": 10,
+          "fontWeight": "600"
+        },
+        "openingNoData": {
+          "fontSize": 12,
+          "color": "rgba(255,255,255,0.4)",
+          "textAlign": "center",
+          "paddingVertical": 8
+        },
+        "bottomBar": {
+          "flexDirection": "row",
+          "paddingHorizontal": 12,
+          "paddingBottom": 8,
+          "paddingTop": 4,
+          "gap": 8
+        },
+        "actionBtn": {
+          "paddingVertical": 10,
+          "borderRadius": 12,
+          "alignItems": "center",
+          "justifyContent": "center",
+          "minWidth": 44
+        },
+        "actionBtnDisabled": {
+          "opacity": 0.4
+        },
+        "resignBtn": {
+          "flex": 1,
+          "backgroundColor": "#7F1D1D",
+          "borderWidth": 1,
+          "borderColor": "rgba(255, 80, 80, 0.3)"
+        },
+        "resignText": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#FFCDD2"
+        },
+        "takeBackBtn": {
+          "flex": 1,
+          "backgroundColor": "#78350F",
+          "borderWidth": 1,
+          "borderColor": "rgba(253, 176, 34, 0.3)"
+        },
+        "takeBackText": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#FDE68A"
+        },
+        "explorerBtn": {
+          "flex": 1,
+          "backgroundColor": "#0F2545",
+          "borderWidth": 1,
+          "borderColor": "rgba(253, 176, 34, 0.3)"
+        },
+        "explorerBtnText": {
+          "fontSize": 12,
+          "fontWeight": "700",
+          "color": "#FDB022"
+        },
+        "newColorBtn": {
+          "flex": 1,
+          "backgroundColor": "#1B3050",
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.15)"
+        },
+        "newColorText": {
+          "fontSize": 13,
+          "fontWeight": "700",
+          "color": "#FFFFFF"
+        },
+        "promotionOverlay": {
+          "position": "absolute",
+          "top": 0,
+          "left": 0,
+          "right": 0,
+          "bottom": 0,
+          "backgroundColor": "rgba(0,0,0,0.8)",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "zIndex": 50
+        },
+        "promotionDialog": {
+          "backgroundColor": "#1A2942",
+          "borderRadius": 20,
+          "padding": 24,
+          "width": 280
+        },
+        "promotionTitle": {
+          "fontSize": 18,
+          "fontWeight": "bold",
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "marginBottom": 16
+        },
+        "promotionOptions": {
+          "gap": 10
+        },
+        "promotionOption": {
+          "backgroundColor": "#4A90E2",
+          "borderRadius": 12,
+          "padding": 14,
+          "alignItems": "center",
+          "flexDirection": "row",
+          "justifyContent": "center",
+          "gap": 12
+        },
+        "promotionOptionText": {
+          "fontSize": 16,
+          "fontWeight": "bold",
+          "color": "#FFFFFF"
+        }
+      },
+      "extraStyles": null,
+      "moduleConstants": {
+        "ANALYSIS_REVIEW_KEY": "@biyaherong_review_pgn",
+        "COACH_DATA": {
+          "1": {
+            "name": "Jaden Pogi",
+            "role": "Young Pawn Hero",
+            "tagline": "Friendly • Casual • Just having fun",
+            "intro": "Hey! I'm Jaden Pogi. I'm still learning too — but I'll give it my best shot! Let's go! 😄",
+            "thinkingMsg": "Umm... let me think for a sec... 🤔",
+            "yourTurnMsg": "Your move! I'll try to keep up! 😅",
+            "winMsg": "Hehe, I got you! Don't worry — you'll beat me next time! 😄",
+            "loseMsg": "You won! Wow, you're so strong! 🎉 I still have a lot to learn!",
+            "accentColor": "#4CAF50",
+            "rating": 800
+          },
+          "2": {
+            "name": "Pretty Jade",
+            "role": "Little Princess Gambit",
+            "tagline": "Tricky • Unpredictable • Surprising",
+            "intro": "Hi! I'm Pretty Jade ✨ I love sneaky moves — can you keep up with me? Hehe~",
+            "thinkingMsg": "Planning something sneaky... ✨",
+            "yourTurnMsg": "Your move~ don't fall into my trap! 💅",
+            "winMsg": "Hehe~ my trap worked perfectly! Better luck next time! 💅",
+            "loseMsg": "Oh no! You beat me! You're really good! ✨",
+            "accentColor": "#E91E8C",
+            "rating": 1500
+          },
+          "3": {
+            "name": "Handsome Jude",
+            "role": "Kuya Tactician",
+            "tagline": "Sharp • Aggressive • Tactical",
+            "intro": "I'm Handsome Jude. My tactics are sharp and aggressive — ready for battle? ⚔️",
+            "thinkingMsg": "Calculating the sharpest line... ⚔️",
+            "yourTurnMsg": "Your move. Don't blunder — I'll punish it. 😤",
+            "winMsg": "Tactics win games! You'll need to sharpen your calculation! ⚔️",
+            "loseMsg": "You outplayed me! Respect — that was genuinely sharp. 👊",
+            "accentColor": "#FF6B35",
+            "rating": 1800
+          },
+          "4": {
+            "name": "Mommy Julie",
+            "role": "Mommy Strategist",
+            "tagline": "Calm • Positional • Patient",
+            "intro": "Hello! I'm Mommy Julie. Good chess is about patience and solid positions. Let's play! 🌸",
+            "thinkingMsg": "Finding the best positional move... 🌸",
+            "yourTurnMsg": "Take your time, anak. Good moves need patience. 🌸",
+            "winMsg": "Patience wins every time! Keep studying positions, anak! 🌸",
+            "loseMsg": "Well played! You showed such great patience today. I'm proud! 🌸",
+            "accentColor": "#FF9BC4",
+            "rating": 2000
+          },
+          "5": {
+            "name": "Coach Pogi",
+            "role": "The Master Trainer",
+            "tagline": "Maximum strength • Full power • Unrelenting",
+            "intro": "I'm Coach Pogi. I've mastered every position on this board. Show me what you've got. 👑",
+            "thinkingMsg": "Analyzing at full depth... every line accounted for. 👑",
+            "yourTurnMsg": "Your move. Every tempo matters at this level. 👑",
+            "winMsg": "That's the gap in preparation. Study harder — I'll be here. 👑",
+            "loseMsg": "You defeated me. Truly exceptional play today. 👑",
+            "accentColor": "#FDB022",
+            "rating": 2500
+          }
+        },
+        "LEVEL_CONFIG": {
+          "1": {
+            "depth": 2,
+            "numMoves": 3
+          },
+          "2": {
+            "depth": 4,
+            "numMoves": 3
+          },
+          "3": {
+            "depth": 7,
+            "numMoves": 2
+          },
+          "4": {
+            "depth": 10,
+            "numMoves": 1
+          },
+          "5": {
+            "depth": 15,
+            "numMoves": 1
+          }
+        },
+        "JADEN_DUBIOUS_WHITE": [
+          {
+            "from": "f2",
+            "to": "f3"
+          },
+          {
+            "from": "g2",
+            "to": "g4"
+          },
+          {
+            "from": "b2",
+            "to": "b4"
+          },
+          {
+            "from": "a2",
+            "to": "a3"
+          },
+          {
+            "from": "h2",
+            "to": "h3"
+          },
+          {
+            "from": "b1",
+            "to": "a3"
+          }
+        ],
+        "JADEN_DUBIOUS_BLACK": [
+          {
+            "from": "f7",
+            "to": "f6"
+          },
+          {
+            "from": "a7",
+            "to": "a6"
+          },
+          {
+            "from": "h7",
+            "to": "h6"
+          },
+          {
+            "from": "g7",
+            "to": "g5"
+          },
+          {
+            "from": "b8",
+            "to": "a6"
+          }
+        ]
+      },
+      "renderConstants": {
+        "squareToPixel": {
+          "col": {
+            "text": "square.charCodeAt(0) - 97",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "square.charCodeAt(0)"
+              },
+              {
+                "sign": -1,
+                "text": "97",
+                "value": 97
+              }
+            ]
+          },
+          "row": {
+            "text": "8 - parseInt(square[1], 10)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "8",
+                "value": 8
+              },
+              {
+                "sign": -1,
+                "text": "parseInt(square[1], 10)"
+              }
+            ]
+          },
+          "displayCol": {
+            "text": "flipped ? 7 - col : col",
+            "condition": "flipped",
+            "whenTrue": {
+              "text": "7 - col",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "7",
+                  "value": 7
+                },
+                {
+                  "sign": -1,
+                  "text": "col",
+                  "ref": "col",
+                  "ratio": 1
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "col",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "col",
+                  "ref": "col",
+                  "ratio": 1
+                }
+              ]
+            }
+          },
+          "displayRow": {
+            "text": "flipped ? 7 - row : row",
+            "condition": "flipped",
+            "whenTrue": {
+              "text": "7 - row",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "7",
+                  "value": 7
+                },
+                {
+                  "sign": -1,
+                  "text": "row",
+                  "ref": "row",
+                  "ratio": 1
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "row",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "row",
+                  "ref": "row",
+                  "ratio": 1
+                }
+              ]
+            }
+          },
+          "return.x": {
+            "text": "displayCol * SQUARE_SIZE + SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "displayCol * SQUARE_SIZE"
+              },
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "return.y": {
+            "text": "displayRow * SQUARE_SIZE + SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "displayRow * SQUARE_SIZE"
+              },
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          }
+        },
+        "renderOverlay": {
+          "hasPremove": {
+            "text": "premove !== null",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "premove !== null"
+              }
+            ]
+          },
+          "hasArrows": {
+            "text": "userArrows.length > 0",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "userArrows.length > 0"
+              }
+            ]
+          },
+          "hasHighlights": {
+            "text": "userHighlights.length > 0",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "userHighlights.length > 0"
+              }
+            ]
+          },
+          "View[0].style": {
+            "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' }",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "{ position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' }"
+              }
+            ]
+          },
+          "View[0].pointerEvents": {
+            "text": "none",
+            "literal": "none"
+          },
+          "Svg[0].width": {
+            "text": "BOARD_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "BOARD_SIZE",
+                "ref": "BOARD_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Svg[0].height": {
+            "text": "BOARD_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "BOARD_SIZE",
+                "ref": "BOARD_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "fromPx": {
+            "text": "squareToPixel(premove.from, isFlipped)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "squareToPixel(premove.from, isFlipped)"
+              }
+            ]
+          },
+          "toPx": {
+            "text": "squareToPixel(premove.to, isFlipped)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "squareToPixel(premove.to, isFlipped)"
+              }
+            ]
+          },
+          "Rect[0].x": {
+            "text": "fromPx.x - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "fromPx.x",
+                "ref": "fromPx.x",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[0].y": {
+            "text": "fromPx.y - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "fromPx.y",
+                "ref": "fromPx.y",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[0].width": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[0].height": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[0].fill": {
+            "text": "rgba(255, 193, 7, 0.35)",
+            "literal": "rgba(255, 193, 7, 0.35)"
+          },
+          "Rect[1].x": {
+            "text": "toPx.x - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "toPx.x",
+                "ref": "toPx.x",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[1].y": {
+            "text": "toPx.y - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "toPx.y",
+                "ref": "toPx.y",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[1].width": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[1].height": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[1].fill": {
+            "text": "rgba(255, 193, 7, 0.45)",
+            "literal": "rgba(255, 193, 7, 0.45)"
+          },
+          "px": {
+            "text": "squareToPixel(sq, isFlipped)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "squareToPixel(sq, isFlipped)"
+              }
+            ]
+          },
+          "Rect[2].key": {
+            "text": "`hl-${sq}`",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "`hl-${sq}`"
+              }
+            ]
+          },
+          "Rect[2].x": {
+            "text": "px.x - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "px.x",
+                "ref": "px.x",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[2].y": {
+            "text": "px.y - SQUARE_SIZE / 2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "px.y",
+                "ref": "px.y",
+                "ratio": 1
+              },
+              {
+                "sign": -1,
+                "text": "SQUARE_SIZE / 2",
+                "ref": "SQUARE_SIZE",
+                "ratio": 0.5
+              }
+            ]
+          },
+          "Rect[2].width": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[2].height": {
+            "text": "SQUARE_SIZE",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "SQUARE_SIZE",
+                "ref": "SQUARE_SIZE",
+                "ratio": 1
+              }
+            ]
+          },
+          "Rect[2].fill": {
+            "text": "rgba(255, 100, 100, 0.45)",
+            "literal": "rgba(255, 100, 100, 0.45)"
+          }
+        },
+        "renderOpeningPanel": {
+          "totalGames": {
+            "text": "openingData ? openingData.white + openingData.draws + openingData.black : 0",
+            "condition": "openingData",
+            "whenTrue": {
+              "text": "openingData.white + openingData.draws + openingData.black",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "openingData.white",
+                  "ref": "openingData.white",
+                  "ratio": 1
+                },
+                {
+                  "sign": 1,
+                  "text": "openingData.draws",
+                  "ref": "openingData.draws",
+                  "ratio": 1
+                },
+                {
+                  "sign": 1,
+                  "text": "openingData.black",
+                  "ref": "openingData.black",
+                  "ratio": 1
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "0",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "0",
+                  "value": 0
+                }
+              ]
+            }
+          },
+          "whiteP": {
+            "text": "totalGames > 0 ? ((openingData!.white / totalGames) * 100).toFixed(1) : '0'",
+            "condition": "totalGames > 0",
+            "whenTrue": {
+              "text": "((openingData!.white / totalGames) * 100).toFixed(1)",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "((openingData!.white / totalGames) * 100).toFixed(1)"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'0'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'0'"
+                }
+              ]
+            }
+          },
+          "drawP": {
+            "text": "totalGames > 0 ? ((openingData!.draws / totalGames) * 100).toFixed(1) : '0'",
+            "condition": "totalGames > 0",
+            "whenTrue": {
+              "text": "((openingData!.draws / totalGames) * 100).toFixed(1)",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "((openingData!.draws / totalGames) * 100).toFixed(1)"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'0'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'0'"
+                }
+              ]
+            }
+          },
+          "blackP": {
+            "text": "totalGames > 0 ? ((openingData!.black / totalGames) * 100).toFixed(1) : '0'",
+            "condition": "totalGames > 0",
+            "whenTrue": {
+              "text": "((openingData!.black / totalGames) * 100).toFixed(1)",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "((openingData!.black / totalGames) * 100).toFixed(1)"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'0'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'0'"
+                }
+              ]
+            }
+          },
+          "View[0].style": {
+            "text": "styles.openingPanel",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingPanel",
+                "ref": "styles.openingPanel",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[1].style": {
+            "text": "styles.openingPanelHeader",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingPanelHeader",
+                "ref": "styles.openingPanelHeader",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[0].style": {
+            "text": "styles.openingPanelTitle",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingPanelTitle",
+                "ref": "styles.openingPanelTitle",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[2].style": {
+            "text": "styles.openingPanelActions",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingPanelActions",
+                "ref": "styles.openingPanelActions",
+                "ratio": 1
+              }
+            ]
+          },
+          "TouchableOpacity[0].onPress": {
+            "text": "() => fetchOpeningExplorer()",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => fetchOpeningExplorer()"
+              }
+            ]
+          },
+          "TouchableOpacity[0].style": {
+            "text": "styles.openingRefreshBtn",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingRefreshBtn",
+                "ref": "styles.openingRefreshBtn",
+                "ratio": 1
+              }
+            ]
+          },
+          "ActivityIndicator[0].size": {
+            "text": "small",
+            "literal": "small"
+          },
+          "ActivityIndicator[0].color": {
+            "text": "#FDB022",
+            "literal": "#FDB022"
+          },
+          "Text[1].style": {
+            "text": "styles.openingRefreshText",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingRefreshText",
+                "ref": "styles.openingRefreshText",
+                "ratio": 1
+              }
+            ]
+          },
+          "TouchableOpacity[1].onPress": {
+            "text": "() => setShowOpeningPanel(false)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => setShowOpeningPanel(false)"
+              }
+            ]
+          },
+          "TouchableOpacity[1].style": {
+            "text": "styles.openingCloseBtn",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingCloseBtn",
+                "ref": "styles.openingCloseBtn",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[2].style": {
+            "text": "styles.openingCloseText",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingCloseText",
+                "ref": "styles.openingCloseText",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[3].style": {
+            "text": "styles.openingLoadingRow",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingLoadingRow",
+                "ref": "styles.openingLoadingRow",
+                "ratio": 1
+              }
+            ]
+          },
+          "ActivityIndicator[1].size": {
+            "text": "small",
+            "literal": "small"
+          },
+          "ActivityIndicator[1].color": {
+            "text": "#FDB022",
+            "literal": "#FDB022"
+          },
+          "Text[3].style": {
+            "text": "styles.openingLoadingText",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingLoadingText",
+                "ref": "styles.openingLoadingText",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[4].style": {
+            "text": "styles.openingNameBadge",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingNameBadge",
+                "ref": "styles.openingNameBadge",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[4].style": {
+            "text": "styles.openingNameEco",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingNameEco",
+                "ref": "styles.openingNameEco",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[5].style": {
+            "text": "styles.openingNameText",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingNameText",
+                "ref": "styles.openingNameText",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[5].style": {
+            "text": "styles.openingStatsBlock",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingStatsBlock",
+                "ref": "styles.openingStatsBlock",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[6].style": {
+            "text": "styles.openingStatsLabel",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingStatsLabel",
+                "ref": "styles.openingStatsLabel",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[6].style": {
+            "text": "styles.openingBar",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingBar",
+                "ref": "styles.openingBar",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[7].style": {
+            "text": "[styles.openingBarSeg, { flex: openingData.white, backgroundColor: '#FFFFFF' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarSeg, { flex: openingData.white, backgroundColor: '#FFFFFF' }]"
+              }
+            ]
+          },
+          "View[8].style": {
+            "text": "[styles.openingBarSeg, { flex: openingData.draws, backgroundColor: '#8BA3C7' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarSeg, { flex: openingData.draws, backgroundColor: '#8BA3C7' }]"
+              }
+            ]
+          },
+          "View[9].style": {
+            "text": "[styles.openingBarSeg, { flex: openingData.black, backgroundColor: '#333' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarSeg, { flex: openingData.black, backgroundColor: '#333' }]"
+              }
+            ]
+          },
+          "View[10].style": {
+            "text": "styles.openingBarLegend",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingBarLegend",
+                "ref": "styles.openingBarLegend",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[7].style": {
+            "text": "[styles.openingBarLegendText, { color: '#FFFFFF' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarLegendText, { color: '#FFFFFF' }]"
+              }
+            ]
+          },
+          "Text[8].style": {
+            "text": "[styles.openingBarLegendText, { color: '#8BA3C7' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarLegendText, { color: '#8BA3C7' }]"
+              }
+            ]
+          },
+          "Text[9].style": {
+            "text": "[styles.openingBarLegendText, { color: '#888' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingBarLegendText, { color: '#888' }]"
+              }
+            ]
+          },
+          "View[11].style": {
+            "text": "styles.openingMovesBlock",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingMovesBlock",
+                "ref": "styles.openingMovesBlock",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[10].style": {
+            "text": "styles.openingMovesTitle",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingMovesTitle",
+                "ref": "styles.openingMovesTitle",
+                "ratio": 1
+              }
+            ]
+          },
+          "ScrollView[0].style": {
+            "text": "{ maxHeight: 130 }",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "{ maxHeight: 130 }"
+              }
+            ]
+          },
+          "ScrollView[0].showsVerticalScrollIndicator": {
+            "text": "false",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "false"
+              }
+            ]
+          },
+          "mTotal": {
+            "text": "m.white + m.draws + m.black",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "m.white",
+                "ref": "m.white",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "m.draws",
+                "ref": "m.draws",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "m.black",
+                "ref": "m.black",
+                "ratio": 1
+              }
+            ]
+          },
+          "mWhiteP": {
+            "text": "mTotal > 0 ? ((m.white / mTotal) * 100).toFixed(0) : '0'",
+            "condition": "mTotal > 0",
+            "whenTrue": {
+              "text": "((m.white / mTotal) * 100).toFixed(0)",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "((m.white / mTotal) * 100).toFixed(0)"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'0'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'0'"
+                }
+              ]
+            }
+          },
+          "View[12].key": {
+            "text": "i",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "i",
+                "ref": "i",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[12].style": {
+            "text": "styles.openingMoveRow",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingMoveRow",
+                "ref": "styles.openingMoveRow",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[11].style": {
+            "text": "styles.openingMoveSan",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingMoveSan",
+                "ref": "styles.openingMoveSan",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[12].style": {
+            "text": "styles.openingMoveStats",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingMoveStats",
+                "ref": "styles.openingMoveStats",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[13].style": {
+            "text": "[styles.openingMoveRating, { color: '#8BA3C7' }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.openingMoveRating, { color: '#8BA3C7' }]"
+              }
+            ]
+          },
+          "Text[14].style": {
+            "text": "styles.openingNoData",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.openingNoData",
+                "ref": "styles.openingNoData",
+                "ratio": 1
+              }
+            ]
+          }
+        }
+      },
+      "colorMaps": {},
+      "inlineStyles": {
+        "View[0].backgroundColor": {
+          "text": "accentFaint",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "accentFaint",
+              "ref": "accentFaint",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].shadowColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[3].borderColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[3].shadowColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[1].color": {
+          "text": "i < level ? '#FDB022' : 'rgba(255,255,255,0.1)'",
+          "condition": "i < level",
+          "whenTrue": {
+            "text": "'#FDB022'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#FDB022'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "'rgba(255,255,255,0.1)'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'rgba(255,255,255,0.1)'"
+              }
+            ]
+          }
+        },
+        "Text[3].color": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[6].color": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[7].borderBottomColor": {
+          "text": "'rgba(8,20,50,0.97)'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'rgba(8,20,50,0.97)'"
+            }
+          ]
+        },
+        "View[8].borderColor": {
+          "text": "accentMid",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "accentMid",
+              "ref": "accentMid",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[12].position": {
+          "text": "'absolute'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'absolute'"
+            }
+          ]
+        },
+        "View[12].top": {
+          "text": "0",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0",
+              "value": 0
+            }
+          ]
+        },
+        "View[12].left": {
+          "text": "0",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0",
+              "value": 0
+            }
+          ]
+        },
+        "View[12].right": {
+          "text": "0",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0",
+              "value": 0
+            }
+          ]
+        },
+        "View[12].alignItems": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "View[20].flex": {
+          "text": "openingData.white",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "openingData.white",
+              "ref": "openingData.white",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[20].backgroundColor": {
+          "text": "'#FFFFFF'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#FFFFFF'"
+            }
+          ]
+        },
+        "View[21].flex": {
+          "text": "openingData.draws",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "openingData.draws",
+              "ref": "openingData.draws",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[21].backgroundColor": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        },
+        "View[22].flex": {
+          "text": "openingData.black",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "openingData.black",
+              "ref": "openingData.black",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[22].backgroundColor": {
+          "text": "'#333'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#333'"
+            }
+          ]
+        },
+        "Text[24].color": {
+          "text": "'#FFFFFF'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#FFFFFF'"
+            }
+          ]
+        },
+        "Text[25].color": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        },
+        "Text[26].color": {
+          "text": "'#888'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#888'"
+            }
+          ]
+        },
+        "ScrollView[1].maxHeight": {
+          "text": "130",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "130",
+              "value": 130
+            }
+          ]
+        },
+        "Text[30].color": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        },
+        "View[28].borderColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[34].color": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[31].borderColor": {
+          "text": "gameOver ? coach.accentColor + '50' : coach.accentColor + '30'",
+          "condition": "gameOver",
+          "whenTrue": {
+            "text": "coach.accentColor + '50'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "coach.accentColor",
+                "ref": "coach.accentColor",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "'50'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "coach.accentColor + '30'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "coach.accentColor",
+                "ref": "coach.accentColor",
+                "ratio": 1
+              },
+              {
+                "sign": 1,
+                "text": "'30'"
+              }
+            ]
+          }
+        },
+        "View[32].borderColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[6].backgroundColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[36].flexDirection": {
+          "text": "'row'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'row'"
+            }
+          ]
+        },
+        "View[36].alignItems": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[41].fontSize": {
+          "text": "9",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "9",
+              "value": 9
+            }
+          ]
+        },
+        "Text[41].fontWeight": {
+          "text": "'700'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'700'"
+            }
+          ]
+        },
+        "Text[41].color": {
+          "text": "CLASSIFICATION_COLORS[cls!]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "CLASSIFICATION_COLORS[cls!]"
+            }
+          ]
+        },
+        "Text[41].marginLeft": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[37].flexDirection": {
+          "text": "'row'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'row'"
+            }
+          ]
+        },
+        "View[37].alignItems": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[43].fontSize": {
+          "text": "9",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "9",
+              "value": 9
+            }
+          ]
+        },
+        "Text[43].fontWeight": {
+          "text": "'700'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'700'"
+            }
+          ]
+        },
+        "Text[43].color": {
+          "text": "CLASSIFICATION_COLORS[cls!]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "CLASSIFICATION_COLORS[cls!]"
+            }
+          ]
+        },
+        "Text[43].marginLeft": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[38].alignItems": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "TouchableOpacity[19].borderColor": {
+          "text": "coach.accentColor + '40'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "'40'"
+            }
+          ]
+        },
+        "View[46].borderColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[58].color": {
+          "text": "gameOutcome === 'win' ? '#4CAF50' : gameOutcome === 'loss' ? '#F44336' : '#FFC107'",
+          "condition": "gameOutcome === 'win'",
+          "whenTrue": {
+            "text": "'#4CAF50'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'#4CAF50'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "gameOutcome === 'loss' ? '#F44336' : '#FFC107'",
+            "condition": "gameOutcome === 'loss'",
+            "whenTrue": {
+              "text": "'#F44336'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'#F44336'"
+                }
+              ]
+            },
+            "whenFalse": {
+              "text": "'#FFC107'",
+              "terms": [
+                {
+                  "sign": 1,
+                  "text": "'#FFC107'"
+                }
+              ]
+            }
+          }
+        },
+        "Text[59].color": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[20].backgroundColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[49].borderColor": {
+          "text": "coach.accentColor + '30'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "'30'"
+            }
+          ]
+        },
+        "Text[67].color": {
+          "text": "accuracyColor(reviewData.white_accuracy)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "accuracyColor(reviewData.white_accuracy)"
+            }
+          ]
+        },
+        "Text[70].color": {
+          "text": "accuracyColor(reviewData.black_accuracy)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "accuracyColor(reviewData.black_accuracy)"
+            }
+          ]
+        },
+        "View[58].backgroundColor": {
+          "text": "color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "color",
+              "ref": "color",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[59].backgroundColor": {
+          "text": "color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "color",
+              "ref": "color",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[23].backgroundColor": {
+          "text": "coach.accentColor",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "coach.accentColor",
+              "ref": "coach.accentColor",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "soundCalls": [
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 710
+        },
+        {
+          "call": "playSound",
+          "key": "check",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 711
+        },
+        {
+          "call": "playSound",
+          "key": "castling",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 712
+        },
+        {
+          "call": "playSound",
+          "key": "capture",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 713
+        },
+        {
+          "call": "playSound",
+          "key": "move",
+          "arg": null,
+          "enclosing": "playMoveSound",
+          "line": 714
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 779
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "makeComputerMove",
+          "line": 785
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 825
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "makeComputerMove",
+          "line": 859
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "makeComputerMove",
+          "line": 865
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "applyUserMoveInternal",
+          "line": 913
+        },
+        {
+          "call": "playMoveSound",
+          "key": null,
+          "arg": "currentChess",
+          "enclosing": "applyUserMoveInternal",
+          "line": 919
+        },
+        {
+          "call": "playSound",
+          "key": "gameStart",
+          "arg": null,
+          "enclosing": "startGame",
+          "line": 968
+        },
+        {
+          "call": "playSound",
+          "key": "gameOver",
+          "arg": null,
+          "enclosing": "PlayCoachGameScreen",
+          "line": 1930
+        }
+      ],
+      "delays": [
+        {
+          "call": "setTimeout",
+          "ms": 80,
+          "msRef": null,
+          "callee": "applyUserMoveInternal",
+          "abort": false,
+          "line": 791
+        },
+        {
+          "call": "setTimeout",
+          "ms": 80,
+          "msRef": null,
+          "callee": "applyUserMoveInternal",
+          "abort": false,
+          "line": 874
+        },
+        {
+          "call": "setTimeout",
+          "ms": 300,
+          "msRef": null,
+          "callee": "makeComputerMove",
+          "abort": false,
+          "line": 972
+        },
+        {
+          "call": "setTimeout",
+          "ms": 400,
+          "msRef": null,
+          "callee": "makeComputerMove",
+          "abort": false,
+          "line": 1019
+        },
+        {
+          "call": "setTimeout",
+          "ms": 15000,
+          "msRef": null,
+          "callee": "controller.abort",
+          "abort": true,
+          "line": 1288
+        }
+      ]
+    },
+    "evalGraph": {
+      "_spec": "2.10",
+      "_source": "components/EvalGraph.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "borderRadius": 6,
+          "overflow": "hidden"
+        }
+      },
+      "extraStyles": null,
+      "moduleConstants": {
+        "CLAMP": 500
+      },
+      "renderConstants": {},
+      "colorMaps": {},
+      "inlineStyles": {},
+      "soundCalls": [],
+      "delays": [],
+      "svg": {
+        "Rect.fill": "#1A2740",
+        "Rect.rx": 6,
+        "Polygon.fill": "rgba(255,255,255,0.25)",
+        "Polygon.fill.1": "rgba(0,0,0,0.35)",
+        "Line.stroke": "rgba(255,255,255,0.15)",
+        "Line.strokeWidth": 1,
+        "Polyline.fill": "none",
+        "Polyline.stroke": "#FDB022",
+        "Polyline.strokeWidth": 1.5,
+        "EvalGraph.height": 60
+      }
+    }
+  }
+}

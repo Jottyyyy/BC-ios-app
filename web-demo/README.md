@@ -191,6 +191,12 @@ Ang gumagana ngayon — **lahat ng limang mode**:
 - **Thematic** — 12 tema sa 3×4 na grid, at solver na may 3 engine lines. **Hindi ito humahawak ng
   rating** — practice lang, pero binibilang pa rin sa Theme Performance at sa daily goal.
 
+> ♟️ **Gumagana na ang paggalaw ng pyesa sa lahat ng puzzle mode.** Simula pa noong Phase B ay
+> **wala talagang tumatanggap ng move** ang kahit anong puzzle screen: ang board ay gumagamit ng
+> square INDEX (`e2` = `12`), pero ang adapter ay parang pangalan (`"e2"`) ang tinatrato, kaya
+> laging **zero** ang legal moves ng bawat square — kaya walang mapipili at walang maigagalaw.
+> Ayos na, at may bagong test na dumadaan sa totoong board mismo para hindi na ito maulit.
+>
 > 🔊 **May tunog na ngayon ang lahat ng mode.** Sa loob ng apat na phase ay *walang* tunog ang
 > Puzzle Hub — hinahanap ng limang screen ang isang global na `Sound`, pero `SoundManager`
 > ang totoong pangalan, kaya laging `null` ito at walang tumutunog. Ayos na. Buksan ang

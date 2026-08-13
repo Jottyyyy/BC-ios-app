@@ -80,6 +80,7 @@ const SWIFT_VIEWS = [
   'AnalysisBoardScreen.swift', 'AnalysisVM.swift', 'AnalysisMenuSidebar.swift',
   'AnalysisEditPanel.swift', 'AnalysisPgnModals.swift', 'AnalysisAnnotationPicker.swift',
   'AnalysisVariationModal.swift', 'AnalysisLibraryModals.swift', 'AnalysisReviewModal.swift',
+  'AnalysisEngineSettings.swift',
   // The check itself is nothing BUT metrics references, so it is the highest-value file here.
   'AnalysisMetricsCheck.swift',
 ];
@@ -115,7 +116,8 @@ const swiftEnums = parseSwiftEnums(fs.readFileSync(SWIFT_METRICS, 'utf8'));
 const CHECKED_ENUMS = ['AnalysisBoard', 'AnalysisPalette', 'AnalysisIndicator', 'AnalysisArrow',
   'AnalysisBadge', 'AnalysisLayout', 'AnalysisEval', 'AnalysisGraph', 'AnalysisReview',
   'AnalysisGraphStyle', 'AnalysisLibraryStyle', 'AnalysisTables', 'AnalysisTiming',
-  'AnalysisEngineLimits', 'AnalysisType', 'AnalysisMenu', 'AnalysisEdit', 'AnalysisModals'];
+  'AnalysisEngineLimits', 'AnalysisEngineStyle', 'AnalysisType', 'AnalysisMenu', 'AnalysisEdit',
+  'AnalysisModals'];
 
 for (const name of CHECKED_ENUMS) {
   checked++;

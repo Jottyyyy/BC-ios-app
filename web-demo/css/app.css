@@ -966,6 +966,58 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
 .an-md-abtn.active { outline: 2px solid var(--an-gold); }
+
+/* ---- Engine Settings (☰ > Engine) ------------------------------------------
+   Every number is a variable set from MET.ENGINE_PANEL in applyMetricsVars(); colours reuse the
+   sheet palette this panel lives in, so it cannot drift from the sheets beside it. */
+.an-eng-list { display: flex; flex-direction: column; gap: var(--an-eng-row-gap); }
+.an-eng-row {
+  display: flex; align-items: center; gap: var(--an-eng-dot-inset);
+  min-height: var(--an-eng-row-h); cursor: pointer; border: 0; text-align: left;
+  background: var(--an-bs-field-bg); border-radius: var(--an-eng-row-r);
+  padding: 0 var(--an-eng-row-ph);
+}
+.an-eng-row.active { outline: 2px solid var(--an-gold); }
+.an-eng-dot {
+  flex: none; width: var(--an-eng-dot); height: var(--an-eng-dot); border-radius: 50%;
+  border: 2px solid var(--an-text-muted); box-sizing: border-box;
+}
+.an-eng-row.active .an-eng-dot { border-color: var(--an-gold); background: var(--an-gold); }
+.an-eng-text { display: flex; flex-direction: column; min-width: 0; }
+.an-eng-name {
+  font-family: var(--font); font-size: var(--an-eng-name-fs); font-weight: 700; color: var(--an-text);
+}
+.an-eng-sum {
+  font-family: var(--font); font-size: var(--an-eng-sum-fs); color: var(--an-text-muted);
+}
+.an-eng-warn {
+  font-family: var(--font); font-size: var(--an-eng-warn-fs); color: var(--an-gold);
+  margin-top: var(--an-eng-warn-gap); line-height: 1.3;
+}
+.an-eng-adv-head {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  margin-top: var(--an-eng-sect-gap); cursor: pointer; border: 0; background: none; padding: 0;
+  font-family: var(--font); font-size: var(--an-eng-adv-label-fs); font-weight: 700;
+  color: var(--an-text-2);
+}
+.an-eng-adv { display: flex; flex-direction: column; }
+.an-eng-ctl { min-height: var(--an-eng-adv-h); display: flex; flex-direction: column; justify-content: center; }
+.an-eng-ctl-top { display: flex; align-items: baseline; justify-content: space-between; }
+.an-eng-ctl-label {
+  font-family: var(--font); font-size: var(--an-eng-adv-label-fs); color: var(--an-text-2);
+}
+.an-eng-ctl-value {
+  font-family: var(--font); font-size: var(--an-eng-adv-value-fs); font-weight: 700; color: var(--an-gold);
+}
+.an-eng-range { width: 100%; height: var(--an-eng-thumb); margin: 0; accent-color: var(--an-gold); }
+.an-eng-seg { display: flex; gap: var(--an-eng-seg-gap); }
+.an-eng-seg button {
+  flex: 1; height: var(--an-eng-seg-h); cursor: pointer; border: 0;
+  border-radius: var(--an-eng-seg-r); background: var(--an-bs-field-bg);
+  font-family: var(--font); font-size: var(--an-eng-adv-value-fs); font-weight: 700;
+  color: var(--an-text-muted);
+}
+.an-eng-seg button.active { background: var(--an-gold); color: var(--an-on-gold); }
 .an-md-asym {
   font-family: var(--font); font-size: var(--an-fs-pick-sym); font-weight: 900; color: var(--an-text);
 }
@@ -1722,3 +1774,173 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
              background: var(--pzrr-done-fill); border-radius: var(--pzrr-done-r);
              padding: var(--pzrr-done-pv) var(--pzrr-done-ph); font-size: var(--pzrr-done-fs);
              font-weight: 700; }
+
+/* ============================================================================ *
+ *  PUZZLE HUB — POLISH
+ *
+ *  Everything here is motion, feedback and focus. **No extracted value is
+ *  touched**: not one colour, size, radius or spacing from
+ *  tools/metrics/puzzle_styles.json appears below, so all ~1,000 parity
+ *  assertions stay green. What the extraction cannot carry is how a screen
+ *  FEELS — the RN StyleSheets have no transitions, no press states and no
+ *  focus rings, because React Native gets those from its own components.
+ *
+ *  `--pzx-*` are polish-only properties. They are deliberately a separate
+ *  namespace from `--pz*` so the CSS-var coverage check keeps treating the
+ *  extracted ones as extracted.
+ * ============================================================================ */
+.pzh-view, .pzp-view, .pzs-view, .pzd-view, .pzds-view,
+.pzt-view, .pzts-view, .pzk-view, .pzks-view, .pzr-view {
+  --pzx-fast: 120ms;
+  --pzx-base: 180ms;
+  --pzx-slow: 260ms;
+  --pzx-ease: cubic-bezier(.22, .61, .36, 1);
+  /* The one extracted value reused rather than re-invented: PuzzleHub.pressOpacity, which the
+     metrics layer has always carried and nothing has ever read. */
+  --pzx-press: .72;
+}
+
+/* ---- Press feedback -------------------------------------------------------
+   Every button in the hub was inert on tap: no ripple, no dim, no scale. On a
+   phone that reads as "did it register?" and people tap twice. */
+.pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzk-share, .pzr-start,
+.pzr-share, .pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
+.pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done, .pzrr-fin-share,
+.pzr-tab, .pzt-card, .pzk-row, .pzr-row {
+  transition: transform var(--pzx-fast) var(--pzx-ease),
+              opacity var(--pzx-fast) var(--pzx-ease),
+              filter var(--pzx-fast) var(--pzx-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.pzh-card:active, .pzd-start:active, .pzds-done:active, .pzk-start:active,
+.pzk-share:active, .pzr-start:active, .pzr-share:active, .pzt-start:active,
+.pzp-share:active, .pz-btn:active, .pzts-btn:active, .pzks-btn:active,
+.pzks-strip-btn:active, .pz-modal-btn:active, .pzrr-modal-btn:active,
+.pzrr-done:active, .pzrr-fin-share:active {
+  opacity: var(--pzx-press);
+  transform: scale(.975);
+}
+/* Cards are large, so they take a gentler squeeze than a button does. */
+.pzh-card:active, .pzt-card:active, .pzr-tab:active { transform: scale(.99); }
+/* A disabled Start must not pretend to respond. */
+.pzt-start-off:active, button:disabled:active { transform: none; opacity: inherit; }
+
+/* ---- Hover, on the pointer devices that have it --------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .pzh-card:hover, .pzt-card:hover, .pzr-tab:hover,
+  .pzk-row:hover, .pzr-row:hover { filter: brightness(1.08); }
+  .pzd-start:hover, .pzk-start:hover, .pzr-start:hover, .pzt-start:hover,
+  .pz-btn:hover, .pzts-btn:hover, .pzks-btn:hover { filter: brightness(1.06); }
+}
+
+/* ---- Focus, for keyboards -------------------------------------------------
+   `:focus-visible` only, so a mouse press never leaves a ring behind. */
+.pzh-view :focus-visible, .pzp-view :focus-visible, .pzs-view :focus-visible,
+.pzd-view :focus-visible, .pzds-view :focus-visible, .pzt-view :focus-visible,
+.pzts-view :focus-visible, .pzk-view :focus-visible, .pzks-view :focus-visible,
+.pzr-view :focus-visible {
+  outline: 2px solid var(--pz-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---- Depth ----------------------------------------------------------------
+   The extracted shadows are all applied at the same strength, so cards, sheets
+   and overlays sit on one plane. Layering them costs nothing and makes the
+   stack legible. */
+.pz-modal-box, .pzrr-modal, .pzks-box { box-shadow: 0 24px 48px rgba(0, 0, 0, .45); }
+.pz-modal-scrim, .pzrr-scrim, .pzks-overlay { backdrop-filter: blur(2px); }
+
+/* ---- Entrances ------------------------------------------------------------
+   Pushed routes and overlays appeared instantly, which on a phone reads as a
+   glitch rather than a navigation. */
+@keyframes pzx-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pzx-pop {
+  from { opacity: 0; transform: scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pzx-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.pzh-view, .pzp-view, .pzs-view, .pzd-view, .pzds-view, .pzt-view,
+.pzts-view, .pzk-view, .pzks-view, .pzr-view {
+  animation: pzx-rise var(--pzx-base) var(--pzx-ease) both;
+}
+.pz-modal-scrim, .pzrr-scrim, .pzks-overlay {
+  animation: pzx-fade var(--pzx-fast) var(--pzx-ease) both;
+}
+.pz-modal-box, .pzrr-modal, .pzks-box, .pzks-strip, .pzrr-finished {
+  animation: pzx-pop var(--pzx-base) var(--pzx-ease) both;
+}
+/* The result numbers are the payoff of a whole run; let them land. */
+.pzks-result-num, .pzrr-fin-score {
+  animation: pzx-pop var(--pzx-slow) var(--pzx-ease) both;
+}
+.pzks-newbest { animation: pzx-pop var(--pzx-slow) var(--pzx-ease) both; }
+
+/* Feedback banners slide in rather than appearing mid-sentence. */
+.pzds-banner:not(.pzds-hidden), .pzts-feedback {
+  animation: pzx-rise var(--pzx-fast) var(--pzx-ease) both;
+}
+/* Turbo's ✓/✕ over the played square. */
+.pzrr-fb { animation: pzx-pop var(--pzx-fast) var(--pzx-ease) both; }
+
+/* ---- The Turbo clock ------------------------------------------------------
+   Colour already changes at 30s and 10s. A pulse in the red band makes the
+   deadline felt rather than read. */
+@keyframes pzx-pulse { 50% { opacity: .55; } }
+.pzrr-timer { transition: color var(--pzx-base) var(--pzx-ease); }
+
+/* ---- The goal ring and progress bars -------------------------------------- */
+.pzg-ring circle, .pzs-theme-fill, .pzs-bar {
+  transition: stroke-dashoffset var(--pzx-slow) var(--pzx-ease),
+              width var(--pzx-slow) var(--pzx-ease),
+              height var(--pzx-slow) var(--pzx-ease);
+}
+
+/* ---- Lists ----------------------------------------------------------------
+   Run history rows arrive as a block; a short stagger reads as a list being
+   filled rather than a screen repainting. */
+.pzk-row, .pzr-row { animation: pzx-rise var(--pzx-fast) var(--pzx-ease) both; }
+.pzk-row:nth-child(2), .pzr-row:nth-child(2) { animation-delay: 30ms; }
+.pzk-row:nth-child(3), .pzr-row:nth-child(3) { animation-delay: 60ms; }
+.pzk-row:nth-child(4), .pzr-row:nth-child(4) { animation-delay: 90ms; }
+.pzk-row:nth-child(n+5), .pzr-row:nth-child(n+5) { animation-delay: 120ms; }
+
+/* ---- Hit targets ----------------------------------------------------------
+   The extracted back buttons are 40-44pt, which is fine; the strip and tab
+   buttons are shorter. This raises only the TOUCH area, never the painted box,
+   so no extracted size changes. */
+.pzks-strip-btn, .pzr-tab, .pz-modal-btn, .pzrr-modal-btn { position: relative; }
+.pzks-strip-btn::after, .pzr-tab::after,
+.pz-modal-btn::after, .pzrr-modal-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+
+/* ---- Reduced motion -------------------------------------------------------
+   Not optional. Everything above is decoration, and someone who has asked the
+   OS for less movement should get the screens with none of it. */
+@media (prefers-reduced-motion: reduce) {
+  .pzh-view, .pzp-view, .pzs-view, .pzd-view, .pzds-view, .pzt-view,
+  .pzts-view, .pzk-view, .pzks-view, .pzr-view,
+  .pz-modal-scrim, .pzrr-scrim, .pzks-overlay,
+  .pz-modal-box, .pzrr-modal, .pzks-box, .pzks-strip, .pzrr-finished,
+  .pzks-result-num, .pzrr-fin-score, .pzks-newbest,
+  .pzds-banner, .pzts-feedback, .pzrr-fb, .pzk-row, .pzr-row {
+    animation: none !important;
+  }
+  .pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzk-share, .pzr-start,
+  .pzr-share, .pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
+  .pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done, .pzrr-fin-share,
+  .pzr-tab, .pzt-card, .pzk-row, .pzr-row {
+    transition: none;
+  }
+  .pzh-card:active, .pzd-start:active, .pzk-start:active, .pzr-start:active,
+  .pzt-start:active, .pz-btn:active, .pzts-btn:active, .pzks-btn:active {
+    transform: none;
+  }
+}

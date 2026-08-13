@@ -37,6 +37,9 @@ var BiyaAnalysisBoard = (function () {
   // Where the search actually runs. `AN` is still used for its pure helpers; the host owns the
   // threading decision so no screen has to know about it.
   var HOST = isNode ? require('./engine-host.js') : BiyaEngineHost;
+  // How hard the engine is allowed to work. Pure and shared with the Swift side; this screen only
+  // stores the choice and reads the resolved numbers back out.
+  var ES = isNode ? require('./engine-settings.js') : BiyaEngineSettings;
   // Saving serialises the tree to a full PGN — headers included, unlike the source's movetext-only
   // `generatePgn()`, which is why a custom start position survives a round trip here.
   var P = isNode ? require('./pgn.js') : BiyaPGN;
@@ -1068,6 +1071,9 @@ var BiyaAnalysisBoard = (function () {
   var autoplayTimer = null;
   var autoplaySpeed = MET.DEFAULT_AUTOPLAY_SPEED;
   var boardTheme = MET.DEFAULT_BOARD_THEME;
+  // Unlike the three view-state vars around it, this one PERSISTS: a preset is a deliberate choice
+  // about battery, and having to make it again after every reload would be its own bug.
+  var engineSettings = ES.load();
   // ---- phase 11 view state ----
   var showArrows = true;              // the ☰ Settings toggle (board.tsx:4517)
   var editing = false;                // Setup Position is open
@@ -1356,6 +1362,21 @@ var BiyaAnalysisBoard = (function () {
     set('--an-fs-pick-sym', T2.annotationSymbol + 'px');
     set('--an-fs-pick-label', T2.annotationLabel + 'px');
     set('--an-fs-pick-sect', T2.annotationSection + 'px');
+    // Engine Settings panel. Same rule as everything above it: the stylesheet names the variable,
+    // the metrics module owns the number, and no view body carries a literal.
+    var EP = MET.ENGINE_PANEL;
+    set('--an-eng-row-h', EP.rowHeight + 'px'); set('--an-eng-row-gap', EP.rowGap + 'px');
+    set('--an-eng-row-r', EP.rowRadius + 'px'); set('--an-eng-row-ph', EP.rowPaddingH + 'px');
+    set('--an-eng-dot', EP.dotSize + 'px'); set('--an-eng-dot-inset', EP.dotInset + 'px');
+    set('--an-eng-name-fs', EP.nameSize + 'px'); set('--an-eng-sum-fs', EP.summarySize + 'px');
+    set('--an-eng-warn-fs', EP.warningSize + 'px'); set('--an-eng-warn-gap', EP.warningGap + 'px');
+    set('--an-eng-sect-gap', EP.sectionGap + 'px');
+    set('--an-eng-adv-h', EP.advancedRowHeight + 'px');
+    set('--an-eng-adv-label-fs', EP.advancedLabelSize + 'px');
+    set('--an-eng-adv-value-fs', EP.advancedValueSize + 'px');
+    set('--an-eng-thumb', EP.thumbSize + 'px');
+    set('--an-eng-seg-h', EP.segmentHeight + 'px'); set('--an-eng-seg-gap', EP.segmentGap + 'px');
+    set('--an-eng-seg-r', EP.segmentRadius + 'px');
   }
 
   // ---- painting --------------------------------------------------------------
@@ -1563,16 +1584,23 @@ var BiyaAnalysisBoard = (function () {
     var token = (engineToken += 1);
     var pos = position(session);
     var keys = historyKeys(session);
-    var deadline = Date.now() + MET.TIMINGS.engineDeadline;
+    var limits = ES.resolve(engineSettings);
+    // Infinite has no deadline at all: only the token stops it, which is what the 💡 button and
+    // every position change already bump. `maxDepth` is then the sole guarantee that it terminates.
+    var deadline = limits.infinite ? 0 : Date.now() + limits.thinkMs;
     session.analyzing = true;
     paintStatus(); paintEngine();
     // Through the host: a Worker when the page is served, sliced in-thread from file://. Same
     // options, same onDepth, same resolved snapshot — see web-demo/js/engine-host.js.
     HOST.analyzeProgressive(pos, {
-      maxDepth: MET.ENGINE_LIMITS.maxDepth,
-      multiPV: MET.ENGINE_LIMITS.multiPV,
+      maxDepth: limits.maxDepth,
+      multiPV: limits.multiPV,
+      deadlineMs: limits.infinite ? 0 : limits.thinkMs,
       historyKeys: keys,
-      shouldCancel: function () { return token !== engineToken || Date.now() > deadline; },
+      shouldCancel: function () {
+        if (token !== engineToken) return true;
+        return deadline !== 0 && Date.now() > deadline;
+      },
       onDepth: function (snap) {
         if (token !== engineToken || !alive()) return;
         session.snapshot = snap;
@@ -1673,6 +1701,9 @@ var BiyaAnalysisBoard = (function () {
     view.classList.add('flush');          // this screen owns the whole box; no gutter, no scroll
 
     if (!session) session = createSession();
+    // A game handed over from Play vs Coach, with its classifications. Before the tokens below, so
+    // a hand-off is never mistaken for the review that was running when the screen was last left.
+    applyPendingHandoff();
     engineToken += 1;
     reviewToken += 1;                      // abandon a review that was running when we left
     clearTimeout(debounceTimer); clearTimeout(autoplayTimer); clearTimeout(draftTimer);
@@ -1839,9 +1870,13 @@ var BiyaAnalysisBoard = (function () {
     paintAll(false);
     showReviewSheet({ state: 'running' });
 
+    // The preset scales the review too — it is where the heat actually is, since a 40-move game is
+    // 41 searches rather than one. Infinite is the exception: `reviewMs` saturates instead, because
+    // an unbounded per-position search over 41 positions would never finish.
+    var reviewLimits = ES.resolve(engineSettings);
     V.reviewProgressive(gamePlan, {
-      maxDepth: MET.ENGINE_LIMITS.maxDepth,
-      budgetMs: MET.TIMINGS.reviewDeadline,
+      maxDepth: reviewLimits.maxDepth,
+      budgetMs: reviewLimits.reviewMs,
       shouldCancel: function () { return token !== reviewToken || !alive(); },
       onProgress: function (completed, total) {
         if (token !== reviewToken || !alive()) return;
@@ -2437,6 +2472,7 @@ var BiyaAnalysisBoard = (function () {
       { title: 'Settings', items: [
         { icon: '🏹', label: 'Engine Arrows  ' + (showArrows ? 'ON' : 'OFF'),
           toggle: showArrows, run: function () { showArrows = !showArrows; paintArrows(); } },
+        { icon: '⚙️', label: 'Engine  ' + ES.resolve(engineSettings).label, run: showEngineSettings },
         { icon: '⏱️', label: 'Autoplay Speed', run: showAutoplaySpeeds },
         // Not in the source's menu: offline there is no Master DB row to sit here, and the board
         // theme had nowhere else to live once ☰ stopped being its stand-in button.
@@ -2846,6 +2882,95 @@ var BiyaAnalysisBoard = (function () {
     card.appendChild(row);
   }
 
+  /**
+   * ⚙️ Engine — how hard the search is allowed to work.
+   *
+   * INVENTED: no such screen exists in the RN source, which shipped fixed limits. Built on the same
+   * `bottomSheet` as everything else in this ☰ section so there is one sheet idiom, not two.
+   *
+   * Changing anything re-runs the search immediately: a setting whose effect you cannot see is a
+   * setting nobody trusts. It also persists, unlike the view-state toggles beside it.
+   */
+  function showEngineSettings() {
+    var card = bottomSheet('Engine');
+    var body = el('div', 'an-bs-body');
+    card.appendChild(body);
+    var advancedOpen = false;      // `panelModel` forces it open when a custom setting is in effect
+
+    function commit(next) {
+      engineSettings = next;
+      ES.save(engineSettings);
+      draw();
+      scheduleAnalysis();          // show the new setting working, immediately
+    }
+
+    /** Renders `ES.panelModel`. Every label, range and selected flag is decided in there. */
+    function draw() {
+      var m = ES.panelModel(engineSettings, advancedOpen);
+      advancedOpen = m.advancedOpen;
+      body.innerHTML = '';
+
+      var list = el('div', 'an-eng-list');
+      m.presets.forEach(function (p) {
+        var row = el('button', 'an-eng-row' + (p.active ? ' active' : ''));
+        row.appendChild(el('span', 'an-eng-dot'));
+        var text = el('div', 'an-eng-text');
+        text.appendChild(el('span', 'an-eng-name', esc(p.label)));
+        text.appendChild(el('span', 'an-eng-sum', esc(p.summary)));
+        row.appendChild(text);
+        row.onclick = function () { commit(ES.selectPreset(engineSettings, p.id)); };
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+
+      if (m.warning) body.appendChild(el('div', 'an-eng-warn', '⚠ ' + esc(m.warning)));
+
+      var head = el('button', 'an-eng-adv-head');
+      head.appendChild(el('span', null, (m.advancedOpen ? '▾ ' : '▸ ') + esc(m.advancedLabel)));
+      head.appendChild(el('span', 'an-eng-ctl-value', esc(m.advancedState)));
+      head.onclick = function () { advancedOpen = !m.advancedOpen; draw(); };
+      body.appendChild(head);
+      if (!m.advancedOpen) return;
+
+      var adv = el('div', 'an-eng-adv');
+      m.controls.forEach(function (c) { adv.appendChild(control(c)); });
+      body.appendChild(adv);
+    }
+
+    function control(c) {
+      var ctl = el('div', 'an-eng-ctl');
+      var top = el('div', 'an-eng-ctl-top');
+      top.appendChild(el('span', 'an-eng-ctl-label', esc(c.label)));
+      top.appendChild(el('span', 'an-eng-ctl-value', esc(c.valueText)));
+      ctl.appendChild(top);
+
+      if (c.kind === 'segment') {
+        var seg = el('div', 'an-eng-seg');
+        c.options.forEach(function (value) {
+          var b = el('button', value === c.value ? 'active' : null, String(value));
+          b.onclick = function () { commit(ES.applyControl(engineSettings, c.key, value)); };
+          seg.appendChild(b);
+        });
+        ctl.appendChild(seg);
+        return ctl;
+      }
+
+      var input = el('input', 'an-eng-range');
+      input.type = 'range';
+      input.min = String(c.min); input.max = String(c.max); input.step = String(c.step);
+      input.value = String(c.value);
+      // `change`, not `input`: committing on every pixel of a drag would restart the search on each
+      // one, which is both useless and the most expensive thing this panel could do.
+      input.onchange = function () {
+        commit(ES.applyControl(engineSettings, c.key, parseInt(input.value, 10)));
+      };
+      ctl.appendChild(input);
+      return ctl;
+    }
+
+    draw();
+  }
+
   /** ⏱️ Autoplay Speed (renderAutoplaySettings:4279). */
   function showAutoplaySpeeds() {
     var card = bottomSheet('Autoplay Speed');
@@ -2881,6 +3006,39 @@ var BiyaAnalysisBoard = (function () {
   }
 
   /** Drop the whole session — the Home tile should open a clean board next time. */
+  /**
+   * Load a finished coach game, WITH its classifications (spec 2.10's hand-off).
+   *
+   * Queued rather than applied: the Analysis Board builds its session inside `render`, and the
+   * caller switches tabs and repaints in the same turn. `render` picks this up on its way in, so
+   * the order of those two calls cannot matter.
+   *
+   * `classifications` is the whole point. The RN hand-off read its `reviewData` through a memoised
+   * callback whose dependency list omitted it, so the board received an empty array every single
+   * time (spec 7 #28). Here it is a plain argument on a plain object.
+   */
+  function loadReviewedGame(payload) {
+    pendingHandoff = (payload && payload.pgn) ? payload : null;
+    return !!pendingHandoff;
+  }
+
+  var pendingHandoff = null;
+
+  /** Consume a queued hand-off, if there is one. Called by `render` once the session exists. */
+  function applyPendingHandoff() {
+    var h = pendingHandoff;
+    pendingHandoff = null;
+    if (!h || !session) return false;
+    var imported = importPGN(session, h.pgn);
+    if (!imported || !imported.ok) return false;
+    var nodes = T.mainline(session.tree);
+    // `applyReview` keys by `move_index - 1`, so the shape it wants is the annotated summary — of
+    // which only `moveEvaluations` is read. Passing the classifications straight through keeps the
+    // hand-off honest: what the coach computed is what the board shows.
+    applyReview(session, { moveEvaluations: h.classifications || [] }, nodes);
+    return true;
+  }
+
   function reset() {
     engineToken += 1;
     reviewToken += 1;
@@ -2914,7 +3072,8 @@ var BiyaAnalysisBoard = (function () {
     applyEditedPosition: applyEditedPosition,
     selfTest: selfTest,
     // view
-    render: render, reset: reset
+    render: render, reset: reset, loadReviewedGame: loadReviewedGame,
+    applyPendingHandoff: applyPendingHandoff
   };
 })();
 

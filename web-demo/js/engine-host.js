@@ -123,7 +123,9 @@ var BiyaEngineHost = (function () {
         maxDepth: opts.maxDepth || 4,
         multiPV: opts.multiPV || 1,
         historyKeys: opts.historyKeys || [],
-        deadlineMs: opts.deadlineMs || MET.TIMINGS.engineDeadline
+        // `0` is Infinite and must survive the fallback — `||` would silently turn it into the
+        // default deadline, which is the whole feature quietly not working on a served page.
+        deadlineMs: opts.deadlineMs === 0 ? 0 : (opts.deadlineMs || MET.TIMINGS.engineDeadline)
       });
       // The caller's cancel is a closure on this thread, so it has to be watched rather than
       // handed over. Cheap: one predicate per frame-ish, against a search that runs for ~a second.

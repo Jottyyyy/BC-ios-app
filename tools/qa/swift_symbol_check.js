@@ -47,6 +47,12 @@ var targets = args.length ? args.map(function (f) { return f.replace(/\\/g, '/')
 // unknown name as fine, which is the trap `swift_lint.js` fell into.
 var members = {};   // Namespace -> Set(member)
 var declared = {};  // Namespace -> true
+// Where each TOP-LEVEL type is declared, so two of the same name in one module can be reported.
+// Swift allows a nested `Foo.Bar` beside a top-level `Bar`; two top-level `Bar`s in one module is a
+// redeclaration error. This check exists because exactly that shipped unnoticed: the generated
+// `CoachMetrics.swift` declared `public enum CoachSelect` while `CoachSelect.swift` declared a view
+// of the same name, and nothing on this checkout compiles Swift.
+var topLevelSites = {};   // "module|Name" -> [file, ...]
 
 function collect(rel) {
   var src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -57,6 +63,14 @@ function collect(rel) {
   while ((m = re.exec(src)) !== null) {
     var ns = m[1];
     declared[ns] = true;
+    // Column 0 means top level: the regex allows leading tabs and spaces for a nested
+    // declaration, so the indentation is what separates the two cases.
+    var indent = m[0].replace(/^\n/, '').match(/^[ \t]*/)[0];
+    if (indent === '' && !/^extension\b/.test(m[0].trim())) {
+      var mod = rel.indexOf('BiyaherongCoachCore') >= 0 ? 'Core' : 'UI';
+      var key = mod + '|' + ns;
+      (topLevelSites[key] || (topLevelSites[key] = [])).push(rel);
+    }
     var set = members[ns] || (members[ns] = new Set());
     // The body, to its matching brace — nested types are collected under their own name by the
     // outer loop, so a shallow scan of this block is enough.
@@ -92,7 +106,7 @@ all.forEach(collect);
 //
 // Only namespaces that look like a metrics/constant holder are checked. Instance values, locals
 // and anything generic are out of scope: this is a name check, not a type checker.
-var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits)$/;
+var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Pairing[A-Z]\w*|Coach[A-Z]\w*|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits|GameReview|ReviewAnnotator|MoveTree|OpeningBook|ChessNotation)$/;
 var SKIP_MEMBER = /^(self|init|Type|shared)$/;
 
 var bad = 0, checked = 0;
@@ -128,7 +142,7 @@ targets.forEach(function (rel) {
 //
 // Scoped to `Puzzle*` and `Analysis*` so SwiftUI and Foundation types are out of scope by
 // construction rather than by an allowlist that would rot.
-var PROJECT_TYPE = /\b((?:Puzzle|Analysis)[A-Z]\w*)\s*\(/g;
+var PROJECT_TYPE = /\b((?:Puzzle|Analysis|Pairing|Coach)[A-Z]\w*)\s*\(/g;
 var typeBad = 0, typeChecked = 0;
 targets.forEach(function (rel) {
   var full = path.join(ROOT, rel);
@@ -151,6 +165,19 @@ targets.forEach(function (rel) {
   }
 });
 bad += typeBad;
+
+// Two top-level types of one name in one module do not compile. Reported here rather than left to
+// the Mac, because this checkout has no compiler to leave it to.
+var dupes = 0;
+Object.keys(topLevelSites).forEach(function (key) {
+  var files = topLevelSites[key].filter(function (f, i, a) { return a.indexOf(f) === i; });
+  if (files.length < 2) return;
+  var parts = key.split('|');
+  console.log('  DUPLICATE  ' + parts[1] + ' is declared at top level ' + files.length
+              + ' times in module ' + parts[0] + ': ' + files.join(', '));
+  dupes++;
+});
+bad += dupes;
 
 console.log(bad ? '\nX ' + bad + ' unresolved reference(s); '
                   + checked + ' members and ' + typeChecked + ' types checked'

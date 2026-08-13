@@ -107,12 +107,14 @@ const textOf = (root, cls) => byClass(root, cls).map(n => n.textContent);
 function loadSandbox() {
   const html = fs.readFileSync(path.join(ROOT, 'web-demo', 'index.html'), 'utf8');
   const order = [...html.matchAll(/<script src="js\/([^"]+)"><\/script>/g)].map(m => m[1]);
-  // `ai.js` is in this list because `analysis-engine.js` reads `CoachAI` AT LOAD TIME — the same
-  // trap that made the analysis worker throw on startup. Leaving it out is not a smaller test, it
-  // is a test of a load order the page does not use.
+  // `ai.js` and `analysis-eval.js` are in this list because `analysis-engine.js` reads `CoachAI`
+  // and `BiyaAnalysisEval` AT LOAD TIME — the same trap that made the analysis worker throw on
+  // startup. Leaving one out is not a smaller test, it is a test of a load order the page does not
+  // use.
   const need = ['engine.js', 'ai.js', 'rating.js', 'sound.js',
                 'puzzle-data.js', 'puzzle-serving.js', 'puzzle-session.js', 'puzzle-store.js',
-                'streak-engine.js', 'puzzle-progress.js', 'eco-data.js', 'movetree.js', 'pgn.js', 'analysis-engine.js',
+                'streak-engine.js', 'puzzle-progress.js', 'eco-data.js', 'movetree.js', 'pgn.js',
+                'analysis-eval.js', 'analysis-engine.js',
                 'opening-book.js', 'analysis-metrics.js', 'engine-host.js', 'analysis-store.js',
                 'puzzle-metrics.js', 'puzzle-app.js', 'puzzle-stats.js', 'puzzle-hub.js',
                 'puzzle-home.js', 'puzzle-board.js', 'puzzle-solver.js',

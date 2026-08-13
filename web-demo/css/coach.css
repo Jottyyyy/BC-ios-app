@@ -1,0 +1,503 @@
+/* ============================================================================ *
+ *  PLAY VS COACH  (spec 2.5-2.8)
+ *
+ *  Every value is `var(--cg…)`, pushed onto the screen root by `MET.applyAll`
+ *  from tools/metrics/coach_styles.json. Names are mechanical —
+ *  `--<prefix>-<styleBlock>-<property>`, kebab-cased.
+ *
+ *  Three prefixes, one per screen root: `--cgs-` select, `--cgc-` colour,
+ *  `--cgp-` game. Never `--pz*` or `--pg*`: each existing audit sweeps its own
+ *  prefix over a sandbox loading only its own screens, so a borrowed prefix
+ *  would be judged unread by the wrong suite.
+ *
+ *  This file was written AFTER `tools/qa/coach_screen_test.js`, on purpose. An
+ *  undefined custom property does not error — it renders as nothing — so every
+ *  `var()` below was checked against the extraction as it was typed.
+ * ============================================================================ */
+
+.cgs-view, .cgc-view, .cgp-view {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.cgs-view { background: var(--cgs-container-background-color); }
+.cgc-view, .cgp-view { background: var(--cgc-container-background-color); }
+
+/* ---- Shared chrome: back button and logo ---- */
+.cgs-back, .cgc-back, .cgp-back {
+  background: none; border: 0; cursor: pointer; font-family: inherit; flex: 0 0 auto;
+  width: var(--cgs-back-btn-width); height: var(--cgs-back-btn-height);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--cgs-back-icon-font-size); color: var(--cgs-back-icon-color);
+}
+.cgs-logo, .cgc-logo, .cgp-logo {
+  width: 30px; height: 30px; border-radius: 15px; flex: 0 0 auto;
+  border: 2px solid var(--gold); background: var(--card-alt);
+  box-shadow: 0 0 6px rgba(253, 176, 34, .6);
+}
+
+/* ---- Coach Select (2.5) ---- */
+.cgs-header { display: flex; align-items: center; padding: 12px 16px; }
+.cgs-header-center { flex: 1; text-align: center; min-width: 0; }
+.cgs-title {
+  font-size: var(--cgs-title-large-font-size);
+  font-weight: var(--cgs-title-large-font-weight);
+  color: var(--cgs-title-large-color);
+  letter-spacing: var(--cgs-title-large-letter-spacing);
+}
+.cgs-family {
+  font-size: var(--cgs-title-small-font-size);
+  font-weight: var(--cgs-title-small-font-weight);
+  color: var(--cgs-title-small-color);
+  letter-spacing: var(--cgs-title-small-letter-spacing);
+}
+.cgs-blurb, .cgs-tagline, .cgs-subtagline {
+  font-size: var(--cgs-title-sub-font-size);
+  color: var(--cgs-title-sub-color);
+  text-align: center;
+}
+.cgs-tagline { font-weight: var(--cgs-footer-bold-font-weight); }
+.cgs-subtagline { color: var(--cgs-footer-light-color); }
+
+.cgs-list {
+  display: flex; flex-wrap: wrap;
+  padding: 0 var(--cgs-row1-padding-horizontal);
+  gap: 10px;
+}
+.cgs-card {
+  flex: var(--cgs-coach-card-flex);
+  min-width: 30%;
+  display: flex; flex-direction: column; align-items: var(--cgs-coach-card-align-items);
+  padding: 0 var(--cgs-coach-card-padding-horizontal) var(--cgs-coach-card-padding-bottom);
+  background: none; border: 0; cursor: pointer; font-family: inherit;
+}
+/* The card's three concentric sizes are FOLDED from `CoachCard`'s own arithmetic —
+   `avatarSize` -> `ringSize = avatarSize + 6` -> `haloSize = ringSize + 10` — by
+   `gen_coach_metrics.js`, which reads them as signed terms out of the extraction. The demo
+   draws one element where the source nests three, so it takes the ring's size and wears the
+   halo as a spread shadow of exactly the gap the source leaves between them. */
+.cgs-avatar {
+  flex: 0 0 auto;
+  width: var(--cgs-card-size-ring-regular);
+  height: var(--cgs-card-size-ring-regular);
+  border-radius: 50%;
+  border: var(--cgs-cyan-ring-border-width) solid var(--cgs-cyan-ring-border-color);
+  background: var(--cgs-cyan-ring-background-color);
+  box-shadow: 0 0 0
+    calc((var(--cgs-card-size-halo-regular) - var(--cgs-card-size-ring-regular)) / 2)
+    var(--cgs-glow-halo-background-color);
+  margin-bottom: var(--cgs-glow-halo-margin-bottom);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--cgs-coach-name-color);
+  font-weight: var(--cgs-coach-name-font-weight);
+}
+.cgs-info { text-align: center; }
+.cgs-name {
+  font-size: var(--cgs-coach-name-font-size);
+  font-weight: var(--cgs-coach-name-font-weight);
+  color: var(--cgs-coach-name-color);
+  margin-bottom: var(--cgs-coach-name-margin-bottom);
+}
+.cgs-blurb-line {
+  font-size: var(--cgs-coach-desc-font-size);
+  color: var(--cgs-coach-desc-color);
+  text-align: var(--cgs-coach-desc-text-align);
+}
+.cgs-right { text-align: center; }
+.cgs-elo {
+  font-size: var(--cgs-coach-rating-font-size);
+  color: var(--cgs-coach-rating-color);
+  font-weight: var(--cgs-coach-rating-font-weight);
+  margin-top: var(--cgs-coach-rating-margin-top);
+}
+.cgs-depth {
+  font-size: var(--cgs-coach-role-font-size);
+  color: var(--cgs-coach-role-color);
+  font-weight: var(--cgs-coach-role-font-weight);
+}
+
+.cgs-takeback {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 var(--cgs-settings-row-margin-horizontal) var(--cgs-settings-row-margin-bottom);
+  background: var(--cgs-settings-row-background-color);
+  border-radius: var(--cgs-settings-row-border-radius);
+  padding: var(--cgs-settings-row-padding-vertical) var(--cgs-settings-row-padding-horizontal);
+  border: var(--cgs-settings-row-border-width) solid var(--cgs-settings-row-border-color);
+}
+.cgs-takeback-label {
+  font-size: var(--cgs-settings-label-font-size);
+  color: var(--cgs-settings-label-color);
+  font-weight: var(--cgs-settings-label-font-weight);
+}
+.cgs-switch {
+  width: 44px; height: 26px; border-radius: 13px; cursor: pointer; font-family: inherit;
+  border: var(--cgs-settings-row-border-width) solid var(--cgs-settings-row-border-color);
+  background: var(--cgs-settings-row-background-color);
+  color: transparent; font-size: 1px;
+}
+.cgs-switch.on { background: var(--gold); }
+
+/* ---- Colour Select (2.6) ---- */
+.cgc-header { display: flex; align-items: center; padding: 12px 16px; }
+.cgc-title {
+  flex: 1; text-align: center;
+  font-size: var(--cgc-color-label-font-size);
+  font-weight: var(--cgc-color-label-font-weight);
+  color: var(--cgc-color-label-color);
+  letter-spacing: var(--cgc-color-label-letter-spacing);
+}
+.cgc-unfinished {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--cgc-saved-game-banner-background-color);
+  border-radius: var(--cgc-saved-game-banner-border-radius);
+  padding: var(--cgc-saved-game-banner-padding-vertical)
+           var(--cgc-saved-game-banner-padding-horizontal);
+  margin: var(--cgc-saved-game-banner-margin-top)
+          var(--cgc-saved-game-banner-margin-horizontal)
+          var(--cgc-saved-game-banner-margin-bottom);
+  gap: var(--cgc-saved-game-banner-gap);
+  border: var(--cgc-saved-game-banner-border-width) solid var(--cgc-saved-game-banner-border-color);
+  font-size: var(--cgc-saved-game-text-font-size);
+  color: var(--cgc-saved-game-text-color);
+  font-weight: var(--cgc-saved-game-text-font-weight);
+}
+.cgc-sides { display: flex; gap: var(--cgc-color-row-gap); padding: 0 16px; }
+.cgc-side {
+  flex: var(--cgc-color-card-flex); cursor: pointer; font-family: inherit; text-align: center;
+  border-radius: var(--cgc-color-card-border-radius);
+  padding: var(--cgc-color-card-padding-vertical) 0;
+  gap: var(--cgc-color-card-gap);
+  border: var(--cgc-color-card-border-width) solid transparent;
+}
+.cgc-side-w { background: var(--cgc-color-card-white-background-color); }
+.cgc-side-b { background: var(--cgc-color-card-black-background-color); }
+.cgc-side-chip { font-size: var(--cgc-king-w-font-size); }
+.cgc-side-w .cgc-side-title {
+  font-size: var(--cgc-color-name-w-font-size);
+  font-weight: var(--cgc-color-name-w-font-weight);
+  color: var(--cgc-color-name-w-color);
+}
+.cgc-side-b .cgc-side-title {
+  font-size: var(--cgc-color-name-b-font-size);
+  font-weight: var(--cgc-color-name-b-font-weight);
+  color: var(--cgc-color-name-b-color);
+}
+.cgc-side-w .cgc-side-sub {
+  font-size: var(--cgc-color-hint-w-font-size); color: var(--cgc-color-hint-w-color);
+}
+.cgc-side-b .cgc-side-sub {
+  font-size: var(--cgc-color-hint-b-font-size); color: var(--cgc-color-hint-b-color);
+}
+
+/* ---- Game (2.7) ---- */
+.cgp-header {
+  display: flex; align-items: center;
+  padding: var(--cgp-play-header-padding-top) var(--cgp-play-header-padding-horizontal)
+           var(--cgp-play-header-padding-bottom);
+}
+.cgp-header-center { flex: 1; min-width: 0; text-align: center; }
+.cgp-coach-name {
+  font-size: var(--cgp-header-name-font-size);
+  font-weight: var(--cgp-header-name-font-weight);
+  color: var(--cgp-header-name-color);
+}
+.cgp-status {
+  font-size: var(--cgp-header-role-font-size);
+  margin-top: var(--cgp-header-role-margin-top);
+}
+
+.cgp-board-wrap { position: relative; display: flex; justify-content: center; }
+.cgp-board { display: block; }
+.cgp-premove {
+  position: absolute; top: 8px; right: 8px; cursor: pointer;
+  background: var(--cgp-premove-chip-background-color);
+  border-radius: var(--cgp-premove-chip-border-radius);
+  padding: var(--cgp-premove-chip-padding-vertical) var(--cgp-premove-chip-padding-horizontal);
+  font-size: var(--cgp-premove-chip-text-font-size);
+  font-weight: var(--cgp-premove-chip-text-font-weight);
+  color: var(--cgp-premove-chip-text-color);
+}
+
+.cgp-strip {
+  display: flex; flex-wrap: wrap; align-items: center;
+  padding: var(--cgp-move-strip-content-padding-horizontal);
+  max-height: var(--cgp-move-strip-max-height);
+  gap: var(--cgp-move-pair-group-gap);
+}
+.cgp-pair { display: flex; align-items: center; gap: 2px; }
+.cgp-no {
+  font-size: var(--cgp-move-pair-num-font-size);
+  color: var(--cgp-move-pair-num-color);
+  padding: 0 var(--cgp-move-pair-num-padding-horizontal);
+}
+.cgp-san {
+  border: 0; cursor: pointer; font-family: inherit;
+  background: var(--cgp-move-token-background-color);
+  border-radius: var(--cgp-move-token-border-radius);
+  padding: var(--cgp-move-token-padding-vertical) var(--cgp-move-token-padding-horizontal);
+  font-size: var(--cgp-move-token-text-font-size);
+  color: var(--cgp-move-token-text-color);
+}
+.cgp-san.on {
+  background: var(--cgp-move-token-active-background-color);
+  color: var(--cgp-move-token-text-active-color);
+}
+
+.cgp-nav {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--cgp-nav-bar-gap);
+  padding: var(--cgp-nav-bar-padding-vertical) var(--cgp-nav-bar-padding-horizontal);
+}
+.cgp-nav-btn {
+  border: 0; cursor: pointer; font-family: inherit;
+  background: var(--cgp-nav-btn-background-color);
+  border-radius: var(--cgp-nav-btn-border-radius);
+  display: flex; align-items: center; justify-content: center;
+  width: var(--cgp-nav-btn-width); height: var(--cgp-nav-btn-height);
+  font-size: var(--cgp-nav-btn-text-font-size);
+  color: var(--cgp-nav-btn-text-color);
+}
+.cgp-nav-btn.off { opacity: var(--cgp-nav-btn-disabled-opacity); cursor: default; }
+
+.cgp-actions {
+  display: flex;
+  padding: var(--cgp-bottom-bar-padding-top) var(--cgp-bottom-bar-padding-horizontal)
+           var(--cgp-bottom-bar-padding-bottom);
+  gap: var(--cgp-bottom-bar-gap);
+}
+.cgp-resign, .cgp-takeback {
+  flex: 1 1 0;
+  min-width: var(--cgp-action-btn-min-width); border: 0; cursor: pointer; font-family: inherit;
+  border-radius: var(--cgp-action-btn-border-radius);
+  padding: var(--cgp-action-btn-padding-vertical) 0;
+}
+.cgp-resign {
+  background: var(--cgp-resign-btn-background-color);
+  font-size: var(--cgp-resign-text-font-size);
+  font-weight: var(--cgp-resign-text-font-weight);
+  color: var(--cgp-resign-text-color);
+}
+.cgp-takeback {
+  background: var(--cgp-take-back-btn-background-color);
+  font-size: var(--cgp-take-back-text-font-size);
+  font-weight: var(--cgp-take-back-text-font-weight);
+  color: var(--cgp-take-back-text-color);
+}
+
+.cgp-result {
+  margin: 12px;
+  background: var(--cgp-modal-card-background-color);
+  border-radius: var(--cgp-modal-card-border-radius);
+  padding: var(--cgp-modal-card-padding-vertical) var(--cgp-modal-card-padding-horizontal);
+  text-align: center;
+}
+.cgp-result-title {
+  font-size: var(--cgp-modal-result-label-font-size);
+  font-weight: var(--cgp-modal-result-label-font-weight);
+  text-align: var(--cgp-modal-result-label-text-align);
+}
+.cgp-result-body {
+  font-size: var(--cgp-modal-result-text-font-size);
+  line-height: var(--cgp-modal-result-text-line-height);
+}
+.cgp-result-row {
+  display: flex; gap: var(--cgp-modal-actions-gap); margin-top: 12px;
+}
+.cgp-rematch, .cgp-review {
+  flex: 1; border: 0; cursor: pointer; font-family: inherit;
+  border-radius: var(--cgp-modal-btn-border-radius);
+  padding: var(--cgp-modal-btn-padding-vertical) 0;
+  font-size: var(--cgp-modal-btn-text-font-size);
+  font-weight: var(--cgp-modal-btn-text-font-weight);
+}
+/* No background here on purpose: `play.tsx` writes
+   `[styles.modalBtn, { backgroundColor: coach.accentColor }]`, so the colour is per-coach and
+   arrives inline from `MET.ACCENTS`, which the generator reads out of `COACH_DATA`. */
+.cgp-rematch { color: var(--cgp-modal-btn-text-color); }
+.cgp-review {
+  background: var(--cgp-modal-review-btn-background-color);
+  color: var(--cgp-modal-review-btn-text-color);
+}
+
+/* ---- Game Review modal (2.10) ---- */
+.cgp-review-scrim {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .7);
+}
+.cgp-review-card {
+  width: calc(100% - var(--cgp-review-modal-card-padding-horizontal) * 2);
+  max-height: 85%;
+  overflow-y: auto;
+  background: var(--cgp-review-modal-card-background-color);
+  border-radius: var(--cgp-review-modal-card-border-radius);
+  padding: var(--cgp-review-modal-card-padding-vertical)
+           var(--cgp-review-modal-card-padding-horizontal);
+  /* `borderColor` is NOT in the StyleSheet: `play.tsx` writes
+     `{ borderColor: coach.accentColor + '30' }` — the accent with a hex alpha BYTE appended, which
+     is spec 2.10's "accent @ 19 %". It arrives inline, like the modal button's fill. */
+  border: var(--cgp-review-modal-card-border-width) solid transparent;
+}
+.cgp-review-title {
+  font-size: var(--cgp-review-modal-title-font-size);
+  font-weight: var(--cgp-review-modal-title-font-weight);
+  color: var(--cgp-review-modal-title-color);
+  text-align: var(--cgp-review-modal-title-text-align);
+  letter-spacing: var(--cgp-review-modal-title-letter-spacing);
+  margin-bottom: var(--cgp-review-modal-title-margin-bottom);
+}
+
+/* Running. The determinate bar replaces the RN spinner and its "20-30 seconds", which described
+   a network round trip that no longer happens. */
+.cgp-review-progress-text {
+  font-size: var(--cgp-review-loading-text-font-size);
+  color: var(--cgp-review-loading-text-color);
+  font-weight: var(--cgp-review-loading-text-font-weight);
+  text-align: center;
+}
+.cgp-review-bar {
+  height: 6px; border-radius: 3px; overflow: hidden; margin: 10px 0;
+  background: var(--cgp-graph-background-color);
+}
+.cgp-review-bar-fill { height: 100%; background: var(--cgp-graph-curve-stroke); transition: width var(--cgx-fast) linear; }
+.cgp-review-cancel {
+  display: block; margin: 0 auto; cursor: pointer; font-family: inherit; border: 0;
+  background: none;
+  font-size: var(--cgp-review-loading-hint-font-size);
+  color: var(--cgp-review-loading-hint-color);
+}
+
+/* Players. Both halves read `columns`, so the accuracy and the counts under it always describe
+   the same player — the RN modal ordered them differently and nothing said so. */
+.cgp-review-players {
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: var(--cgp-review-players-row-margin-bottom);
+}
+.cgp-review-col { flex: 1; text-align: center; }
+.cgp-review-col-label {
+  font-size: var(--cgp-review-player-label-font-size);
+  font-weight: var(--cgp-review-player-label-font-weight);
+  color: var(--cgp-review-player-label-color);
+}
+.cgp-review-accuracy {
+  font-size: var(--cgp-review-accuracy-value-font-size);
+  font-weight: var(--cgp-review-accuracy-value-font-weight);
+}
+.cgp-review-accuracy-label {
+  font-size: var(--cgp-review-accuracy-label-font-size);
+  font-weight: var(--cgp-review-accuracy-label-font-weight);
+  color: var(--cgp-review-accuracy-label-color);
+  letter-spacing: var(--cgp-review-accuracy-label-letter-spacing);
+  text-transform: uppercase;
+}
+.cgp-review-divider {
+  width: var(--cgp-review-divider-width);
+  height: var(--cgp-review-divider-height);
+  background: var(--cgp-review-divider-background-color);
+  margin: 0 var(--cgp-review-divider-margin-horizontal);
+  flex: 0 0 auto;
+}
+
+.cgp-review-graph {
+  background: var(--cgp-graph-background-color);
+  border-radius: var(--cgp-graph-border-radius);
+  height: var(--cgp-graph-height);
+  margin-bottom: var(--cgp-review-graph-wrap-margin-bottom);
+  overflow: hidden;
+}
+.cgp-review-svg { display: block; width: 100%; height: 100%; }
+.cgp-review-mid {
+  stroke: var(--cgp-graph-mid-stroke);
+  stroke-width: var(--cgp-graph-mid-stroke-width);
+}
+.cgp-review-curve {
+  fill: none; vector-effect: non-scaling-stroke;
+  stroke: var(--cgp-graph-curve-stroke);
+  stroke-width: var(--cgp-graph-curve-stroke-width);
+}
+
+.cgp-review-classes {
+  display: flex; flex-direction: column;
+  gap: var(--cgp-review-classifications-block-gap);
+  margin-bottom: var(--cgp-review-classifications-block-margin-bottom);
+}
+.cgp-review-class {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--cgp-review-class-row-gap);
+}
+.cgp-review-count {
+  width: var(--cgp-review-class-count-width);
+  text-align: center;
+  font-size: var(--cgp-review-class-count-font-size);
+  font-weight: var(--cgp-review-class-count-font-weight);
+}
+.cgp-review-dot {
+  width: var(--cgp-review-class-dot-width);
+  height: var(--cgp-review-class-dot-height);
+  border-radius: var(--cgp-review-class-dot-border-radius);
+  flex: 0 0 auto;
+}
+.cgp-review-class-label {
+  width: var(--cgp-review-class-label-width);
+  text-align: center;
+  font-size: var(--cgp-review-class-label-font-size);
+  font-weight: var(--cgp-review-class-label-font-weight);
+  color: var(--cgp-review-class-label-color);
+}
+
+/* The classification tint is applied INLINE from `analysis-metrics.js`'s ten-tier table — the
+   same table the Analysis Board's own review rows read. Ten hex values in a stylesheet would have
+   been a second copy of it, and the two would eventually disagree. */
+.cgp-review-actions {
+  display: flex; gap: var(--cgp-review-modal-actions-gap);
+}
+.cgp-review-start, .cgp-review-newgame {
+  flex: 1; border: 0; cursor: pointer; font-family: inherit;
+}
+.cgp-review-start {
+  padding: var(--cgp-review-start-btn-padding-vertical) 0;
+  border-radius: var(--cgp-review-start-btn-border-radius);
+  background: var(--gold);
+  font-size: var(--cgp-review-start-btn-text-font-size);
+  font-weight: var(--cgp-review-start-btn-text-font-weight);
+  color: var(--cgp-review-start-btn-text-color);
+}
+.cgp-review-newgame {
+  padding: var(--cgp-review-new-game-btn-padding-vertical) 0;
+  border-radius: var(--cgp-review-new-game-btn-border-radius);
+  background: var(--cgp-review-new-game-btn-background-color);
+  border: var(--cgp-review-new-game-btn-border-width) solid
+          var(--cgp-review-new-game-btn-border-color);
+  font-size: var(--cgp-review-new-game-btn-text-font-size);
+  font-weight: var(--cgp-review-new-game-btn-text-font-weight);
+  color: var(--cgp-review-new-game-btn-text-color);
+}
+
+/* ---- Polish. No extracted value is touched. ---- */
+.cgs-view, .cgc-view, .cgp-view {
+  --cgx-fast: 120ms;
+  --cgx-ease: cubic-bezier(.22, .61, .36, 1);
+  --cgx-press: .72;
+}
+.cgs-card, .cgs-switch, .cgc-side, .cgp-san, .cgp-nav-btn, .cgp-resign, .cgp-takeback,
+.cgp-rematch, .cgp-review, .cgp-premove, .cgs-back, .cgc-back, .cgp-back {
+  transition: transform var(--cgx-fast) var(--cgx-ease),
+              opacity var(--cgx-fast) var(--cgx-ease);
+}
+.cgs-card:active, .cgs-switch:active, .cgc-side:active, .cgp-san:active,
+.cgp-nav-btn:not(.off):active, .cgp-resign:active, .cgp-takeback:active,
+.cgp-rematch:active, .cgp-review:active, .cgp-premove:active,
+.cgs-back:active, .cgc-back:active, .cgp-back:active {
+  opacity: var(--cgx-press); transform: scale(.985);
+}
+.cgs-card:focus-visible, .cgc-side:focus-visible, .cgp-san:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cgs-card, .cgs-switch, .cgc-side, .cgp-san, .cgp-nav-btn, .cgp-resign, .cgp-takeback,
+  .cgp-rematch, .cgp-review, .cgp-premove, .cgs-back, .cgc-back, .cgp-back {
+    transition: none;
+  }
+  .cgs-card:active, .cgc-side:active, .cgp-san:active { transform: none; }
+}

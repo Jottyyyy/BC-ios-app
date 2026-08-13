@@ -33,11 +33,12 @@
  */
 'use strict';
 
-// ORDER MATTERS: `analysis-engine.js` reads `CoachAI` at load time (it reuses the coach's PSTs and
-// move ordering), so `ai.js` has to be in the global scope before it runs — the same order
-// index.html uses. Get it wrong and the worker throws on startup, `engine-host` quietly degrades to
-// the in-thread path, and the whole fix looks like it did nothing.
-importScripts('engine.js', 'ai.js', 'analysis-engine.js');
+// ORDER MATTERS: `analysis-engine.js` reads `CoachAI` and `BiyaAnalysisEval` at load time (it
+// reuses the coach's move ordering and the analysis evaluation), and `analysis-eval.js` in turn
+// reads `CoachAI` for the midgame tables it shares. So: engine, coach, eval, search — the same
+// order index.html uses. Get it wrong and the worker throws on startup, `engine-host` quietly
+// degrades to the in-thread path, and the whole fix looks like it did nothing.
+importScripts('engine.js', 'ai.js', 'analysis-eval.js', 'analysis-engine.js');
 
 /** Ids the host has asked us to abandon. A search checks this between depths. */
 var cancelled = Object.create(null);
@@ -57,12 +58,18 @@ function runAnalyze(msg) {
   var pos = Engine.fromFEN(msg.fen);
   if (!pos) throw new Error('unparseable FEN: ' + msg.fen);
 
-  var deadline = Date.now() + (msg.deadlineMs || 1200);
+  // `deadlineMs: 0` is Infinite analysis and means exactly that: no clock. The search then ends
+  // only when the host sends `cancel` or `maxDepth` is reached, which is why that ceiling exists.
+  var noDeadline = msg.deadlineMs === 0;
+  var deadline = noDeadline ? 0 : Date.now() + (msg.deadlineMs || 1200);
   var steps = BiyaAnalysis.analyzeSteps(pos, {
     maxDepth: msg.maxDepth || 4,
     multiPV: msg.multiPV || 1,
     historyKeys: msg.historyKeys || [],
-    shouldCancel: function () { return cancelled[msg.id] === true || Date.now() > deadline; }
+    shouldCancel: function () {
+      if (cancelled[msg.id] === true) return true;
+      return !noDeadline && Date.now() > deadline;
+    }
   });
 
   var reported = null;
