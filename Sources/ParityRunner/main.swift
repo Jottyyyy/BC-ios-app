@@ -2857,15 +2857,15 @@ do {
 
     // ---- runs -------------------------------------------------------------------
     var rs = PuzzleProgress.seed(now: t0)
-    var run = PuzzleProgress.endStreakRun(&rs, length: 7, now: t0)
+    var run = PuzzleProgress.endStreakRun(&rs, length: 7, bestBefore: 0, now: t0)
     h.check(run.isNewBest && rs.streak.bestStreak == 7, "a first run is a best")
     h.check(rs.streakRuns.count == 1, "and is written to history")
     h.check(rs.streak.currentStreak == 0 && rs.streak.puzzleRating == 600,
             "the run and the difficulty ramp both reset")
-    run = PuzzleProgress.endStreakRun(&rs, length: 3, now: t0 + 1)
+    run = PuzzleProgress.endStreakRun(&rs, length: 3, bestBefore: 7, now: t0 + 1)
     h.check(!run.isNewBest && rs.streak.bestStreak == 7,
             "a shorter run does not lower the best — one source of truth (fix #8)")
-    PuzzleProgress.endStreakRun(&rs, length: 0, now: t0 + 2)
+    PuzzleProgress.endStreakRun(&rs, length: 0, bestBefore: 7, now: t0 + 2)
     h.check(rs.streakRuns.count == 2, "a zero-length run is not written to history")
 
     var rh = PuzzleProgress.seed(now: t0)
@@ -2910,7 +2910,7 @@ do {
     h.check(PuzzleProgress.seenSet(js) == Set([1, 3, 5]), "and reads back")
     PuzzleProgress.recordRatedAttempt(&js, puzzleId: 3, isCorrect: true, puzzleRating: 1250,
                                       themes: ["fork"], solveTimeSeconds: 8, now: t0, calendar: cal)
-    PuzzleProgress.endStreakRun(&js, length: 4, now: t0)
+    PuzzleProgress.endStreakRun(&js, length: 4, bestBefore: 0, now: t0)
     PuzzleProgress.savePlayDraft(&js, puzzleId: 3, now: t0)
     let enc = JSONEncoder()
     enc.outputFormatting = [.sortedKeys]

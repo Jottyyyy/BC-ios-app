@@ -83,8 +83,16 @@ const scratchUI = path.join(scratch, 'DemoApp', 'Sources', 'BiyaherongUI');
 fs.mkdirSync(scratchUI, { recursive: true });
 fs.mkdirSync(path.join(scratch, 'tools', 'qa'), { recursive: true });
 
+// Copied with line endings NORMALISED to LF. This checkout has both: `git merge` writes CRLF into
+// the files it touches while files written directly are LF, so a literal anchor containing "\n"
+// silently stops matching a file that a merge happened to rewrite — and every mutant in it goes
+// untested while the run still looks like it did something. The checker only greps, so normalising
+// costs nothing, and the scratch copy is thrown away either way.
 const sources = fs.readdirSync(UI).filter(f => f.endsWith('.swift'));
-for (const f of sources) fs.copyFileSync(path.join(UI, f), path.join(scratchUI, f));
+for (const f of sources) {
+  const text = fs.readFileSync(path.join(UI, f), 'utf8').replace(/\r\n/g, '\n');
+  fs.writeFileSync(path.join(scratchUI, f), text);
+}
 
 // The checker resolves ROOT from its own location, so a copy two levels under the scratch root
 // sees the copied sources and nothing else.

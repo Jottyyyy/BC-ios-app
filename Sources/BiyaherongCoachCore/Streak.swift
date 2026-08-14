@@ -15,7 +15,7 @@ public enum StreakEngine {
     // The ±50 streak serving window lives in `PuzzleServing.streakWindow` (single source of truth).
 
     /// Immutable snapshot of a user's streak row.
-    public struct State: Equatable, Codable {
+    public struct State: Equatable, Codable, Sendable {
         public var currentStreak: Int
         public var bestStreak: Int
         public var puzzleRating: Int

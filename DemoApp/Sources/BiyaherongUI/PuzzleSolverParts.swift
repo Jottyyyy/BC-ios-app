@@ -62,7 +62,7 @@ final class PuzzleSolverEngine: ObservableObject {
         deselect()
         solutionHighlight = [:]
         play(.gameStart)
-        after(PuzzleSession.opponentDelayMs(mode)) { [weak self] in
+        after(PuzzleSession.Timing.opponentDelayMs(mode)) { [weak self] in
             guard let self, var s = self.session else { return }
             let r = s.applySetupMove()
             self.session = s
@@ -547,11 +547,24 @@ struct PuzzleEnginePanelView: View {
 /// than inventing a second set.
 struct PuzzleModal: View {
     let title: String
-    let body: String
+    /// The copy under the title — `pz-modal-body` in the web twin, which is why every call site
+    /// labels it `body:`. `View` already owns the name `body`, so it is stored under another one
+    /// and the label is kept by the init below rather than renamed at six call sites.
+    let message: String
     let dangerTitle: String
     let keepTitle: String
     let onDanger: () -> Void
     let onKeep: () -> Void
+
+    init(title: String, body: String, dangerTitle: String, keepTitle: String,
+         onDanger: @escaping () -> Void, onKeep: @escaping () -> Void) {
+        self.title = title
+        self.message = body
+        self.dangerTitle = dangerTitle
+        self.keepTitle = keepTitle
+        self.onDanger = onDanger
+        self.onKeep = onKeep
+    }
 
     var body: some View {
         ZStack {
@@ -562,7 +575,7 @@ struct PuzzleModal: View {
                     .foregroundStyle(PuzzlePalette.textPrimary)
                     .multilineTextAlignment(.center)
                     .padding(.bottom, PuzzleTurboRun.modalTitleMarginBottom)
-                Text(body)
+                Text(message)
                     .font(Theme.nunito(PuzzleTurboRun.modalBodySize, .regular))
                     .foregroundStyle(PuzzlePalette.textSecondary)
                     .multilineTextAlignment(.center)

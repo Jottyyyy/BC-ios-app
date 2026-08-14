@@ -21,7 +21,7 @@ struct PuzzleTurboHomeScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.turboTitle,
+            PuzzleScreenHeader(title: PuzzleStrings.turboTitle, subtitle: nil,
                                titleSize: PuzzleType.turboTitle, onBack: onExit) {
                 Text(PuzzleStrings.turboBadge)
                     .font(Theme.nunito(PuzzleType.turboBadge, .bold))
@@ -228,9 +228,9 @@ struct PuzzleTurboRunScreen: View {
     let onExit: () -> Void
 
     @StateObject private var engine = PuzzleSolverEngine(mode: .turbo)
-    @State private var run = TurboRun.State(mode: 0, score: 0, mistakes: 0, targetRating: 0,
-                                            puzzlesServed: 0, startedAt: nil, endedAt: nil,
-                                            reason: nil)
+    /// A placeholder until `start()` builds the real one on appear. `TurboRun.start` is the way in:
+    /// it is the engine's own empty run, so the ramp and the clock cannot be seeded by hand here.
+    @State private var run = TurboRun.start(profileRating: 0, mode: PuzzleTurboRunVM.infiniteMode)
     @State private var result: PuzzleProgress.RushResult?
     @State private var showQuit = false
     @State private var feedback: (square: String, correct: Bool)?

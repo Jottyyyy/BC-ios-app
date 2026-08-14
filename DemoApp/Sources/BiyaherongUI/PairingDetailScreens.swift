@@ -486,7 +486,7 @@ struct PairingDetailScreen: View {
             } else {
                 standingsHeaderRow
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
-                    standingsRow(r, rank: i + 1, alt: i % 2 == 0)
+                    standingsRow(r, in: t, rank: i + 1, alt: i % 2 == 0)
                 }
                 ShareLink(item: PairingShareText.standings(t)) {
                     Text(PairingStrings.shareStandings)
@@ -538,8 +538,13 @@ struct PairingDetailScreen: View {
             .frame(width: width)
     }
 
-    private func standingsRow(_ r: PairingEngine.StandingsRow, rank: Int, alt: Bool) -> some View {
+    /// `StandingsRow` carries only the `wins` its tie-break ladder needs, so the draw and loss
+    /// columns read the player record — the same recompute pass fills all three in, and it is the
+    /// pair the twin's row object carries alongside `wins`.
+    private func standingsRow(_ r: PairingEngine.StandingsRow, in t: PairingDocument.Tournament,
+                              rank: Int, alt: Bool) -> some View {
         let first = rank == 1
+        let record = PairingDocument.player(t, id: r.id)
         return HStack(spacing: 0) {
             // Rank 1 gold, ON SCREEN as well as in the share image (spec 7 #14). The RN styles for
             // this existed and were only ever applied to the image.
@@ -568,8 +573,8 @@ struct PairingDetailScreen: View {
                 .foregroundStyle(PairingDetail.standingsPtsColor)
                 .frame(width: PairingCols.pts)
             value(String(r.wins), PairingCols.wdl)
-            value(String(r.draws), PairingCols.wdl)
-            value(String(r.losses), PairingCols.wdl)
+            value(String(record?.draws ?? 0), PairingCols.wdl)
+            value(String(record?.losses ?? 0), PairingCols.wdl)
             value(PairingEngine.formatScore(r.buchholz), PairingCols.bch)
             value(PairingEngine.formatScore(r.sonnebornBerger), PairingCols.sb)
         }
@@ -690,8 +695,13 @@ enum PairingShareText {
         for (i, p) in PairingDocument.standings(t).enumerated() {
             var rank = "\(i + 1)."
             while rank.count < 3 { rank += " " }
-            lines.append(rank + " " + p.name + "  " + PairingEngine.formatScore(p.score)
-                         + "  \(p.wins)W \(p.draws)D \(p.losses)L")
+            let record = PairingDocument.player(t, id: p.id)
+            let wdl: String = "\(p.wins)W \(record?.draws ?? 0)D \(record?.losses ?? 0)L"
+            var line: String = rank
+            line += " " + p.name
+            line += "  " + PairingEngine.formatScore(p.score)
+            line += "  " + wdl
+            lines.append(line)
         }
         lines.append("")
         lines.append(PairingStrings.hashtags)
