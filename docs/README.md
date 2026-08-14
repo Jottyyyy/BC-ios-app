@@ -19,6 +19,9 @@ Feature- and subsystem-level documentation for this repo.
 - **[`../web-demo/README.md`](../web-demo/README.md)** — end-user run steps for the Windows browser demo.
 
 ## Feature docs
+- [`chessboard.md`](chessboard.md) — the one board renderer per language, the sizing rule every screen
+  obeys (a fixed square from the WIDTH — never `min(w, h)`), coordinates, and the gate that fails when
+  either is reinvented. **Read this before touching any screen that shows a board.**
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
 - [`home-screen.md`](home-screen.md) — the landing dashboard: four bands, a never-scrolling 3×2 grid of six

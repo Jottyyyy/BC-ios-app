@@ -35,7 +35,7 @@ struct PuzzleStreakHomeScreen: View {
             runList
             bottom
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
         .overlay { if showResume { resumeModal } }
     }
@@ -199,19 +199,28 @@ struct PuzzleStreakSolverScreen: View {
     @State private var showStrip = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            statsBar
-            PuzzleBoardBand(engine: engine)
-            bottom
-            Spacer(minLength: 0)
+        // ONE GeometryReader per screen, at the very top. Everything below reads `geo.size.width`;
+        // nothing below may open its own, because a GeometryReader nested in the VStack is greedy —
+        // it takes the leftover HEIGHT, and the board was then sized off that instead of the width.
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                header
+                statsBar
+                PuzzleBoardBand(engine: engine, edge: geo.size.width)
+                bottom
+                Spacer(minLength: 0)
+            }
+            // Explicit size, pinned to `.top`. The old `.frame(maxHeight: .infinity)` defaulted to
+            // `.center`, so once the header went greedy the whole screen drifted into the middle of
+            // the phone with a blank block above it. Leftover height belongs BELOW the hint, which
+            // is where `.pzks-bottom` leaves it in the browser.
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .background(PuzzlePalette.screenBg)
+            .overlay { promotion }
+            .overlay { if result != nil && !showStrip { resultOverlay } }
+            .onAppear(perform: start)
+            .onDisappear { engine.leave() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PuzzlePalette.screenBg)
-        .overlay { promotion }
-        .overlay { if result != nil && !showStrip { resultOverlay } }
-        .onAppear(perform: start)
-        .onDisappear { engine.leave() }
     }
 
     private var header: some View {
@@ -229,7 +238,17 @@ struct PuzzleStreakSolverScreen: View {
                 .font(Theme.nunito(PuzzleStreakSolver.counterSize, .bold))
                 .foregroundStyle(PuzzleStreakHome.badgeFill)
             Spacer()
-            Color.clear.frame(width: PuzzleStreakSolver.backBtnW)
+            // The browser draws `.pzd-logo` here (app.css:1349-1350) — a gold ring with a soft
+            // glow. Swift had a bare `Color.clear.frame(width:)` instead, and that single missing
+            // `height:` is what broke this screen: `Color` is greedy, `.frame(width:)` constrains
+            // only the width, so the header reported an unbounded max height, became a flexible
+            // child of the outer VStack, and claimed a slice of the screen as blank space.
+            // Both axes are spelled out here, deliberately, the way CoachScreens.swift:76 does.
+            Circle()
+                .strokeBorder(PuzzlePalette.gold, lineWidth: PuzzleStreakSolver.logoBorder)
+                .frame(width: PuzzleStreakSolver.logoSize, height: PuzzleStreakSolver.logoSize)
+                .shadow(color: PuzzleStreakSolver.logoGlowColor,
+                        radius: PuzzleStreakSolver.logoGlowRadius)
         }
         .padding(.horizontal, PuzzleStreakSolver.headerPaddingH)
         .padding(.vertical, PuzzleStreakSolver.headerPaddingV)
@@ -318,7 +337,11 @@ struct PuzzleStreakSolverScreen: View {
                                 .stroke(PuzzlePalette.gold,
                                         lineWidth: PuzzleStreakSolver.newBestBorder))
                     }
-                    overlayButton(PuzzleStrings.streakShowSolution, PuzzlePalette.gold) {
+                    // Navy on gold, not white on gold: `.pzks-btn-gold { color: var(--pz-on-gold) }`
+                    // (app.css:1614). The browser was rendering it white too, because the streak
+                    // root never set `--pz-on-gold` — both sides are corrected together.
+                    overlayButton(PuzzleStrings.streakShowSolution, PuzzlePalette.gold,
+                                  text: PuzzlePalette.onGold) {
                         reveal()
                     }
                     overlayButton(PuzzleStrings.streakShareResult, PuzzleStreakHome.shareFill) { }
@@ -345,12 +368,12 @@ struct PuzzleStreakSolverScreen: View {
         }
     }
 
-    private func overlayButton(_ title: String, _ fill: Color,
+    private func overlayButton(_ title: String, _ fill: Color, text: Color = .white,
                                _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(Theme.nunito(PuzzleStreakSolver.btnSize, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(text)
                 .padding(.horizontal, PuzzleStreakSolver.btnPaddingH)
                 .padding(.vertical, PuzzleStreakSolver.btnPaddingV)
                 .background(fill,

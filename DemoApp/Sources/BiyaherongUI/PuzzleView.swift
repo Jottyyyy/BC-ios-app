@@ -185,10 +185,13 @@ struct PuzzleView: View {
                 }
             }
             VStack(spacing: 4) {
-                BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
-                          lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
-                          boardSize: boardSize, onTap: { vm.tap($0) })
-                    .frame(width: boardSize, height: boardSize)
+                // Fixed-size macOS demo panel, but routed through the one band like every other
+                // board. `coordinates: false` because the a–h / 1–8 strips are drawn outside.
+                ChessBoardBand(edge: boardSize) { edge in
+                    BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
+                              lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
+                              boardSize: edge, onTap: { vm.tap($0) }, coordinates: false)
+                }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(.black.opacity(0.25), lineWidth: 1))
                     .shadow(color: .black.opacity(0.22), radius: 9, y: 3)

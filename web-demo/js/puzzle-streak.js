@@ -66,6 +66,10 @@ var BiyaPuzzleStreak = (function () {
     set('--pz-bg', P.screenBg); set('--pz-card', P.card); set('--pz-card-alt', P.cardAlt);
     set('--pz-text', P.textPrimary); set('--pz-text-2', P.textSecondary);
     set('--pz-gold', P.gold); set('--pz-orange', P.streakOrange);
+    // `.pzks-btn-gold { color: var(--pz-on-gold) }` (app.css) had nothing to read here, so
+    // "💡 Show Solution" fell back to the inherited white instead of navy-on-gold. Every other
+    // puzzle screen sets it (puzzle-solver.js, puzzle-thematic.js); this one did not.
+    set('--pz-on-gold', P.onGold);
     set('--pzk-pad-h', H.headerPaddingH + 'px'); set('--pzk-pad-t', H.headerPaddingTop + 'px');
     set('--pzk-pad-b', H.headerPaddingBottom + 'px'); set('--pzk-title-fs', T.streakTitle + 'px');
     set('--pzk-badge-fill', H.badgeFill); set('--pzk-badge-ph', H.badgePaddingH + 'px');

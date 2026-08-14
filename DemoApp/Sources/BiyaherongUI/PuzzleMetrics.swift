@@ -678,6 +678,16 @@ public enum PuzzleStreakSolver {
     public static let statLabelMarginBottom: CGFloat = 2
     public static let statValueSize: CGFloat = 22
     public static let statDividerSize: CGFloat = 20
+    /// The header's right-hand mark, from `.pzd-logo` (web-demo/css/app.css:1349-1350):
+    /// `width/height 30px; border-radius 50%; border 2px solid var(--pz-gold);
+    ///  box-shadow 0 0 6px rgba(253,176,34,.6)`.
+    /// It replaces a `Color.clear` that carried a width and no height — see the header comment in
+    /// PuzzleStreakScreens.swift for why that one omission cost the whole screen's layout.
+    public static let logoSize: CGFloat = 30
+    public static let logoBorder: CGFloat = 2
+    public static let logoGlowRadius: CGFloat = 6
+    public static let logoGlowColor = Color(red: 253/255, green: 176/255, blue: 34/255)
+        .opacity(0.6)
     public static let bottomPaddingH: CGFloat = 16
     public static let bottomGap: CGFloat = 10
     public static let hintSize: CGFloat = 14

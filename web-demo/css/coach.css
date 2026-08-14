@@ -208,7 +208,11 @@
 }
 
 .cgp-board-wrap { position: relative; display: flex; justify-content: center; }
-.cgp-board { display: block; }
+/* `width: 100%` for the same reason `.pz-board chess-board` has it (app.css) and the Swift
+   CoachGameScreen now takes its edge from the screen width: everything inside <chess-board> is
+   absolutely positioned, so its max-content contribution is 0 and a flex item with no width had
+   nothing to size itself from. Every other board in the demo states its width; this one did not. */
+.cgp-board { display: block; width: 100%; }
 .cgp-premove {
   position: absolute; top: 8px; right: 8px; cursor: pointer;
   background: var(--cgp-premove-chip-background-color);

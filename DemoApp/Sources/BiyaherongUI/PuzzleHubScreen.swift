@@ -17,6 +17,14 @@ enum PuzzleRoute: Hashable {
 struct PuzzleHubScreen: View {
     @ObservedObject var store: PuzzleHubStore
     let onExit: () -> Void
+    /// Called with `true` while any route is pushed on top of the hub, so the host can hide the
+    /// app's tab bar. The browser does exactly this — every pushed puzzle route calls
+    /// `appCard().classList.add('an-mode')`, whose only job is `.tabbar { display: none }`
+    /// (web-demo/js/app.js). Without it the solver screens draw a tab bar the web twin does not
+    /// have, and lose ~90pt of the height the board wants.
+    ///
+    /// Defaulted, so the macOS demo's `AppShell` call site is unaffected.
+    var onPushedChange: (Bool) -> Void = { _ in }
     @State private var path: [PuzzleRoute] = []
 
     var body: some View {
@@ -28,6 +36,10 @@ struct PuzzleHubScreen: View {
                 }
         }
         .tint(PuzzlePalette.gold)
+        // `path.count` rather than `path.isEmpty`: pushing solver-on-top-of-home keeps the flag
+        // true, and `onChange` on a Bool that never changes value would not fire on the way in.
+        .onChange(of: path.count) { _, count in onPushedChange(count > 0) }
+        .onDisappear { onPushedChange(false) }
     }
 
     // MARK: - The hub itself
@@ -40,7 +52,7 @@ struct PuzzleHubScreen: View {
             cards
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
     }
 

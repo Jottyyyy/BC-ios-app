@@ -284,16 +284,22 @@ struct CoachGameScreen: View {
     private var game: CoachGame.Game? { store.game }
 
     var body: some View {
-        VStack(spacing: .zero) {
-            header
-            board
-            moveStrip
-            navRow
-            if let g = game, CoachGame.isOver(g) { resultCard(g) } else { actions }
-            Spacer(minLength: .zero)
+        // One GeometryReader, at the top — see PuzzleSolverParts.PuzzleBoardBand. This screen's
+        // board used the same `GeometryReader` + `min(w, h)` shape the puzzle solvers did, so it
+        // shrank the same way whenever the move strip or the result card grew.
+        GeometryReader { geo in
+            VStack(spacing: .zero) {
+                header
+                board(edge: geo.size.width)
+                moveStrip
+                navRow
+                if let g = game, CoachGame.isOver(g) { resultCard(g) } else { actions }
+                Spacer(minLength: .zero)
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .overlay { if store.confirmingResign { resignPrompt } }
+            .overlay { if let state = store.review { reviewModal(state) } }
         }
-        .overlay { if store.confirmingResign { resignPrompt } }
-        .overlay { if let state = store.review { reviewModal(state) } }
     }
 
     private var header: some View {
@@ -334,11 +340,10 @@ struct CoachGameScreen: View {
         return CoachGame.isLive(g) ? CoachStrings.live : CoachStrings.reviewing
     }
 
-    private var board: some View {
-        GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
-            let shown = game.map { CoachGame.displayPosition($0) }
-            let pos = shown.flatMap { ChessPosition(fen: $0.fen) }
+    private func board(edge: CGFloat) -> some View {
+        let shown = game.map { CoachGame.displayPosition($0) }
+        let pos = shown.flatMap { ChessPosition(fen: $0.fen) }
+        return ChessBoardBand(edge: edge) { side in
             ZStack(alignment: .topTrailing) {
                 BoardView(pieces: pos.map(piecesFrom) ?? [],
                           selected: selected,
@@ -350,10 +355,7 @@ struct CoachGameScreen: View {
                           onTap: { tap($0, in: pos) })
                 if let p = store.controller.premove { premoveChip(p) }
             }
-            .frame(width: side, height: side)
-            .frame(maxWidth: .infinity)
         }
-        .aspectRatio(CoachLayout.boardAspect, contentMode: .fit)
     }
 
     private func lastMove(_ shown: CoachGame.Shown?, _ pos: ChessPosition?) -> Move? {

@@ -9,6 +9,94 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-14 (fixed) — One chessboard, one sizing rule: the Puzzle Streak screen that shipped wrong
+
+A TestFlight build of the **Puzzle Streak solver** came back with a block of empty navy above the
+header, the content floating in the middle of the phone, a board covering about three quarters of the
+width, and the app's tab bar still showing. The browser twin of the same screen was correct. Three
+independent causes, each a single token wide, plus a fourth divergence nobody had noticed.
+
+**Fixed — the greedy header.** `PuzzleStreakScreens.swift` balanced its header with
+
+```swift
+Color.clear.frame(width: PuzzleStreakSolver.backBtnW)   // no height:
+```
+
+`Color` accepts any proposal and `.frame(width:)` constrains one axis, so the header reported an
+unbounded max height, became a *flexible* child of the screen's `VStack`, and was handed a slice of
+the leftover screen height as blank space. It was the only one-axis `Color` frame in the module —
+`CoachScreens.swift` spells both axes. It is now the gold ring the browser draws there (`.pzd-logo`),
+with a width **and** a height.
+
+**Fixed — boards sized off the leftover height.** `PuzzleBoardBand` (all five solvers) and
+`CoachGameScreen.board` both wrapped `BoardView` in a `GeometryReader` and took
+`min(geo.size.width, geo.size.height)`. A `GeometryReader` in a stack is proposed whatever is left
+over, so the board's *width* tracked the leftover *height*: it never filled the screen and resized
+whenever anything above or below it grew. This is `board_layout_check.js`'s CSS bug
+(`width: min(100cqw, 100cqh - …)`) one language over, and the lesson was already written down in
+`AnalysisBoardScreen.swift`. Every board is now a fixed square from the width, with the band below it
+flexible — the browser's `.pz-board { flex: none }` + `.pz-bottom { flex: 1 1 auto }`.
+
+**Fixed — screen roots drifting to centre.** `.frame(maxWidth: .infinity, maxHeight: .infinity)`
+defaults to `alignment: .center`. Once the two bugs above stopped the content filling the frame,
+centre is where it went. Every puzzle screen root now pins to `.top`.
+
+**Changed — `BoardView` lifted out of `PlayView.swift` into its own `BoardView.swift`,** alongside a
+new `ChessBoardBand`: the one wrapper that turns an edge into a square. It is deliberately *not*
+`maxWidth: .infinity`, because callers hang `.overlay(alignment: .topLeading)` (arrows, the
+annotation badge, Turbo's feedback dot) and `.clipShape` on it. Six different ad-hoc wrappers are now
+one; `PhoneView`'s hard-coded 330pt board is measured, and the Analysis Board keeps its pixel-snapped
+`AnalysisBoard.size(screenWidth:pixelRatio:)` but routes through the same band. The comment in
+`PhoneView.swift` asking for exactly this lift is discharged.
+
+**Changed — the tab bar hides on pushed puzzle routes,** matching the browser, where every pushed
+route sets `an-mode` and `.app-card.an-mode .tabbar { display: none }`. `PuzzleHubScreen` reports its
+depth via `onPushedChange`. Worth ~90pt of height to the board.
+
+**Added — a–h / 1–8 coordinates on the Swift board,** which `<chess-board>` has always drawn and
+`BoardView` never did. Geometry extracted from the stylesheet that already had it, into `BoardCoords`
+(`AnalysisMetrics.swift`). The two units there are different on purpose: `clamp(7px, 2.1cqw, 12px)`
+measures against the **board** edge, the `3%`/`1%`/`4%` insets against the **square**. The two macOS
+demo panels pass `coordinates: false` — they draw their own strips outside the board.
+
+**Added — `tools/qa/swift_layout_check.js`,** the SwiftUI half of `board_layout_check.js`, wired into
+`js_goldens.js`. Each rule is one of the bugs above restated as a grep: no one-axis frame on a
+`Color`, no `min(geo.size.width, geo.size.height)`, no `GeometryReader{…}.aspectRatio(…)` board band,
+no `BoardView` outside `ChessBoardBand`, screen roots pinned to `.top`, a Spacer after every solver
+board, and the tab bar hidden on pushed routes. None of this is visible to a compiler, and there is
+no Swift compiler on the Windows checkout at all.
+
+**Added — `tools/qa/swift_layout_mutation_test.js`,** because a grep-based gate is worth exactly its
+ability to fail. It reintroduces all seven bugs into a scratch copy and requires each to be rejected.
+It earned its place immediately: the first version of the check let **two** mutants through — the
+greedy-frame rule was a regex anchored on `Circle()` immediately followed by `.frame(`, which sailed
+past the real `Circle().strokeBorder(…).frame(…)` chain, and the Spacer rule searched the whole file,
+so a Spacer in an unrelated overlay satisfied it. The first is now a chain walker, the second is
+scoped to the stack the board is in. A broader first draft also flagged three *correct* sites
+(`microBar`, the theme bars, the sidebar rule — fills and dividers inside a container that already
+fixes the other axis), so the rule is scoped to `Color.…`: a rule that cries wolf on the correct
+spelling gets suppressed, and then it is not a rule.
+
+**`web-demo/` updated** — three genuine defects found while comparing the two, all fixed on the web
+side rather than copied into Swift:
+
+- `--pz-on-gold` was never set on the streak root, so `.pzks-btn-gold { color: var(--pz-on-gold) }`
+  fell back to inherited white — "💡 Show Solution" was white-on-gold instead of navy. Both languages
+  corrected together.
+- `.pzd-view, .pzt-view` forced `-apple-system`, so Daily and Thematic rendered in Segoe UI on
+  Windows while Streak and Turbo inherited Nunito. Two typefaces in one feature, neither matching the
+  app. Override removed; all five inherit Nunito now.
+- `.cgp-board` (Play vs Coach) declared no width. Everything inside `<chess-board>` is absolutely
+  positioned, so its max-content contribution is 0 and a flex item with no width had nothing to size
+  from. Now `width: 100%`, like every other board in the demo.
+
+**Docs** — new [`docs/chessboard.md`](docs/chessboard.md) (the renderer, the sizing rule, coordinates,
+the gate); [`docs/README.md`](docs/README.md), [`docs/web-demo.md`](docs/web-demo.md) and
+[`docs/puzzle-hub.md`](docs/puzzle-hub.md) point at it.
+
+No domain engine was touched — this is view and layout code only, so `ParityRunner` counts are
+unchanged. `js_goldens.js`: 29,807 assertions across 62 suites, green.
+
 ### 2026-08-13 (added) — A stronger analysis engine, and an Engine Settings panel to spend it
 
 The Analysis Board's engine got both halves of what was asked for: it plays better at the same

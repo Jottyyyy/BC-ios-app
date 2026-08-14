@@ -44,7 +44,7 @@ struct PuzzleThematicGridScreen: View {
             }
             startButton
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
     }
 
@@ -117,30 +117,33 @@ struct PuzzleThematicSolverScreen: View {
     @State private var dry = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            PuzzleScreenHeader(title: themeLabel,
-                               subtitle: PuzzleStrings.thematicSolved(solvedThisSession),
-                               titleSize: PuzzleType.thematicSolverTitle,
-                               onBack: { engine.leave(); onExit() })
-            statsBar
-            PuzzleBoardBand(engine: engine)
-            hint
-            feedbackBanner
-            if dry {
-                Text(PuzzleStrings.thematicDry)
-                    .font(Theme.nunito(PuzzleThematicSolver.feedbackTextSize, .regular))
-                    .foregroundStyle(PuzzlePalette.textSecondary)
-                    .padding(.top, PuzzleThematicSolver.feedbackMarginBottom)
+        // One GeometryReader, at the top — see PuzzleSolverParts.PuzzleBoardBand.
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                PuzzleScreenHeader(title: themeLabel,
+                                   subtitle: PuzzleStrings.thematicSolved(solvedThisSession),
+                                   titleSize: PuzzleType.thematicSolverTitle,
+                                   onBack: { engine.leave(); onExit() })
+                statsBar
+                PuzzleBoardBand(engine: engine, edge: geo.size.width)
+                hint
+                feedbackBanner
+                if dry {
+                    Text(PuzzleStrings.thematicDry)
+                        .font(Theme.nunito(PuzzleThematicSolver.feedbackTextSize, .regular))
+                        .foregroundStyle(PuzzlePalette.textSecondary)
+                        .padding(.top, PuzzleThematicSolver.feedbackMarginBottom)
+                }
+                PuzzleBottomPanel(engine: engine, onNext: next)
+                if PuzzleDisplay.hasEnginePanel(engine.mode) { PuzzleEnginePanelView(engine: engine) }
+                Spacer(minLength: 0)
             }
-            PuzzleBottomPanel(engine: engine, onNext: next)
-            if PuzzleDisplay.hasEnginePanel(engine.mode) { PuzzleEnginePanelView(engine: engine) }
-            Spacer(minLength: 0)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .background(PuzzlePalette.screenBg)
+            .overlay { promotion }
+            .onAppear(perform: start)
+            .onDisappear { engine.leave() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PuzzlePalette.screenBg)
-        .overlay { promotion }
-        .onAppear(perform: start)
-        .onDisappear { engine.leave() }
     }
 
     private var themeLabel: String {

@@ -124,6 +124,12 @@ View + interaction only — it **never mutates game state**. Give it a `rules` o
 the app applies that move to the real engine, then calls `setPosition()` back (single source of truth stays
 outside the component).
 
+> Its SwiftUI counterpart is `BoardView` + `ChessBoardBand`, and the two are kept deliberately in step —
+> same square colours, same highlight precedence, same coordinate geometry, same **sizing rule** (a fixed
+> square from the width; the band below it is the flexible one). See [`chessboard.md`](chessboard.md) before
+> changing either; a divergence here is what shipped a broken Puzzle Streak screen to TestFlight while the
+> browser looked correct.
+
 - **Attributes:** `fen` · `flipped` · `interactive` · `coordinates` · `piece-path` · `draggable-pieces`
 - **Properties:** `.rules = { legalMovesFrom(fen, sq) → [{to, promotion|null}] }` · `.fen` · `.flipped` ·
   `.interactive` · `.draggablePieces` · `.arrows = [{from, to, rank}]`

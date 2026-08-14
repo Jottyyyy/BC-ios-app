@@ -81,6 +81,9 @@ const SWIFT_VIEWS = [
   'AnalysisEditPanel.swift', 'AnalysisPgnModals.swift', 'AnalysisAnnotationPicker.swift',
   'AnalysisVariationModal.swift', 'AnalysisLibraryModals.swift', 'AnalysisReviewModal.swift',
   'AnalysisEngineSettings.swift',
+  // The shared board. It is not an Analysis screen, but `BoardStyle`, `AnalysisIndicator` and
+  // `BoardCoords` all live in AnalysisMetrics.swift and this is the only file that reads all three.
+  'BoardView.swift',
   // The check itself is nothing BUT metrics references, so it is the highest-value file here.
   'AnalysisMetricsCheck.swift',
 ];
@@ -117,7 +120,7 @@ const CHECKED_ENUMS = ['AnalysisBoard', 'AnalysisPalette', 'AnalysisIndicator', 
   'AnalysisBadge', 'AnalysisLayout', 'AnalysisEval', 'AnalysisGraph', 'AnalysisReview',
   'AnalysisGraphStyle', 'AnalysisLibraryStyle', 'AnalysisTables', 'AnalysisTiming',
   'AnalysisEngineLimits', 'AnalysisEngineStyle', 'AnalysisType', 'AnalysisMenu', 'AnalysisEdit',
-  'AnalysisModals'];
+  'AnalysisModals', 'BoardCoords'];
 
 for (const name of CHECKED_ENUMS) {
   checked++;

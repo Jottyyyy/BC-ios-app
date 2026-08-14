@@ -32,7 +32,7 @@ struct PuzzleDailyHomeScreen: View {
             }
             startButton
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
     }
 
@@ -159,22 +159,25 @@ struct PuzzleDailySolverScreen: View {
     enum Banner: Equatable { case solved, wrong }
 
     var body: some View {
-        VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.dailyTitle,
-                               subtitle: themeSummary,
-                               titleSize: PuzzleType.dailySolverTitle,
-                               onBack: { engine.leave(); onExit() })
-            instruction
-            PuzzleBoardBand(engine: engine)
-            bannerView
-            doneButton
-            Spacer(minLength: 0)
+        // One GeometryReader, at the top — see PuzzleSolverParts.PuzzleBoardBand.
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                PuzzleScreenHeader(title: PuzzleStrings.dailyTitle,
+                                   subtitle: themeSummary,
+                                   titleSize: PuzzleType.dailySolverTitle,
+                                   onBack: { engine.leave(); onExit() })
+                instruction
+                PuzzleBoardBand(engine: engine, edge: geo.size.width)
+                bannerView
+                doneButton
+                Spacer(minLength: 0)
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .background(PuzzlePalette.screenBg)
+            .overlay { promotion }
+            .onAppear(perform: start)
+            .onDisappear { engine.leave() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PuzzlePalette.screenBg)
-        .overlay { promotion }
-        .onAppear(perform: start)
-        .onDisappear { engine.leave() }
     }
 
     /// The source shows the puzzle's title from the API; offline there is none, so the themes

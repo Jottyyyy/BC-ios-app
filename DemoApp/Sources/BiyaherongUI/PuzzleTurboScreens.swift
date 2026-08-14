@@ -40,7 +40,7 @@ struct PuzzleTurboHomeScreen: View {
             runList
             bottom
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
         .overlay { if resumeDraft != nil { resumeModal } }
     }
@@ -240,27 +240,32 @@ struct PuzzleTurboRunScreen: View {
         .autoconnect()
 
     var body: some View {
-        VStack(spacing: 0) {
-            if result != nil { results } else { running }
+        // One GeometryReader, at the top — see PuzzleSolverParts.PuzzleBoardBand. The width is
+        // threaded into `running` rather than read again down there, so this screen keeps the
+        // one-reader rule even though its board sits two views deep.
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                if result != nil { results } else { running(edge: geo.size.width) }
+            }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .background(PuzzlePalette.screenBg)
+            .overlay { promotion }
+            .overlay { if showQuit { quitModal } }
+            .onAppear(perform: start)
+            .onDisappear(perform: leave)
+            .onReceive(tick) { _ in tickClock() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PuzzlePalette.screenBg)
-        .overlay { promotion }
-        .overlay { if showQuit { quitModal } }
-        .onAppear(perform: start)
-        .onDisappear(perform: leave)
-        .onReceive(tick) { _ in tickClock() }
     }
 
     // MARK: - Running
 
-    private var running: some View {
+    private func running(edge: CGFloat) -> some View {
         VStack(spacing: 0) {
             header
             statsBar
             ZStack(alignment: .topLeading) {
-                PuzzleBoardBand(engine: engine)
-                feedbackDot
+                PuzzleBoardBand(engine: engine, edge: edge)
+                feedbackDot(edge: edge)
             }
             hint
             Spacer(minLength: 0)
@@ -334,28 +339,29 @@ struct PuzzleTurboRunScreen: View {
     /// `PuzzleTurboFeedback.origin` owns the arithmetic — `left` subtracts its radius term and
     /// `top` adds its own, and the board flip is asymmetric. Re-deriving it here is exactly how the
     /// annotation badge once shipped in the wrong corner in both languages.
+    /// Takes the board edge rather than re-measuring it. It used to open its own `GeometryReader`
+    /// and ask for `min(w, h)` — which both re-derived a number the screen already knows and, being
+    /// greedy, stretched the `ZStack` it shares with the board. Same rule as everywhere else: one
+    /// reader per screen, the edge travels down.
     @ViewBuilder
-    private var feedbackDot: some View {
+    private func feedbackDot(edge: CGFloat) -> some View {
         if let fb = feedback {
-            GeometryReader { geo in
-                let side = min(geo.size.width, geo.size.height)
-                let r = side / CGFloat(PuzzleTurboRunVM.filesPerRank)
-                    * PuzzleTurboFeedback.radiusFactor
-                let origin = PuzzleTurboFeedback.origin(square: fb.square, boardSize: side,
-                                                        userIsWhite: engine.userIsWhite)
-                Text(fb.correct ? PuzzleStrings.turboFeedbackOk : PuzzleStrings.turboFeedbackBad)
-                    .font(.system(size: r * PuzzleTurboFeedback.glyphFactor, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: r * PuzzleTurboRunVM.diameter,
-                           height: r * PuzzleTurboRunVM.diameter)
-                    .background(fb.correct ? PuzzleTurboFeedback.correctFill
-                                           : PuzzleTurboFeedback.wrongFill,
-                                in: Circle())
-                    .overlay(Circle().stroke(PuzzleTurboFeedback.borderColor,
-                                             lineWidth: PuzzleTurboFeedback.borderWidth))
-                    .offset(x: origin.x, y: origin.y)
-            }
-            .allowsHitTesting(false)
+            let r = edge / CGFloat(PuzzleTurboRunVM.filesPerRank)
+                * PuzzleTurboFeedback.radiusFactor
+            let origin = PuzzleTurboFeedback.origin(square: fb.square, boardSize: edge,
+                                                    userIsWhite: engine.userIsWhite)
+            Text(fb.correct ? PuzzleStrings.turboFeedbackOk : PuzzleStrings.turboFeedbackBad)
+                .font(.system(size: r * PuzzleTurboFeedback.glyphFactor, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: r * PuzzleTurboRunVM.diameter,
+                       height: r * PuzzleTurboRunVM.diameter)
+                .background(fb.correct ? PuzzleTurboFeedback.correctFill
+                                       : PuzzleTurboFeedback.wrongFill,
+                            in: Circle())
+                .overlay(Circle().stroke(PuzzleTurboFeedback.borderColor,
+                                         lineWidth: PuzzleTurboFeedback.borderWidth))
+                .offset(x: origin.x, y: origin.y)
+                .allowsHitTesting(false)
         }
     }
 

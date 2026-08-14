@@ -67,6 +67,9 @@ struct PhoneApp: View {
     /// screen, which cannot be retired until `BoardView` is lifted out of `PlayView.swift`.
     @StateObject private var coachStore = CoachStore()
     @State private var showCoach = false
+    /// True while the Puzzles tab has a route pushed on top of the hub — the tab bar hides, the
+    /// way it does in the browser. See `PuzzleHubScreen.onPushedChange`.
+    @State private var puzzlePushed = false
 
     // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
     // make the memberwise initializer private, so only the file-local no-argument form would be
@@ -98,13 +101,18 @@ struct PhoneApp: View {
                         // the corpus has `moves[0]` belonging to the opponent), so the two cannot
                         // share a solver — which is why the old screen is retired to a dev entry
                         // rather than adapted.
-                        case 1: PuzzleHubScreen(store: puzzleStore, onExit: { tab = 0 })
+                        case 1: PuzzleHubScreen(store: puzzleStore, onExit: { tab = 0 },
+                                                onPushedChange: { puzzlePushed = $0 })
                         case 2: PlayPhone(vm: gameVM)
                         default: ProfilePhone(store: puzzleStore)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    PhoneTabBar(tab: $tab)
+                    // Hidden while the Puzzles tab has a route pushed, matching the browser, where
+                    // every pushed route sets `an-mode` and `.app-card.an-mode .tabbar` is
+                    // `display: none`. The Analysis Board, Pairing and Coach are ZStack siblings
+                    // below and already cover the bar; only the Puzzle Hub lives inside a tab.
+                    if !puzzlePushed { PhoneTabBar(tab: $tab) }
                 }
                 if showAnalysis {
                     VStack(spacing: 0) {
@@ -313,12 +321,26 @@ struct PuzzlePromotionOverlay: View {
     }
 }
 
-func phoneBoard(_ board: BoardView, size: CGFloat = 344) -> some View {
-    board
-        .frame(width: size, height: size)
+/// The legacy Play tab's board chrome. `size` is now measured, not assumed: it used to default to
+/// 344 and be called with a hard-coded 330, which meant the board was the wrong width on every
+/// phone that is not the design baseline. It goes through `ChessBoardBand` like every other board.
+func phoneBoard(_ board: BoardView, size: CGFloat) -> some View {
+    ChessBoardBand(edge: size) { _ in board }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 1))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+}
+
+/// What `PlayPhone` reserves beside the board: the eval bar's 14pt, the 8pt gap, and the row's
+/// 16pt padding on each side. Named rather than inlined so the board edge below reads as one
+/// subtraction instead of four magic numbers.
+private enum PlayPhoneBoard {
+    static let evalBarWidth: CGFloat = 14
+    static let evalBarGap: CGFloat = 8
+    static let rowPaddingH: CGFloat = 16
+    static func edge(screenWidth: CGFloat) -> CGFloat {
+        max(0, screenWidth - rowPaddingH * 2 - evalBarWidth - evalBarGap)
+    }
 }
 
 func phoneCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -343,10 +365,15 @@ struct PlayPhone: View {
     private var coachLevel: Int { (Coaches.all.firstIndex { $0.id == vm.coach?.id } ?? 0) + 1 }
 
     var body: some View {
-        if vm.started { gameView } else { LegacyCoachSelect(vm: vm) }
+        if vm.started {
+            // One GeometryReader, at the top — the board edge below is derived from this width.
+            GeometryReader { geo in gameView(edge: PlayPhoneBoard.edge(screenWidth: geo.size.width)) }
+        } else {
+            LegacyCoachSelect(vm: vm)
+        }
     }
 
-    private var gameView: some View {
+    private func gameView(edge: CGFloat) -> some View {
         ScrollView {
             VStack(spacing: 12) {
                 HStack {
@@ -373,13 +400,13 @@ struct PlayPhone: View {
                     }
                 }.padding(.horizontal, 18)
 
-                HStack(alignment: .top, spacing: 8) {
-                    EvalBar(whitePct: vm.whiteWinPct, height: 330)
+                HStack(alignment: .top, spacing: PlayPhoneBoard.evalBarGap) {
+                    EvalBar(whitePct: vm.whiteWinPct, height: edge)
                     phoneBoard(BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
                                          lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
-                                         boardSize: 330, onTap: { vm.tap($0) }), size: 330)
+                                         boardSize: edge, onTap: { vm.tap($0) }), size: edge)
                         .overlay { if vm.pendingPromotion != nil { PromotionOverlay(color: vm.position.sideToMove) { vm.choosePromotion($0) } } }
-                }.padding(.horizontal, 16)
+                }.padding(.horizontal, PlayPhoneBoard.rowPaddingH)
 
                 HStack(spacing: 6) {
                     Text(vm.thinking ? "\(vm.coach?.name ?? "Coach") is thinking…" : vm.statusText)

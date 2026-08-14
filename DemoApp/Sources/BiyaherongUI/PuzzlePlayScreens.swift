@@ -43,7 +43,7 @@ struct PuzzlePlayHomeScreen: View {
             }
             bottom
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PuzzlePalette.screenBg)
     }
 
@@ -285,30 +285,34 @@ struct PuzzlePlaySolverScreen: View {
         .autoconnect()
 
     var body: some View {
-        VStack(spacing: 0) {
-            PuzzleScreenHeader(title: PuzzleStrings.puzzle,
-                               titleSize: PuzzleType.dailySolverTitle,
-                               onBack: { engine.leave(); onExit() }) {
-                Text(PuzzleDisplay.formatTime(elapsed))
-                    .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
-                    .foregroundStyle(PuzzlePalette.textPrimary)
-                    .monospacedDigit()
+        // One GeometryReader, at the top — see PuzzleSolverParts.PuzzleBoardBand for why the board
+        // must be sized from the width and never from a nested reader's leftover height.
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                PuzzleScreenHeader(title: PuzzleStrings.puzzle,
+                                   titleSize: PuzzleType.dailySolverTitle,
+                                   onBack: { engine.leave(); onExit() }) {
+                    Text(PuzzleDisplay.formatTime(elapsed))
+                        .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
+                        .foregroundStyle(PuzzlePalette.textPrimary)
+                        .monospacedDigit()
+                }
+                infoStrip
+                PuzzleBoardBand(engine: engine, edge: geo.size.width)
+                deltaRow
+                PuzzleBottomPanel(engine: engine, onNext: next)
+                if PuzzleDisplay.hasEnginePanel(engine.mode) { PuzzleEnginePanelView(engine: engine) }
+                Spacer(minLength: 0)
             }
-            infoStrip
-            PuzzleBoardBand(engine: engine)
-            deltaRow
-            PuzzleBottomPanel(engine: engine, onNext: next)
-            if PuzzleDisplay.hasEnginePanel(engine.mode) { PuzzleEnginePanelView(engine: engine) }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PuzzlePalette.screenBg)
-        .overlay { promotion }
-        .onAppear(perform: startIfNeeded)
-        .onDisappear { engine.leave() }
-        .onReceive(tick) { _ in
-            guard let startedAt, engine.session?.phase == .playing else { return }
-            elapsed = (PuzzleHubStore.nowMs() - startedAt) / PuzzleSolverVM.msPerSecond
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .background(PuzzlePalette.screenBg)
+            .overlay { promotion }
+            .onAppear(perform: startIfNeeded)
+            .onDisappear { engine.leave() }
+            .onReceive(tick) { _ in
+                guard let startedAt, engine.session?.phase == .playing else { return }
+                elapsed = (PuzzleHubStore.nowMs() - startedAt) / PuzzleSolverVM.msPerSecond
+            }
         }
     }
 

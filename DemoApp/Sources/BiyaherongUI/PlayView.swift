@@ -239,10 +239,17 @@ struct PlayView: View {
                 }
             }
             VStack(spacing: 4) {
-                BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
-                          lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
-                          boardSize: boardSize, onTap: { vm.tap($0) })
-                    .frame(width: boardSize, height: boardSize)
+                // The macOS demo panel has a fixed board, so it hands `ChessBoardBand` a constant
+                // rather than a measured width — but it goes through the band like every other
+                // screen, so there is exactly one place that decides a board's geometry.
+                ChessBoardBand(edge: boardSize) { edge in
+                    BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
+                              lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
+                              boardSize: edge, onTap: { vm.tap($0) },
+                              // This screen draws its own a–h / 1–8 strips outside the board
+                              // (below), so the in-square labels would be a second copy.
+                              coordinates: false)
+                }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(.black.opacity(0.25), lineWidth: 1))
                     .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
@@ -342,153 +349,4 @@ struct PlayView: View {
             .shadow(radius: 20)
         }
     }
-}
-
-struct BoardView: View {
-    let pieces: [BoardPiece]
-    let selected: Int?
-    let legalTargets: Set<Int>
-    let lastMove: Move?
-    let flipped: Bool
-    let checkSquare: Int?
-    let boardSize: CGFloat
-    let onTap: (Int) -> Void
-
-    // Everything below is defaulted and declared AFTER `onTap`, so the four existing call sites —
-    // which pass every argument by label, never as a trailing closure — keep compiling untouched.
-    // They must also stay non-`private`: a `private var` stored property is included in the
-    // memberwise initializer and would downgrade it to private, breaking the cross-file call sites
-    // in PhoneView.swift and PuzzleView.swift. (`private let x = …`, with an initialiser, is omitted
-    // from the init entirely, which is why the two colour constants could be private before.)
-
-    /// Colours and indicator geometry. The default reproduces exactly what this board rendered
-    /// before the Analysis Board existed, so Play and Puzzles are unchanged.
-    var style: BoardStyle = BoardStyle()
-    /// Per-square fills for the engine-line preview. Only honoured when `style.replacesFill`.
-    var customHighlights: [Int: Color] = [:]
-    /// Supplied only by the Analysis Board. When nil, no drag gesture is installed at all and the
-    /// tap path is byte-identical to before.
-    var onDragMove: ((Int, Int) -> Void)?
-
-    private var square: CGFloat { boardSize / 8 }
-    private var occupied: Set<Int> { Set(pieces.map { $0.square }) }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            squares
-            pieceLayer.allowsHitTesting(false)
-        }
-        .frame(width: boardSize, height: boardSize)
-        // One board-level gesture rather than per-piece: `pieceLayer` is `allowsHitTesting(false)`,
-        // so a gesture attached to a piece would never fire. `minimumDistance` keeps a stationary
-        // press flowing through to the per-cell tap.
-        //
-        // The mask is what makes "no drag when `onDragMove` is nil" true rather than aspirational:
-        // `.subviews` disables this gesture and leaves the cells' `.onTapGesture` recognisers alone,
-        // so Play and Puzzles behave exactly as they did. A plain `if` here would change the body's
-        // return type, which `some View` cannot express without an `AnyView` box.
-        .gesture(dragGesture, including: onDragMove == nil ? .subviews : .all)
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 4)
-            .onEnded { value in
-                guard let onDragMove else { return }
-                guard let from = squareAt(value.startLocation), let to = squareAt(value.location) else { return }
-                if from != to { onDragMove(from, to) }
-            }
-    }
-
-    /// Board-local point → logical square, honouring the flip. Nil outside the board.
-    private func squareAt(_ p: CGPoint) -> Int? {
-        guard p.x >= 0, p.y >= 0, p.x < boardSize, p.y < boardSize, square > 0 else { return nil }
-        let col = min(7, max(0, Int(p.x / square)))
-        let row = min(7, max(0, Int(p.y / square)))
-        let file = flipped ? 7 - col : col
-        let rank = flipped ? row : 7 - row
-        return Square.make(file: file, rank: rank)
-    }
-
-    private var squares: some View {
-        VStack(spacing: 0) {
-            ForEach(rowRanks(), id: \.self) { rank in
-                HStack(spacing: 0) {
-                    ForEach(colFiles(), id: \.self) { file in
-                        cell(Square.make(file: file, rank: rank))
-                    }
-                }
-            }
-        }
-    }
-
-    private func cell(_ sq: Int) -> some View {
-        let isLight = (Square.file(sq) + Square.rank(sq)) % 2 == 1
-        let isSelected = selected == sq
-        let isLast = lastMove.map { $0.from == sq || $0.to == sq } ?? false
-        let isTarget = legalTargets.contains(sq)
-        let hasPiece = occupied.contains(sq)
-        let isCheck = checkSquare == sq
-        // Two fill models. The original board TINTS translucent layers over the square colour; the
-        // Analysis Board REPLACES it outright (spec 3.3), with a strict precedence. `style` picks.
-        let base: Color = {
-            guard style.replacesFill else { return isLight ? style.light : style.dark }
-            if isSelected { return style.selected }
-            if let custom = customHighlights[sq] { return custom }
-            if isLast { return style.lastMove }
-            return isLight ? style.light : style.dark
-        }()
-        return ZStack {
-            Rectangle().fill(base)
-            if !style.replacesFill {
-                if isLast { Rectangle().fill(style.lastMove) }
-                if isSelected { Rectangle().fill(style.selected) }
-            }
-            if isCheck { Rectangle().fill(style.check) }
-            if isTarget {
-                if hasPiece {
-                    if style.replacesFill {
-                        // Spec 3.7: diameter 0.85 of a square, stroke 0.08 — sized explicitly,
-                        // because an unframed Circle would fill the whole cell.
-                        Circle()
-                            .stroke(style.targetRing,
-                                    lineWidth: AnalysisIndicator.ringStrokeWidth(square: square))
-                            .frame(width: AnalysisIndicator.ringSize(square: square),
-                                   height: AnalysisIndicator.ringSize(square: square))
-                    } else {
-                        Circle().stroke(style.targetRing, lineWidth: style.ringLineWidth)
-                            .padding(style.ringInset)
-                    }
-                } else {
-                    Circle().fill(style.targetDot)
-                        .frame(width: style.dotSize(square: square),
-                               height: style.dotSize(square: square))
-                }
-            }
-        }
-        .frame(width: square, height: square)
-        .contentShape(Rectangle())
-        .onTapGesture { onTap(sq) }
-    }
-
-    private var pieceLayer: some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(pieces) { bp in
-                PieceImage(piece: bp.piece, size: square)
-                    .position(center(bp.square))
-                    .transition(.scale(scale: 0.4).combined(with: .opacity))
-                    .zIndex(lastMove?.to == bp.square ? 1 : 0)
-            }
-        }
-        .frame(width: boardSize, height: boardSize, alignment: .topLeading)
-    }
-
-    private func center(_ sq: Int) -> CGPoint {
-        let f = Square.file(sq), r = Square.rank(sq)
-        let col = flipped ? 7 - f : f
-        let row = flipped ? r : 7 - r
-        return CGPoint(x: (CGFloat(col) + 0.5) * square, y: (CGFloat(row) + 0.5) * square)
-    }
-
-    private func rowRanks() -> [Int] { flipped ? Array(0...7) : Array(0...7).reversed() }
-    private func colFiles() -> [Int] { flipped ? Array(0...7).reversed() : Array(0...7) }
 }

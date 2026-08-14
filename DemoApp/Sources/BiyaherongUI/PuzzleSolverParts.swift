@@ -383,9 +383,17 @@ extension PuzzleScreenHeader where Trailing == EmptyView {
 /// The board band, sized to the width it is given, with the solver's highlights applied.
 struct PuzzleBoardBand: View {
     @ObservedObject var engine: PuzzleSolverEngine
+    /// The screen's content width, from its one top-level `GeometryReader`.
+    ///
+    /// This used to be a `GeometryReader` + `min(geo.size.width, geo.size.height)` right here, and
+    /// that is what broke every solver screen on a real phone: a `GeometryReader` inside a `VStack`
+    /// takes the leftover HEIGHT, so `min(w, h)` made the board's width track it. The board never
+    /// filled the screen, and the surplus turned into blank space above the header. The web twin
+    /// is `.pz-board { flex: none } chess-board { width: 100% }` — rigid board, flexible bottom.
+    let edge: CGFloat
+
     var body: some View {
-        GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
+        ChessBoardBand(edge: edge) { side in
             BoardView(pieces: engine.pieces,
                       selected: engine.selected,
                       legalTargets: engine.legalTargets,
@@ -404,10 +412,7 @@ struct PuzzleBoardBand: View {
                           Haptics.play(.pickUp)
                           engine.submit(from: from, to: to)
                       })
-                .frame(width: side, height: side)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .aspectRatio(1, contentMode: .fit)
     }
 }
 

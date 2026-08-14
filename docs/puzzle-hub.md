@@ -283,8 +283,12 @@ checked against the JS by `replay_puzzle_core.js`. They are the first item of th
 date and a `🏆` on any run equalling the best. The start button reads "🔥 Resume / New Streak" and
 raises the resume modal only when a run is actually live.
 
-**Solver** — the live `🔥 n` counter, the stats bar, the board, the hint line. Two things about it
-are deliberate and easy to undo by accident:
+**Solver** — the live `🔥 n` counter, the stats bar, the board, the hint line. The header's
+right-hand mark is the gold ring (`.pzd-logo`); it used to be a bare `Color.clear` with a width and
+no height in Swift, which made the header greedy and pushed the whole screen into the middle of the
+phone. See [`chessboard.md`](chessboard.md) — that bug and the board's `min(w, h)` sizing are what
+the layout gate now guards. Two more things about the solver are deliberate and easy to undo by
+accident:
 
 * **A correct solve plays no sound.** In a streak the reward is the next puzzle appearing.
   `game-over` fires on failure instead. Asserted in `puzzle_screen_test.js` by reading the source

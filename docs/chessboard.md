@@ -1,0 +1,163 @@
+# The chessboard
+
+One board renderer per language, one rule for sizing it, and a gate that fails when either is
+reinvented.
+
+| Language | Renderer | Sizing wrapper |
+|---|---|---|
+| Swift | `BoardView` — `DemoApp/Sources/BiyaherongUI/BoardView.swift` | `ChessBoardBand`, same file |
+| Browser | `<chess-board>` — `web-demo/js/chess-board.js` | `.pz-board chess-board { width: 100% }` etc. |
+
+Both draw the squares, the pieces, the highlights, the legal-move dots and rings, and the a–h / 1–8
+coordinates. Neither owns any screen chrome — headers, stat bars, promotion dialogs and result
+overlays belong to the screens.
+
+---
+
+## The sizing rule
+
+**A board is a fixed square derived from the WIDTH it is given. Never `min(width, height)`.**
+
+This is the rule the whole file exists for. It has now been broken twice, once per language, in the
+same shape:
+
+```css
+/* the browser, before board_layout_check.js */
+.an-board            { flex: 1 1 auto; container-type: size; }
+.an-board chess-board{ width: min(100cqw, calc(100cqh - var(--an-eval-h) - 4px)); }
+```
+
+```swift
+// SwiftUI, before swift_layout_check.js
+GeometryReader { geo in
+    let side = min(geo.size.width, geo.size.height)   // ← the bug
+    BoardView(…, boardSize: side).frame(maxWidth: .infinity, maxHeight: .infinity)
+}
+.aspectRatio(1, contentMode: .fit)
+```
+
+A `GeometryReader` — like a CSS container query on a flexible band — reports the space *left over*
+after everything else in the stack. Taking `min(w, h)` therefore makes the board's **width** track
+the leftover **height**. Two symptoms follow, and both were reported from a real device:
+
+- the board never fills the screen, and
+- it resizes whenever anything above or below it grows (a banner, an extra engine line, a move row).
+
+The correct shape is the browser's: the board is rigid and the band **below** it flexes.
+
+```css
+.pz-board            { flex: none; }
+.pz-board chess-board{ width: 100%; --board-radius: 0; }
+.pz-bottom           { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+```
+
+```swift
+GeometryReader { geo in                       // ONE reader, at the screen root
+    VStack(spacing: 0) {
+        header
+        PuzzleBoardBand(engine: engine, edge: geo.size.width)
+        bottom
+        Spacer(minLength: 0)                  // the bottom is the flexible band
+    }
+    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+}
+```
+
+Two consequences worth stating outright:
+
+- **One `GeometryReader` per screen, at the top.** The edge travels down as a `CGFloat`. A reader
+  nested inside a `VStack` is greedy, which is what starts the whole problem.
+- **`alignment: .top` on the screen root.** `.frame(maxWidth: .infinity, maxHeight: .infinity)`
+  defaults to `.center`, so the moment the content stops filling the frame it drifts into the middle
+  of the phone with a blank block above it.
+
+`ChessBoardBand` is deliberately *only* `content(edge).frame(width: edge, height: edge)` — no
+`maxWidth: .infinity`. Callers hang `.overlay(alignment: .topLeading)` (arrows, the annotation badge,
+Turbo's feedback dot) and `.clipShape(RoundedRectangle(…))` on it, and both anchor to its frame;
+padding the band out to the screen width would move every arrow and round the wrong corners.
+Horizontal centring is the parent stack's job, which a `VStack` already does.
+
+### Who supplies the edge
+
+| Screen | Edge |
+|---|---|
+| The five puzzle solvers | `geo.size.width` (full bleed, like `.pz-board`) |
+| Play vs Coach | `geo.size.width` |
+| Analysis Board | `AnalysisBoard.size(screenWidth:pixelRatio:)` — snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. Pinned to the RN source; do not replace it with the plain width. |
+| Legacy Play tab | `PlayPhoneBoard.edge(screenWidth:)` — width minus the eval bar, its gap and the row padding |
+| The two macOS demo panels | a constant (480 / 460); they are fixed-size desktop panels |
+
+---
+
+## Coordinates
+
+On by default in both languages, matching `<chess-board>`'s `coordinates` attribute. Geometry is
+extracted from the stylesheet that already drew them (`chess-board.js`), into `BoardCoords` in
+`AnalysisMetrics.swift`:
+
+- file letter `a`–`h` on the **bottom visual row only**, inset `right 3%` / `bottom 1%` of a square
+- rank digit `1`–`8` on the **left visual column only**, inset `left 4%` / `top 1%`
+- weight 600, size `clamp(7px, 2.1cqw, 12px)`, colour `#8BA3C7` at 0.9 opacity
+
+The two units are different on purpose and the difference is load-bearing: `cqw` is 1% of the
+**board** width (`.board` sets `container-type: inline-size`), while the `%` insets are relative to
+the **square**. Hence `BoardCoords.fontSize(boardEdge:)` against one and the inset helpers against
+the other.
+
+Labels carry the *logical* file/rank, so they follow a flip. The two macOS demo panels pass
+`coordinates: false` because they draw their own strips outside the board.
+
+---
+
+## Screen chrome that is NOT the board's
+
+`BoardView` stays free of anything screen-specific; each one is an overlay at the call site.
+
+- `BoardArrows` and `AnalysisAnnotationOverlay` — Analysis Board
+- `PromotionOverlay` / `PuzzlePromotionOverlay` — two genuinely different dialogs, see
+  `AnalysisPromotion`'s doc comment
+- the premove chip — Play vs Coach
+- the ✓/✕ feedback dot — Turbo
+
+---
+
+## Tab bar
+
+The app's tab bar is hidden while the Puzzles tab has a route pushed, matching the browser, where
+every pushed route calls `appCard().classList.add('an-mode')` and `.app-card.an-mode .tabbar` is
+`display: none`. `PuzzleHubScreen` reports its depth through `onPushedChange`; `PhoneApp` holds the
+flag. The Analysis Board, Pairing and Play vs Coach are `ZStack` siblings that already cover the bar.
+
+---
+
+## Key files
+
+| File | What |
+|---|---|
+| `DemoApp/Sources/BiyaherongUI/BoardView.swift` | `BoardView` + `ChessBoardBand` |
+| `DemoApp/Sources/BiyaherongUI/AnalysisMetrics.swift` | `BoardStyle`, `BoardTheme`, `AnalysisIndicator`, `BoardCoords` |
+| `DemoApp/Sources/BiyaherongUI/PuzzleSolverParts.swift` | `PuzzleBoardBand` — the five solvers' call site |
+| `web-demo/js/chess-board.js` | the Web Component |
+| `web-demo/js/puzzle-board.js` | the solver plumbing four puzzle modes share |
+| `tools/qa/swift_layout_check.js` | the SwiftUI layout gate |
+| `tools/qa/swift_layout_mutation_test.js` | proof that gate can still fail |
+| `tools/qa/board_layout_check.js` | the CSS half of the same rule |
+
+---
+
+## How to test
+
+```bash
+node tools/qa/js_goldens.js            # includes both layout gates and the mutation test
+node tools/qa/swift_layout_check.js    # the gate alone
+node tools/qa/swift_layout_mutation_test.js
+node tools/qa/swift_lint.js            # no arguments
+node tools/qa/swift_symbol_check.js    # no arguments
+```
+
+Visually, in `web-demo/index.html` at an iPhone size: **Puzzles → 🔥 Streak → Start Streak**. The
+tab bar is gone, the board is edge-to-edge with coordinates, and the empty space is *below* the
+hint. Then the same for Daily, Thematic, Turbo and Play vs Coach.
+
+On a Mac, `swift build && swift run ParityRunner` must still exit 0 — none of this touches a domain
+engine — and `DemoApp/run-demo.sh` shows the same screens natively.

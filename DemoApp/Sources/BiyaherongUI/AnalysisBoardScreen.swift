@@ -108,19 +108,24 @@ struct AnalysisBoardScreen: View {
     // addition and belongs here, under the board. The 3pt one is real and lives in the engine panel.
 
     private func boardBand(width: CGFloat) -> some View {
+        // This screen keeps its own edge formula — `AnalysisBoard.size` snaps the edge down to a
+        // whole multiple of 8 physical pixels so squares land on pixel boundaries, and that is
+        // pinned to the RN source. It still goes through `ChessBoardBand`, so there is exactly one
+        // place that turns an edge into a square.
         let edge = AnalysisBoard.size(screenWidth: width, pixelRatio: displayScale)
         return VStack(spacing: AnalysisLayout.boardPaddingTop) {
-            BoardView(pieces: vm.pieces,
-                      selected: vm.selected,
-                      legalTargets: vm.legalTargets,
-                      lastMove: vm.lastMove,
-                      flipped: vm.flipped,
-                      checkSquare: vm.checkSquare,
-                      boardSize: edge,
-                      onTap: { vm.tap($0) },
-                      style: vm.style,
-                      onDragMove: { from, to in vm.drag(from: from, to: to) })
-                .frame(width: edge, height: edge)
+            ChessBoardBand(edge: edge) { side in
+                BoardView(pieces: vm.pieces,
+                          selected: vm.selected,
+                          legalTargets: vm.legalTargets,
+                          lastMove: vm.lastMove,
+                          flipped: vm.flipped,
+                          checkSquare: vm.checkSquare,
+                          boardSize: side,
+                          onTap: { vm.tap($0) },
+                          style: vm.style,
+                          onDragMove: { from, to in vm.drag(from: from, to: to) })
+            }
                 // Arrows sit on top as an overlay, the same way PromotionOverlay is applied —
                 // BoardView itself stays free of anything analysis-specific.
                 .overlay(alignment: .topLeading) {

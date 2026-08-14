@@ -24,6 +24,10 @@ enum CoachLayout {
 
     /// The board is square. RN gets this from `BOARD_SIZE`; SwiftUI states it as a ratio so the
     /// board tracks the device instead of the reference width.
+    ///
+    /// Kept as the record of that fact, but no longer read by a view: squareness is now `BoardView`'s
+    /// and `ChessBoardBand`'s job for every screen at once, and multiplying an edge by 1 here only
+    /// hid which of the two decided the geometry.
     static let boardAspect: CGFloat = 1
 
     /// `moveStripContent.gap`, as a stack spacing.

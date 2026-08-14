@@ -214,6 +214,54 @@ enum AnalysisIndicator {
     static func ringStrokeWidth(square: CGFloat) -> CGFloat { square * ringStrokeRatio }
 }
 
+// MARK: - Board coordinate labels
+
+/// The a–h / 1–8 labels drawn inside the board's edge squares.
+///
+/// Extracted from the one board that already draws them — `web-demo/js/chess-board.js:102-103`:
+///
+///     .sq .cf,.sq .cr { position:absolute; font:600 clamp(7px,2.1cqw,12px)/1 …;
+///                       color:var(--_coord); opacity:.9; pointer-events:none; }
+///     .sq .cf { right:3%; bottom:1%; }
+///     .sq .cr { left:4%;  top:1%;    }
+///
+/// The two units are deliberately different and getting them the same way round matters:
+/// `cqw` is 1% of the **board** width (`.board` declares `container-type: inline-size`), so the
+/// font size scales with the whole edge; the `%` insets are relative to the **square** each label
+/// sits in. Hence `fontSize(boardEdge:)` against one and the insets against the other.
+///
+/// Placement follows `_layoutCells` (chess-board.js:290-292): the file letter on visual row 7 only,
+/// the rank digit on visual column 0 only, both labelled with the LOGICAL file/rank so they follow
+/// the flip.
+enum BoardCoords {
+    static let color = Theme.c(0x8BA3C7)
+    static let opacity: Double = 0.9
+    static let weight: NunitoWeight = .semiBold      // CSS font-weight 600
+
+    static let minFontSize: CGFloat = 7
+    static let maxFontSize: CGFloat = 12
+    static let fontEdgeRatio: CGFloat = 0.021        // 2.1cqw
+
+    static let fileInsetTrailingRatio: CGFloat = 0.03
+    static let fileInsetBottomRatio: CGFloat = 0.01
+    static let rankInsetLeadingRatio: CGFloat = 0.04
+    static let rankInsetTopRatio: CGFloat = 0.01
+
+    /// `clamp(7px, 2.1cqw, 12px)`, measured against the board edge.
+    static func fontSize(boardEdge: CGFloat) -> CGFloat {
+        min(maxFontSize, max(minFontSize, boardEdge * fontEdgeRatio))
+    }
+    static func fileInsetTrailing(square: CGFloat) -> CGFloat { square * fileInsetTrailingRatio }
+    static func fileInsetBottom(square: CGFloat) -> CGFloat { square * fileInsetBottomRatio }
+    static func rankInsetLeading(square: CGFloat) -> CGFloat { square * rankInsetLeadingRatio }
+    static func rankInsetTop(square: CGFloat) -> CGFloat { square * rankInsetTopRatio }
+
+    /// "a"…"h" for a logical file index.
+    static func fileLabel(_ file: Int) -> String { String(UnicodeScalar(UInt8(97 + file))) }
+    /// "1"…"8" for a logical rank index.
+    static func rankLabel(_ rank: Int) -> String { String(rank + 1) }
+}
+
 // MARK: - Arrows (spec 3.9)
 
 enum AnalysisArrow {
