@@ -69,6 +69,12 @@ var CPLAY = require(path.join(ROOT, 'web-demo', 'js', 'coach-play.js'));
 var CSCREEN = require(path.join(__dirname, 'coach_screen_test.js'));
 var CREVIEW = require(path.join(__dirname, '..', '..', 'web-demo', 'js', 'coach-review.js'));
 var RCOACH = require(path.join(__dirname, 'replay_coach.js'));
+var LOGIN = require(path.join(ROOT, 'web-demo', 'js', 'login.js'));
+var RLOGIN = require(path.join(__dirname, 'replay_login.js'));
+var DLIMITS = require(path.join(ROOT, 'web-demo', 'js', 'daily-limits.js'));
+var PREMIUM = require(path.join(ROOT, 'web-demo', 'js', 'premium.js'));
+var RPREMIUM = require(path.join(__dirname, 'replay_premium.js'));
+var HOME = require(path.join(ROOT, 'web-demo', 'js', 'home.js'));
 var RPUZ = require(path.join(__dirname, 'replay_puzzle_core.js'));
 var RVM  = require(path.join(__dirname, 'replay_puzzle_vm.js'));
 var PMET = require(path.join(JS, 'puzzle-metrics.js'));
@@ -179,6 +185,20 @@ record('swift coach vs JS', RCOACH.selfTest());
 record('coach-metrics vs RN source',
        CMET.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'coach_styles.json'))));
 record('coach book legality', CBOOK.selfTestLegality(require(path.join(ROOT, 'web-demo', 'js', 'engine.js'))));
+// The login gate. The pure layer first, then the Swift-vs-JS replay — which also carries the
+// offline guarantee (no URLSession / fetch / URL anywhere in the feature), the script order and
+// the CSS-variable audit, because a login screen is where all three are easiest to break.
+record('login pure layer', LOGIN.selfTest());
+record('swift login vs JS', RLOGIN.selfTest());
+// The subscription. The free tier's PHP-pinned caps first, then the entitlement state machine on
+// top of them, then the Swift-vs-JS replay — which also carries the offline guarantee (StoreKit
+// allowed, URLSession and any third URL not), the script order and the CSS-variable audit.
+record('daily limits', DLIMITS.selfTest());
+record('subscription pure layer', PREMIUM.selfTest());
+record('swift subscription vs JS', RPREMIUM.selfTest());
+// The home screen's pure layer ran only in the browser until now, and the premium banner's state
+// machine lives in it — it would otherwise sit outside this gate entirely.
+record('home pure layer', HOME.selfTest());
 record('pairing-metrics.selfTest', PMETRICS.selfTest());
 record('pairing-metrics vs RN source',
        PMETRICS.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'tournament_styles.json'))));

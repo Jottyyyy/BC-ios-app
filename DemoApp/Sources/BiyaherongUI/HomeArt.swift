@@ -25,6 +25,10 @@ enum HomeArt {
         case video = "video_icon"
         case swiss = "swiss"
         case appIcon = "app-icon"
+        /// The full brand mark ("Byaherong COACH APP"), as opposed to `appIcon`'s gold knight.
+        /// Copied from the RN app's `assets/images/icon.png` — the logo its login, register and
+        /// splash screens all use. Only the login screen draws it. See docs/login.md.
+        case brandLogo = "brand-logo"
         case openingBook = "opening_book"     // the only true vector
     }
 
@@ -64,8 +68,10 @@ enum HomeArt {
     }
 
     /// Warms every home asset. Called on appear so switching to the Home tab never decodes inline.
+    /// `brandLogo` is included because the login screen is the app's FIRST screen — it is the one
+    /// asset that would otherwise decode while the user is looking at it.
     static func preload() {
-        for a: Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon] { _ = raster(a) }
+        for a: Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon, .brandLogo] { _ = raster(a) }
         _ = vector(.openingBook)
     }
 
@@ -100,7 +106,7 @@ enum HomeArt {
     /// failure a missing `.copy("Images")` produces inside a packaged app.
     nonisolated static func diagnosticsSummary() -> String {
         var missing: [String] = []
-        for name in ["puzzle_knight", "analysis", "video_icon", "swiss", "app-icon"] {
+        for name in ["puzzle_knight", "analysis", "video_icon", "swiss", "app-icon", "brand-logo"] {
             if Bundle.module.url(forResource: name, withExtension: "png", subdirectory: "Images") == nil {
                 missing.append(name + ".png")
             }
@@ -113,7 +119,7 @@ enum HomeArt {
             bookState = "MISSING"
         }
         return missing.isEmpty
-            ? "all 5 PNGs resolve, opening_book.svg \(bookState)"
+            ? "all 6 PNGs resolve, opening_book.svg \(bookState)"
             : "MISSING \(missing.joined(separator: ", ")); opening_book.svg \(bookState)"
     }
 }
@@ -152,15 +158,18 @@ struct HomeCardIcon: View {
     }
 }
 
-/// The app icon, aspect-filled and clipped to `shape`. Used by the header logo (a circle) and the
-/// Play-with-Coach ring (a squircle).
+/// A bundled square mark, aspect-filled and clipped to `shape`. Used by the header logo (a circle),
+/// the Play-with-Coach ring (a squircle) and — with `asset: .brandLogo` — the login hero.
+///
+/// `asset` is defaulted and declared last, so the two original call sites are unchanged.
 struct HomeAppIcon<S: Shape>: View {
     let size: CGFloat
     let shape: S
+    var asset: HomeArt.Asset = .appIcon
 
     var body: some View {
         Group {
-            if let img = HomeArt.raster(.appIcon) {
+            if let img = HomeArt.raster(asset) {
                 img.resizable().interpolation(.high).aspectRatio(contentMode: .fill)
             } else {
                 Theme.cardAlt

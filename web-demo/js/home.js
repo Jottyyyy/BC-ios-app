@@ -416,6 +416,10 @@ var BiyaHome = (function () {
 
   function setColorful(v) { state.isColorful = !!v; }
   function setPremium(v, endsAt) { state.isPremium = !!v; state.subscriptionEndsAt = endsAt || null; }
+  /* `state.userName` has been read by the header avatar since it was drawn, and nothing ever set
+     it — so the avatar drew its "?" fallback on every render. The signed-in user supplies it now,
+     matching `PhoneApp`'s `HomeScreen(userName: loginStore.displayName …)`. */
+  function setUserName(v) { state.userName = v == null ? '' : String(v); }
 
   return {
     // pure
@@ -426,7 +430,8 @@ var BiyaHome = (function () {
     membershipTitle: membershipTitle, membershipEmoji: membershipEmoji, membershipSubtitle: membershipSubtitle,
     selfTest: selfTest,
     // view
-    render: render, state: state, setColorful: setColorful, setPremium: setPremium
+    render: render, state: state, setColorful: setColorful, setPremium: setPremium,
+    setUserName: setUserName
   };
 })();
 

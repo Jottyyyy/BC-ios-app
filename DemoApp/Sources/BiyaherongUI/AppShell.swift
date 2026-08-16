@@ -38,6 +38,10 @@ struct RootView: View {
     @State private var selection: Panel? = .phone
     /// One store for the sidebar's hub, so switching panels does not reset progress.
     @StateObject private var puzzleStore = PuzzleHubStore()
+    /// The desktop shell is an engine harness, not a place anyone subscribes — but the hub reads a
+    /// live entitlement now, so it needs one. It resolves to the free tier here, which is also the
+    /// state worth exercising: the caps are the thing the panel can usefully show.
+    @StateObject private var premium = PremiumStore()
     var body: some View {
         NavigationSplitView {
             List(Panel.allCases, selection: $selection) { p in
@@ -54,7 +58,7 @@ struct RootView: View {
                 // The hub, same as the phone's Puzzles tab. The ten hand-made samples live on
                 // at `.samples` — they are the engine spot-check they were written for, and they
                 // use the opposite move convention, so they cannot share this solver.
-                case .puzzles: PuzzleHubScreen(store: puzzleStore, onExit: {})
+                case .puzzles: PuzzleHubScreen(store: puzzleStore, premium: premium, onExit: {})
                 case .samples: PuzzleView()
                 case .play: PlayView()
                 case .home: HomeView()

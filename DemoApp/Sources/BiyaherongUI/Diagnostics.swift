@@ -30,8 +30,9 @@ public func biyaherongDiagnostics() -> String {
     if svg != 12 { out += "WARNING: expected 12 piece SVGs — boards will fall back to Unicode glyphs\n" }
     // The home screen's card art. A missing `.copy("Images")` in Package.swift fails silently at
     // runtime (blank cards) and only inside a packaged app — this is what catches it.
-    if png != 5 || isvg != 1 {
-        out += "WARNING: expected 5 PNGs + 1 SVG in Images/ — home screen cards will render blank\n"
+    if png != 6 || isvg != 1 {
+        out += "WARNING: expected 6 PNGs + 1 SVG in Images/ — home screen cards or the login hero "
+        out += "will render blank\n"
     }
 
     // The offline ECO opening book (tools/eco/build_eco.php). Same silent-failure mode as Images/:

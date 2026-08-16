@@ -27,6 +27,11 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: App
+      # Not compiled — the local StoreKit configuration the Debug scheme runs against, so the
+      # trial, a renewal, an expiry, billing retry and the grace window are all exercisable
+      # without App Store Connect. See docs/subscription.md.
+      - path: Biyaherong.storekit
+        buildPhase: none
     dependencies:
       - package: BiyaherongUI
         product: BiyaherongUI
@@ -66,9 +71,12 @@ targets:
         # catalog on disk still succeeds and silently ships with no icon keys at all.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
-        # The app is 100% offline (no URLSession/Network anywhere), so it uses no non-exempt
-        # encryption. Declaring this up front stops App Store Connect halting every single
-        # upload on the manual export-compliance question.
+        # The app makes no network calls of its own — the only framework that talks to Apple is
+        # StoreKit, for the subscription, and it reads the device's own transaction cache. Its
+        # transport is OS-provided TLS, which is EXEMPT, so `NO` remains the correct declaration
+        # and stops App Store Connect halting every upload on the manual export-compliance
+        # question. `tools/qa/replay_premium.js` fails the build gate on any URLSession or on a
+        # third URL, so this claim stays a test rather than a comment.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_CFBundleDisplayName: Biyaherong
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -92,6 +100,9 @@ schemes:
         Biyaherong: all
     run:
       config: Debug
+      # Without this the Debug scheme talks to the real sandbox, which needs an App Store Connect
+      # record and a sandbox Apple Account. With it, everything is local and instant.
+      storeKitConfiguration: Biyaherong.storekit
     test:
       config: Debug
     profile:

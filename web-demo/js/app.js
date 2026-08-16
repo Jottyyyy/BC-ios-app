@@ -88,7 +88,11 @@
   var view = document.getElementById('view');
   var tabbarEl = document.getElementById('tabbar');
   var TABS = [{ id: 'home', ico: ICON.home, lbl: 'Home' }, { id: 'puzzles', ico: ICON.puzzles, lbl: 'Puzzles' }, { id: 'play', ico: ICON.play, lbl: 'Play' }, { id: 'profile', ico: ICON.profile, lbl: 'Profile' }];
-  var current = 'home';
+  // The login gate. `BiyaLogin` owns the session; a missing or unrecognised stored value means the
+  // login screen, so a half-written key fails closed rather than letting someone straight into the
+  // app. Signing in persists, so this is the first screen once and not on every launch —
+  // Profile > Sign out is the way back to it.
+  var current = BiyaLogin.shared().isSignedIn() ? 'home' : 'login';
   function renderTabbar() {
     tabbarEl.innerHTML = '';
     TABS.forEach(function (t) {
@@ -113,7 +117,9 @@
     // The Analysis Board also hides the tab bar: it is a pushed route in the original, and its
     // seven bands cannot spare the height. Cleared here for the same reason .flush is.
     appCard().classList.remove('an-mode');
-    if (current === 'home') renderHome();
+    if (current === 'login') renderLogin();
+    else if (current === 'paywall') renderPaywall();
+    else if (current === 'home') renderHome();
     else if (current === 'play') renderPlay();
     else if (current === 'profile') renderProfile();
     else if (current === 'analysis') renderAnalysis();
@@ -140,6 +146,94 @@
   function appCard() { return view.closest ? view.closest('.app-card') : view.parentNode; }
 
   /* ======================================================================== *
+   *  LOGIN — see js/login.js
+   * ======================================================================== */
+
+  // The gate owns the whole box and hides the tab bar, the same two flags every pushed route sets.
+  // `.flush` because it draws to the edges; `an-mode` because a login screen with a tab bar under
+  // it is not a gate.
+  function renderLogin() {
+    view.classList.add('flush');
+    appCard().classList.add('an-mode');
+    BiyaLogin.render(view, finishSignIn);
+  }
+
+  // The screen raises the event, the shell owns the transition — the same split PhoneApp uses,
+  // where `LoginScreen(onSignedIn:)` fires and the host runs the `withAnimation` cross-fade.
+  function finishSignIn() {
+    var card = appCard();
+    var secs = BiyaLogin.TIMING.signInFadeSeconds;
+    current = 'home';
+    renderTabbar();
+    render();
+    card.style.setProperty('--lg-fade-secs', secs + 's');
+    card.classList.add('lg-signing-in');
+    setTimeout(function () { card.classList.remove('lg-signing-in'); }, secs * 1000);
+  }
+
+  function signOut() {
+    BiyaLogin.shared().signOut();
+    current = 'login';
+    renderTabbar();
+    render();
+  }
+
+  /* ======================================================================== *
+   *  SUBSCRIPTION — see js/premium.js
+   * ======================================================================== */
+
+  // A pushed route, like the login gate: it owns the box and hides the tab bar.
+  function renderPaywall() {
+    view.classList.add('flush');
+    appCard().classList.add('an-mode');
+    BiyaPremium.render(view, function () { goPaywallBack(); });
+  }
+
+  // Where the paywall returns to. Remembered rather than assumed, so a cap hit inside the Puzzle
+  // Hub does not dump the user back on Home.
+  var paywallReturn = 'home';
+  function goPaywall() {
+    paywallReturn = (current === 'paywall') ? paywallReturn : current;
+    current = 'paywall';
+    renderTabbar();
+    render();
+  }
+  function goPaywallBack() {
+    current = paywallReturn;
+    renderTabbar();
+    render();
+  }
+
+  /**
+   * The free tier's allowances, at the one place every route transition funnels through — the same
+   * split the Swift uses, where `PuzzleHubScreen` owns every gate and the solvers know nothing.
+   *
+   * Spends one use and runs `go`, or raises the lock card and does nothing.
+   */
+  function gate(mode, message, go) {
+    var p = BiyaPremium.shared();
+    if (!p.canUse(mode)) { raiseCap(message, true); return; }
+    p.recordUse(mode);
+    go();
+  }
+
+  function raiseCap(message, resets) {
+    appCard().appendChild(BiyaPremium.lockCard(message, {
+      resets: resets,
+      onSeePlans: goPaywall
+    }));
+  }
+
+  /** `You've solved 5/5 free puzzles today…` — the count substituted, never re-typed. */
+  function ratedCapMessage() {
+    var P = BiyaPremium;
+    return P.fill(P.STRINGS.puzzleCap, {
+      used: P.shared().used(P.MODE.regular),
+      limit: P.maxUses(P.MODE.regular)
+    });
+  }
+
+  /* ======================================================================== *
    *  ANALYSIS BOARD — see js/analysis.js
    * ======================================================================== */
   function renderAnalysis() {
@@ -163,18 +257,27 @@
   function renderPuzzleHub() {
     appCard().classList.add('an-mode');           // a pushed route: no tab bar, full height
     BiyaPuzzleHub.render(view, function (mode) {
+      // Only Thematic is gated here: it is the one hard premium gate. The others are daily
+      // allowances, spent when a run actually starts — browsing a home screen and backing out
+      // must not cost the user their run.
       if (mode === 'play') puzzleGo('puzzle-play');
       else if (mode === 'daily') puzzleGo('puzzle-daily');
-      else if (mode === 'thematic') puzzleGo('puzzle-thematic');
-      else if (mode === 'streak') puzzleGo('puzzle-streak');
+      else if (mode === 'thematic') {
+        if (BiyaPremium.isThematicLocked(BiyaPremium.shared().isPremium())) {
+          raiseCap(BiyaPremium.STRINGS.thematicLock, false);
+        } else { puzzleGo('puzzle-thematic'); }
+      } else if (mode === 'streak') puzzleGo('puzzle-streak');
       else if (mode === 'turbo') puzzleGo('puzzle-turbo');
     }, function () { puzzleGo('home'); });
   }
 
   function renderPuzzlePlayHome() {
     appCard().classList.add('an-mode');
-    BiyaPuzzleHome.render(view, function () { puzzleGo('puzzle-solve'); },
-                          function () { puzzleGo('puzzles'); });
+    // The allowance is spent HERE, on the way into the solver — a failed attempt still costs a
+    // use, exactly as the original counted them.
+    BiyaPuzzleHome.render(view, function () {
+      gate(BiyaPremium.MODE.regular, ratedCapMessage(), function () { puzzleGo('puzzle-solve'); });
+    }, function () { puzzleGo('puzzles'); });
   }
 
   function renderPuzzleSolver() {
@@ -204,8 +307,10 @@
 
   function renderStreakHome() {
     appCard().classList.add('an-mode');
-    BiyaPuzzleStreak.renderHome(view, function () { puzzleGo('puzzle-streak-solve'); },
-                                function () { puzzleGo('puzzles'); });
+    BiyaPuzzleStreak.renderHome(view, function () {
+      gate(BiyaPremium.MODE.streak, BiyaPremium.STRINGS.streakCap,
+           function () { puzzleGo('puzzle-streak-solve'); });
+    }, function () { puzzleGo('puzzles'); });
   }
   function renderStreakSolver() {
     appCard().classList.add('an-mode');
@@ -219,8 +324,11 @@
   function renderTurboHome() {
     appCard().classList.add('an-mode');
     BiyaPuzzleTurbo.renderHome(view, function (mode, draft) {
-      turboLaunch = { mode: mode, draft: draft };
-      puzzleGo('puzzle-turbo-run');
+      // PER MODE — rush_0, rush_3 and rush_5 carry their own allowance. Resuming a draft is the
+      // SAME run continued and already cost its use when it started.
+      function launch() { turboLaunch = { mode: mode, draft: draft }; puzzleGo('puzzle-turbo-run'); }
+      if (draft) { launch(); return; }
+      gate(BiyaPremium.MODE.rush(mode), BiyaPremium.STRINGS.rushCap, launch);
     }, function () { puzzleGo('puzzles'); });
   }
   function renderTurboRun() {
@@ -308,6 +416,13 @@
    *  HOME TAB — see js/home.js
    * ======================================================================== */
   function renderHome() {
+    // The header avatar's initial comes from the signed-in user, the way `PhoneApp` passes
+    // `userName: loginStore.displayName` to `HomeScreen`. Without this it draws its "?" fallback.
+    BiyaHome.setUserName(BiyaLogin.shared().displayName());
+    // The banner's gold skin, the avatar's badge and the expiry line all come from the live
+    // entitlement, the way `PhoneApp` passes `isPremium:` / `subscriptionEndsAt:` to `HomeScreen`.
+    var sub = BiyaPremium.shared();
+    BiyaHome.setPremium(sub.isPremium(), sub.expiresAt() ? new Date(sub.expiresAt()) : null);
     BiyaHome.render(view, function (action) {
       // Only the actions with a real destination in this demo are wired; the rest are the empty
       // callbacks the screen is designed around (§12).
@@ -318,6 +433,8 @@
       // home.js has emitted 'pairing' since the tile was drawn; there was simply nothing here to
       // catch it.
       else if (action === 'pairing') pairingGo('pairing');
+      // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
+      else if (action === 'membership') goPaywall();
     });
   }
 
@@ -676,8 +793,11 @@
     view.appendChild(el('div', 'screen-head', '<h1 class="screen-title">Profile</h1>'));
     var wrap = el('div', 'wrap-x stack');
     var tier = R.classify(store.puzzleRating);
+    // The name comes from the session now, not a literal, so the badge and the header agree with
+    // whatever the signed-in user is called.
+    var who = BiyaLogin.shared().displayName();
     wrap.appendChild(el('div', 'profile-card',
-      '<div class="mono-badge">B</div><div><div class="pname">Biyahero</div><div class="ptier">' + tier + '</div></div>' +
+      '<div class="mono-badge">' + who.charAt(0) + '</div><div><div class="pname">' + who + '</div><div class="ptier">' + tier + '</div></div>' +
       '<div class="prating">' + store.puzzleRating + '<div style="font-size:10px;opacity:.8;font-weight:700">RATING</div></div>'));
 
     var acc = store.attempts ? Math.round(store.solved / store.attempts * 100) : 0;
@@ -711,6 +831,30 @@
     avs += '</div>';
     cc.innerHTML = '<div class="card-label">Your coaches</div>' + avs;
     wrap.appendChild(cc);
+
+    // Subscription — its state and the route to the paywall.
+    var PW = BiyaPremium, sub = PW.shared(), acc = sub.access();
+    var line = acc.kind === 'premium'
+      ? (sub.expiresAt() ? 'Renews ' + PW.dateText(sub.expiresAt()) : 'Active subscription')
+      : acc.kind === 'grace'
+        ? PW.STRINGS.graceTitle + ' · ' + PW.daysPillText(acc.daysLeft)
+        : 'Unlock everything';
+    var pc = el('div', 'card');
+    pc.innerHTML = '<div class="card-label">' + PW.STRINGS.premium + '</div>'
+      + '<div class="lg-account-row">' + (sub.isPremium() ? PW.GLYPH.crown : '⭐') + ' ' + line
+      + '</div><button class="pw-profile-cta" type="button">'
+      + (sub.isPremium() ? PW.STRINGS.manageRow : PW.STRINGS.lockCta) + '</button>';
+    pc.querySelector('.pw-profile-cta').onclick = goPaywall;
+    wrap.appendChild(pc);
+
+    // Account — the only way back to the login screen once the session has been persisted.
+    var S = BiyaLogin.STRINGS;
+    var ac = el('div', 'card');
+    ac.innerHTML = '<div class="card-label">' + S.accountCard + '</div>'
+      + '<div class="lg-account-row">' + S.signedInWith + ' ' + BiyaLogin.shared().providerLabel()
+      + '</div><button class="lg-signout" type="button">' + S.signOut + '</button>';
+    ac.querySelector('.lg-signout').onclick = signOut;
+    wrap.appendChild(ac);
 
     view.appendChild(wrap);
   }
@@ -908,6 +1052,19 @@
     var home = BiyaHome.selfTest();
     ck('home pure layer (' + home.passed + ' assertions)', home.failures.length, 0);
     home.failures.forEach(function (f) { console.log('FAIL home: ' + f); });
+    // The login gate's pure layer — the band budget, the drift field's keep-out zones, the two
+    // colours of Apple's button that must never be retinted, and the session state machine
+    // including the branch that decides whether a bad stored value lets someone past the gate.
+    var login = BiyaLogin.selfTest();
+    ck('login pure layer (' + login.passed + ' assertions)', login.failures.length, 0);
+    login.failures.forEach(function (f) { console.log('FAIL login: ' + f); });
+    // The free tier's PHP-pinned caps, then the subscription state machine on top of them.
+    var caps = BiyaDailyLimits.selfTest();
+    ck('daily limits (' + caps.passed + ' assertions)', caps.failures.length, 0);
+    caps.failures.forEach(function (f) { console.log('FAIL limits: ' + f); });
+    var prem = BiyaPremium.selfTest();
+    ck('subscription pure layer (' + prem.passed + ' assertions)', prem.failures.length, 0);
+    prem.failures.forEach(function (f) { console.log('FAIL premium: ' + f); });
     // The analysis notation core: SAN/UCI parsing, the position key, the draw rules, the move tree
     // and PGN. The full 3,105-case replay against the PHP oracle needs the goldens on disk and so
     // lives in `node tools/qa/js_goldens.js`; these are the self-contained halves.
@@ -974,11 +1131,24 @@
     BiyaHome.setColorful(themeSel.value === 'colorful');
     if (current === 'home') render();
   };
+  // Demo chrome, deliberately OUTSIDE the phone: it drives the SIMULATED store so the whole
+  // lifecycle — trial, active, the grace window, expiry — is walkable without a device or a month
+  // of waiting. The app itself only ever reads `BiyaPremium.shared()`.
   var premiumSel = document.getElementById('home-premium-select');
   if (premiumSel) premiumSel.onchange = function () {
-    // A fixed date so the expiry string is stable to look at, not a moving target.
-    BiyaHome.setPremium(premiumSel.value === 'premium', new Date(2026, 8, 12));
-    if (current === 'home') render();
+    var sub = BiyaPremium.shared(), DAY = BiyaPremium.CONST.msPerDay, now = Date.now();
+    var v = premiumSel.value;
+    if (v === 'free') { sub.clear(); }
+    else if (v === 'trial') { sub.startTrial(); }
+    else if (v === 'active') { sub.subscribe(); }
+    else if (v === 'grace') {
+      // Expired yesterday, auto-renew still on, no way to reach Apple — the renewal-day
+      // subscriber, which is the exact case the grace window exists for.
+      sub.apply({ isSubscribed: true, willAutoRenew: true, expiresAtMs: now - DAY }, now);
+    } else if (v === 'expired') {
+      sub.apply({ isSubscribed: true, willAutoRenew: false, expiresAtMs: now - DAY }, now);
+    }
+    render();
   };
 
   renderTabbar();

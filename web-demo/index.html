@@ -44,11 +44,16 @@
           <option value="colorful">Colorful</option>
         </select>
       </div>
-      <span class="device-label">Membership</span>
+      <!-- Drives the SIMULATED store in js/premium.js, so the whole subscription lifecycle is
+           walkable here without a device, a sandbox account or a month of waiting. -->
+      <span class="device-label">Subscription</span>
       <div class="select-wrap">
-        <select id="home-premium-select" aria-label="Membership state">
+        <select id="home-premium-select" aria-label="Subscription state">
           <option value="free">Free</option>
-          <option value="premium">Premium</option>
+          <option value="trial">Trial</option>
+          <option value="active">Active</option>
+          <option value="grace">Grace</option>
+          <option value="expired">Expired</option>
         </select>
       </div>
     </div>
@@ -163,6 +168,13 @@
   <script src="js/coach-select.js"></script>
   <script src="js/coach-color.js"></script>
   <script src="js/coach-play.js"></script>
+  <!-- The login gate. app.js reads BiyaLogin at BOOT to decide the first screen, so this must load
+       before it. Nothing else reads it. -->
+  <script src="js/login.js"></script>
+  <!-- The subscription. ORDER MATTERS: premium.js reads BiyaDailyLimits at load time for the
+       PHP-pinned free-tier caps, and app.js reads BiyaPremium for every gate. -->
+  <script src="js/daily-limits.js"></script>
+  <script src="js/premium.js"></script>
   <script src="js/app.js"></script>
   <script src="js/device.js"></script>
 </body>

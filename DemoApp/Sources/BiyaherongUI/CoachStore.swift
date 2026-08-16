@@ -42,6 +42,13 @@ final class CoachStore: ObservableObject {
     @Published private(set) var review: ReviewState?
     /// Raised by the game screen; the host presents the prompt (spec §7 #24).
     @Published var confirmingResign = false
+    /// True when a review was refused because the free tier's daily allowance is spent. The screen
+    /// shows the cap message and the upgrade route; the store does not know what a paywall is.
+    @Published var reviewBlocked = false
+
+    /// The free tier's daily Game Review allowance, supplied by the host. Returns false when it is
+    /// spent and **consumes one when it returns true**. `nil` means ungated.
+    var reviewGate: (() -> Bool)?
 
     /// Spec §7 #39: the RN switch was never written anywhere, so it reset on every launch.
     @Published var allowTakeBack: Bool {
@@ -247,6 +254,12 @@ final class CoachStore: ObservableObject {
     /// `shouldCancel` reads the same token, so cancelling stops the search rather than its answer.
     func startReview() {
         guard let g = game, CoachReview.isReviewable(g) else { return }
+        // Checked AFTER `isReviewable`, so a review that was never going to run does not cost the
+        // user one of their three.
+        if let reviewGate, !reviewGate() {
+            reviewBlocked = true
+            return
+        }
         cancelInFlight()
         let token = controller.generation
         let plan = CoachReview.plan(from: g)

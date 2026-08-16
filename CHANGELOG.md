@@ -9,6 +9,222 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-16 (added) — A monthly subscription with a 7-day trial, enforced on-device with no server
+
+The app earns recurring revenue now: one auto-renewing **monthly** plan with a **7-day free trial**,
+verified entirely by **StoreKit 2 on the device**. No backend, no accounts, no receipt POST. Under it
+sits a genuinely playable free tier, and the paywall is reached on demand — the "⭐ Go Premium"
+banner, or a cap the user just hit — never as a wall in front of a new install.
+
+**Why an offline app can do this at all.** `Transaction.currentEntitlements` is served from the
+device's own transaction cache and every transaction in it is a JWS Apple already signed, so the
+check is cryptographic, local, and works in Airplane Mode. Apple is the server.
+
+**What it cannot see is a renewal** — Apple charges the card server-side and issues a new transaction
+the phone never receives, so a cached entitlement can only ever expire. A **7-day grace window**
+covers that, and it applies only when auto-renew was ON at the last check; someone who deliberately
+cancelled knew the date was coming and gets none. **The free tier is what makes the design safe:**
+when grace lapses the user drops to the free tier with every rating, saved analysis and tournament
+intact, not to a dead app.
+
+Two holes stay open, deliberately, because closing them needs the server that was ruled out:
+**refunds** are invisible until the device syncs, and **clock rollback** extends access.
+`Entitlement.trustedNow` floors the clock at the newest Apple-signed `signedDate` ever seen, which
+raises the bar without closing it. All of it is in [`PORTING_NOTES.md`](PORTING_NOTES.md).
+
+**Added — the pure layer.** `Sources/BiyaherongCoachCore/Entitlement.swift`: the trial/expiry/grace
+state machine, the clock floor, the round-**up** day count, and the day-keyed usage counters.
+Foundation only and **deliberately StoreKit-free**, which is what lets `PaywallMetricsCheck` assert
+the whole thing without a device, a network or a sandbox account. No ParityRunner group — there is
+no PHP oracle for new behaviour, so it gets a runnable check and a JS twin instead.
+
+**Added — the store and the screens.** `PremiumStore.swift` is the **only file in the app that
+imports StoreKit** (asserted). `KeychainStorage.swift` is the repo's first keychain use — the
+snapshot survives a reinstall — and falls back to `UserDefaults` on macOS, where `SecItem` from an
+unsigned binary raises a system dialog that would hang the demo. Plus `PaywallMetrics.swift`,
+`PaywallScreen.swift` (offer · subscribed · grace), `PremiumLockCard`, and a new
+`PaywallMetricsCheck` executable target.
+
+**The free tier was already built.** Every gate has accepted an `isPremium` since the port; nothing
+ever passed `true`. `DailyLimits` (5 rated / 1 streak / 1 rush / 2 coach, 168 golden assertions),
+`TournamentEngine`'s 3-vs-30 rounds, the whole "⭐ Go Premium" ⇄ "✈️ Premium Active" banner state
+machine, and the coach lock skin extracted into `CoachMetrics.swift:94-135` and never used — all of
+it was waiting for one Bool. Three details that are easy to read wrong and are now pinned by
+assertions: **Turbo is counted per mode** (`rush_0`/`rush_3`/`rush_5`, not one shared counter), the
+**Daily puzzle is never gated**, and the counters count **starts, not solves** — a failed attempt
+still spends a use, exactly as the original counted them.
+
+**`DailyLimits` was not touched.** It is pinned to the PHP oracle; a mode added there would make it
+diverge from the backend it was verified against. The one invented cap — 3 Game Reviews a day —
+lives in `Entitlement`, and `replay_premium.js` fails if `"review"` ever appears in `DailyLimits` in
+either language. The number is borrowed rather than guessed: the RN app gated the Analysis Board at
+3 saved sessions and 3 pinned GM games.
+
+**Both Game Review entry points share one allowance.** The Analysis Board's ☰ menu and Play vs
+Coach's "Start Review" both go through `PremiumStore.consumeReview()`; capping one alone would have
+been a free bypass of the other. `AnalysisReviewModal.State` gained a `.capped` case beside
+`.tooShort`, and `CoachStore` a `reviewBlocked` flag.
+
+**Fixed while writing the test that found it — a fail-OPEN hole.** `resolve` honoured
+`isSubscribed` even with no expiry date, so `{"isSubscribed":true}` — two words in localStorage or a
+plist — bought permanent premium. An auto-renewable subscription always carries an expiry, so a
+snapshot without one is not something StoreKit produced. It now **fails closed** in both languages,
+with an assertion each.
+
+**Fixed — the grace card said "0 days remaining".** In grace the subscription has already lapsed, so
+the plan card rendered a zero pill directly under a "✓ Active" badge. The pill is suppressed at zero;
+the amber warning above it already says what is going on.
+
+**Changed — the bundle identifier did not match itself.** `ios/project.yml` said
+`com.prince24pogi.biyaherongchessapp` (the live App Store Connect record) and `codemagic.yaml` said
+`com.biyaherong.coach`. StoreKit product IDs are namespaced per app record, so sandbox purchases
+would have failed against the wrong one. Reconciled onto the `project.yml` value. `ios/project.yml`
+also gains `Biyaherong.storekit` and a `storeKitConfiguration:` on the Debug scheme, so the trial, a
+renewal, an expiry, billing retry and the grace window are all exercisable locally; and its
+export-compliance comment is rewritten — **`ITSAppUsesNonExemptEncryption: NO` stays correct**,
+since StoreKit's transport is OS-provided TLS and therefore exempt.
+
+**`web-demo/` updated** — mirrored in full. New `js/daily-limits.js` (the JS twin `DailyLimits` never
+had, closing a fully-ported Swift island with no cross-check) and `js/premium.js` (the same pure
+layer, plus a **simulated** store). The **Subscription** picker above the phone now walks the whole
+lifecycle — Free · Trial · Active · Grace · Expired — in seconds instead of a month, `?storefail`
+shows the "couldn't reach the App Store" card, and a `---- Paywall ----` section in `css/app.css` is
+driven entirely by `--pw-*` properties the JS sets from the one table. The Home banner's
+`'membership'` action, emitted since the day the banner was drawn and silently dropped ever since,
+finally goes somewhere.
+
+**Changed — three QA gates got sharper.** New `tools/qa/replay_premium.js` (423 assertions) carries
+the Swift-vs-JS comparison **and** four guards that are not values: the state machine's fail-closed,
+no-grace-after-cancel and clock-floor branches; the offline guarantee, where StoreKit is allowed but
+`URLSession` is not and **exactly two URLs** are permitted (Apple's standard EULA and the privacy
+policy, both required by App Review — a third fails); that `DailyLimits` has not grown the invented
+mode; and the `--pw-*` audit in both directions. `swift_symbol_check.js` now covers the
+`Paywall*` / `Premium*` / `Entitlement` namespaces in **both** its regexes, which were asymmetric.
+And `home.js` is finally registered in `js_goldens.js` — its self-test ran only in the browser, and
+the premium banner's state machine lives in it.
+
+**Docs** — new [`docs/subscription.md`](docs/subscription.md); [`docs/README.md`](docs/README.md)
+points at it; [`ios/BUILD-iOS.md`](ios/BUILD-iOS.md) corrected in two places, most importantly its
+"if you see a bundle identifier error, just change it" advice, which orphans every product ID.
+
+⚠️ **Four things must still happen in App Store Connect** and cannot be done from this repo: create
+the subscription group and the monthly product (the ID must match `PremiumStore.monthlyProductID`
+exactly), add the 7-day introductory offer, set the price, and **enable the billing grace period**.
+Note also that `ios-free-unsigned` can no longer validate the store path — it archives with signing
+off, so there is no App ID with In-App Purchase and the paywall shows "Store Unavailable"
+permanently. `ios-testflight` is the only real test path.
+
+No domain rule was changed — `DailyLimits` and `TournamentEngine` are untouched, so `ParityRunner`
+counts are unchanged. `js_goldens.js`: **31,037 assertions across 68 suites**, green (was 30,368
+across 64). `replay_premium.js` was mutation-checked against eight deliberate Swift edits — grace
+7→14, grace granted after a cancel, fail-open on a missing expiry, the clock floor removed, the
+review cap changed, the Apple "Active" pill retinted, the privacy URL swapped for an unrelated host,
+and refunded transactions no longer skipped — and caught all eight.
+
+### 2026-08-16 (added) — A login screen, with a SIMULATED "Continue with Apple"
+
+The app now opens on a login screen instead of dropping straight into the dashboard: the Biyaherong brand
+mark under a gold ring and glow, the app name and Taglish tagline, one **Continue with Apple** button, and
+a Privacy · Terms footer. Tapping the button signs in and cross-fades to the existing Home dashboard,
+ready to play. Faint chess pieces drift behind it all. Nothing else about the app changed.
+
+**The Apple sign-in is simulated.** There is no `AuthenticationServices` call and no network of any kind —
+`LoginStore.signIn(_:)` writes one string and publishes. Two consequences worth stating plainly:
+
+- **This will not pass App Review as-is.** A "Continue with Apple" button that performs no Apple
+  authentication is a rejection. Everything a real one needs is behind that single method; wiring
+  `ASAuthorizationController` into the button's action and calling `signIn(_:)` on success changes nothing
+  else, and needs the `com.apple.developer.applesignin` entitlement added to `ios/project.yml`.
+- **The offline guarantee survives.** `ios/project.yml:69-71` justifies its export-compliance `NO` with
+  "no URLSession/Network anywhere", and that is still true. `replay_login.js` now makes it a test rather
+  than a promise: it fails on `URLSession`, `URLRequest`, `fetch(`, `XMLHttpRequest`, `ASAuthorization` or
+  any `http(s)://` in either language's half of the feature.
+
+It also reverses a locked spec decision (`docs/specs/BIYAHERONG-PORT-SPEC.md:1348-1352`: *"No accounts, no
+login, no API, no progress sync."*). Recorded in [`PORTING_NOTES.md`](PORTING_NOTES.md) with the table of
+invented constants, as the hard rule in [`CLAUDE.md`](CLAUDE.md) requires.
+
+**Added — the screen.** `LoginMetrics.swift` (the pure layer: band budget, palette, type scale, drift
+table, timings, copy, the session predicate), `LoginScreen.swift` (the view), `LoginStore.swift` (the
+session), `LoginMetricsCheck.swift` + a new `LoginMetricsCheck` executable target. Four bands over a
+124pt squircle hero, and `LoginLayout.fixedHeight()` (413pt) plus the 24pt spacer floor is asserted to
+fit an iPhone SE's 667pt. **A login screen that scrolls is a bug, not a layout.**
+
+**Fixed before it shipped — the hero was pinned to its floor.** The first build put all the leftover
+height *below* the hero, which on a 852pt phone left ~400pt of nothing between the tagline and the
+button and read as two disconnected clusters. The leftover is now **split 35 / 65**
+(`LoginLayout.spacerTopShare`), so the logo lands at ~32% of the screen on the shortest phone and the
+tallest alike. Swift computes it (`LoginLayout.heroTop(screenHeight:)`); the browser spells the identical
+rule as `flex-grow: 35` / `65` over a zero basis, and both self-checks assert that the two shares add
+back up to exactly the leftover.
+
+**Added — the session, and it fails closed.** One string under `biya.auth.session.v1`, persisted behind an
+injected `CoachGame.Storage` (reused, not re-declared). `nil`, `""`, `"0"`, `"APPLE"`, `" apple"` and every
+unknown provider read as signed out, and the store refuses to persist a provider the predicate does not
+know — a half-written or hand-edited key shows the login screen rather than letting someone past it.
+Signing out removes the key rather than blanking it. Both mutations are idempotent, asserted by write and
+removal count.
+
+**Changed — the Profile tab** gains an **Account** card with Sign out, the only way back to the login
+screen once the session persists, and its name and avatar initial now come from the session instead of a
+hard-coded `"Biyahero"` / `"B"`. **`PhoneApp`** gained the gate as its LAST `ZStack` sibling — last so it
+covers the tab bar and all three pushed routes, a sibling rather than `.fullScreenCover` because that does
+not exist on macOS and this view renders inside the desktop phone frame. `HomeScreen` finally gets a
+`userName`, so the header avatar draws an initial instead of the `"?"` fallback it has drawn until now.
+
+**Added — the brand mark.** `Images/brand-logo.png`, the RN app's `assets/images/icon.png` (the logo its
+`login.tsx`, `register.tsx` and Expo splash all use), as opposed to the gold-knight `app-icon.png` the
+Home header draws. `HomeAppIcon` gained a defaulted `asset:` parameter rather than being duplicated, so
+both existing call sites are unchanged. `Diagnostics.swift` now expects **6** PNGs in `Images/`.
+
+**Changed — two QA tools got sharper.** `swift_symbol_check.js` now checks the `Login*` and `Home*`
+namespaces too (`CHECKED` and `PROJECT_TYPE`), which immediately surfaced two false negatives in its own
+collector: it could not see a `nonisolated static func` (so `HomeArt.diagnosticsSummary` read as
+unresolved) and it could not see synthesized `CaseIterable` members (so every `Foo.allCases` did). Both
+fixed by reading the modifier list and the inheritance clause rather than by allow-listing names —
+coverage went from 3,038 references / 136 types to 3,336 / 147.
+
+```swift
+// The one typography exception in the app, in both languages:
+Text(LoginStrings.appleButton).font(.system(size: LoginType.buttonLabelSize, weight: .semibold))
+```
+
+Apple's button is the **white** variant (their guidance for a dark background), the mark stays pure black
+on pure white — both self-checks assert those two colours as absolutes, not merely as a Swift/JS match,
+because "both languages agree it is gold" would still be wrong — and its label is the system font rather
+than Nunito, so the control does not visibly change size when the real
+`ASAuthorizationAppleIDButton` replaces it.
+
+**`web-demo/` updated** — the screen is mirrored in full: a new `js/login.js` (the same pure layer, the
+same store, plus the DOM renderer), a `---- Login ----` section in `css/app.css` driven entirely by
+`--lg-*` custom properties the JS sets from the one table, the boot gate and `renderLogin` / `finishSignIn`
+/ `signOut` in `js/app.js`, and one new `<script>` tag. Two guards were added after noticing that
+`css/coach.css` has been shipping unlinked: `replay_login.js` asserts `index.html` loads `js/login.js`
+before `js/app.js` **and** links the stylesheet the login styles live in, and audits every `--lg-*` in
+both directions — set-but-never-read is dead, read-but-never-set silently falls back to nothing.
+
+**Fixed — two defects the browser found that no gate could have.** Driving the real screen in Chrome
+turned up both, and both now have assertions:
+
+- **Tapping Privacy then Terms stacked two sheets**, and closing peeled one off and left the other. The
+  Swift cannot do this — `legalTopic` is a single optional, so a second tap swaps — so the browser was
+  wrong, not the Swift. `legalSheet()` now removes an open sheet before appending, and
+  `replay_login.js` asserts both halves of that shape.
+- **The Home header avatar drew its `"?"` fallback.** `BiyaHome.state.userName` has been read by the
+  avatar since the day it was drawn and nothing ever set it — there was no setter at all. Added
+  `BiyaHome.setUserName`, called from `renderHome()` with the signed-in user, which is the browser's
+  half of `HomeScreen(userName: loginStore.displayName …)`.
+
+**Docs** — new [`docs/login.md`](docs/login.md) (the four bands, the simulated sign-in and its seam, the
+fail-closed session, key files, how to test); [`docs/README.md`](docs/README.md) points at it.
+
+No domain engine was touched — this is view, session and layout code only, so `ParityRunner` counts are
+unchanged. `js_goldens.js`: **30,368 assertions across 64 suites**, green (was 29,807 across 62).
+`replay_login.js` was mutation-checked by hand against seven deliberate Swift edits — a changed button
+height, a retinted Apple button, a drift piece moved into the hero column, a typo'd tagline, a privacy
+body edited in one language only, a hard-coded radius replacing the `Theme` reuse, and a dropped
+idempotency guard — and caught all seven.
+
 ### 2026-08-14 (fixed) — One chessboard, one sizing rule: the Puzzle Streak screen that shipped wrong
 
 A TestFlight build of the **Puzzle Streak solver** came back with a block of empty navy above the

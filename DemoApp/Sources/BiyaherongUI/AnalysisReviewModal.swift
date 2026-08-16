@@ -18,12 +18,17 @@ struct AnalysisReviewModal: View {
         case running(completed: Int, total: Int)
         case results
         case tooShort
+        /// The free tier's daily Game Review allowance is spent. Sits beside `.tooShort` because it
+        /// is the same shape of answer: the review cannot start, and here is why.
+        case capped
     }
 
     let state: State
     let summary: ReviewSummary?
     let onCancel: () -> Void
     let onClose: () -> Void
+    /// Shown only in the `.capped` state. Defaulted, so every existing call site is unchanged.
+    var onUpgrade: (() -> Void)?
 
     var body: some View {
         GeometryReader { geo in
@@ -58,6 +63,8 @@ struct AnalysisReviewModal: View {
                 }
             case .tooShort:
                 message("Not enough moves", "Play or import at least two moves before reviewing.")
+            case .capped:
+                cappedBody
             }
         }
         .background(AnalysisPalette.reviewCard,
@@ -242,6 +249,47 @@ struct AnalysisReviewModal: View {
         .overlay(alignment: .top) {
             Rectangle().fill(AnalysisReview.hairlineColor).frame(height: AnalysisReview.hairline)
         }
+    }
+
+    /// The free tier's Game Review allowance is spent. Copy from `UpgradePrompt.tsx`, with the cap
+    /// substituted rather than re-typed — and the reset note, because this limit *does* reset.
+    private var cappedBody: some View {
+        VStack(spacing: AnalysisReview.loadingGap) {
+            Text(PaywallStrings.lockTitle)
+                .font(Theme.nunito(AnalysisReview.loadingTextSize, .semiBold))
+                .foregroundStyle(AnalysisPalette.gold)
+            Text(PaywallStrings.fill(PaywallStrings.reviewCap,
+                                     ["limit": String(Entitlement.reviewsPerDay)]))
+                .font(Theme.nunito(AnalysisReview.hintSize))
+                .foregroundStyle(AnalysisReview.hintColor)
+                .multilineTextAlignment(.center)
+            Text(PaywallStrings.resetsNote)
+                .font(Theme.nunito(AnalysisReview.hintSize))
+                .foregroundStyle(AnalysisReview.hintColor)
+            if let onUpgrade {
+                Button(action: onUpgrade) {
+                    Text(PaywallStrings.lockCta)
+                        .font(Theme.nunito(AnalysisReview.skipTextSize, .semiBold))
+                        .foregroundStyle(PaywallPalette.ctaInk)
+                        .padding(.vertical, AnalysisReview.skipPaddingV)
+                        .padding(.horizontal, AnalysisReview.skipPaddingH)
+                        .background(PaywallPalette.cta,
+                                    in: RoundedRectangle(cornerRadius: AnalysisReview.skipRadius,
+                                                         style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            Button(action: onClose) {
+                Text("Close")
+                    .font(Theme.nunito(AnalysisReview.skipTextSize, .semiBold))
+                    .foregroundStyle(AnalysisReview.skipTextColor)
+                    .padding(.vertical, AnalysisReview.skipPaddingV)
+                    .padding(.horizontal, AnalysisReview.skipPaddingH)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, AnalysisReview.loadingPaddingV)
+        .padding(.horizontal, AnalysisReview.loadingPaddingH)
     }
 
     private func message(_ title: String, _ hint: String) -> some View {

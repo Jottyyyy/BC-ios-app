@@ -63,7 +63,10 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store           # use `ad_hoc` instead to install on specific registered UDIDs
-        bundle_identifier: com.biyaherong.coach # must match ios/project.yml PRODUCT_BUNDLE_IDENTIFIER
+        # MUST match ios/project.yml's PRODUCT_BUNDLE_IDENTIFIER — it did not, and StoreKit
+        # product IDs are namespaced per App Store Connect record, so sandbox purchases would have
+        # failed against the wrong app.
+        bundle_identifier: com.prince24pogi.biyaherongchessapp
       xcode: latest
       vars:
         XCODE_PROJECT: "ios/Biyaherong.xcodeproj"

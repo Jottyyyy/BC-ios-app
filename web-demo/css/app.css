@@ -1947,3 +1947,662 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
     transform: none;
   }
 }
+
+/* ---- Login: the app's first screen ----------------------------------------
+   Mirror of DemoApp/Sources/BiyaherongUI/LoginScreen.swift. Every number here
+   comes in as a `--lg-*` custom property that js/login.js sets from the one
+   table LoginMetrics.swift also holds — there is no second hand-typed copy.
+   The `--lg-` prefix is its own namespace: `--pz*`, `--pg*`, `--cg*` and
+   `--an-*` belong to other screens and have their own audits. */
+
+.lg-view {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* The warm pool of light behind the hero. Two stops of one hue, so it reads as
+   a glow and not as a visible disc. */
+.lg-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 26%,
+      var(--lg-glow-inner) 0, var(--lg-glow-outer) var(--lg-glow-end));
+}
+
+/* Real bundled piece art at very low opacity — the same SVGs the boards draw,
+   no new asset and no emoji. */
+.lg-drift {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lg-piece {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  animation-name: lg-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-fill-mode: both;
+}
+
+@keyframes lg-float {
+  from { transform: translate(-50%, -50%); }
+  to { transform: translate(-50%, calc(-50% + var(--lg-travel))); }
+}
+
+.lg-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--lg-hero-top) var(--lg-pad-h) var(--lg-footer-bottom);
+}
+
+/* TWO flexible bands, not one. Over a zero basis, `flex-grow: 35 / 65` splits the leftover exactly
+   the way `LoginLayout.heroTop` + the Spacer beneath it do in Swift. With one band the hero sat on
+   its 64px floor and a tall phone left ~400px of nothing between it and the button. */
+.lg-spacer-top {
+  flex: var(--lg-grow-top) 0 0;
+}
+
+/* ---- hero ---- */
+
+.lg-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* `inset` ring rather than a border: it draws OVER the image inside the same
+   box, which is what SwiftUI's `.overlay(...strokeBorder)` does. A CSS border
+   would shrink the content box instead. The glow is the second, outer shadow. */
+.lg-logo {
+  width: var(--lg-logo);
+  height: var(--lg-logo);
+  border-radius: var(--lg-logo-radius);
+  overflow: hidden;
+  display: block;
+  box-shadow:
+    inset 0 0 0 var(--lg-logo-ring) var(--lg-logo-ring-color),
+    0 0 var(--lg-logo-glow) var(--lg-logo-glow-shadow);
+  animation: lg-pop var(--lg-hero-secs) cubic-bezier(.2, .9, .3, 1.15) var(--lg-hero-delay) both;
+}
+
+.lg-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lg-words {
+  margin-top: var(--lg-hero-gap);
+  text-align: center;
+  animation: lg-rise var(--lg-text-secs) ease-out var(--lg-text-delay) both;
+}
+
+.lg-title {
+  font-size: var(--lg-title-size);
+  font-weight: 800;
+  letter-spacing: var(--lg-title-track);
+  color: var(--lg-title-color);
+}
+
+.lg-tagline {
+  margin-top: var(--lg-title-gap);
+  font-size: var(--lg-tagline-size);
+  font-weight: 500;
+  color: var(--lg-tagline-color);
+}
+
+/* The larger of the two flexible bands. Its floor is the same constant the Swift budget uses. */
+.lg-spacer {
+  flex: var(--lg-grow-bottom) 0 0;
+  min-height: var(--lg-spacer-min);
+}
+
+/* ---- action band ---- */
+
+.lg-actions {
+  animation: lg-rise var(--lg-btn-secs) ease-out var(--lg-btn-delay) both;
+}
+
+/* Apple's WHITE variant — the one their guidance calls for on a dark
+   background. Black on white, never tinted to the app's gold.
+
+   The label is deliberately the SYSTEM font rather than Nunito, the one
+   exception on this screen and the same one the Swift makes: the real
+   Sign in with Apple control renders in San Francisco, so matching it now
+   means the button does not visibly change when the simulation goes away.
+   See PORTING_NOTES.md. */
+.lg-apple {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lg-btn-gap);
+  width: 100%;
+  height: var(--lg-btn-h);
+  border: 0;
+  border-radius: var(--lg-btn-radius);
+  background: var(--lg-apple-fill);
+  color: var(--lg-apple-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: var(--lg-btn-size);
+  font-weight: 600;
+  letter-spacing: var(--lg-btn-track);
+  box-shadow: 0 var(--lg-btn-shadow-y) var(--lg-btn-shadow) var(--lg-apple-shadow);
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.lg-apple svg {
+  width: var(--lg-btn-glyph);
+  height: var(--lg-btn-glyph);
+  /* Optical centring: the mark's bounding box hangs slightly low against caps. */
+  margin-top: -2px;
+}
+
+/* Dim on press, no scale — the same feedback `DimButtonStyle` gives in Swift. */
+.lg-apple:active,
+.lg-legal-link:active,
+.lg-sheet-close:active {
+  opacity: var(--lg-pressed);
+}
+
+.lg-reassure {
+  margin-top: var(--lg-reassure-gap);
+  text-align: center;
+  font-size: var(--lg-reassure-size);
+  font-weight: 500;
+  color: var(--lg-reassure-color);
+}
+
+.lg-legal {
+  margin-top: var(--lg-footer-gap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lg-legal-gap);
+}
+
+.lg-legal-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--lg-legal-size);
+  font-weight: 500;
+  color: var(--lg-legal-color);
+}
+
+.lg-legal-sep {
+  font-size: var(--lg-legal-size);
+  color: var(--lg-legal-color);
+}
+
+/* ---- the bundled legal sheet ----
+   Bundled text, never a URL: the app has no network and the offline claim in
+   ios/project.yml depends on it staying that way. */
+
+.lg-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: lg-fade var(--lg-sheet-secs) ease-out both;
+}
+
+.lg-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--lg-scrim);
+}
+
+.lg-sheet-card {
+  position: relative;
+  width: var(--lg-sheet-w);
+  max-width: calc(100% - var(--lg-pad-h) * 2);
+  padding: var(--lg-sheet-pad);
+  border-radius: var(--lg-sheet-radius);
+  background: var(--lg-sheet-fill);
+  border: 1px solid var(--lg-sheet-border);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+
+.lg-sheet-title {
+  font-size: var(--lg-sheet-title-size);
+  font-weight: 700;
+  color: var(--lg-sheet-title-color);
+  text-align: center;
+}
+
+.lg-sheet-body {
+  margin-top: var(--lg-sheet-title-gap);
+  max-height: var(--lg-sheet-max);
+  overflow-y: auto;
+  font-size: var(--lg-sheet-body-size);
+  color: var(--lg-sheet-body-color);
+  line-height: calc(var(--lg-sheet-body-size) + var(--lg-sheet-line) + 4px);
+}
+
+.lg-sheet-body p { margin: 0 0 10px; }
+.lg-sheet-body p:last-child { margin-bottom: 0; }
+
+.lg-sheet-close {
+  margin-top: var(--lg-sheet-body-gap);
+  width: 100%;
+  height: var(--lg-sheet-close-h);
+  border: 0;
+  border-radius: var(--lg-sheet-close-radius);
+  background: var(--gold);
+  color: var(--on-gold);
+  font-family: inherit;
+  font-size: var(--lg-sheet-close-size);
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+/* ---- the Profile tab's Account card ----
+   The only way back to the login screen once the session has been persisted. */
+
+.lg-account-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-fg);
+}
+
+.lg-signout {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: rgba(255, 107, 107, .12);
+  color: var(--red);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.lg-signout:active { opacity: .82; }
+
+/* ---- entrances ---- */
+
+@keyframes lg-pop {
+  from { opacity: 0; transform: scale(var(--lg-entrance-scale)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes lg-rise {
+  from { opacity: 0; transform: translateY(var(--lg-rise)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes lg-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* The cross-fade the shell plays when the simulated sign-in lands. */
+.app-card.lg-signing-in .view { animation: lg-fade var(--lg-fade-secs, .35s) ease-in-out both; }
+
+/* ---- reduced motion ----
+   Not optional. The pieces are still DRAWN — removing them would take the
+   texture away too, which is not what the setting asks for. They just stop. */
+@media (prefers-reduced-motion: reduce) {
+  .lg-piece, .lg-logo, .lg-words, .lg-actions, .lg-sheet,
+  .app-card.lg-signing-in .view {
+    animation: none !important;
+  }
+  .lg-apple, .lg-sheet-close { transition: none; }
+}
+
+/* ---- Paywall: the subscription screen and the lock card -------------------
+   Mirror of DemoApp/Sources/BiyaherongUI/PaywallScreen.swift. Every number and
+   colour arrives as a `--pw-*` custom property that js/premium.js sets from the
+   one table PaywallMetrics.swift also holds — there is no second hand-typed
+   copy. `--pw-` is its own namespace: `--pz*`, `--pg*`, `--cg*`, `--an-*`,
+   `--lg-*` and `--h-*` belong to other screens and have their own audits. */
+
+.pw-view {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--pw-c-screen-bg);
+}
+
+/* ---- header ---- */
+
+.pw-head {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-row-gap);
+  height: var(--pw-header-height);
+  padding: 0 var(--pw-screen-padding-h);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--pw-c-screen-bg);
+}
+
+.pw-back {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--pw-t-header-title-size);
+  color: var(--pw-c-heading);
+}
+
+.pw-head-title {
+  font-size: var(--pw-t-header-title-size);
+  font-weight: 700;
+  color: var(--pw-c-heading);
+}
+
+.pw-active {
+  margin-left: auto;
+  padding: var(--pw-pill-radius-v) var(--pw-pill-radius-h);
+  border-radius: var(--pw-pill-radius);
+  background: var(--pw-c-active-pill);
+  color: var(--pw-c-active-pill-ink);
+  font-size: var(--pw-t-active-pill-size);
+  font-weight: 700;
+}
+
+/* ---- body ---- */
+
+.pw-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-card-gap);
+  padding: var(--pw-hero-padding-v) var(--pw-screen-padding-h);
+}
+
+.pw-hero {
+  text-align: center;
+  padding: var(--pw-hero-padding-v) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-crown { font-size: var(--pw-crown-size); line-height: 1; }
+
+.pw-hero-title {
+  font-size: var(--pw-t-hero-title-size);
+  font-weight: 700;
+  color: var(--pw-c-title);
+}
+
+.pw-hero-body {
+  font-size: var(--pw-t-hero-body-size);
+  line-height: var(--pw-t-hero-body-line-height);
+  color: var(--pw-c-body);
+}
+
+/* ---- cards ---- */
+
+.pw-card {
+  padding: var(--pw-card-padding);
+  border-radius: var(--pw-card-radius);
+  background: var(--pw-c-card);
+  border: var(--pw-card-border-width) solid var(--pw-c-card-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-card-active { border-color: var(--pw-c-active-card-border); }
+
+.pw-card-title {
+  font-size: var(--pw-t-card-title-size);
+  font-weight: 700;
+  color: var(--pw-c-heading);
+}
+
+.pw-card-title.pw-gold { color: var(--pw-c-title); }
+
+.pw-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pw-row-gap);
+  font-size: var(--pw-t-row-size);
+  color: var(--pw-c-heading);
+}
+
+.pw-row span:last-child { color: var(--pw-c-body); }
+
+.pw-check { color: var(--pw-c-check); font-weight: 700; }
+
+.pw-until {
+  text-align: center;
+  font-size: var(--pw-t-price-size);
+  font-weight: 800;
+  color: var(--pw-c-title);
+}
+
+.pw-days {
+  align-self: center;
+  padding: var(--pw-pill-radius-v) var(--pw-pill-radius-h);
+  border-radius: var(--pw-pill-radius);
+  background: var(--pw-c-days-pill);
+  color: var(--pw-c-days-pill-ink);
+  font-size: var(--pw-t-days-pill-size);
+  font-weight: 700;
+}
+
+/* ---- the grace warning. Amber, not red: nothing is broken, nothing is lost. ---- */
+
+.pw-warn {
+  padding: var(--pw-warn-padding);
+  border-radius: var(--pw-warn-radius);
+  background: var(--pw-c-warn-fill);
+  border: var(--pw-card-border-width) solid var(--pw-c-warn-border);
+}
+
+.pw-warn-title {
+  font-size: var(--pw-t-row-size);
+  font-weight: 700;
+  color: var(--pw-c-warn-ink);
+  margin-bottom: 6px;
+}
+
+.pw-warn-body {
+  font-size: var(--pw-t-restore-link-size);
+  color: var(--pw-c-body);
+}
+
+/* ---- the "could not reach the App Store" card ----
+   Rendered by the Swift when `Product.products(for:)` comes back empty — which is
+   what an unsigned build always sees, since it has no App ID with In-App Purchase.
+   Reachable in the browser with `?storefail`. */
+
+.pw-fail {
+  padding: var(--pw-fail-padding);
+  border-radius: var(--pw-fail-radius);
+  background: var(--pw-c-fail-fill);
+  border: var(--pw-card-border-width) solid var(--pw-c-fail-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-fail-title {
+  font-size: var(--pw-t-row-size);
+  font-weight: 700;
+  color: var(--pw-c-title);
+}
+
+.pw-fail-body {
+  font-size: var(--pw-t-restore-link-size);
+  color: var(--pw-c-body);
+}
+
+/* ---- actions ---- */
+
+.pw-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-cta {
+  width: 100%;
+  height: var(--pw-cta-height);
+  border: 0;
+  border-radius: var(--pw-cta-radius);
+  background: var(--pw-c-cta);
+  color: var(--pw-c-cta-ink);
+  font-family: inherit;
+  font-size: var(--pw-t-cta-size);
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.pw-price {
+  text-align: center;
+  font-size: var(--pw-t-restore-link-size);
+  color: var(--pw-c-body);
+}
+
+.pw-restore {
+  width: 100%;
+  height: var(--pw-restore-height);
+  border: var(--pw-restore-border-width) solid var(--pw-c-restore-border);
+  border-radius: var(--pw-restore-radius);
+  background: none;
+  color: var(--pw-c-restore-ink);
+  font-family: inherit;
+  font-size: var(--pw-t-restore-size);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.pw-cta:active,
+.pw-restore:active,
+.pw-back:active { opacity: var(--pw-pressed); }
+
+/* ---- the App Review disclosure. Required verbatim, and the only URLs in the app. ---- */
+
+.pw-legal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-disclosure {
+  font-size: var(--pw-t-legal-size);
+  line-height: var(--pw-t-legal-line-height);
+  color: var(--pw-c-legal);
+}
+
+.pw-links {
+  display: flex;
+  align-items: center;
+  gap: var(--pw-row-gap);
+  font-size: var(--pw-t-legal-size);
+}
+
+.pw-link { color: var(--pw-c-body); font-weight: 600; text-decoration: underline; }
+.pw-legal-sep { color: var(--pw-c-legal); }
+
+/* ---- the lock card a gated feature shows in place of its content ---- */
+
+.pw-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pw-fade var(--pw-present-secs) ease-out both;
+}
+
+.pw-lock-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--pw-c-scrim);
+}
+
+.pw-lock-card {
+  position: relative;
+  margin: 0 var(--pw-screen-padding-h);
+  padding: var(--pw-card-padding);
+  border-radius: var(--pw-card-radius);
+  background: var(--pw-c-card);
+  border: var(--pw-restore-border-width) solid var(--pw-c-cta);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+.pw-lock-title {
+  font-size: var(--pw-t-header-title-size);
+  font-weight: 700;
+  color: var(--pw-c-title);
+}
+
+.pw-lock-body {
+  font-size: var(--pw-t-row-size);
+  line-height: var(--pw-t-hero-body-line-height);
+  color: var(--pw-c-body);
+}
+
+.pw-reset {
+  font-size: var(--pw-t-legal-size);
+  color: var(--pw-c-body);
+}
+
+/* The Home header's logo, repeated in the paywall header on the offer state. */
+.pw-logo { width: var(--pw-logo-size); height: var(--pw-logo-size); border-radius: 50%; }
+
+@keyframes pw-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pw-lock { animation: none !important; }
+  .pw-cta, .pw-restore, .pw-back { transition: none; }
+}
+
+/* The Profile tab's subscription row, beside the account card. */
+.pw-profile-cta {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: var(--gold);
+  color: var(--on-gold);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.pw-profile-cta:active { opacity: .82; }

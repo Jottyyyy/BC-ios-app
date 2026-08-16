@@ -16,6 +16,9 @@ enum PairingRoute: Hashable {
 /// The feature root. One `NavigationStack`, and children get closures rather than the path.
 struct PairingRootScreen: View {
     @ObservedObject var store: PairingStore
+    /// Free tournaments run to 3 rounds, premium to 30. Defaulted-free so the macOS demo's
+    /// `TournamentView` panel, which has no store, is unaffected.
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
     @State private var path: [PairingRoute] = []
 
@@ -37,6 +40,7 @@ struct PairingRootScreen: View {
         switch route {
         case .create:
             PairingCreateScreen(store: store,
+                                maxRounds: premium.maxSwissRounds,
                                 onCreated: { id in
                                     path.removeLast()
                                     path.append(.detail(id))
@@ -278,6 +282,9 @@ struct PairingListScreen: View {
 
 struct PairingCreateScreen: View {
     @ObservedObject var store: PairingStore
+    /// The Swiss round ceiling for this user — 3 free, 30 premium. Defaulted to the premium
+    /// ceiling so the macOS `TournamentView` panel keeps behaving as it did.
+    var maxRounds: Int = TournamentEngine.premiumMaxRounds
     let onCreated: (Int) -> Void
     let onExit: () -> Void
 
@@ -410,7 +417,9 @@ struct PairingCreateScreen: View {
             label(PairingStrings.roundsLabel).padding(.top, PairingCreate.rrNoteMarginTop)
             HStack(spacing: PairingCreate.roundsRowGap) {
                 ForEach(PairingCreateScreen.presets, id: \.self) { n in
-                    Button { rounds = n; freeRounds = "" } label: {
+                    // A preset above the user's ceiling clamps to it rather than being hidden —
+                    // the hint below says why, which is more honest than a preset that vanishes.
+                    Button { rounds = min(maxRounds, n); freeRounds = "" } label: {
                         Text(String(n))
                             .font(Theme.nunito(PairingCreate.roundBtnTextFontSize, .extraBold))
                             .foregroundStyle(rounds == n ? PairingCreate.roundBtnTextActiveColor
@@ -437,8 +446,9 @@ struct PairingCreateScreen: View {
                     .background(PairingCreate.roundInputBackgroundColor,
                                 in: RoundedRectangle(cornerRadius: PairingCreate.roundInputBorderRadius))
                     .onChange(of: freeRounds) { _, v in
-                        // Clamped, and the clamp is the store's — one rule, not two.
-                        if let n = Int(v) { rounds = PairingDocument.clampRounds(n) }
+                        // Clamped, and the clamp is the store's — one rule, not two — then capped
+                        // by the entitlement on top of it.
+                        if let n = Int(v) { rounds = min(maxRounds, PairingDocument.clampRounds(n)) }
                     }
             }
             // The live recommendation, in place of the deleted free-plan limit notice.
@@ -447,6 +457,12 @@ struct PairingCreateScreen: View {
                 .font(Theme.nunito(PairingCreate.hintFontSize))
                 .foregroundStyle(PairingCreate.hintColor)
                 .padding(.top, PairingCreate.hintMarginTop)
+            if maxRounds < TournamentEngine.premiumMaxRounds {
+                Text(PaywallStrings.fill(PaywallStrings.roundsCap, ["n": String(maxRounds)]))
+                    .font(Theme.nunito(PairingCreate.hintFontSize))
+                    .foregroundStyle(PaywallPalette.title)
+                    .padding(.top, PairingCreate.hintMarginTop)
+            }
         }
     }
 

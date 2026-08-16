@@ -16,6 +16,9 @@ enum PuzzleRoute: Hashable {
 /// hand-made sample positions and none of the Core reached a screen.
 struct PuzzleHubScreen: View {
     @ObservedObject var store: PuzzleHubStore
+    /// The subscription. Every free-tier cap in the hub is read live from here, never from a
+    /// cached flag — the exact drift the RN app had between `@is_premium` and the server.
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
     /// Called with `true` while any route is pushed on top of the hub, so the host can hide the
     /// app's tab bar. The browser does exactly this — every pushed puzzle route calls
@@ -25,7 +28,12 @@ struct PuzzleHubScreen: View {
     ///
     /// Defaulted, so the macOS demo's `AppShell` call site is unaffected.
     var onPushedChange: (Bool) -> Void = { _ in }
+    var onPaywall: () -> Void = {}
     @State private var path: [PuzzleRoute] = []
+    /// The cap the user just hit, held as its message so the overlay is one branch and not five.
+    @State private var capMessage: String?
+    /// Daily allowances reset at midnight and say so; a hard feature gate does not.
+    @State private var capResets = true
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -40,6 +48,9 @@ struct PuzzleHubScreen: View {
         // true, and `onChange` on a Bool that never changes value would not fire on the way in.
         .onChange(of: path.count) { _, count in onPushedChange(count > 0) }
         .onDisappear { onPushedChange(false) }
+        // Above the NavigationStack, because a cap can be hit from a pushed route (Play home on
+        // the way into the solver) and the lock card has to cover that too.
+        .overlay(alignment: .center) { capOverlay }
     }
 
     // MARK: - The hub itself
@@ -108,14 +119,64 @@ struct PuzzleHubScreen: View {
     }
 
     /// Card → route. All five are live; there is no "coming soon" branch left.
+    ///
+    /// Only **Thematic** is gated here, because it is the one hard premium gate — the others are
+    /// daily allowances, and those are spent when a run actually starts, not when its home screen
+    /// is opened. Browsing the Streak screen and backing out must not cost the user their run.
     private func open(_ id: String) {
         switch id {
         case "play": path.append(.playHome)
         case "daily": path.append(.dailyHome)
-        case "thematic": path.append(.thematicGrid)
+        case "thematic":
+            if premium.isThematicLocked {
+                raise(PaywallStrings.thematicLock, resets: false)
+            } else {
+                path.append(.thematicGrid)
+            }
         case "streak": path.append(.streakHome)
         case "turbo": path.append(.turboHome)
         default: break
+        }
+    }
+
+    // MARK: - The free tier's allowances
+
+    /// Spends one use of `mode` and runs `go`, or raises the cap message and does nothing.
+    private func gate(_ mode: String, _ message: String, _ go: () -> Void) {
+        guard premium.canUse(mode) else {
+            raise(message, resets: true)
+            return
+        }
+        premium.recordUse(mode)
+        go()
+    }
+
+    private func raise(_ message: String, resets: Bool) {
+        capResets = resets
+        capMessage = message
+    }
+
+    /// `You've solved 5/5 free puzzles today…` — the count substituted, never re-typed.
+    private var ratedCapMessage: String {
+        PaywallStrings.fill(PaywallStrings.puzzleCap,
+                            ["used": String(premium.used(Entitlement.Mode.regular)),
+                             "limit": String(Entitlement.maxUses(for: Entitlement.Mode.regular))])
+    }
+
+    @ViewBuilder
+    private var capOverlay: some View {
+        if let capMessage {
+            ZStack {
+                PaywallPalette.scrim
+                    .ignoresSafeArea()
+                    .onTapGesture { self.capMessage = nil }
+                PremiumLockCard(body_: capMessage,
+                                onSeePlans: {
+                                    self.capMessage = nil
+                                    onPaywall()
+                                },
+                                showsResetNote: capResets)
+            }
         }
     }
 
@@ -123,7 +184,14 @@ struct PuzzleHubScreen: View {
     private func destination(_ route: PuzzleRoute) -> some View {
         switch route {
         case .playHome:
-            PuzzlePlayHomeScreen(store: store, onPlay: { path.append(.playSolver) },
+            // The allowance is spent HERE, on the way into the solver — a failed attempt still
+            // costs a use, exactly as the original counted them.
+            PuzzlePlayHomeScreen(store: store,
+                                 onPlay: {
+                                     gate(Entitlement.Mode.regular, ratedCapMessage) {
+                                         path.append(.playSolver)
+                                     }
+                                 },
                                  onExit: { path.removeLast() })
         case .playSolver:
             PuzzlePlaySolverScreen(store: store, onExit: { path.removeLast() })
@@ -140,13 +208,30 @@ struct PuzzleHubScreen: View {
             PuzzleThematicSolverScreen(store: store, theme: theme,
                                        onExit: { path.removeLast() })
         case .streakHome:
-            PuzzleStreakHomeScreen(store: store, onStart: { path.append(.streakSolver) },
+            PuzzleStreakHomeScreen(store: store,
+                                   onStart: {
+                                       gate(Entitlement.Mode.streak, PaywallStrings.streakCap) {
+                                           path.append(.streakSolver)
+                                       }
+                                   },
                                    onExit: { path.removeLast() })
         case .streakSolver:
             PuzzleStreakSolverScreen(store: store, onExit: { path.removeLast() })
         case .turboHome:
+            // PER MODE. `rush_0`, `rush_3` and `rush_5` carry their own allowance — one shared
+            // counter would be the easy, wrong reading of the original.
             PuzzleTurboHomeScreen(store: store,
-                                  onStart: { path.append(.turboRun(mode: $0, resumeDraft: $1)) },
+                                  onStart: { mode, resume in
+                                      // Resuming a draft is the SAME run continued — it already
+                                      // cost its allowance when it started.
+                                      guard !resume else {
+                                          path.append(.turboRun(mode: mode, resumeDraft: true))
+                                          return
+                                      }
+                                      gate(Entitlement.Mode.rush(mode), PaywallStrings.rushCap) {
+                                          path.append(.turboRun(mode: mode, resumeDraft: false))
+                                      }
+                                  },
                                   onExit: { path.removeLast() })
         case .turboRun(let mode, let resume):
             PuzzleTurboRunScreen(store: store, mode: mode, resumeDraft: resume,

@@ -22,6 +22,11 @@ struct AnalysisBoardScreen: View {
     /// Supplied by the parent, exactly like `ChessGameVM.backToSelect` — this module has no
     /// NavigationStack and no `@Environment(\.dismiss)`.
     var onClose: () -> Void = {}
+    /// The free tier's daily Game Review allowance. A closure rather than the store itself, so the
+    /// analysis layer stays unaware that subscriptions exist. Defaulted to ungated, which is what
+    /// the macOS demo panel wants.
+    var reviewGate: (() -> Bool)?
+    var onPaywall: () -> Void = {}
 
     var body: some View {
         GeometryReader { geo in
@@ -70,6 +75,9 @@ struct AnalysisBoardScreen: View {
             }
             .animation(.easeOut(duration: AnalysisTiming.screenPresentSeconds), value: vm.menuOpen)
         }
+        // The VM owns the review; the host owns the allowance. Handing the closure over on appear
+        // keeps the analysis layer free of any notion of a subscription.
+        .onAppear { vm.reviewGate = reviewGate }
     }
 
     // MARK: - 1. Header
@@ -281,7 +289,8 @@ struct AnalysisBoardScreen: View {
             AnalysisReviewModal(state: state,
                                 summary: vm.reviewSummary,
                                 onCancel: { vm.cancelReview() },
-                                onClose: { vm.dismissReview() })
+                                onClose: { vm.dismissReview() },
+                                onUpgrade: { vm.dismissReview(); onPaywall() })
         }
     }
 

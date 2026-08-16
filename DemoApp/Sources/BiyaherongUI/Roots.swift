@@ -17,7 +17,7 @@ public struct BiyaherongPhoneRoot: View {
             .preferredColorScheme(.dark)
             .background(Theme.background.ignoresSafeArea())
             .tint(Theme.gold)
-            .onAppear { PieceArt.preload() }
+            .onAppear { PieceArt.preload(); LoginArt.preload() }
     }
 }
 
@@ -25,6 +25,6 @@ public struct BiyaherongPhoneRoot: View {
 public struct BiyaherongMacRoot: View {
     public init() {}
     public var body: some View {
-        RootView().onAppear { PieceArt.preload() }
+        RootView().onAppear { PieceArt.preload(); LoginArt.preload() }
     }
 }

@@ -74,5 +74,22 @@ let package = Package(
             name: "CoachMetricsCheck",
             dependencies: ["BiyaherongUI"]
         ),
+        // The login screen's pure layer: the band budget against the shortest supported phone (a
+        // login screen that scrolls is a bug), the drift field's keep-out zones, the two colours of
+        // Apple's button that must never be retinted, and the session state machine — including the
+        // fail-closed branch, which is the one that decides whether a bad stored value lets someone
+        // past the gate.
+        .executableTarget(
+            name: "LoginMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
+        // The subscription's pure layer: the trial/expiry/grace state machine and every boundary in
+        // it, the monotonic clock floor that stops a back-dated clock resurrecting a lapsed
+        // subscription, the round-UP day count the server got wrong, and every free-tier cap —
+        // including that Puzzle Turbo is counted PER MODE, which is the easy thing to read wrong.
+        .executableTarget(
+            name: "PaywallMetricsCheck",
+            dependencies: ["BiyaherongUI"]
+        ),
     ]
 )

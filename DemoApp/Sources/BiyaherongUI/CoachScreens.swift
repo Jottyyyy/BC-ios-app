@@ -12,20 +12,26 @@ import BiyaherongCoachCore
 /// so a reply landing during a transition cannot address a screen that has gone.
 struct CoachRootScreen: View {
     @ObservedObject var store: CoachStore
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
+    let onPaywall: () -> Void
 
     var body: some View {
         Group {
             switch store.screen {
             case .select:
-                CoachSelectScreen(store: store, onExit: onExit)
+                CoachSelectScreen(store: store, premium: premium, onExit: onExit,
+                                  onPaywall: onPaywall)
             case .colour(let level):
                 CoachColourScreen(store: store, level: level)
             case .game:
-                CoachGameScreen(store: store)
+                CoachGameScreen(store: store, onPaywall: onPaywall)
             }
         }
         .background(CoachSelect.containerBackgroundColor.ignoresSafeArea())
+        // Play vs Coach's "Start Review" produces the same Game Review the Analysis Board does, so
+        // it spends the same allowance. Capping one and not the other would be a free bypass.
+        .onAppear { store.reviewGate = { premium.consumeReview() } }
     }
 }
 
@@ -33,7 +39,9 @@ struct CoachRootScreen: View {
 
 struct CoachSelectScreen: View {
     @ObservedObject var store: CoachStore
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
+    let onPaywall: () -> Void
 
     var body: some View {
         VStack(spacing: CoachLayout.sectionGap) {
@@ -82,10 +90,50 @@ struct CoachSelectScreen: View {
     private var roster: some View {
         LazyVGrid(columns: CoachLayout.rosterColumns, spacing: CoachSelect.row1MarginBottom) {
             ForEach(CoachRoster.all) { coach in
-                Button { store.pick(level: coach.id) } label: { card(coach) }
+                Button { pick(coach) } label: { lockable(coach) }
                     .buttonStyle(.plain)
             }
         }
+    }
+
+    /// Coaches 3-5 are premium, exactly as `locked={!userIsPremium && c.id > 2}` had it. A locked
+    /// card goes straight to the paywall rather than opening a modal first — also as it did.
+    private func pick(_ coach: CoachProfile) {
+        if premium.isCoachLocked(level: coach.id) { onPaywall() } else { store.pick(level: coach.id) }
+    }
+
+    /// The lock skin. Every one of these tokens was extracted from the RN source and has been
+    /// sitting unused in `CoachMetrics.swift` since the port — nothing here is invented.
+    @ViewBuilder
+    private func lockable(_ coach: CoachProfile) -> some View {
+        if premium.isCoachLocked(level: coach.id) {
+            VStack(spacing: .zero) {
+                card(coach)
+                    .overlay {
+                        CoachSelect.lockOverlayBackgroundColor
+                            .overlay(Text(PaywallGlyph.lock)
+                                .font(.system(size: CoachSelect.lockIconFontSize)))
+                    }
+                premiumTag
+            }
+        } else {
+            card(coach)
+        }
+    }
+
+    private var premiumTag: some View {
+        Text(PaywallStrings.premium.uppercased())
+            .font(.system(size: CoachSelect.premiumTagTextFontSize, weight: .bold))
+            .tracking(CoachSelect.premiumTagTextLetterSpacing)
+            .foregroundStyle(CoachSelect.premiumTagTextColor)
+            .padding(.horizontal, CoachSelect.premiumTagPaddingHorizontal)
+            .padding(.vertical, CoachSelect.premiumTagPaddingVertical)
+            .background(CoachSelect.premiumTagBackgroundColor,
+                        in: RoundedRectangle(cornerRadius: CoachSelect.premiumTagBorderRadius))
+            .overlay(RoundedRectangle(cornerRadius: CoachSelect.premiumTagBorderRadius)
+                .strokeBorder(CoachSelect.premiumTagBorderColor,
+                              lineWidth: CoachSelect.premiumTagBorderWidth))
+            .padding(.top, CoachSelect.premiumTagMarginTop)
     }
 
     private func card(_ coach: CoachProfile) -> some View {
@@ -278,6 +326,8 @@ struct CoachColourScreen: View {
 
 struct CoachGameScreen: View {
     @ObservedObject var store: CoachStore
+    /// Defaulted, so the store's own screens can be previewed without an entitlement.
+    var onPaywall: () -> Void = {}
     @State private var selected: Int?
     @State private var legalTargets: Set<Int> = []
 
@@ -299,6 +349,9 @@ struct CoachGameScreen: View {
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             .overlay { if store.confirmingResign { resignPrompt } }
             .overlay { if let state = store.review { reviewModal(state) } }
+            // "Start Review" here produces the same Game Review the Analysis Board does and spends
+            // the same allowance, so it hits the same wall — with the same message.
+            .overlay { if store.reviewBlocked { reviewCapOverlay } }
         }
     }
 
@@ -666,6 +719,21 @@ struct CoachGameScreen: View {
     /// One modal for both halves of the review: the determinate bar is replaced in place, so a
     /// review that finishes does not flash a second card.
     @ViewBuilder
+    private var reviewCapOverlay: some View {
+        ZStack {
+            PaywallPalette.scrim
+                .ignoresSafeArea()
+                .onTapGesture { store.reviewBlocked = false }
+            PremiumLockCard(body_: PaywallStrings.fill(PaywallStrings.reviewCap,
+                                                       ["limit": String(Entitlement.reviewsPerDay)]),
+                            onSeePlans: {
+                                store.reviewBlocked = false
+                                onPaywall()
+                            },
+                            showsResetNote: true)
+        }
+    }
+
     private func reviewModal(_ state: CoachStore.ReviewState) -> some View {
         ZStack {
             CoachPlay.modalOverlayBackgroundColor.ignoresSafeArea()

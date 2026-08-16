@@ -70,6 +70,18 @@ struct PhoneApp: View {
     /// True while the Puzzles tab has a route pushed on top of the hub — the tab bar hides, the
     /// way it does in the browser. See `PuzzleHubScreen.onPushedChange`.
     @State private var puzzlePushed = false
+    /// The simulated sign-in. It gates the whole app: until it is signed in, `LoginScreen` covers
+    /// every sibling below, tab bar included. Persisted, so this is the first screen once and not
+    /// on every launch. See docs/login.md.
+    @StateObject private var loginStore = LoginStore()
+    /// The subscription. One store for the whole shell, so every gate reads the same live
+    /// entitlement rather than a cached copy — the failure the RN app had, where a stale
+    /// `@is_premium` in AsyncStorage disagreed with the server. See docs/subscription.md.
+    @StateObject private var premium = PremiumStore()
+    /// The paywall is reached on demand — the "⭐ Go Premium" banner, or a gate the user just hit —
+    /// never as a wall in front of a new install. The free tier is genuinely playable.
+    @State private var showPaywall = false
+    @Environment(\.scenePhase) private var scenePhase
 
     // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
     // make the memberwise initializer private, so only the file-local no-argument form would be
@@ -101,10 +113,13 @@ struct PhoneApp: View {
                         // the corpus has `moves[0]` belonging to the opponent), so the two cannot
                         // share a solver — which is why the old screen is retired to a dev entry
                         // rather than adapted.
-                        case 1: PuzzleHubScreen(store: puzzleStore, onExit: { tab = 0 },
-                                                onPushedChange: { puzzlePushed = $0 })
+                        case 1: PuzzleHubScreen(store: puzzleStore, premium: premium,
+                                                onExit: { tab = 0 },
+                                                onPushedChange: { puzzlePushed = $0 },
+                                                onPaywall: { openPaywall() })
                         case 2: PlayPhone(vm: gameVM)
-                        default: ProfilePhone(store: puzzleStore)
+                        default: ProfilePhone(store: puzzleStore, login: loginStore,
+                                              premium: premium, onPaywall: { openPaywall() })
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,7 +134,9 @@ struct PhoneApp: View {
                         #if os(macOS)
                         statusBar
                         #endif
-                        AnalysisBoardScreen(onClose: { showAnalysis = false })
+                        AnalysisBoardScreen(onClose: { showAnalysis = false },
+                                            reviewGate: { premium.consumeReview() },
+                                            onPaywall: { openPaywall() })
                     }
                     .background(AnalysisPalette.screenBg)
                     .transition(.move(edge: .bottom))
@@ -129,7 +146,8 @@ struct PhoneApp: View {
                         #if os(macOS)
                         statusBar
                         #endif
-                        PairingRootScreen(store: pairingStore, onExit: { showPairing = false })
+                        PairingRootScreen(store: pairingStore, premium: premium,
+                                          onExit: { showPairing = false })
                     }
                     // `PairingPalette` has no screenBg and there is no PairingTiming; rather than
                     // invent two constants, the extracted screen fill and the Analysis Board's
@@ -142,7 +160,9 @@ struct PhoneApp: View {
                         #if os(macOS)
                         statusBar
                         #endif
-                        CoachRootScreen(store: coachStore, onExit: { showCoach = false })
+                        CoachRootScreen(store: coachStore, premium: premium,
+                                        onExit: { showCoach = false },
+                                        onPaywall: { openPaywall() })
                             // Spec 2.10's hand-off: Start Review closes Play vs Coach and opens
                             // the Analysis Board on the reviewed game, classifications and all.
                             .onChange(of: coachStore.pendingHandoff) { _, payload in
@@ -157,18 +177,77 @@ struct PhoneApp: View {
                     .background(CoachSelect.containerBackgroundColor)
                     .transition(.move(edge: .bottom))
                 }
+                // The paywall sits ABOVE the three pushed routes — a gate hit inside Play vs Coach
+                // has to be able to cover it — but BELOW the login gate, which must stay last.
+                if showPaywall {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        PaywallScreen(store: premium, onClose: { closePaywall() })
+                    }
+                    .background(PaywallPalette.screenBg)
+                    .transition(.move(edge: .bottom))
+                }
+                // LAST sibling on purpose: the login gate has to cover the tab bar and all three
+                // pushed routes above, not sit behind them. A ZStack sibling for the same reason
+                // they are — `.fullScreenCover` does not exist on macOS and this view renders
+                // inside the desktop phone frame.
+                //
+                // It cross-fades rather than sliding: signing in reveals the app that was always
+                // there, where the routes above are pushes onto it.
+                if !loginStore.isSignedIn {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        LoginScreen(onSignedIn: { signIn() })
+                    }
+                    .background(LoginPalette.screenBg)
+                    .transition(.opacity)
+                }
             }
             .frame(width: shell.size.width, height: shell.size.height)
         }
+        // The entitlement is re-read at launch and on every foreground, and `Transaction.updates`
+        // carries renewals and revocations for the rest of the app's life. Nothing here is trusted
+        // from a cached boolean.
+        .task {
+            premium.startObserving()
+            await premium.refresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await premium.refresh() }
+        }
+    }
+
+    private func openPaywall() {
+        withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showPaywall = true }
+    }
+
+    private func closePaywall() {
+        withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showPaywall = false }
+    }
+
+    /// The simulated sign-in, animated here rather than inside `LoginScreen` — the screen raises the
+    /// event, the host owns the transition, the same split every other route on this shell uses.
+    private func signIn() {
+        withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { loginStore.signIn() }
     }
 
     /// Only the callbacks with a real destination today are wired; the rest are the empty closures
     /// the screen is designed around and stay that way until those screens exist.
     ///
-    /// Arguments must follow `HomeScreen.init`'s declaration order — `onAnalysis` sits between
-    /// `onPuzzles` and `onPlayCoach`.
+    /// Arguments must follow `HomeScreen.init`'s declaration order — `userName` is first, and
+    /// `onAnalysis` sits between `onPuzzles` and `onPlayCoach`.
     private func home(basis: CGSize) -> some View {
-        HomeScreen(isColorful: homeColorful,
+        // `userName` used to be left at its default, so the header avatar drew the "?" fallback.
+        // There is a signed-in user now, so it draws their initial.
+        HomeScreen(userName: loginStore.displayName,
+                   isPremium: premium.isPremium,
+                   subscriptionEndsAt: premium.expiresAt,
+                   isColorful: homeColorful,
                    scaleBasis: basis,
                    onAvatar: { tab = 3 },
                    onPuzzles: { tab = 1 },
@@ -186,7 +265,10 @@ struct PhoneApp: View {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showPairing = true
                        }
-                   })
+                   },
+                   // The banner has drawn "⭐ Go Premium" since the screen was written and its tap
+                   // went nowhere. This is where it goes.
+                   onMembership: { openPaywall() })
     }
 
     private var statusBar: some View {
@@ -502,6 +584,13 @@ struct ProfilePhone: View {
     /// Reads the hub's store, not the retired sample solver — otherwise the profile would show a
     /// rating and a solve count from a screen the user can no longer reach.
     @ObservedObject var store: PuzzleHubStore
+    /// The session, so this tab can end it. It is the only way back to the login screen once the
+    /// sign-in has been persisted.
+    @ObservedObject var login: LoginStore
+    /// The subscription, so this tab can show its state and route to the paywall.
+    @ObservedObject var premium: PremiumStore
+    let onPaywall: () -> Void
+    private var initial: String { String(login.displayName.prefix(1)) }
     private var accuracy: Double {
         // `PuzzleStats.accuracy` is the golden-tested one; it returns nil before any attempt.
         guard let a = PuzzleStats.accuracy(store.state) else { return 0 }
@@ -524,11 +613,11 @@ struct ProfilePhone: View {
                 PhoneTitle(title: "Profile")
 
                 HStack(spacing: 14) {
-                    Text("B").font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
+                    Text(initial).font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
                         .frame(width: 64, height: 64).background(Theme.onGold.opacity(0.14), in: Circle())
                         .overlay(Circle().stroke(Theme.onGold.opacity(0.3)))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Biyahero").font(Theme.nunito(20, .bold)).foregroundStyle(Theme.onGold)
+                        Text(login.displayName).font(Theme.nunito(20, .bold)).foregroundStyle(Theme.onGold)
                         Text(RatingTier.classify(rating)).font(Theme.nunito(14, .medium)).foregroundStyle(Theme.onGold.opacity(0.75))
                         Text("\(rating) rating").font(Theme.nunito(21, .extraBold)).foregroundStyle(Theme.onGold)
                     }
@@ -577,9 +666,73 @@ struct ProfilePhone: View {
                         }
                     }
                 }
+
+                phoneCard(PaywallStrings.premium) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Text(premium.isPremium ? PaywallGlyph.crown : PaywallStrings.goPremium)
+                                .font(Theme.nunito(13, .medium))
+                            Text(subscriptionLine)
+                                .font(Theme.nunito(13, .medium))
+                            Spacer()
+                        }.foregroundStyle(premium.isPremium ? Theme.gold : Theme.mutedForeground)
+                        Button(action: onPaywall) {
+                            Text(premium.isPremium ? PaywallStrings.manageRow
+                                                   : PaywallStrings.lockCta)
+                                .font(Theme.nunito(14, .bold))
+                                .foregroundStyle(Theme.onGold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Theme.gold,
+                                            in: RoundedRectangle(cornerRadius: Theme.radiusButton))
+                        }
+                        .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+                    }
+                }
+
+                phoneCard(LoginStrings.accountCard) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 6) {
+                            Image(systemName: LoginArt.appleSymbol).font(Theme.nunito(13, .medium))
+                            Text("\(LoginStrings.signedInWith) \(login.providerLabel)")
+                                .font(Theme.nunito(13, .medium))
+                            Spacer()
+                        }.foregroundStyle(Theme.mutedForeground)
+                        Button(action: { signOut() }) {
+                            Text(LoginStrings.signOut)
+                                .font(Theme.nunito(14, .bold))
+                                .foregroundStyle(Theme.negative)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Theme.negative.opacity(0.12),
+                                            in: RoundedRectangle(cornerRadius: Theme.radiusButton))
+                        }
+                        .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+                    }
+                }
                 Spacer(minLength: 8)
             }
         }
+    }
+
+    /// One line for all three states, so the card never has to say "Premium Active" to someone
+    /// whose entitlement is actually stale.
+    private var subscriptionLine: String {
+        switch premium.access {
+        case .premium:
+            guard let expiry = premium.expiresAt else { return HomeMembership.noExpirySubtitle }
+            return HomeMembership.expiryText(expiry)
+        case .grace(let days):
+            return PaywallStrings.fill(PaywallStrings.graceTitle, [:])
+                + " · " + PaywallStrings.daysPillText(days)
+        case .free:
+            return HomeMembership.freeSubtitle
+        }
+    }
+
+    /// Ends the session. Same fade as signing in, played in reverse by the gate in `PhoneApp`.
+    private func signOut() {
+        withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { login.signOut() }
     }
 
     private func band(_ r: Int) -> (Int, Int) {

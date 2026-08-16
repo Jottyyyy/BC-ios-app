@@ -534,10 +534,22 @@ final class AnalysisVM: ObservableObject {
     // `handleAnalyzeGame` (:1854) stamps the strip but shows only an Alert, with no graph and no
     // cancel. One action here does both — a deliberate deviation, recorded in PORTING_NOTES.
 
+    /// The free tier's daily Game Review allowance, supplied by the host.
+    ///
+    /// Returns false when it is spent, and **consumes one when it returns true** — so it is called
+    /// exactly once, at the top of `startReview()`, after the too-short guard so a review that was
+    /// never going to run does not cost the user an allowance. `nil` means ungated, which is what
+    /// the macOS demo panel gets.
+    var reviewGate: (() -> Bool)?
+
     func startReview() {
         let plan = ReviewAnnotator.plan(session.tree)
         guard plan.positions.count >= AnalysisTables.minimumReviewPositions else {
             reviewState = .tooShort
+            return
+        }
+        if let reviewGate, !reviewGate() {
+            reviewState = .capped
             return
         }
         // A review and a live search would fight over the same cores. Stop the engine first.

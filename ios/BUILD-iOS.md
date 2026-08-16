@@ -64,6 +64,12 @@ Skip to **Step 2**.
    for your own phone). If you see a red "bundle identifier is not available" error, change
    **Bundle Identifier** to something unique, e.g. `com.<yourname>.biyaherong`.
 
+   ⚠️ **Only for a personal sideload.** StoreKit product IDs are namespaced per App Store Connect
+   record, so changing the bundle identifier orphans the subscription — `Product.products(for:)`
+   comes back empty and the paywall shows "Store Unavailable" forever. Never change it on a build
+   headed for TestFlight or the App Store; the shipping value lives in `project.yml` and must stay
+   in step with `codemagic.yaml`. See [`../docs/subscription.md`](../docs/subscription.md).
+
 ---
 
 ## Step 3 — Run it on your own iPhone (works today, free)
@@ -118,6 +124,10 @@ Pick the route that matches your account:
 - **App size** ≈ 100 MB — the 550,000-puzzle SQLite DB is bundled offline. That's expected.
 - **Portrait only** — the phone UI is designed for portrait; the project.yml locks it there.
 - **Orientation / iPad** — it runs on iPad but shows the iPhone-sized layout; iPad-specific polish is future work.
-- **No internet needed** — everything (engine, puzzles, coaches, sounds) runs fully offline.
+- **Almost no internet needed** — the engine, puzzles, coaches and sounds all run fully
+  offline. The one exception is StoreKit: buying or restoring the subscription needs a
+  connection, and so does the periodic entitlement refresh. Everything already bought keeps
+  working offline, and a lapse drops to the free tier rather than a dead app. See
+  [`../docs/subscription.md`](../docs/subscription.md).
 - If a build ever fails on *"Bundle.module"* or missing resources, make sure the app is linking the
   **BiyaherongUI package library** (Step 1), not copies of the Swift files.

@@ -76,8 +76,16 @@ function collect(rel) {
     // outer loop, so a shallow scan of this block is enough.
     var body = blockAt(src, re.lastIndex - 1);
     var mm;
-    var member = /(?:^|\n)[ \t]*(?:public |internal |private(?:\(set\))? |fileprivate |open |static |final |class |lazy |weak |@\w+(?:\([^)]*\))?\s+)*(?:let|var|func|case|typealias|init|subscript)\s+([A-Za-z_]\w*)/g;
+    var member = /(?:^|\n)[ \t]*(?:public |internal |private(?:\(set\))? |fileprivate |open |static |final |class |lazy |weak |unowned |mutating |nonmutating |override |convenience |required |dynamic |nonisolated(?:\(unsafe\))? |@\w+(?:\([^)]*\))?\s+)*(?:let|var|func|case|typealias|init|subscript)\s+([A-Za-z_]\w*)/g;
     while ((mm = member.exec(body)) !== null) set.add(mm[1]);
+    // SYNTHESIZED members. These are never written, so a shallow scan can never find them, and
+    // without this every `Foo.allCases` reads as unresolved — a false alarm that teaches people to
+    // skim past the real ones. Read off the inheritance clause rather than allow-listed by name.
+    var inherits = m[0];
+    if (/\bCaseIterable\b/.test(inherits)) set.add('allCases');
+    if (/(?:^|\n)[ \t]*(?:[\w@()]+\s+)*enum\s+[A-Za-z_]\w*\s*:\s*(?:String|Int|Double|Character)\b/.test(inherits)) {
+      set.add('rawValue');
+    }
     // A NESTED type is reachable as `Outer.Inner`, so it counts as a member of its parent.
     // Without this, `PuzzleHub.Mode` and `DailyGoal.Status` read as unresolved — false alarms
     // that would teach people to skim past the real ones.
@@ -106,7 +114,7 @@ all.forEach(collect);
 //
 // Only namespaces that look like a metrics/constant holder are checked. Instance values, locals
 // and anything generic are out of scope: this is a name check, not a type checker.
-var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Pairing[A-Z]\w*|Coach[A-Z]\w*|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits|GameReview|ReviewAnnotator|MoveTree|OpeningBook|ChessNotation)$/;
+var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Pairing[A-Z]\w*|Coach[A-Z]\w*|Login[A-Z]\w*|Home[A-Z]\w*|Paywall[A-Z]\w*|Premium[A-Z]\w*|Entitlement|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits|GameReview|ReviewAnnotator|MoveTree|OpeningBook|ChessNotation)$/;
 var SKIP_MEMBER = /^(self|init|Type|shared)$/;
 
 var bad = 0, checked = 0;
@@ -140,9 +148,9 @@ targets.forEach(function (rel) {
 // set of interdependent screens blind: one references another by a name that was never written,
 // and nothing notices until a Mac.
 //
-// Scoped to `Puzzle*` and `Analysis*` so SwiftUI and Foundation types are out of scope by
-// construction rather than by an allowlist that would rot.
-var PROJECT_TYPE = /\b((?:Puzzle|Analysis|Pairing|Coach)[A-Z]\w*)\s*\(/g;
+// Scoped to the screen prefixes so SwiftUI and Foundation types are out of scope by construction
+// rather than by an allowlist that would rot.
+var PROJECT_TYPE = /\b((?:Puzzle|Analysis|Pairing|Coach|Login|Paywall|Premium)[A-Z]\w*)\s*\(/g;
 var typeBad = 0, typeChecked = 0;
 targets.forEach(function (rel) {
   var full = path.join(ROOT, rel);
