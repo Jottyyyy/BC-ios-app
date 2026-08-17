@@ -52,12 +52,12 @@ targets:
         # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
         # CI overwrites it with $BUILD_NUMBER (see codemagic.yaml).
         #
-        # KEEP THIS IN SYNC WITH WHAT WAS ACTUALLY DELIVERED. Builds 38, 39, 40 and 41 are all
-        # consumed in App Store Connect; 41 shipped 2026-08-13. Earlier uploads each passed
+        # KEEP THIS IN SYNC WITH WHAT WAS ACTUALLY DELIVERED. Builds 38, 39, 40, 41 and 42 are
+        # all consumed in App Store Connect; 42 shipped 2026-08-17. Earlier uploads each passed
         # CURRENT_PROJECT_VERSION on the xcodebuild command line and left this line reading "38",
         # so the file said 38 while the record was already at 40 — the next person to trust it
-        # would have been rejected as a duplicate. The next manual upload must use 42 or higher.
-        CURRENT_PROJECT_VERSION: "41"
+        # would have been rejected as a duplicate. The next manual upload must use 43 or higher.
+        CURRENT_PROJECT_VERSION: "42"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone

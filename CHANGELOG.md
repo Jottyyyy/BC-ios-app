@@ -9,6 +9,25 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-17 (changed) — TestFlight build 1.0.5 (42): the subscription/login work shipped to App Store Connect
+
+Pulled `origin/main` (`e85ee68`, `318efa5`, `cc8bc34` — the login screen, the paywall/`PremiumStore`
+StoreKit layer, `Entitlement`, and the one-chessboard layout fix) and delivered it as build **42**.
+Delivery UUID `660c31b3-f4cf-454d-87bc-f256970c7da5`; `--validate-app` returned VERIFY SUCCEEDED first.
+
+**Unlike 2026-08-10 and 2026-08-13, this pull compiled as-is** — `swift build` at the root and in
+`DemoApp/` were both clean, no stale call sites to repair. Recorded because two-for-two had made
+"main is broken after a teammate push" the working assumption; it is not a rule.
+
+**Changed.** `ios/project.yml`: `CURRENT_PROJECT_VERSION` 41 → **42** (41 was consumed 2026-08-13; the
+next manual upload must use 43 or higher). **Added.** `ios/ExportOptions.plist` is now **committed**
+rather than re-authored from memory every session — it is what signs the unsigned archive at export
+time (`method: app-store-connect`, `signingStyle: manual`, `Apple Distribution`, team `3C29G97AU5`).
+Re-authoring it by hand each time was a standing trip hazard, since the signing settings cannot be
+passed as `xcodebuild` overrides without breaking SwiftPM's resource-bundle target.
+
+`web-demo/` not updated — this is a release/build-config change with no user-facing behaviour of its own.
+
 ### 2026-08-16 (added) — A monthly subscription with a 7-day trial, enforced on-device with no server
 
 The app earns recurring revenue now: one auto-renewing **monthly** plan with a **7-day free trial**,

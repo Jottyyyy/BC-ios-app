@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The archive is built UNSIGNED (CODE_SIGNING_ALLOWED=NO) and signed here, at export
+	     time. Signing settings must never be passed as xcodebuild command-line overrides:
+	     they would also apply to SwiftPM's generated resource-bundle target
+	     BiyaherongUI_BiyaherongUI, which fails with "does not support provisioning profiles". -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>3C29G97AU5</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.prince24pogi.biyaherongchessapp</key>
+		<string>Biyaherong App Store</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
