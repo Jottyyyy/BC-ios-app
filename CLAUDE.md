@@ -85,8 +85,10 @@ node tools/qa/puzzle_corpus_check.js          # quotas, indexes, every line repl
 python3 tools/qa/corpus_mutation_test.py      # proves that gate is not vacuous
 node tools/qa/puzzle_core_mutation_test.js    # ditto for the session/selection/progress suite
 
-# --- iOS app (macOS + Xcode 16+ only) ---
-cd ios && xcodegen generate && open Biyaherong.xcodeproj          # see ios/BUILD-iOS.md
+# --- iOS app + shipping to TestFlight (macOS + Xcode only) ---
+cd ios && xcodegen generate && open Biyaherong.xcodeproj          # Xcode MUST be closed for xcodegen
+tools/ship/ship_testflight.sh --dry-run       # build + verify entitlements + validate, NO upload
+tools/ship/ship_testflight.sh                 # ...and ship it: bumps the build number, uploads
 
 # --- web-demo (Windows browser preview, no install) ---
 # open web-demo/index.html  (or  web-demo/index.html?selftest  for the engine perft check)
@@ -170,6 +172,17 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   **signed terms** (`renderConstants`), and `tools/qa/metrics_key_check.js` + `swift_source_keys.js` check
   that every constant reference and every source lookup resolves — in Swift as well as JS, because there is
   no compiler here to do it.
+- **Shipping is one command — `tools/ship/ship_testflight.sh`** (runbook: `docs/shipping-to-testflight.md`).
+  **On this pipeline an exit code is not evidence.** `xcodebuild` prints `EXPORT SUCCEEDED` while
+  silently dropping an entitlement the provisioning profile lacks, and Apple's API returns 201 for a
+  capability it did not persist. The only check that has ever caught it is decoding the artifact:
+  `codesign -d --entitlements :- Payload/Biyaherong.app`. The script does that and refuses to upload if
+  anything in `ios/Biyaherong.entitlements` is missing. Three rules fall out and each cost a session:
+  an **unsigned archive cannot carry an entitlement** (so the archive is signed now, with the signing
+  settings TARGET-scoped in `project.yml` — as `xcodebuild` overrides they break SwiftPM's
+  `BiyaherongUI_BiyaherongUI` bundle); a **profile snapshots the App ID's capabilities when minted**, so
+  enabling one means delete-and-recreate, never refresh; and `manageAppVersionAndBuildNumber` **defaults
+  to true** and rewrites the build number at export, so `ExportOptions.plist` pins it false.
 - **Licensing:** piece art is CC BY-SA, Nunito is SIL OFL, and the Stockfish decision makes the whole app
   **GPL** — keep attributions intact.
 

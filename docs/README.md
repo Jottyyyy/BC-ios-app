@@ -74,6 +74,9 @@ Feature- and subsystem-level documentation for this repo.
 - [`app-store-readiness.md`](app-store-readiness.md) — what the submission needs that is not a
   feature: the privacy manifest, the Sign in with Apple entitlement, and the licence correction —
   plus the App Store Connect steps that cannot be done from this repo. **Read before submitting.**
+- [`shipping-to-testflight.md`](shipping-to-testflight.md) — **one command** to build, verify and
+  upload a TestFlight build (`tools/ship/ship_testflight.sh`), the one-time signing/API-key setup,
+  and the several ways Apple's tooling reports success while silently doing nothing. **Complete.**
 
 _More docs get added here as features are built._
 

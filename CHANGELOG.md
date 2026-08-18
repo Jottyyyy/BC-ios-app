@@ -9,6 +9,39 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (added) — `tools/ship/ship_testflight.sh`: shipping a build is one command, and it verifies
+
+Shipping 1.0.6 (43) took a whole session and four separate silent failures. This is that session
+turned into a script and a runbook so the next one takes a minute.
+
+**Added.** `tools/ship/ship_testflight.sh` — bumps `CURRENT_PROJECT_VERSION`, regenerates the project,
+archives **signed**, exports, validates and uploads, authenticating with an App Store Connect API key
+rather than an app-specific password. `--dry-run` does everything except the upload. `docs/shipping-to-testflight.md`
+is the runbook: one-time setup, the by-hand commands, and every trap below.
+
+**The point of the script is the two verify steps**, because on this pipeline **an exit code is not
+evidence**: it decodes the archive AND the signed `.ipa` and checks that every key declared in
+`ios/Biyaherong.entitlements` actually reached the binary, refusing to upload otherwise.
+`codesign -d --entitlements` is the only check that caught any of this.
+
+**Fixed — `ios/ExportOptions.plist` now pins `manageAppVersionAndBuildNumber` to `false`.** It
+defaults to **true**, and Xcode uses it to silently step the build number past whatever App Store
+Connect already holds. Caught by the script's own output: an archive built at CFBundleVersion 43
+exported as an `.ipa` reading **44**, purely because 43 had just been delivered. Every "build N
+shipped" note in this file was therefore a guess rather than a fact; now the number in the repo is
+the number that ships.
+
+**Fixed — `ios/BUILD-iOS.md` no longer contradicts the build.** Step 2 said to tick *Automatically
+manage signing*, which stopped being true when 1.0.6 moved to manual signing for the entitlement; it
+is now scoped to personal sideloads with a pointer to the real runbook. Its TestFlight section
+described Xcode's Organizer flow, which hides both checks that matter and rewrites the build number —
+replaced with the one-command path.
+
+**Changed.** `CLAUDE.md` gains the ship command and a short rules block (still under 200 lines);
+`docs/README.md` lists the new doc.
+
+`web-demo/` not updated — release tooling with no user-facing behaviour.
+
 ### 2026-08-18 (fixed) — Three compile errors that broke the iOS Release archive, and the entitlement the profile does not carry
 
 Merged `origin/main` (23 commits: the App Store rejection fixes, per-coach clocks, Home-as-root, the

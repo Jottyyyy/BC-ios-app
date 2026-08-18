@@ -58,6 +58,12 @@ Skip to **Step 2**.
 
 ## Step 2 — Sign it (needed for any real device)
 
+> **This step is for a PERSONAL sideload onto your own phone only.** The shipping configuration is
+> **manual** signing, set target-scoped in `ios/project.yml` (`CODE_SIGN_STYLE: Manual`,
+> `DEVELOPMENT_TEAM`, `CODE_SIGN_IDENTITY`, `PROVISIONING_PROFILE_SPECIFIER`), because the app now
+> carries a Sign in with Apple entitlement and automatic signing cannot supply it here. To ship a
+> real build, do not follow this section — see [`../docs/shipping-to-testflight.md`](../docs/shipping-to-testflight.md).
+
 1. Select the **Biyaherong** target ▸ **Signing & Capabilities**.
 2. Tick **Automatically manage signing**.
 3. **Team**: pick your Apple ID (click *Add an Account…* if it's not listed — a free Apple ID is fine
@@ -89,14 +95,19 @@ have at most 3 sideloaded apps, and it only installs on devices signed in to *yo
 
 Pick the route that matches your account:
 
-### Option 1 — TestFlight (best for sharing; needs paid $99/yr account)
-1. Enroll at [developer.apple.com/programs](https://developer.apple.com/programs) ($99/yr).
-2. In Xcode: **Product ▸ Archive** (set the destination to *Any iOS Device* first).
-3. In the Organizer window that opens: **Distribute App ▸ TestFlight & App Store Connect ▸ Upload**.
-4. On [App Store Connect](https://appstoreconnect.apple.com), open the app ▸ **TestFlight**, add
-   testers by email (or make a public link). They install the free **TestFlight** app and tap your
-   link. Builds last 90 days; up to 10,000 testers. *(An app icon is required for TestFlight — add an
-   `AppIcon` to Assets first.)*
+### Option 1 — TestFlight (how this app actually ships)
+
+**One command:** `tools/ship/ship_testflight.sh` — it bumps the build number, archives signed,
+verifies the entitlements survived into the signed `.ipa`, validates, and uploads. Full runbook,
+one-time setup and the several ways Apple reports success while doing nothing:
+**[`../docs/shipping-to-testflight.md`](../docs/shipping-to-testflight.md)**.
+
+Do **not** use Xcode's Organizer ▸ *Distribute App* for this project. It hides the two checks that
+matter — whether the archive is signed at all, and whether the entitlement reached the binary — and
+it re-writes the build number behind your back.
+
+Testers install the free **TestFlight** app. Builds last 90 days; internal groups get them with no
+review, external testing needs Beta App Review.
 
 ### Option 2 — AltStore / Sideloadly (free-ish, closest to "send them the file")
 1. In Xcode: **Product ▸ Archive ▸ Distribute App ▸ Custom ▸ Development** (or *Ad Hoc*), Export → gives

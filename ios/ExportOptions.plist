@@ -19,6 +19,14 @@
 		<key>com.prince24pogi.biyaherongchessapp</key>
 		<string>Biyaherong App Store</string>
 	</dict>
+	<!-- Xcode DEFAULTS THIS TO TRUE, and it silently rewrites the build number at export time to
+	     step past whatever App Store Connect already has. Verified 2026-08-18: an archive built at
+	     CFBundleVersion 43 exported as an .ipa reading 44, purely because 43 had just been
+	     delivered. That makes ios/project.yml's CURRENT_PROJECT_VERSION - and every CHANGELOG note
+	     claiming what shipped - a guess. Pinned to false so the number in the repo is the number
+	     that ships; bump it deliberately instead (tools/ship/ship_testflight.sh does). -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
 	<key>uploadSymbols</key>
 	<true/>
 	<key>destination</key>
