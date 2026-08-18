@@ -1,0 +1,26 @@
+Copyright (c) 2026 Biyaherong Chess Coach. All rights reserved.
+
+This software and its source code are proprietary. No permission is granted to copy,
+modify, distribute, sublicense, or create derivative works from it, in whole or in part,
+except as expressly permitted in writing by the copyright holder.
+
+The compiled application is distributed through the Apple App Store under Apple's
+standard End User Licence Agreement:
+https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+
+Third-party assets bundled with this application carry their own licences and are NOT
+covered by the notice above. See THIRD-PARTY-NOTICES.md — the piece artwork is CC BY-SA,
+which is a copyleft licence with obligations that survive distribution.
+
+
+A NOTE ON THE FUTURE GPL PLAN
+-----------------------------
+README.md and CLAUDE.md record a locked decision to embed Stockfish, which is GPLv3, and
+to publish this app's source openly as a result. That decision has not been carried out:
+there is no Stockfish, no NNUE and no GPL code anywhere in this repository today, and the
+engine that ships is original work (Sources/BiyaherongCoachCore/LocalEngine.swift).
+
+This file therefore describes what actually ships now. When Stockfish lands, GPLv3 §5
+requires the combined work to be licensed under the GPL, and this file must be replaced
+with the GPL text at that time — not before, because a licence grant is irrevocable and
+cannot be un-given once published.

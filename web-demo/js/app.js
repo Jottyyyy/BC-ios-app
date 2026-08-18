@@ -186,6 +186,43 @@
     render();
   }
 
+  /* The browser twin of AccountDeletion.erase. Reads the SAME two lists out of
+   * BiyaLogin.ACCOUNT_DATA, so neither language can quietly start keeping something the other
+   * erases. The four JSON documents are an iOS-side mechanism (Application Support has no browser
+   * equivalent), which is why only the keys are removed here. */
+  function eraseAccountData() {
+    var A = BiyaLogin.ACCOUNT_DATA;
+    function drop(k) { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } }
+    A.erasedKeys.forEach(drop);
+    Object.keys(localStorage).forEach(function (k) {
+      A.erasedKeyPrefixes.forEach(function (p) { if (k.indexOf(p) === 0) drop(k); });
+    });
+  }
+
+  /* Guideline 5.1.1(v)'s deletion, confirmed first. A MODAL rather than a route, deliberately:
+   * OPEN_ROUTES is asserted to be exactly home/login/paywall/profile, and a `delete-account` route
+   * would fail that gate — rightly, because a destructive confirm is not somewhere you navigate
+   * to and then press Back out of. Mirrors the Swift `.alert`. */
+  function confirmDeleteAccount() {
+    var S = BiyaLogin.STRINGS;
+    var sheet = el('div', 'lg-confirm');
+    sheet.innerHTML = '<div class="lg-confirm-box">'
+      + '<div class="lg-confirm-title">' + S.deleteTitle + '</div>'
+      + '<div class="lg-confirm-body">' + S.deleteBody.replace(/\n\n/g, '<br><br>') + '</div>'
+      + '<div class="lg-confirm-actions">'
+      + '<button class="lg-confirm-no" type="button">' + S.deleteCancel + '</button>'
+      + '<button class="lg-confirm-yes" type="button">' + S.deleteConfirm + '</button>'
+      + '</div></div>';
+    function close() { if (sheet.parentNode) sheet.parentNode.removeChild(sheet); }
+    sheet.querySelector('.lg-confirm-no').onclick = close;
+    sheet.querySelector('.lg-confirm-yes').onclick = function () {
+      close();
+      eraseAccountData();
+      signOut();
+    };
+    document.querySelector('.app-card').appendChild(sheet);
+  }
+
   /* ======================================================================== *
    *  SUBSCRIPTION — see js/premium.js
    * ======================================================================== */
@@ -898,8 +935,10 @@
     var ac = el('div', 'card');
     ac.innerHTML = '<div class="card-label">' + S.accountCard + '</div>'
       + '<div class="lg-account-row">' + S.signedInWith + ' ' + BiyaLogin.shared().providerLabel()
-      + '</div><button class="lg-signout" type="button">' + S.signOut + '</button>';
+      + '</div><button class="lg-signout" type="button">' + S.signOut + '</button>'
+      + '<button class="lg-delete" type="button">' + S.deleteAccount + '</button>';
     ac.querySelector('.lg-signout').onclick = signOut;
+    ac.querySelector('.lg-delete').onclick = confirmDeleteAccount;
     wrap.appendChild(ac);
 
     view.appendChild(wrap);

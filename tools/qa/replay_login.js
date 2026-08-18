@@ -300,27 +300,163 @@ function run() {
   //    feature to be edited in one language only.
   ['title', 'tagline', 'appleButton', 'reassurance', 'privacy', 'terms', 'legalSeparator',
     'defaultDisplayName', 'appleProviderLabel', 'noProviderLabel', 'accountCard', 'signedInWith',
-    'signOut', 'sheetClose', 'privacyTitle', 'termsTitle'].forEach((k) => {
+    'signOut', 'sheetClose', 'privacyTitle', 'termsTitle', 'authFailed',
+    'deleteAccount', 'deleteTitle', 'deleteConfirm', 'deleteCancel'].forEach((k) => {
     eq(L.STRINGS[k], swStr(metrics, 'LoginStrings', k), 'LoginStrings.' + k);
   });
-  ['privacyBody', 'termsBody'].forEach((k) => {
+  ['privacyBody', 'termsBody', 'deleteBody'].forEach((k) => {
     eq(L.STRINGS[k], swMultiline(metrics, 'LoginStrings', k), 'LoginStrings.' + k);
   });
   eq(L.STRINGS.appleButton, 'Continue with Apple', "Apple's required button wording, verbatim");
 
+  // 9b. ACCOUNT DELETION's two lists. Guideline 5.1.1(v) needs the erase list; Apple's rule that
+  //     deleting an account must not forfeit a paid subscription needs the KEEP list, and that one
+  //     is the easier of the two to lose in a refactor.
+  {
+    const A = L.ACCOUNT_DATA;
+    const swAcc = code(metrics);
+    const arrayOf = (name) => {
+      const m = new RegExp('static let ' + name +
+        ': \\[String\\] = \\[([\\s\\S]*?)\\]').exec(swAcc);
+      return m ? (m[1].match(/"([^"]+)"/g) || []).map((s) => s.slice(1, -1)) : null;
+    };
+    ['erasedKeys', 'erasedKeyPrefixes', 'erasedFiles', 'keptKeys'].forEach((name) => {
+      const sw = arrayOf(name);
+      expect(!!sw, `LoginAccountData.${name} parses`);
+      if (sw) eq(A[name].join(','), sw.join(','), `LoginAccountData.${name}`);
+    });
+
+    // EXTRACT, DON'T TRANSCRIBE: every erased key is a literal here, copied from a declaration
+    // that lives on a @MainActor store this enum cannot reach. So check the copies against the
+    // originals — a renamed key that only got changed in one place is exactly the leftover this
+    // feature exists to prevent.
+    const CORE = path.join(ROOT, 'Sources', 'BiyaherongCoachCore');
+    const owners = [
+      ['biya.auth.session.v1', metrics, 'LoginSession.storageKey'],
+      ['biya.coach.takeback.v1', read(UI, 'CoachStore.swift'), 'CoachStore.takeBackKey'],
+      ['biya.analysis.engine.v1', read(CORE, 'EngineSettings.swift'), 'EngineSettings.storageKey'],
+      ['biya.coach.draft.v1.', read(CORE, 'CoachGame.swift'), 'CoachGame.draftKeyPrefix'],
+      ['biya.store.subscription.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.snapshotKey'],
+      ['biya.store.usage.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.usageKey'],
+    ];
+    owners.forEach(([key, src, owner]) => {
+      expect(!!src && code(src).indexOf('"' + key + '"') >= 0,
+        `${owner} still declares "${key}" — LoginAccountData copies it`);
+    });
+    // The two that must NOT be erased, stated as an assertion rather than as a comment.
+    A.keptKeys.forEach((k) => {
+      expect(A.erasedKeys.indexOf(k) < 0, `${k} is KEPT, never erased`);
+      A.erasedKeyPrefixes.forEach((p) => {
+        expect(k.indexOf(p) !== 0, `${k} is not swept up by the prefix ${p}`);
+      });
+    });
+
+    // The browser mirrors it as a MODAL, not a route: trial_gate_check.js asserts OPEN_ROUTES is
+    // exactly home/login/paywall/profile, and a delete-account route would break that.
+    const appJs = code(fs.readFileSync(path.join(JS, 'app.js'), 'utf8'));
+    expect(/function confirmDeleteAccount\(\)/.test(appJs), 'the browser confirms before erasing');
+    expect(/function eraseAccountData\(\)/.test(appJs), 'and has an eraser driven by ACCOUNT_DATA');
+    expect(appJs.indexOf('BiyaLogin.ACCOUNT_DATA') >= 0,
+      'the browser eraser reads the SHARED list rather than its own copy');
+    expect(!/'delete-account'/.test(appJs), 'deletion is not a route');
+    // Swift confirms too. A one-tap irreversible wipe is the bug this asserts against.
+    expect(/isPresented: \$confirmingDelete/.test(code(read(UI, 'PhoneView.swift'))),
+      'the Swift delete is behind a confirmation');
+  }
+
+  // 9c. THE SIGN-IN STATE MACHINE. `ASAuthorizationController` cannot be mirrored in a browser,
+  //     so the two languages share the DECISION half instead: which event moves the screen where.
+  //     Comparing it here is what stops the mirror being a vacuous "both look the same".
+  {
+    const table = [
+      ['idle', 'start', 'requesting'], ['idle', 'succeeded', 'idle'],
+      ['idle', 'cancelled', 'idle'], ['idle', 'failed', 'idle'],
+      ['requesting', 'start', 'requesting'], ['requesting', 'succeeded', 'idle'],
+      ['requesting', 'cancelled', 'idle'], ['requesting', 'failed', 'failed'],
+      ['failed', 'start', 'requesting'], ['failed', 'succeeded', 'failed'],
+      ['failed', 'cancelled', 'failed'], ['failed', 'failed', 'failed'],
+    ];
+    eq(L.AUTH_PHASES.length * L.AUTH_EVENTS.length, table.length,
+      'the table covers every phase x event pair');
+    for (const [phase, event, want] of table) {
+      eq(L.authNext(phase, event), want, `authNext(${phase}, ${event})`);
+    }
+    // The branch worth stating twice, because getting it wrong in one language is invisible:
+    // a user who backs out of Apple's sheet must NOT be shown an error.
+    expect(!L.authShowsError(L.authNext('requesting', 'cancelled')),
+      'a cancelled sign-in shows no error');
+    expect(L.authShowsError(L.authNext('requesting', 'failed')), 'a failed one does');
+    expect(L.authIsBusy('requesting') && !L.authIsBusy('idle'),
+      'the request is busy only while Apple has the sheet up');
+
+    // The Swift arms, read off the source. Every non-default transition the JS table names must
+    // appear literally; everything else falls to `default: return phase`.
+    const swAuth = code(metrics);
+    ['case (.idle, .start), (.failed, .start): return .requesting',
+     'case (.requesting, .succeeded): return .idle',
+     'case (.requesting, .cancelled): return .idle',
+     'case (.requesting, .failed): return .failed',
+     'default: return phase'].forEach((arm) => {
+      expect(swAuth.indexOf(arm) >= 0, `LoginAuth.next holds: ${arm}`);
+    });
+    expect(/showsError\(_ phase: LoginAuthPhase\) -> Bool \{ phase == \.failed \}/.test(swAuth),
+      'LoginAuth.showsError agrees with the JS');
+    expect(/isBusy\(_ phase: LoginAuthPhase\) -> Bool \{ phase == \.requesting \}/.test(swAuth),
+      'LoginAuth.isBusy agrees with the JS');
+    eq(L.AUTH_PHASES.join(','), 'idle,requesting,failed', 'the JS phase vocabulary');
+    eq(L.AUTH_EVENTS.join(','), 'start,succeeded,cancelled,failed', 'the JS event vocabulary');
+    ['idle', 'requesting', 'failed', 'start', 'succeeded', 'cancelled'].forEach((c) => {
+      expect(new RegExp('case ' + c + '\\b').test(swAuth), `the Swift declares .${c}`);
+    });
+  }
+
   // 10. THE OFFLINE GUARANTEE. `ios/project.yml`'s export-compliance NO says the app has no
   //     network at all, and a login screen is the single most likely place to break that.
+  //
+  //     `ASAuthorization` used to be banned here alongside the networking tokens, because the
+  //     sign-in was SIMULATED and this ban was what kept it that way. It is real now — a fake
+  //     "Continue with Apple" is an App Store rejection — so that one token became an ALLOWLIST
+  //     OF ONE instead of a deletion: `LoginAppleAuth.swift` must make the call, and nothing else
+  //     may. The networking tokens stay banned EVERYWHERE, including in that new file: Apple's
+  //     sheet reaches Apple over the system's own transport, and a URLSession in the login feature
+  //     would still be a first-party network call and still a lie in ios/project.yml.
+  const appleAuth = read(UI, 'LoginAppleAuth.swift');
+  expect(!!appleAuth, 'LoginAppleAuth.swift exists');
   const sources = { 'LoginMetrics.swift': metrics, 'LoginStore.swift': store,
     'LoginScreen.swift': screen, 'LoginMetricsCheck.swift': check,
+    'LoginAppleAuth.swift': appleAuth || '',
     'web-demo/js/login.js': fs.readFileSync(path.join(JS, 'login.js'), 'utf8') };
   Object.keys(sources).forEach((name) => {
     const src = code(sources[name]);
-    ['URLSession', 'URLRequest', 'fetch(', 'XMLHttpRequest', 'ASAuthorization'].forEach((tok) => {
-      expect(src.indexOf(tok) < 0, `${name} contains no ${tok} — the sign-in is simulated`);
+    ['URLSession', 'URLRequest', 'fetch(', 'XMLHttpRequest'].forEach((tok) => {
+      expect(src.indexOf(tok) < 0, `${name} contains no ${tok} — the app opens no connection`);
     });
     const urls = src.match(/https?:\/\/[^\s"')]+/g) || [];
     expect(urls.length === 0, `${name} contains no URL (${urls.join(', ')})`);
   });
+
+  //     The allowlist, both halves. A positive assertion so the call cannot quietly go away and
+  //     leave a button that does nothing again, and a negative one so it cannot spread.
+  expect(code(sources['LoginAppleAuth.swift']).indexOf('ASAuthorizationController') >= 0,
+    'LoginAppleAuth.swift makes the real Sign in with Apple call');
+  expect(code(sources['LoginAppleAuth.swift']).indexOf('requestedScopes = []') >= 0,
+    'and asks for NO scopes — a name or an email would be data the privacy manifest denies collecting');
+  ['LoginMetrics.swift', 'LoginStore.swift', 'LoginScreen.swift', 'LoginMetricsCheck.swift',
+   'web-demo/js/login.js'].forEach((name) => {
+    expect(code(sources[name]).indexOf('ASAuthorization') < 0,
+      `${name} does not touch AuthenticationServices — LoginAppleAuth.swift is the only file that may`);
+  });
+  //     Exhaustive, so the permission cannot spread to a file this list has never heard of.
+  const importers = fs.readdirSync(UI).filter((f) => f.endsWith('.swift'))
+    .filter((f) => /^import AuthenticationServices$/m
+      .test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
+  eq(importers.join(','), 'LoginAppleAuth.swift',
+    'exactly one file in the UI imports AuthenticationServices');
+  //     And the browser twin declares itself a stub, so it can never be read as the real thing.
+  expect(/var SIMULATED_AUTH = true;/.test(code(sources['web-demo/js/login.js'])),
+    'the browser sign-in declares itself simulated');
+  expect(!/SIMULATED_AUTH/.test(code(sources['LoginAppleAuth.swift'])),
+    'and the Swift does NOT carry that flag');
 
   // 11. The wiring the browser needs. `css/coach.css` shipped unlinked and nothing noticed; these
   //     are the three ways this feature could ship the same silent nothing.

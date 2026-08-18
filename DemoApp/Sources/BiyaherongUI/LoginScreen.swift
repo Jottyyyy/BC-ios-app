@@ -50,6 +50,9 @@ struct LoginScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var entered = false
     @State private var legalTopic: LoginLegalTopic?
+    /// Owns the Apple request. `@StateObject` because the request outlives a body re-evaluation and
+    /// a controller that gets released mid-flight never calls back.
+    @StateObject private var appleAuth = LoginAppleAuth()
 
     var body: some View {
         GeometryReader { geo in
@@ -126,6 +129,14 @@ struct LoginScreen: View {
     private var actions: some View {
         VStack(spacing: LoginLayout.atRest) {
             LoginAppleButton(action: { signIn() })
+                // An alert, not a band: this screen's height budget is asserted against the
+                // shortest supported phone, and a login screen that scrolls is a bug. An alert
+                // costs no layout at all.
+                .alert(LoginStrings.authFailed,
+                       isPresented: Binding(get: { LoginAuth.showsError(appleAuth.phase) },
+                                            set: { if !$0 { appleAuth.dismissError() } })) {
+                    Button(LoginStrings.sheetClose, role: .cancel) { appleAuth.dismissError() }
+                }
             Text(LoginStrings.reassurance)
                 .font(Theme.nunito(LoginType.reassureSize, .medium))
                 .foregroundStyle(LoginPalette.reassure)
@@ -164,11 +175,14 @@ struct LoginScreen: View {
     /// `.animation(nil, value:)` applies the change without interpolating it.
     private func entrance(_ base: Animation) -> Animation? { reduceMotion ? nil : base }
 
-    /// Simulated: no `AuthenticationServices`, no network. See `LoginStore.signIn(_:)` for where the
-    /// real call goes.
+    /// Raises Apple's real sheet. Only a genuine success opens the session; a cancel leaves the
+    /// gate exactly where it was, and a failure surfaces the alert. The haptic moved inside the
+    /// success branch — it used to fire on the tap, which would now celebrate a cancel.
     private func signIn() {
-        Haptics.play(.success)
-        onSignedIn()
+        appleAuth.start { _ in
+            Haptics.play(.success)
+            onSignedIn()
+        }
     }
 
     private func openLegal(_ topic: LoginLegalTopic) {

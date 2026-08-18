@@ -550,6 +550,8 @@ struct ProfilePhone: View {
     @ObservedObject var login: LoginStore
     /// The subscription, so this screen can show its state and route to the paywall.
     @ObservedObject var premium: PremiumStore
+    /// Raised by the Delete account button and lowered by either alert action.
+    @State private var confirmingDelete = false
     /// Back to Home. Profile is reached from the Home header's avatar and had no way out at all
     /// while the tab bar existed — it was the only screen in either language without one.
     let onExit: () -> Void
@@ -672,6 +674,26 @@ struct ProfilePhone: View {
                                             in: RoundedRectangle(cornerRadius: Theme.radiusButton))
                         }
                         .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+                        // Guideline 5.1.1(v): with a real Sign in with Apple, deletion has to be
+                        // reachable in-app. Quieter than Sign out on purpose — it is the rarer and
+                        // the more destructive of the two — but on the same card, one tap from the
+                        // Home avatar, which is the route left open even to a locked user.
+                        Button(action: { confirmingDelete = true }) {
+                            Text(LoginStrings.deleteAccount)
+                                .font(Theme.nunito(13, .semibold))
+                                .foregroundStyle(Theme.negative)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+                        .alert(LoginStrings.deleteTitle, isPresented: $confirmingDelete) {
+                            Button(LoginStrings.deleteCancel, role: .cancel) { }
+                            Button(LoginStrings.deleteConfirm, role: .destructive) {
+                                deleteAccount()
+                            }
+                        } message: {
+                            Text(LoginStrings.deleteBody)
+                        }
                     }
                 }
                 Spacer(minLength: 8)
@@ -692,6 +714,18 @@ struct ProfilePhone: View {
         case .free:
             return HomeMembership.freeSubtitle
         }
+    }
+
+    /// Erases the account's local data, then ends the session — which drops the whole shell back
+    /// to the login gate, so there is nothing left to navigate back to.
+    ///
+    /// `store.reset()` comes FIRST and on purpose: the hub's progress is live in memory, and a
+    /// store that persisted itself after the file had been removed would quietly write the deleted
+    /// progress straight back. Reset, then erase, then sign out.
+    private func deleteAccount() {
+        store.reset()
+        AccountDeletion.eraseAll()
+        withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { login.signOut() }
     }
 
     /// Ends the session. Same fade as signing in, played in reverse by the gate in `PhoneApp`.

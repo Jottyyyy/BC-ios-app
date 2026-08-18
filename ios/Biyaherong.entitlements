@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Sign in with Apple. Wired via CODE_SIGN_ENTITLEMENTS in ios/project.yml. It sits HERE rather than in App/ for the
+  same reason Biyaherong.storekit does: everything under App/ is swept into the target by the
+  `- path: App` source entry, and an entitlements plist copied into the app bundle as a resource
+  is not what anybody wants. Out here it needs an explicit entry with `buildPhase: none`.
+
+  Committed rather than generated from XcodeGen's `entitlements:` block, for the same reason the
+  app icon catalog is committed (see the comment beside ASSETCATALOG_COMPILER_APPICON_NAME): a
+  build whose entitlement file is missing still succeeds, and the failure only shows up at runtime
+  as a sheet that never appears.
+
+  This file alone is not enough. The capability must ALSO be enabled for the App ID
+  (com.prince24pogi.biyaherongchessapp) in the Apple Developer portal, or signing fails outright.
+  And note the free CI path — codemagic.yaml's `ios-free-unsigned` — archives with
+  CODE_SIGNING_ALLOWED=NO, so entitlements are never applied there: that .ipa compiles but cannot
+  sign in. Use `ios-testflight` to test the login. See ios/BUILD-iOS.md.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>
