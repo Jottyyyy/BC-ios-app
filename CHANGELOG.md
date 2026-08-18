@@ -9,6 +9,33 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — A fresh checkout failed the QA gate on Windows: text files are now pinned to LF
+
+Found by dogfooding the worktree rule added in the entry below this one — the first `git worktree add`
+produced a checkout that failed `node tools/qa/js_goldens.js` with **8 assertion failures across
+ReplayLogin and ReplayPremium**, on a branch whose diff touched nothing but Markdown.
+
+**The cause.** The repo stores LF, but `core.autocrlf=true` (the Git-for-Windows default) materialises
+CRLF on checkout, and there was no `.gitattributes` to say otherwise. `tools/qa/replay_login.js` and
+`replay_premium.js` read multi-line Swift string literals — the ones written with a trailing `\`
+continuation — straight out of `LoginMetrics.swift` and the paywall strings, and they do not strip the
+`\r`. Every such string came back with literal `\r\n` and unjoined continuations, so all 8 compared
+unequal against the JS twin. **This was invisible for the whole project so far** because the Swift in the
+existing checkout was written locally with LF and never round-tripped through a checkout; anyone cloning
+this repo on Windows would have hit it on day one.
+
+Proof rather than inference: converting the single file `LoginMetrics.swift` to LF and re-running took
+`ReplayLogin` from *383 passed, 2 failed* to **385 passed, 0 failed**, with `git diff` reporting no
+content change.
+
+**The fix.** A new `.gitattributes` — `* text=auto eol=lf` plus explicit `binary` for `.png`, `.webp`,
+`.mp3`, `.ttf`, `.sqlite` and `.pdf`. Every checkout on every platform now lands the same bytes the
+tooling expects. **Nothing committed changes** — the blobs were already LF; this only governs what is
+written into the working tree. As a bonus it also stops `php tools/eco/build_eco.php` from dirtying
+`DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` and `web-demo/js/eco-data.js` with line-ending-only diffs.
+
+`web-demo/` unaffected.
+
 ### 2026-08-18 (docs) — A worktree per task, changelog-first, and landing via PR
 
 Process, not code. `web-demo/` unaffected — nothing user-facing changed.

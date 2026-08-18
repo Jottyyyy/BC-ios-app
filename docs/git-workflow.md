@@ -12,7 +12,9 @@ gives a diff to read before anything ships.
 ## Key files
 - [`../CLAUDE.md`](../CLAUDE.md) — the ten rules. They are binding; this file is only the commands.
 - [`../CHANGELOG.md`](../CHANGELOG.md) — read the **top** before starting; add an entry before landing.
-- [`../.gitignore`](../.gitignore) — ignores `.claude/worktrees/`, so worktrees never show up as untracked.
+- [`../.gitignore`](../.gitignore) — ignores `.claude/worktrees/`, so worktrees never show as untracked.
+- [`../.gitattributes`](../.gitattributes) — pins text files to LF. Without it a fresh checkout gets CRLF
+  and the Swift-source replay suites fail on strings alone. Do not remove it.
 
 ## 1 · Before you start
 Read the newest entries at the top of `CHANGELOG.md` (it is 2500+ lines — read the top, never the whole
@@ -43,22 +45,36 @@ assistant actually needs. Two caveats, both real:
   `worktree-fix+foo`, not `fix/foo`. Rename it immediately, from inside the worktree:
   `git branch -m fix/foo`.
 - **It isolates the shell.** A worktree session refuses any command it cannot prove stays inside the
-  worktree — no `cd`, no `/tmp`, no long `&&` chains with redirects. Use plain, separate commands and
-  worktree-relative paths.
+  worktree — no `cd`, no `/tmp`, no long `&&` chains with redirects, and not even `grep -c $'\r' file`.
+  Use plain, separate commands and worktree-relative paths.
 
 It defaults to `worktree.baseRef: fresh` (branch from `origin/main`). Setting `worktree.baseRef: head`
 branches from local HEAD instead — only useful when you deliberately want to stack on unpushed work.
 
 ## 3 · Set up a fresh worktree
-A new worktree contains **only tracked files**, so everything in `.gitignore` is missing:
+A worktree contains **only tracked files**, so everything in `.gitignore` is missing. Worse, anything that
+finds the sibling Laravel repo by relative path breaks: a worktree sits three levels deep, so the oracle's
+`tools/oracle/../../..` resolves to `.claude/worktrees/` instead of `D:\SAAS PROJECT\BYAHERONG-COACH`.
 
-| Missing | Fix | Notes |
+```bash
+export LARAVEL_ROOT="D:/SAAS PROJECT/BYAHERONG-COACH/BYAHERONG-COACH-LARAVEL"
+php tools/oracle/generate_goldens.php   # Goldens/ is gitignored and does NOT come along
+php tools/eco/build_eco.php             # Goldens/eco_lookup.json + eco_book.tsv
+```
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `Goldens/` | `php tools/oracle/generate_goldens.php` | **Do this before any parity run.** Without it the run is vacuous, not green. |
-| `.build/` | `swift build` | Cold build, macOS only. |
-| — | *nothing to install* | The `tools/qa` suite is dependency-free Node; there is no `npm install`. |
+| `MISSING Goldens/game_review.json` | `Goldens/` is gitignored | `php tools/oracle/generate_goldens.php` |
+| `MISSING Goldens/eco_lookup.json` | same | `php tools/eco/build_eco.php` |
+| `WARNING: skipping the san_parse + pgn_tokens goldens` | `LARAVEL_ROOT` unset; the relative lookup fails from a worktree | set `LARAVEL_ROOT` and re-run. **Never ignore this** — it is a warning, not an error, and it silently truncates the goldens. `ParityRunner` then fails its `san_parse`/`pgn_tokens` floors. |
+| `FATAL: cannot find the real ChessEngine` | same, but from `build_eco.php` | same |
 
-`DemoApp/Sources/BiyaherongUI/puzzles.sqlite` **is** tracked, so it comes along.
+`build_eco.php` rewrites two **tracked** files — `DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` and
+`web-demo/js/eco-data.js`. Check `git status` afterwards; if `git diff --stat` on them is empty,
+`git checkout --` them. Regenerating them is not part of your change.
+
+`DemoApp/Sources/BiyaherongUI/puzzles.sqlite` **is** tracked and comes along. There is no `npm install` —
+the `tools/qa` suite is dependency-free Node. `.build/` is absent, so the first `swift build` is cold.
 
 ## 4 · Do the work, then log it
 Update `CHANGELOG.md` (new entry at the top, under `## [Unreleased]`, shaped
@@ -76,6 +92,10 @@ swift run ParityRunner               # macOS only; must exit 0
 
 CI (`codemagic.yaml`) has no `triggering:` block and runs **none** of these — both workflows are started by
 hand and only build the iOS app. A red gate merged is a regression shipped.
+
+If a Replay suite fails on **string contents alone** while your diff touched no Swift, suspect line endings
+before you suspect the code: `file <the .swift file>` should say LF, not CRLF. That is what `.gitattributes`
+is there to prevent.
 
 ## 6 · Land it
 
