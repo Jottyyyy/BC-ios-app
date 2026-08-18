@@ -50,15 +50,20 @@ targets:
         PRODUCT_NAME: Biyaherong
         # This app ships into the EXISTING "Biyaherong Chess Coach" App Store Connect record,
         # replacing the earlier Expo/React-Native build. App Store Connect refuses any version
-        # at or below one it already has, and that record is already at 1.0.4 — hence 1.0.5.
-        MARKETING_VERSION: "1.0.5"
+        # at or below one it already has. That record reached 1.0.4, then 1.0.5 consumed builds
+        # 38-42 — hence 1.0.6, which is the first version to carry a REAL Sign in with Apple
+        # (builds 38-42 all shipped the simulated button, which is why they never needed the
+        # com.apple.developer.applesignin entitlement and this one does).
+        MARKETING_VERSION: "1.0.6"
         # Build number, unique per version string. Version 1.0.4 already reached build 37 in
         # App Store Connect, so continuing at 38 keeps the sequence monotonic across the whole
         # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
         # CI overwrites it with $BUILD_NUMBER (see codemagic.yaml).
         #
-        # KEEP THIS IN SYNC WITH WHAT WAS ACTUALLY DELIVERED. Builds 38 through 43 are all
-        # consumed in App Store Connect; 43 shipped 2026-08-18. Earlier uploads each passed
+        # KEEP THIS IN SYNC WITH WHAT WAS ACTUALLY DELIVERED. Builds 38-42 are consumed in App
+        # Store Connect, all under 1.0.5; 42 shipped 2026-08-17. 43 is the first build of 1.0.6
+        # and has NOT been delivered yet. The number keeps climbing across version trains rather
+        # than resetting to 1, which is what the paragraph above means by monotonic. Earlier uploads each passed
         # CURRENT_PROJECT_VERSION on the xcodebuild command line and left this line reading "38",
         # so the file said 38 while the record was already at 40 — the next person to trust it
         # would have been rejected as a duplicate. The next manual upload must use 44 or higher.

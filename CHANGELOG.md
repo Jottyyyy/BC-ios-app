@@ -26,8 +26,12 @@ all of them invisible on the Windows checkout because there is no Swift compiler
    `onOpeningTrainer` (the declaration has them the other way), and `Theme.nunito(13, .semibold)` used
    SwiftUI's spelling; the `NunitoWeight` case is `.semiBold`.
 
-**Changed.** `ios/project.yml`: `CURRENT_PROJECT_VERSION` 42 → **43** (42 was consumed 2026-08-17; the
-next manual upload must use 44 or higher). `ios/Biyaherong.xcodeproj` regenerated.
+**Changed.** `ios/project.yml`: `MARKETING_VERSION` 1.0.5 → **1.0.6**, `CURRENT_PROJECT_VERSION` 42 →
+**43**. 1.0.5 consumed builds 38-42 and this goes out as a new version rather than another build on the
+old one; the build number keeps climbing across version trains instead of resetting to 1, which is what
+the "monotonic" note beside it has always meant. **1.0.6 is the first version whose Apple sign-in is
+real** — 38-42 all shipped the simulated button, which is exactly why none of them ever needed the
+`com.apple.developer.applesignin` entitlement and this one does. `ios/Biyaherong.xcodeproj` regenerated.
 
 **Verified on the archive, which is what Windows could not do.** `PrivacyInfo.xcprivacy` really is at
 `Biyaherong.app/PrivacyInfo.xcprivacy` — the inference recorded beside `GENERATE_INFOPLIST_FILE` was
