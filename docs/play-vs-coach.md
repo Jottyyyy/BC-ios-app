@@ -17,7 +17,18 @@ Status: **complete in both languages, including the offline game review (§2.10)
 
 | File | What it owns |
 |---|---|
-| `web-demo/js/coach-engine.js` | Strength: `LEVEL_CONFIG` (depth + MultiPV per level), `pickMove` with an injected RNG, and the think-time pacer. |
+| `web-demo/js/coach-engine.js` | Strength: `LEVEL_CONFIG` (depth + MultiPV + **movetime** per level), `pickMove` with an injected RNG, and the think-time pacer. |
+
+**The five levels now have five clocks — 0.3/0.6/1/2/4 s.** They used to share one flat 1 s cap
+carried over from the Python service. Because depth is only a ceiling and the engine reaches a mean
+depth of ~6 in a second, levels 4 and 5 never came near their 10 and 15 and played identically:
+"Coach Pogi" and "Mommy Julie" were the same opponent in different art. Level 3 keeps exactly 1000 ms,
+so the middle of the ladder is unchanged. Recorded as a deviation in `PORTING_NOTES.md`.
+
+`thinkMs` is a different knob and was deliberately left alone: it is a **floor** on the reply, awaited
+in parallel with the search, so the reply lands at `max(search, floor)`. Levels 4 and 5 simply stop
+being paced. Raising the floors to match would make fast positions — a book move, a forced recapture —
+artificially slow, which is the opposite of what a floor is for.
 | `web-demo/js/coach-book.js` | The per-persona opening book. Declarative `[history, move]` rows; an illegal book move falls through to the engine **silently**. |
 | `web-demo/js/coach-game.js` | The record, threefold, the result, the per-level 7-day draft. |
 | `web-demo/js/coach-turn.js` | Whose turn it is, the premove, the nav rules, and the **generation counter**. |

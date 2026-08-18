@@ -114,16 +114,24 @@ function run() {
   // ── CoachEngine: the level table ────────────────────────────────────────────
   {
     const rows = [...code(swEngine).matchAll(
-      /(\d+):\s*Config\(depth:\s*(\d+),\s*numMoves:\s*(\d+)\)/g)];
+      /(\d+):\s*Config\(depth:\s*(\d+),\s*numMoves:\s*(\d+),\s*movetimeMs:\s*(\d+)\)/g)];
     eq(rows.length, 5, 'five levels in the Swift LEVEL_CONFIG');
-    for (const [, lv, depth, numMoves] of rows) {
+    for (const [, lv, depth, numMoves, movetimeMs] of rows) {
       const js = ENG.LEVEL_CONFIG[Number(lv)];
       expect(!!js, `Swift has a level ${lv} the JS does not`);
       if (!js) continue;
       eq(js.depth, Number(depth), `L${lv} depth`);
       eq(js.numMoves, Number(numMoves), `L${lv} numMoves`);
+      // Per level since the flat `movetimeCapMs` was retired. This is the constant that decides
+      // real strength, so a drift here is a silently different opponent in one language.
+      eq(js.movetimeMs, Number(movetimeMs), `L${lv} movetimeMs`);
     }
-    eq(ENG.MOVETIME_CAP_MS, swNum(swEngine, 'movetimeCapMs'), 'the 1 s movetime cap');
+    expect(!/movetimeCapMs/.test(code(swEngine)),
+      'the flat movetime cap is gone from the Swift — it is per level now');
+    for (let lv = 1; lv < 5; lv++) {
+      expect(ENG.LEVEL_CONFIG[lv].movetimeMs < ENG.LEVEL_CONFIG[lv + 1].movetimeMs,
+        `the ladder is monotonic in time (L${lv} thinks less than L${lv + 1})`);
+    }
     eq(1, swNum(swEngine, 'minLevel'), 'minLevel');
     eq(5, swNum(swEngine, 'maxLevel'), 'maxLevel');
   }

@@ -32,22 +32,22 @@ var BiyaCoachEngine = (function () {
   // level 1 chooses uniformly among three lines at depth 2, so its mistakes are real moves a weak
   // player might find, not noise.
 
+  // `movetimeMs` is per level, and it is what actually sets strength: `depth` is only a ceiling,
+  // and at ~60k nodes/sec a one-second search reaches depth 5-6 in a middlegame. With one flat cap
+  // for all five, levels 4 and 5 never approached their 10 and 15 and played identically. L3 keeps
+  // exactly the old 1000 ms, so the middle of the ladder is unchanged. See CoachEngine.swift.
   var LEVEL_CONFIG = {
-    1: { depth: 2,  numMoves: 3 },
-    2: { depth: 4,  numMoves: 3 },
-    3: { depth: 7,  numMoves: 2 },
-    4: { depth: 10, numMoves: 1 },
-    5: { depth: 15, numMoves: 1 },
+    1: { depth: 2,  numMoves: 3, movetimeMs: 300 },
+    2: { depth: 4,  numMoves: 3, movetimeMs: 600 },
+    3: { depth: 7,  numMoves: 2, movetimeMs: 1000 },
+    4: { depth: 10, numMoves: 1, movetimeMs: 2000 },
+    5: { depth: 15, numMoves: 1, movetimeMs: 4000 },
   };
 
   var MIN_LEVEL = 1, MAX_LEVEL = 5;
 
-  /**
-   * The Python service capped every interactive search at 1 s, so the bots' real strength is the
-   * strength of a 1-second search. Keeping the cap preserves it; removing it would silently make
-   * every coach stronger than the one people have been playing.
-   */
-  var MOVETIME_CAP_MS = 1000;
+  /** The longest any coach may think. Level 5 is the one that reaches it. */
+  var MOVETIME_MAX_MS = 4000;
 
   function config(level) {
     return LEVEL_CONFIG[clampLevel(level)];
@@ -132,7 +132,7 @@ var BiyaCoachEngine = (function () {
   /** The limits to hand the engine for one reply. */
   function searchLimits(level) {
     var c = config(level);
-    return { depth: c.depth, multiPV: c.numMoves, movetimeMs: MOVETIME_CAP_MS };
+    return { depth: c.depth, multiPV: c.numMoves, movetimeMs: c.movetimeMs };
   }
 
   // ---- Self-test -------------------------------------------------------------------------------
@@ -152,8 +152,13 @@ var BiyaCoachEngine = (function () {
     eq(config(3).numMoves, 2, 'L3 width');
     eq(config(5).depth, 15, 'L5 depth');
     eq(config(5).numMoves, 1, 'L5 takes one line only');
-    eq(searchLimits(4).movetimeMs, 1000,
-       'every search keeps the 1 s cap the Python service imposed');
+    eq(config(3).movetimeMs, 1000,
+       'L3 still gets exactly the 1 s the Python service gave every level');
+    eq(searchLimits(5).movetimeMs, MOVETIME_MAX_MS, 'L5 thinks the longest');
+    for (var lv = 1; lv < 5; lv++) {
+      expect(config(lv).movetimeMs < config(lv + 1).movetimeMs,
+             'the ladder is monotonic in TIME too, not only in depth (L' + lv + ')');
+    }
     // An out-of-range level must still return a playable config rather than undefined — a deep link
     // with a bad level is spec 7 #35, where `COACH_DATA[NaN]` produced a white screen.
     eq(config(0).depth, config(1).depth, 'level 0 clamps to 1');
@@ -243,7 +248,7 @@ var BiyaCoachEngine = (function () {
   return {
     LEVEL_CONFIG: LEVEL_CONFIG, THINK_MS: THINK_MS,
     MIN_LEVEL: MIN_LEVEL, MAX_LEVEL: MAX_LEVEL,
-    MOVETIME_CAP_MS: MOVETIME_CAP_MS,
+    MOVETIME_MAX_MS: MOVETIME_MAX_MS,
     ENDGAME_PIECES: ENDGAME_PIECES, ENDGAME_SCALE: ENDGAME_SCALE,
     config: config, clampLevel: clampLevel, searchLimits: searchLimits,
     pickIndex: pickIndex, pickMove: pickMove, thinkTimeMs: thinkTimeMs,

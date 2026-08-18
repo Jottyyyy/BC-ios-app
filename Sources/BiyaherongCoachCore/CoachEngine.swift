@@ -23,32 +23,57 @@ public enum CoachEngine {
     // MARK: - Level configuration (spec §2.2, verbatim)
 
     public struct Config: Equatable, Sendable {
-        /// Search depth.
+        /// Search depth — a CEILING, not a target. At the ~60k nodes/sec this engine measures, a
+        /// one-second search reaches depth 5-6 in a middlegame, so levels 4 and 5 never came near
+        /// theirs. The clock below is what actually decides strength.
         public let depth: Int
         /// The MultiPV width to ask the engine for. This is what makes the weak levels weak: level
         /// 1 chooses uniformly among three lines at depth 2, so its mistakes are real moves a weak
         /// player might find, not noise.
         public let numMoves: Int
+        /// How long this level may think, in milliseconds.
+        public let movetimeMs: Int
     }
 
+    /// ## Why the movetime is per level
+    ///
+    /// All five levels used to share one flat `movetimeCapMs = 1000`. Because `depth` is only a
+    /// ceiling, the clock is what really sets strength — so a flat clock meant a flat ladder at the
+    /// top. Measured over `engine_budget_check.js`'s six positions this engine reaches a mean depth
+    /// of 6.33 at 1200 ms; levels 4 and 5 ask for 10 and 15 and got neither, which made "Coach
+    /// Pogi" and "Mommy Julie" the same opponent in different art.
+    ///
+    /// **Level 3 still gets exactly 1000 ms**, so the middle of the ladder plays precisely as it
+    /// always has and the change is anchored to the old behaviour at one point.
+    ///
+    /// ## How this composes with `thinkMs`, which is NOT the same knob
+    ///
+    /// `thinkMs` below is a **floor** on the reply, awaited in parallel with the search so a coach
+    /// never answers instantly. This is a **ceiling** on the search. The reply therefore lands at
+    /// `max(search, floor)`, and the two do not need to agree: a level whose search outruns its
+    /// floor simply stops being paced, which is what happens at levels 4 and 5 now. Raising the
+    /// floors to match would make *fast* positions — a book move, a forced recapture — artificially
+    /// slow, which is the opposite of what the floor is for. They are deliberately left alone.
+    ///
+    /// **Endgames are bounded by `depth`, not by this clock.** `endgameScale` trims the think floor
+    /// only, so nothing here scales down on a near-empty board — but nothing needs to: a sparse
+    /// position reaches level 5's depth-15 ceiling long before 4 s, and terminating on the ceiling
+    /// is precisely what `EngineSettings` says `maxDepth` exists for.
+    ///
+    /// A sanctioned DEVIATION from the Python service's flat cap — see PORTING_NOTES.md.
     public static let levelConfig: [Int: Config] = [
-        1: Config(depth: 2, numMoves: 3),
-        2: Config(depth: 4, numMoves: 3),
-        3: Config(depth: 7, numMoves: 2),
-        4: Config(depth: 10, numMoves: 1),
-        5: Config(depth: 15, numMoves: 1),
+        1: Config(depth: 2, numMoves: 3, movetimeMs: 300),
+        2: Config(depth: 4, numMoves: 3, movetimeMs: 600),
+        3: Config(depth: 7, numMoves: 2, movetimeMs: 1000),
+        4: Config(depth: 10, numMoves: 1, movetimeMs: 2000),
+        5: Config(depth: 15, numMoves: 1, movetimeMs: 4000),
     ]
 
     public static let minLevel = 1
     public static let maxLevel = 5
 
-    /// The Python service capped every interactive search at 1 s, so the bots' real strength IS the
-    /// strength of a 1-second search. Keeping the cap preserves it; removing it would silently make
-    /// every coach stronger than the one people have been playing.
-    public static let movetimeCapMs = 1000
-
     public static func config(level: Int) -> Config {
-        levelConfig[clamp(level: level)] ?? Config(depth: 2, numMoves: 3)
+        levelConfig[clamp(level: level)] ?? Config(depth: 2, numMoves: 3, movetimeMs: 300)
     }
 
     /// Spec §7 #35: a deep link can arrive with a level that is not a level, and the RN app indexed
@@ -158,6 +183,6 @@ public enum CoachEngine {
     /// The limits to hand the engine for one reply.
     public static func searchLimits(level: Int) -> Limits {
         let c = config(level: level)
-        return Limits(depth: c.depth, multiPV: c.numMoves, movetimeMs: movetimeCapMs)
+        return Limits(depth: c.depth, multiPV: c.numMoves, movetimeMs: c.movetimeMs)
     }
 }
