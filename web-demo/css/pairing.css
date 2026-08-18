@@ -127,7 +127,10 @@
 
 /* ---- Create ---- */
 .pgc-body { flex: var(--pgc-body-flex); padding: var(--pgc-body-content-padding);
-  overflow-y: auto; }
+  overflow-y: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pgc-body::-webkit-scrollbar { width: 0; height: 0; }
 .pgc-label { font-size: var(--pgc-label-font-size); font-weight: var(--pgc-label-font-weight);
   color: var(--pgc-label-color); letter-spacing: var(--pgc-label-letter-spacing);
   text-transform: uppercase; margin-bottom: var(--pgc-label-margin-bottom); }

@@ -103,6 +103,12 @@
     inputTextSize: 15,
     inputPadH: 14,
     inputPadV: 12,
+    // INVENTED — the RN form has no PGN box, so there is nothing to extract. Taken from
+    // `pairing.css`'s `.pgd-modal-area`, the app's other paste-a-blob field, so the two agree.
+    // It lives here rather than in the stylesheet because a number written in CSS is a number no
+    // gate and no Swift twin can see: it was `min-height: 160px` inline, the only literal in the
+    // whole --op-* block, contradicting the block's own header comment.
+    pgnMinHeight: 160,
     toggleGap: 8,
     toggleRadius: 10,
     togglePadV: 12,

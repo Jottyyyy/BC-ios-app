@@ -1,7 +1,7 @@
 # home-screen — the app's landing dashboard
 
 A dark-navy, **never-scrolling**, single-viewport dashboard: a header, a 3×2 grid of six equal cards, an
-hourly-rotating Taglish quote, and two bottom banners. It is the first tab of the phone app.
+hourly-rotating Taglish quote, and a bottom banner. It is the first tab of the phone app.
 
 It is **presentation only** — no networking, no persistence, no navigation. Every dynamic value is a view
 input and every tap is a closure the caller supplies, so the screen is a pure function of its arguments.
@@ -14,13 +14,14 @@ Ported from the React Native app's `app/(app)/user/home.tsx` in the sibling
 - **Run it (macOS):** `cd DemoApp && swift run DemoApp` → the **Phone UI** panel. The Sky/Colorful picker
   sits above the phone frame.
 - **Assertions:** `cd DemoApp && swift run HomeMetricsCheck` (macOS) or
-  `node -e "console.log(require('./web-demo/js/home.js').selfTest().summary)"` (anywhere).
+  `node -e "console.log(require('./web-demo/js/home.js').selfTest().summary)"` (anywhere), plus
+  `node tools/qa/home_chrome_check.js` for the header/banner invariants that span both languages.
 
 ## The four bands
 
 ```
 ┌──────────────────────────────────────┐
-│  avatar · logo · search              │  fixed height
+│  avatar · brand logo · (balance)     │  fixed height
 ├──────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐          │
 │  │  card 1  │  │  card 2  │          │  ← row 1
@@ -32,12 +33,25 @@ Ported from the React Native app's `app/(app)/user/home.tsx` in the sibling
 ├──────────────────────────────────────┤
 │  " quote of the hour "     — Coach   │  fixed height
 ├──────────────────────────────────────┤
-│  [ ♟️ Donate ]      [ ⭐ Premium ]    │  fixed height
+│  [        ⭐ Premium         ]       │  fixed height
 └──────────────────────────────────────┘
 ```
 
 The header, quote strip and banner row are **fixed heights computed up front**; the grid is the only
 flexible band. It takes exactly the leftover, then splits it into three equal rows of two equal tiles.
+
+Two of those bands hold a deliberate emptiness, and both are load-bearing:
+
+- **The header's third slot is an empty 38 pt box.** It used to be a 🔍 button whose tap went nowhere;
+  the client asked for it gone. But the logo is centred by being *flanked by two equal controls*, so
+  deleting the button outright would shove the mark 19 pt right. The counterweight takes `avatarSize`,
+  because the avatar is what it balances.
+- **The banner band is still sized for a two-line subtitle**, though the one banner left has one line.
+  That height was pinned to Donate's `"Help sponsor / a student"`; Donate is gone (Apple does not permit
+  an app to collect donations) but the height feeds `fixedBandsHeight` → `gridHeight` →
+  `tile(inGridContent:)`. Trimming it to one line would silently resize all six cards on every device.
+
+`tools/qa/home_chrome_check.js` asserts both, in both languages, along with the mark's asset and curve.
 
 Two things about that are worth knowing before touching the layout:
 
@@ -112,6 +126,7 @@ why the tile pressed, dimmed, and did nothing at all.
 | `DemoApp/Sources/BiyaherongUI/HomeParts.swift` | Header trio, quote strip, banners, the press-feedback `ButtonStyle`. |
 | `DemoApp/Sources/BiyaherongUI/HomeArt.swift` | Bundled card artwork loader + `HomeCardIcon` / `HomeAppIcon`. |
 | `DemoApp/Sources/BiyaherongUI/HomeMetricsCheck.swift` | The runnable self-check (no XCTest in this toolchain). |
+| `tools/qa/home_chrome_check.js` | The cross-language gate on this file's header and banner band: the brand asset, the squircle proportion, the counterweight, the absence of Donate/search, and the two-line band height. |
 | `DemoApp/Sources/BiyaherongUI/Images/` | The six art assets. Declared `.copy` in `Package.swift`, so **every lookup passes `subdirectory: "Images"`**. |
 | `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | Hosts it as tab 0 and supplies the scale basis. |
 | `web-demo/js/home.js` | The browser mirror. Its top half is a line-for-line port of the pure layer. |
@@ -128,7 +143,16 @@ why the tile pressed, dimmed, and did nothing at all.
 | `isColorful` | Which theme renders |
 | `scaleBasis` | The size the responsive scalar derives from — see below |
 
-Plus ten tap callbacks (avatar, search, six cards, two banners), all defaulting to `{}`.
+Plus eight tap callbacks (avatar, six cards, the membership banner), all defaulting to `{}`.
+`onSearch` and `onDonate` were removed with the controls that raised them.
+
+**The header mark is the brand logo, not the app icon.** `Images/brand-logo.png` is the "Byaherong COACH
+APP" collage; `Images/app-icon.png` is the gold knight, which stays on the Play-with-Coach ring and the
+iOS app icon. That choice forces the shape: the collage carries a wordmark across its bottom edge, so it
+is clipped to a **squircle**, at the login hero's own corner proportion
+(`LoginLayout.logoRadius / LoginLayout.logoSize`) rather than a second hand-picked radius — same mark,
+same curve, both screens. The radius is a *ratio* because `logoSize` spans 41–92 pt: a fixed one would
+read as a circle at the small end and a square at the large one.
 
 **`scaleBasis` is not cosmetic.** The host passes the whole phone shell, matching the original's
 `Dimensions.get('window')`. Deriving the scalar from the screen's own box instead would make every icon and

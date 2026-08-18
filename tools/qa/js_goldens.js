@@ -44,6 +44,8 @@ var SKEYS = require(path.join(__dirname, 'swift_source_keys.js'));
 var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
 var SLAYOUT = require(path.join(__dirname, 'swift_layout_check.js'));
 var NAVICONS = require(path.join(__dirname, 'nav_icons_check.js'));
+var HCHROME = require(path.join(__dirname, 'home_chrome_check.js'));
+var WSHELL = require(path.join(__dirname, 'web_shell_check.js'));
 var TGATE = require(path.join(__dirname, 'trial_gate_check.js'));
 var OTREE = require(path.join(JS, 'opening-tree.js'));
 var OMET = require(path.join(JS, 'opening-metrics.js'));
@@ -160,6 +162,8 @@ record('board layout invariants', LAYOUT.selfTest());
 // the greedy one-axis frame that pushed the Streak solver into the middle of the phone.
 record('swift layout invariants', SLAYOUT.selfTest());
 record('nav icon invariants', NAVICONS.selfTest());
+record('home chrome invariants', HCHROME.selfTest());
+record('web shell wiring', WSHELL.selfTest());
 record('trial gate invariants', TGATE.selfTest());
 record('opening-tree.selfTest', OTREE.selfTest());
 record('opening-metrics.selfTest', OMET.selfTest());

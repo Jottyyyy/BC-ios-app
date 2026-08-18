@@ -1800,6 +1800,70 @@ first move now, and dead code that looks live is worse than none.
 
 ---
 
+## Home chrome — client revision (2026-08-18, fourth round)
+
+Three asks, one screen: remove Donate, replace the header knight with the brand mark, remove the
+search button. Each is a deletion, and in each case the *deletion* was the easy half.
+
+### Donate: the height outlives the banner
+
+Apple does not permit donation collection outside an approved non-profit flow, and this one had no
+flow at all — `onDonate` defaulted to `{}` and no host ever passed it, in either language. Removing
+the banner, `HomeDonate`, `HomePalette.sponsor`, `.home-banner.sponsor`, `--home-sponsor` and the
+JS `DONATE` table is mechanical.
+
+**`HomeScreenMetrics.bannerHeight` is deliberately NOT reduced.** It budgets
+`naturalLineHeight(bannerSubSize) * 2` because Donate's `"Help sponsor\na student · ₱99"` was the
+two-line subtitle and both banners were pinned to the taller one. The surviving Membership banner
+has a one-line subtitle, so the obvious tidy-up is to drop the `* 2` — and it would be wrong.
+`bannerHeight` feeds `fixedBandsHeight` → `gridHeight(container:)` → `tile(inGridContent:)`: the
+grid is the only flexible band, so shrinking a fixed one grows all six cards, on every device, and
+`3·h + 2·gap == gridHeight` is an exact identity the self-check pins. A colour request must not
+change tile geometry. The comment now explains the coupling without naming a banner that no longer
+exists, and `home_chrome_check.js` fails if the `* 2` is ever removed.
+
+### The header mark: the asset was always there
+
+`Images/brand-logo.png` — the "Byaherong COACH APP" collage — has shipped in the bundle since the
+login screen landed, and only the login hero drew it. `Images/app-icon.png`'s gold knight is the
+**app icon**, and it was standing in for the brand on the Home header. `HomeLogo` now passes
+`asset: .brandLogo` through the `asset:` parameter `HomeAppIcon` gained for exactly this case, so
+nothing new ships and `Diagnostics.swift`'s hard count of 6 PNGs + 1 SVG is untouched. The knight
+keeps the Play-with-Coach ring and the iOS icon.
+
+**The shape had to change with it.** The knight is a square field and reads fine in a `Circle()`;
+the collage carries a wordmark across its bottom edge, which a circle crops off. So a squircle —
+and its radius is **`LoginLayout.logoRadius / LoginLayout.logoSize`**, referenced rather than
+re-typed. Same mark, same curve, both screens; a second hand-picked radius is precisely how two
+copies of one brand drift apart.
+
+It has to be a **ratio**, not a size: `logoSize` is `(54 * scale).rounded()` over a 0.75–1.7 scale
+range, i.e. 41–92 pt. A fixed 13 pt radius would read as a near-circle on a small phone and a
+near-square on an iPad. Radii land at 10 / 13 / 22 pt at the three reference scales, asserted in
+`HomeMetricsCheck` §12.
+
+The browser half cannot take the ratio by reference — `login.js` is a separate IIFE and `home.js`
+has no load-order guarantee over it — so it restates `30 / 124` with a comment naming the source.
+That restatement is exactly the "two hand-typed copies" risk `CLAUDE.md` warns about, so the new
+gate reads both Swift login constants, both JS login constants and the JS fraction, and asserts all
+four agree.
+
+### The search button: deleting it is two changes, not one
+
+`HomeSearchButton` was a 🔍 emoji in a 38 pt circle whose `onSearch` defaulted to `{}` and was never
+passed. Removing it retires `HomeLayout.searchSize`, `searchEmojiSize` and `HomePalette.searchFill`
+as well.
+
+**The counterweight is the non-obvious half.** `HomeHeader` is `HStack(spacing: 0)` with the avatar,
+then `HomeLogo(...).frame(maxWidth: .infinity)`, then the button. The logo is at true screen centre
+*because* it is flanked by two equal-width controls; with one side gone it centres in an asymmetric
+gap and lands 19 pt right. So the slot survives as `Color.clear.frame(width: HomeLayout.avatarSize)`
+in Swift and `.home-header-balance` in CSS, and the gate asserts the CSS width equals the Swift
+`avatarSize` — 38 in both — rather than trusting two literals.
+
+Home's `🔍` had been on the documented "deliberate emoji, out of scope for vectorisation" list in
+`docs/navigation-chrome.md` and above in this file; both now record that the button itself went, so
+there is no glyph left to exempt.
 ## The trial gate — a reversed product decision (2026-08-18, fourth round)
 
 Client, round 4: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi sila naka 7-days
@@ -1955,6 +2019,61 @@ pair refuses with a named message. The download belongs in `ContentClient` (spec
 `URLSession` sites in the app), and putting a second one in a SwiftUI button is exactly the leak that
 rule exists to prevent. `replay_opening_tree.js` §7 asserts the two languages agree on the set.
 
+## The web shell — two things that were never wired (2026-08-18, round-4 follow-up)
+
+Both found by the client, both invisible to every suite, and both the same shape: something correct
+on disk that never reaches the page.
+
+### `coach.css` was never linked
+
+`web-demo/index.html` listed `theme.css`, `app.css`, `pairing.css` — and not `coach.css`. Since
+`bbb11ba`. The whole Play vs Coach family rendered with UA defaults the moment `app.js` started
+routing Play to it.
+
+**Why no gate caught it.** `docs/play-vs-coach.md` carried the caveat verbatim: *"the wiring has not
+been exercised in a real browser … `auditAppWiring()` reads `app.js` as source instead … that
+catches a control wired to nothing; it cannot catch a layout problem."* That was exactly right.
+Worse, the bug had already been **noticed** a round earlier (`CHANGELOG.md:590`) and the guard
+written for it — `replay_login.js:332-333` — asserts only that `app.css` is linked. A guard written
+for one file, for a class of bug that is about *all* files.
+
+The lesson is the one this repo keeps relearning in a new place: a check that reads the same source
+the code reads cannot see a wiring gap. `tools/qa/web_shell_check.js` asks the page instead — every
+stylesheet on disk is linked, every script is loaded or is a verified Worker.
+
+### The scrollbar rule was documentation, not enforcement
+
+`app.css:9`: *"Hide scrollbars everywhere for an app-like look (scrolling still works)"*, applied to
+`html, body`. **`scrollbar-width` is not an inherited property**, and a `::-webkit-scrollbar`
+pseudo-element matched on `html, body` does not cascade to descendants. Every nested scroll band has
+to declare both halves itself. Thirteen did not.
+
+Only the `.an-*` family had it right, because it is the most recently finished screen family and
+copied its own neighbours. The Opening Tree, added in this same round, inherited the omission from
+the puzzle screens it was modelled on.
+
+### DEVIATION resolved: `resize` is banned outright
+
+`resize: vertical` appeared on four textareas. **iOS has no resize handle**, so each one was an
+affordance the browser offered and the Swift app could not — a divergence the mirror is supposed to
+prevent, not create. `pairing.css`'s `.pgd-modal-area` already had `resize: none` and is where the
+Opening Tree's box was copied from, with that single line flipped.
+
+All five are `none`. The gate bans any other value, so the mirror cannot grow a control the app
+cannot have.
+
+### INVENTED constant: `OpeningLayout.pgnMinHeight = 160`
+
+The RN form has no PGN box, so there is nothing to extract. Taken from `.pgd-modal-area`'s 160 px,
+the app's other paste-a-blob field, so the two agree.
+
+It had been living as `min-height: 160px` inline in `app.css` — the only numeric literal in the
+`--op-*` block, contradicting the block's own header comment and `openings.js:8`. A number written
+in a stylesheet is a number no gate and no Swift twin can see, which is precisely how the two
+languages came to disagree: `TextField(axis: .vertical)` grows from **one line**, so the browser
+showed a 160 pt paste target and the app a single-line input. Both take the metric now, and
+`replay_opening_tree.js` compares it because it loops over every `LAYOUT` key.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had
@@ -2062,4 +2181,5 @@ Full write-up in `docs/navigation-chrome.md`. The deviations and decisions that 
 coincidence); and `coach-select.js` read an `STR.backArrow` that is undefined everywhere.
 
 **Deliberately out of scope**, at the user's choice: the nine Analysis toolbar emoji, the four
-transport arrows, the ☰ menu's own `✕`, and Home's `🔍`.
+transport arrows, and the ☰ menu's own `✕`. (Home's `🔍` was on this list until round 4, when the
+client asked for the button itself — which had never been wired to anything — to be removed.)

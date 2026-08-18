@@ -189,9 +189,17 @@ In the browser: open `web-demo/index.html` and pick **Play**, or the **Play vs C
 Choose a coach → choose a colour → play. Leaving mid-game and returning offers **Continue**; the
 draft is per level and kept 7 days.
 
-> The wiring has not been exercised in a real browser from this checkout — the automation extension
-> could not reach a local server, so `auditAppWiring()` in `coach_screen_test.js` reads `app.js` as
-> source instead: it asserts the routes exist, that every callback the game screen offers is
-> supplied, that both generation guards are present, and that the retired sample screen is gone.
-> That catches a control wired to nothing; it cannot catch a layout problem. First run in a browser
-> is worth a look.
+> **That caveat came true, exactly as written.** It used to read: *"the wiring has not been
+> exercised in a real browser … `auditAppWiring()` reads `app.js` as source instead … that catches a
+> control wired to nothing; it cannot catch a layout problem. First run in a browser is worth a
+> look."*
+>
+> The first run in a browser found one: **`css/coach.css` was never linked in `index.html`.** All
+> 507 lines and all 21 `.cgs-*` rules were correct and on disk; the page simply never loaded them,
+> so every screen here rendered as unstyled UA buttons — white text on the default light button
+> face. Only two classes resolved, and both came from `app.css`: `nav-icon` (which is why the back
+> button was a grey square) and `.view.flush` (which is why the text ran edge to edge).
+>
+> `coach_screen_test.js` could not have caught it: it reads `coach.css` off disk at line 25, which
+> validates the file in complete isolation from whether the page loads it. `tools/qa/web_shell_check.js`
+> now asserts every stylesheet in `css/` is linked.

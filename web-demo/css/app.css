@@ -6,9 +6,17 @@
 /* ---- Site chrome (website showcase) --------------------------------------- */
 body { min-height: 100dvh; }
 
-/* Hide scrollbars everywhere for an app-like look (scrolling still works). */
+/* Hide scrollbars everywhere for an app-like look (scrolling still works).
+   `scrollbar-width` does NOT inherit and `::-webkit-scrollbar` does not cascade, so this pair only
+   covers the page itself — every nested scroll band declares it again. tools/qa/web_shell_check.js
+   fails the build if one forgets. */
 html, body { scrollbar-width: none; -ms-overflow-style: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
+
+/* A <textarea> scrolls by UA default and never declares `overflow`, so no selector scan can find
+   it. One element rule covers all five, in this sheet and in pairing.css. */
+textarea { scrollbar-width: none; -ms-overflow-style: none; }
+textarea::-webkit-scrollbar { width: 0; height: 0; }
 
 .site-banner {
   position: sticky; top: 0; z-index: 50;
@@ -305,10 +313,13 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-avatar .ha-initial { font-weight: 800; font-size: 18px; color: var(--on-gold); line-height: 1; }
 .home-avatar .ha-badge { position: absolute; bottom: -2px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-size: 10px; line-height: 1; }
 .home-logo-wrap { flex: 1; display: flex; justify-content: center; }
-.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: 50%; border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
+/* A squircle, not a circle: the mark is the "Byaherong COACH APP" collage and a circle crops its
+   wordmark off. --h-logo-r is set by home.js from the login hero's own radius proportion. */
+.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: var(--h-logo-r); border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
 .home-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.home-search { width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; background: var(--home-search-fill); font-size: 17px; line-height: 1; flex: none; }
-.home-search:active { opacity: .7; }
+/* Empty, and exactly the avatar's width. It is what keeps the logo at true screen centre now that
+   the magnifier button is gone — see the comment in home.js's header build. */
+.home-header-balance { width: 38px; height: 38px; flex: none; }
 
 /* Grid — `min-height: 0` / `min-width: 0` are load-bearing: without them a flex child refuses to
    shrink below its content size, the rows stop being exact thirds, and the screen overflows. */
@@ -372,7 +383,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-banners { flex: none; display: flex; gap: 8px; margin: 0 14px 10px; align-items: stretch; }
 .home-banner { flex: 1 1 0; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 8px; border-radius: 12px; text-align: center; background: var(--home-banner-fill); border: 1px solid var(--home-banner-border); }
 .home-banner:active { opacity: .85; }
-.home-banner.sponsor { background: var(--home-sponsor); border-color: transparent; }
 .home-banner.membership { background: var(--home-membership); border-color: transparent; }
 /* Premium's gold wash ALWAYS outranks the colorful purple — the gold state is the reward. */
 .home-banner.premium { background: var(--home-premium-fill); border-color: var(--home-premium-border); }
@@ -819,7 +829,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 .an-bs-input.narrow { width: 80px; flex: none; }
 .an-bs-input::placeholder { color: var(--an-text-muted); }
-.an-bs-notes { min-height: 56px; resize: vertical; }
+.an-bs-notes { min-height: 56px; resize: none; }
 .an-bs-results {
   display: flex; gap: var(--an-bs-res-gap);
   margin: 2px 0 var(--an-bs-res-mb);
@@ -945,7 +955,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 /* The board needs no edit-mode override any more: it is already the fixed `BOARD_SIZE` square the
    source's `editBoard` style specifies, in edit mode and out of it. Only the panel band changes,
    because the editor is taller than the ECO list and wants the room the hidden bands free up. */
-.an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; }
+.an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.an-view.editing .an-panels::-webkit-scrollbar { width: 0; height: 0; }
 .an-view.editing .an-engine { display: none; }
 .an-view.editing .an-strip { display: none; }
 /* board.tsx:4616 hides the whole status+toolbar row in edit mode, in its own words "to maximise
@@ -1025,7 +1036,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 
 /* PGN import/export, the annotation picker and the variation card — all in the bottom sheet */
 .an-md-pgn-input {
-  width: 100%; box-sizing: border-box; border: 0; outline: none; resize: vertical;
+  width: 100%; box-sizing: border-box; border: 0; outline: none; resize: none;
   font-family: var(--mono); background: var(--an-md-pgn-in-bg);
   border-radius: var(--an-md-pgn-in-r); padding: var(--an-md-pgn-in-pad);
   color: var(--an-md-pgn-in-color); font-size: var(--an-md-pgn-in-fs);
@@ -1289,7 +1300,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
                   font-weight: 600; margin-top: var(--pzp-stat-mt); }
 .pzp-divider { width: var(--pzp-div-w); height: var(--pzp-div-h); background: var(--pzp-div-c); }
 .pzp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-            padding: var(--pzp-top-gap) var(--pzp-top-ph) 0; }
+            padding: var(--pzp-top-gap) var(--pzp-top-ph) 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pzp-body::-webkit-scrollbar { width: 0; height: 0; }
 .pzp-bottom { flex: none; display: flex; flex-direction: column; gap: var(--pzp-bot-gap);
               padding: var(--pzp-bot-pt) var(--pzp-bot-ph) var(--pzp-bot-pb); }
 .pzp-info {
@@ -1365,7 +1379,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pz-delta { font-size: var(--pz-delta-fs); font-weight: 700; margin-top: var(--pz-delta-mt);
             min-height: 1em; }
 .pz-bottom { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-             padding: var(--pz-bottom-pad-t) var(--pz-bottom-pad-h) 0; }
+             padding: var(--pz-bottom-pad-t) var(--pz-bottom-pad-h) 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pz-bottom::-webkit-scrollbar { width: 0; height: 0; }
 .pz-wrong-row { display: flex; gap: var(--pz-row-gap); }
 .pz-wrong-row .pz-btn { flex: 1 1 0; }
 .pz-btn { border: 0; cursor: pointer; font-size: var(--pz-btn-fs); font-weight: 700;
@@ -1413,7 +1430,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
                   padding: var(--pz-sheet-input-pad-v) var(--pz-sheet-input-pad-h);
                   margin-bottom: var(--pz-sheet-input-mb);
                   border: 1px solid var(--pz-sheet-input-border); font-family: inherit; }
-.pz-sheet-notes { min-height: var(--pz-sheet-notes-h); resize: vertical; }
+.pz-sheet-notes { min-height: var(--pz-sheet-notes-h); resize: none; }
 .pz-sheet-row { display: flex; gap: var(--pz-sheet-row-gap); margin-top: var(--pz-sheet-row-mt); }
 .pz-sheet-row .pz-btn { flex: 1 1 0; font-size: var(--pz-sheet-btn-fs); }
 
@@ -1437,7 +1454,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzd-logo { width: 30px; height: 30px; border-radius: 50%; flex: none;
             border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6); }
 .pzd-content { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-               padding: 0 var(--pzd-content-ph) var(--pzd-content-pb); }
+               padding: 0 var(--pzd-content-ph) var(--pzd-content-pb);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pzd-content::-webkit-scrollbar { width: 0; height: 0; }
 .pzd-hero { background: var(--pz-card); border-radius: var(--pzd-hero-r);
             padding: var(--pzd-hero-pad); margin-bottom: var(--pzd-hero-mb);
             border: 1px solid var(--pzd-hero-border);
@@ -1622,7 +1642,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzk-list-title { flex: none; font-size: var(--pzk-list-title); font-weight: 700;
                   color: var(--pz-text);
                   padding: var(--pzk-list-pt) var(--pzk-list-ph) var(--pzk-list-pb); }
-.pzk-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzk-list-ph); }
+.pzk-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzk-list-ph); scrollbar-width: none; -ms-overflow-style: none; }
+.pzk-list::-webkit-scrollbar { width: 0; height: 0; }
 .pzk-row { display: flex; align-items: center; gap: var(--pzk-row-gap);
            background: var(--pz-card); border-radius: var(--pzk-row-r);
            padding: var(--pzk-row-pv) var(--pzk-row-ph);
@@ -1770,7 +1791,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzr-list-title { flex: none; font-size: var(--pzr-list-title); font-weight: 700;
                   color: var(--pz-text);
                   padding: var(--pzr-list-pt) var(--pzr-list-ph) var(--pzr-list-pb); }
-.pzr-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzr-list-ph); }
+.pzr-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzr-list-ph); scrollbar-width: none; -ms-overflow-style: none; }
+.pzr-list::-webkit-scrollbar { width: 0; height: 0; }
 .pzr-row { display: flex; align-items: center; gap: var(--pzr-row-gap);
            background: var(--pz-card); border-radius: var(--pzr-row-r);
            padding: var(--pzr-row-pv) var(--pzr-row-ph); margin-bottom: var(--pzr-row-mb); }
@@ -2280,7 +2302,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   font-size: var(--lg-sheet-body-size);
   color: var(--lg-sheet-body-color);
   line-height: calc(var(--lg-sheet-body-size) + var(--lg-sheet-line) + 4px);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.lg-sheet-body::-webkit-scrollbar { width: 0; height: 0; }
 
 .lg-sheet-body p { margin: 0 0 10px; }
 .lg-sheet-body p:last-child { margin-bottom: 0; }
@@ -2372,7 +2396,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   height: 100%;
   overflow-y: auto;
   background: var(--pw-c-screen-bg);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.pw-view::-webkit-scrollbar { width: 0; height: 0; }
 
 /* ---- header ---- */
 
@@ -2728,7 +2754,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   flex: 1 1 0; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: var(--op-listGap);
   padding: 0 var(--op-screenPadH) var(--op-screenPadH);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.op-list::-webkit-scrollbar { width: 0; height: 0; }
 .op-card {
   display: flex; align-items: center; gap: var(--op-cardGap);
   background: var(--opc-card); border-radius: var(--op-cardRadius); padding: var(--op-cardPad);
@@ -2791,7 +2819,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .op-form {
   flex: 1 1 0; min-height: 0; overflow-y: auto;
   padding: 0 var(--op-screenPadH) var(--op-formPadBottom);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.op-form::-webkit-scrollbar { width: 0; height: 0; }
 .op-label {
   font-size: var(--op-labelSize); font-weight: 600; color: var(--opc-muted);
   letter-spacing: var(--op-labelTracking);
@@ -2804,7 +2834,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   padding: var(--op-inputPadV) var(--op-inputPadH);
   font: 400 var(--op-inputTextSize)/1.4 inherit;
 }
-.op-textarea { min-height: 160px; resize: vertical; font-family: ui-monospace, monospace; }
+.op-textarea {
+  min-height: var(--op-pgnMinHeight);
+  /* `resize` has no counterpart on iOS, so a drag handle here is a control the Swift app cannot
+     have. It also put a second scrollbar hard against `.op-form`'s, which is what the client
+     screenshotted. `web_shell_check.js` bans any value but `none`. */
+  resize: none;
+  font-family: ui-monospace, monospace;
+}
 .op-toggles { display: flex; gap: var(--op-toggleGap); }
 .op-toggle {
   flex: 1 1 0; min-width: 0; background: var(--opc-card); color: var(--opc-muted); cursor: pointer;
@@ -2869,7 +2906,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   flex: 1 1 0; min-height: 0; overflow-y: auto;
   padding: 0 var(--op-screenPadH) var(--op-movesPadBottom);
   display: flex; flex-direction: column; gap: var(--op-rowBottom);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.op-moves::-webkit-scrollbar { width: 0; height: 0; }
 .op-move {
   display: flex; align-items: center; gap: var(--op-rowGap); width: 100%; text-align: left;
   background: var(--opc-card); border: 0; cursor: pointer; color: inherit; font-family: inherit;

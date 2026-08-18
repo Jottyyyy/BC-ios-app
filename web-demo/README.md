@@ -78,8 +78,8 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 
 4-tab na phone app (tulad ng tunay):
 
-- **Home** — ang landing dashboard: header, 3×2 grid ng anim na card, hourly na Taglish quote, at ang
-  Donate / Membership banners. May Sky / Colorful na tema (pumili sa itaas ng phone).
+- **Home** — ang landing dashboard: header (avatar · brand logo), 3×2 grid ng anim na card, hourly na
+  Taglish quote, at ang Membership banner. May Sky / Colorful na tema (pumili sa itaas ng phone).
 - **Opening Tree** — mula sa Home tile. Gumawa ng tree mula sa PGN ng mga laro mo, tapos i-explore
   sa board: bawat move may bilang ng laro at win/draw/loss bar. Walang internet na kailangan.
 - **Puzzles** — ang **Puzzle Hub**: 5 mode cards + daily-goal ring. **Live na ang lahat ng lima** —

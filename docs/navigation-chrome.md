@@ -77,7 +77,10 @@ component replaces the glyph *inside* the button and never the button's box. On 
 exactly one screen, the Analysis Board, in each language.
 
 **Out, by explicit choice:** the nine Analysis toolbar emoji (📂 ✏️ 💡 🔄 ▶), the four transport
-arrows (⏮ ◀ ▶ ⏭, still `CoachGlyph`), the ☰ menu's own `✕`, and Home's `🔍`.
+arrows (⏮ ◀ ▶ ⏭, still `CoachGlyph`), and the ☰ menu's own `✕`.
+
+Home's `🔍` was on that list too, and is now moot: the client asked for the search button itself to
+go, so there is no glyph left to vectorise. `tools/qa/home_chrome_check.js` bans it from returning.
 
 Two glyph tables lost their `back` entry and were retired with inverted assertions:
 `CoachGlyph.back` (`CoachMetricsCheck` now asserts **four** transport glyphs and that `back` is not
