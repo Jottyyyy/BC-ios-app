@@ -97,8 +97,8 @@ const MUTANTS = [
   {
     id: 'tab_bar_shown_on_pushed_routes',
     file: 'PhoneView.swift',
-    from: 'if !puzzlePushed { PhoneTabBar(tab: $tab) }',
-    to: 'PhoneTabBar(tab: $tab)',
+    from: 'if !puzzlePushed { PhoneTabBar(tab: gatedTab) }',
+    to: 'PhoneTabBar(tab: gatedTab)',
     why: 'the tab bar left visible on pushed puzzle routes',
   },
 ];

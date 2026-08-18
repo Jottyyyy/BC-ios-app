@@ -30,8 +30,9 @@ Feature- and subsystem-level documentation for this repo.
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
 - [`subscription.md`](subscription.md) — one monthly plan with a 7-day trial, verified **on-device by
-  StoreKit 2 with no server**: the trial/expiry/grace state machine, the free tier's daily caps, the
-  paywall, and the two holes (refunds, clock rollback) that are accepted rather than defended.
+  StoreKit 2 with no server**: the **trial gate** that makes every tap without an entitlement land on
+  the offer, the trial/expiry/grace state machine, the daily caps a *lapsed* subscriber returns to,
+  the paywall, and the two holes (refunds, clock rollback) that are accepted rather than defended.
 - [`login.md`](login.md) — the app's first screen: the brand hero, one **simulated** "Continue with Apple"
   button, a persisted fail-closed session, and the bundled Privacy · Terms sheet. **The sign-in performs no
   Apple authentication and no network call** — read this before wiring a real one.

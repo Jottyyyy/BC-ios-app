@@ -1750,6 +1750,73 @@ first move now, and dead code that looks live is worse than none.
 
 ---
 
+## The trial gate — a reversed product decision (2026-08-18, fourth round)
+
+Client, round 4: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi sila naka 7-days
+free trial … kada click lagi mong dalhin doon."* Nothing is usable until the trial is started.
+
+**This is a deliberate reversal of a documented decision, not a refinement of one.** The
+subscription was designed the other way round, in this file and in `docs/subscription.md`: a
+genuinely playable free tier with the paywall reached on demand, and `Entitlement.Access.free`
+carrying the comment *"Never a dead app — this is what makes the offline design safe."* Both now
+record the reversal in place rather than being quietly rewritten.
+
+### What did NOT change, and why that was the whole design question
+
+The obvious implementation is to make `.free` mean "no access" in `Entitlement` — and it is wrong
+on three counts:
+
+1. `Entitlement`, `DailyLimits` and `Entitlement.Usage` are **parity-tested Core** with
+   `requireMinCounts` floors, and `CLAUDE.md` forbids lowering a floor to make a run pass. Gutting
+   them would mean either lowering floors or deleting goldens.
+2. The caps are still **true of a lapsed subscriber**. Someone whose month runs out returns to
+   `.free` with those exact allowances; a `.free` that means "nothing" would have to be a fourth
+   state, which is more machine, not less.
+3. `Entitlement.resolve` **already fails closed** — no `expiresAtMs` returns `.free` at line one.
+   The Core was never the thing letting people in; the shell was.
+
+So the change is one guard per language, at the router, and nothing else. `PhoneApp.locked`,
+`openTabs`, `visibleTab`, `gatedTab`, `gated(_:)` in `PhoneView.swift`; `locked()`, `OPEN_ROUTES`,
+`isOpenRoute()`, the tab-bar check and the `render()` backstop in `app.js`.
+
+### The three non-obvious parts
+
+**Gating the tiles gates the pushed routes.** `showAnalysis`, `showCoach` and `showPairing` are set
+from Home tile closures and nowhere else, so four wrapped closures close three whole screens. That
+is a property, not a coincidence, so `trial_gate_check.js` asserts each flag has at most one other
+setter — a second entry point would be a silent bypass.
+
+**Two exemptions, and exactly two.** `onAvatar` (Profile owns Sign out; walling it strands a user
+who signed in with the wrong Apple Account, and Restore lives on the paywall they could then not
+leave) and `onMembership` (it *is* the offer). The gate counts the ungated callbacks rather than
+naming them, so a third exemption fails.
+
+**A lapse can happen between taps.** `Transaction.updates` fires mid-session and the browser demo's
+own entitlement picker does exactly this. A tap-time-only gate would leave a user playing on a tab
+they no longer own, so both halves re-resolve on every paint: Swift through `visibleTab`, the
+browser through a backstop ahead of its dispatch chain. The backstop forces `paywallReturn` to Home
+— returning to the screen it just walled would bounce straight back into itself.
+
+### A divergence this exposed
+
+`app.js` gated **only** the four puzzle modes. Play vs Coach, the Analysis Board and the Swiss round
+ceiling had no premium reference anywhere in the browser, while Swift gated all three via
+`CoachScreens.isCoachLocked`, `consumeReview()` and `maxSwissRounds`. `replay_premium.js` asserts
+the JS *puzzle* gates and the *Swift* coach/review gates as separate lists, so nothing compared the
+two languages' coverage and the drift survived every green run. The client tests on Windows, so
+what they had been looking at was an app with no locks on it at all.
+
+One router guard closes it, and `trial_gate_check.js` now compares the two open sets directly —
+mapping the Swift tab *indices* through the browser's tab table, so `[0, 3]` is verified to still
+mean Home and Profile rather than assumed to.
+
+### Consequence for shipping
+
+The 7-day introductory offer still does not exist in App Store Connect. That was a to-do while the
+free tier carried the app; now it is the only door in, and a CTA reading "Start Your 7-Day Free
+Trial" against a product with no introductory offer promises something the store will not honour.
+Listed in `docs/subscription.md` § *Before this can ship*.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had
