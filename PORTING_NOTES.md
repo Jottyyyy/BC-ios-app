@@ -1575,6 +1575,56 @@ browser with `?storefail`. `ios-testflight` is the only real store test path. No
 
 ---
 
+## Board squares — an extracted palette that nothing read (2026-08-18)
+
+Client feedback: *"doon sa lahat ng board sa puzzle natin dapat ganto kulay ng chess board para mas
+maliwanag at mas maaliwalas"*, attached to a screenshot of **this app's own Analysis Board** on its
+default `classic` theme. Investigating why one screen already looked like the screenshot and the
+others did not turned a colour request into a parity fix.
+
+**The finding.** `tools/metrics/extract_puzzle_styles.js` has walked the real
+`components/DragDropChessBoard.tsx` into `puzzle_styles.json` → `shared.board` since the puzzle
+screens were ported, and it carries the source app's actual palette:
+
+```json
+"lightSquare": { "backgroundColor": "#F0D9B5" },  "darkSquare": { "backgroundColor": "#B58863" },
+"selectedSquare": { "backgroundColor": "#F6F669" }, "lastMoveSquare": { "backgroundColor": "#CDD26A" }
+```
+
+`grep -r 'shared.board' --include=*.js --include=*.swift` returned **zero hits**. Both languages
+independently hardcoded an invented `#5BA3F5` / `#2C4A73` blue instead — `BoardStyle`'s defaults in
+`AnalysisMetrics.swift`, `--board-light` / `--board-dark` in `theme.css`, and a third copy as the
+`var()` fallbacks inside `chess-board.js`'s `:host` block. So the five puzzle solvers, Play vs
+Coach and the two macOS panels had drawn a colour the source app never had, for the whole life of
+the port. The Analysis Board escaped only because `BoardTheme.default == .classic` happens to be
+the extracted pair by another route.
+
+**Why nothing caught it.** No suite anywhere asserted a square colour literal — the two Swift
+assertions were *relative* (`plain.light == Theme.boardLight`), so they followed the wrong value
+happily, and the JS twin compared against `BOARD_THEMES.classic`, a different constant. The two
+languages agreed with each other, which `CLAUDE.md` names explicitly as the failure mode that
+shipped the annotation badge in the wrong corner: **two hand-typed copies agreeing is not
+verification.**
+
+**The fix.** `BoardStyle`'s defaults become `BoardTheme.classic.light` / `.dark`; `theme.css` and
+the `chess-board.js` fallbacks take the same hexes. `tools/qa/board_layout_check.js` gains §8, which
+pins all five writers — in Swift as well as JS, read as text since there is no compiler here — to
+`shared.board`, and bans the old blue from any of them. Both directions are mutation-checked.
+
+**Deliberate deviations retained.**
+
+- **The indicators stay gold.** `lastMove` / `selected` remain `Theme.accent` at 0.32 / 0.55 laid
+  *over* the square (`replacesFill == false`), not the RN board's solid `#F6F669` / `#CDD26A`. The
+  screenshot the client approved is the Analysis Board, which has always drawn gold on brown, and
+  the solid pair would also collide with the Puzzle Streak's `--hl-sol-from` / `--hl-sol-to`
+  solution highlights.
+- **`Theme.boardLight` / `Theme.boardDark` survive.** They are no longer a board colour, but they
+  are still real chrome — the level capsule in `PlayView`, the rating chip in `PuzzleView` — so they
+  keep their values and gain a comment saying they must never be put back on a board.
+- **The Analysis Board's three-theme picker is untouched.** `analysis.js` sets `--board-light` /
+  `--board-dark` on its own root, so `classic` / `green` / `blue` still work; what changed is only
+  what every *other* screen inherits.
+
 ## Analysis Board — client revision (2026-08-18): typography, bands, PV length, tap-to-play
 
 Four asks from a TestFlight screenshot, and what each one cost in deviations.

@@ -62,9 +62,12 @@
   --home-premium-border: rgba(253, 176, 34, .35);
   --home-premium-fill: rgba(253, 176, 34, .06);
 
-  /* board */
-  --board-light: #5BA3F5;
-  --board-dark: #2C4A73;
+  /* board — Classic Brown, the pair the real RN board draws
+     (tools/metrics/puzzle_styles.json -> shared.board.lightSquare/darkSquare).
+     Read ONLY by <chess-board>; js/analysis.js sets its own per-theme values on the
+     analysis root, so the Analysis Board's theme picker is unaffected. */
+  --board-light: #F0D9B5;
+  --board-dark: #B58863;
   --hl-last: rgba(253, 176, 34, .32);
   --hl-select: rgba(253, 176, 34, .55);
   --hl-check: rgba(255, 107, 107, .50);

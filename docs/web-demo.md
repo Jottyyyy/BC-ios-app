@@ -125,8 +125,9 @@ the app applies that move to the real engine, then calls `setPosition()` back (s
 outside the component).
 
 > Its SwiftUI counterpart is `BoardView` + `ChessBoardBand`, and the two are kept deliberately in step —
-> same square colours, same highlight precedence, same coordinate geometry, same **sizing rule** (a fixed
-> square from the width; the band below it is the flexible one). See [`chessboard.md`](chessboard.md) before
+> same square colours — now *pinned* to one extraction by `board_layout_check.js` §8, after both
+> languages spent the whole port drawing an invented blue — same highlight precedence, same coordinate
+> geometry, same **sizing rule** (a fixed square from the width; the band below it is the flexible one). See [`chessboard.md`](chessboard.md) before
 > changing either; a divergence here is what shipped a broken Puzzle Streak screen to TestFlight while the
 > browser looked correct.
 

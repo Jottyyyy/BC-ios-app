@@ -170,8 +170,10 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     let plain = BoardStyle()
     expect(plain.replacesFill == false,
            "the DEFAULT style overlays, so Play and Puzzles render exactly as before")
-    expect(plain.light == Theme.boardLight && plain.dark == Theme.boardDark,
-           "the default style keeps the existing board colours")
+    expect(plain.light == BoardTheme.classic.light && plain.dark == BoardTheme.classic.dark,
+           "the default style draws the RN board's Classic Brown, not the invented blue")
+    expect(plain.light != Theme.boardLight && plain.dark != Theme.boardDark,
+           "and Theme.boardLight/boardDark are no longer a board colour at all")
     expectNear(plain.dotRatio, 0.32, "the default dot ratio is today's 0.32")
     expectNear(plain.dotSize(square: 40), 12.8, "the default dot is 32% of a square")
     let analysis = BoardStyle.analysis(theme: .green)
