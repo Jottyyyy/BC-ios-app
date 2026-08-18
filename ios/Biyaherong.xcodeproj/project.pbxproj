@@ -9,13 +9,16 @@
 /* Begin PBXBuildFile section */
 		72892309E830157E280FC994 /* BiyaherongApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CA706713DC509A6F367A36 /* BiyaherongApp.swift */; };
 		8D74325DB2EE26DADE2E5AEB /* BiyaherongUI in Frameworks */ = {isa = PBXBuildFile; productRef = 612592233D15D3E496D56F75 /* BiyaherongUI */; };
+		AEC990A87821364F84DB4076 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 99EDEFEA361A7203F2D1629D /* PrivacyInfo.xcprivacy */; };
 		D3C69C994F8A2314E4448D7C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5F5904F6840E2A55451F5A77 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		28504D99D85BA20A004AEF9B /* Biyaherong.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Biyaherong.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		34CA706713DC509A6F367A36 /* BiyaherongApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiyaherongApp.swift; sourceTree = "<group>"; };
+		466134A069A4CA62804A6C01 /* Biyaherong.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Biyaherong.entitlements; sourceTree = "<group>"; };
 		5F5904F6840E2A55451F5A77 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		99EDEFEA361A7203F2D1629D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B98C0C79E2EDA124A15F75C5 /* Biyaherong.storekit */ = {isa = PBXFileReference; path = Biyaherong.storekit; sourceTree = "<group>"; };
 		E13D32EA680014A779E9C9FB /* DemoApp */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DemoApp; path = ../DemoApp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -37,6 +40,7 @@
 			children = (
 				5F5904F6840E2A55451F5A77 /* Assets.xcassets */,
 				34CA706713DC509A6F367A36 /* BiyaherongApp.swift */,
+				99EDEFEA361A7203F2D1629D /* PrivacyInfo.xcprivacy */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -60,6 +64,7 @@
 		F87C53DD8B5B02BBF5EE10DA = {
 			isa = PBXGroup;
 			children = (
+				466134A069A4CA62804A6C01 /* Biyaherong.entitlements */,
 				B98C0C79E2EDA124A15F75C5 /* Biyaherong.storekit */,
 				5354A6DD0DBEC6CD6753574C /* App */,
 				C24F9FED770C2E5E081681F4 /* Packages */,
@@ -132,6 +137,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D3C69C994F8A2314E4448D7C /* Assets.xcassets in Resources */,
+				AEC990A87821364F84DB4076 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,9 +215,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Biyaherong.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 42;
+				CURRENT_PROJECT_VERSION = 43;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Biyaherong;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -237,9 +244,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Biyaherong.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 42;
+				CURRENT_PROJECT_VERSION = 43;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Biyaherong;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;

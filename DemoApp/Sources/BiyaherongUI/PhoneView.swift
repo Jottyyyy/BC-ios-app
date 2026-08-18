@@ -349,14 +349,14 @@ struct PhoneApp: View {
                            showAnalysis = true
                        }
                    },
-                   onPlayCoach: gated {
-                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
-                           showCoach = true
-                       }
-                   },
                    onOpeningTrainer: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showOpenings = true
+                       }
+                   },
+                   onPlayCoach: gated {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showCoach = true
                        }
                    },
                    onPairing: gated {
@@ -680,7 +680,7 @@ struct ProfilePhone: View {
                         // Home avatar, which is the route left open even to a locked user.
                         Button(action: { confirmingDelete = true }) {
                             Text(LoginStrings.deleteAccount)
-                                .font(Theme.nunito(13, .semibold))
+                                .font(Theme.nunito(13, .semiBold))
                                 .foregroundStyle(Theme.negative)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)

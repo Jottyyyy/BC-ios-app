@@ -68,7 +68,7 @@ public struct LocalEngine: AnalysisEngine {
     /// truncates a line, not the engine, so the panel never shows a line that stops for a reason
     /// the user cannot see. Not read from `AnalysisSession` — the engine does not know a panel
     /// exists, and the two are pinned to each other by assertion instead.
-    static let pvExtendLimit = 14
+    public static let pvExtendLimit = 14
 
     /// How deep one tail probe searches.
     ///

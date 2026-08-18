@@ -9,6 +9,44 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — Three compile errors that broke the iOS Release archive, and the entitlement the profile does not carry
+
+Merged `origin/main` (23 commits: the App Store rejection fixes, per-coach clocks, Home-as-root, the
+brand mark, Opening Tree, the trial gate, Classic Brown). **The merge did not compile.** Three errors,
+all of them invisible on the Windows checkout because there is no Swift compiler there:
+
+1. **`OpeningTree.swift:351` — unterminated string literal.** The whitespace separators in
+   `raw.movetext.split(whereSeparator:)` were written as **real control bytes** (`0x0A`, `0x09`, `0x0D`)
+   inside the string literals rather than the escapes `\n`, `\t`, `\r`. A repo-wide byte scan for
+   `"[\n\t\r]"` in every `.swift` file found these three and nothing else.
+2. **`ParityRunner/main.swift:735,752` — `LocalEngine.pvExtendLimit` is `internal`.** The harness
+   asserts it against `AnalysisSession.pvPreview`, which is `public`; made the constant `public` to
+   match its sibling. `swift_lint.js`'s public-exposes-internal check does not run the other way round.
+3. **`PhoneView.swift:357,683`** — the `HomeScreen` call site passed `onPlayCoach` before
+   `onOpeningTrainer` (the declaration has them the other way), and `Theme.nunito(13, .semibold)` used
+   SwiftUI's spelling; the `NunitoWeight` case is `.semiBold`.
+
+**Changed.** `ios/project.yml`: `CURRENT_PROJECT_VERSION` 42 → **43** (42 was consumed 2026-08-17; the
+next manual upload must use 44 or higher). `ios/Biyaherong.xcodeproj` regenerated.
+
+**Verified on the archive, which is what Windows could not do.** `PrivacyInfo.xcprivacy` really is at
+`Biyaherong.app/PrivacyInfo.xcprivacy` — the inference recorded beside `GENERATE_INFOPLIST_FILE` was
+right. `Biyaherong.storekit` is correctly absent from the bundle. `CFBundleVersion` 43,
+`ITSAppUsesNonExemptEncryption` false, `CFBundleIconName` AppIcon.
+
+**NOT SHIPPED — and this is the reason.** `xcodebuild -exportArchive` reports `EXPORT SUCCEEDED`, then
+**silently drops `com.apple.developer.applesignin`** from the signed binary, because the
+`Biyaherong App Store` provisioning profile does not carry it. `codesign -d --entitlements` on the
+exported `.ipa` shows only `application-identifier`, `beta-reports-active`, `team-identifier` and
+`get-task-allow`. The comment in `ios/Biyaherong.entitlements` predicted exactly this: *"the capability
+must ALSO be enabled for the App ID in the Apple Developer portal, or signing fails outright"* — it does
+not fail outright, it fails **quietly**, which is worse. Since `LoginScreen.swift:131` makes
+"Continue with Apple" the only way into the app, that build would have locked out every user and every
+App Store reviewer, on the very blocker this merge set out to close. The App ID needs the capability
+enabled and the profile regenerated before 43 can go up; the archive is otherwise ready.
+
+`web-demo/` not updated — build-config and compile fixes with no user-facing behaviour of their own.
+
 ### 2026-08-18 (fixed) — The three things that would have failed App Review, and a licence that was not true
 
 Client: *"make sure lang pag pinasa natin to sa [store] 100 percent papasa ah?"* Two audits over the

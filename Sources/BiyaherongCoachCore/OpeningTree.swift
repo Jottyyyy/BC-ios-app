@@ -348,8 +348,7 @@ public extension OpeningTree {
             // of hand-pasted exports carry only one of the two. It is read off the RAW movetext,
             // not off `tokens`: `mainlineTokens` drops result tokens by design, so looking there
             // would find the last MOVE and quietly never match.
-            let tail = raw.movetext.split(whereSeparator: { $0 == " " || $0 == "
-" || $0 == "	" || $0 == "" }).last
+            let tail = raw.movetext.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == "\r" }).last
             let outcome = Outcome.parse(raw.headers["Result"] ?? "")
                 ?? tail.flatMap { Outcome.parse(String($0)) }
             out.append(Game(sanMoves: tokens, userIsWhite: isWhite, outcome: outcome))
