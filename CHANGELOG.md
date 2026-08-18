@@ -38,16 +38,33 @@ real** — 38-42 all shipped the simulated button, which is exactly why none of 
 right. `Biyaherong.storekit` is correctly absent from the bundle. `CFBundleVersion` 43,
 `ITSAppUsesNonExemptEncryption` false, `CFBundleIconName` AppIcon.
 
-**NOT SHIPPED — and this is the reason.** `xcodebuild -exportArchive` reports `EXPORT SUCCEEDED`, then
-**silently drops `com.apple.developer.applesignin`** from the signed binary, because the
-`Biyaherong App Store` provisioning profile does not carry it. `codesign -d --entitlements` on the
-exported `.ipa` shows only `application-identifier`, `beta-reports-active`, `team-identifier` and
-`get-task-allow`. The comment in `ios/Biyaherong.entitlements` predicted exactly this: *"the capability
-must ALSO be enabled for the App ID in the Apple Developer portal, or signing fails outright"* — it does
-not fail outright, it fails **quietly**, which is worse. Since `LoginScreen.swift:131` makes
-"Continue with Apple" the only way into the app, that build would have locked out every user and every
-App Store reviewer, on the very blocker this merge set out to close. The App ID needs the capability
-enabled and the profile regenerated before 43 can go up; the archive is otherwise ready.
+**SHIPPED as 1.0.6 (43)** on 2026-08-18, delivery UUID `d13e1ffe-44d6-40c8-912a-683134f2859a`;
+`--validate-app` returned VERIFY SUCCEEDED first. Getting there took unpicking two separate silent
+failures, both of which reported success:
+
+**1 · The App ID never had the capability.** `xcodebuild -exportArchive` prints `EXPORT SUCCEEDED` and
+then **silently drops** `com.apple.developer.applesignin` when the profile does not carry it. The
+comment in `ios/Biyaherong.entitlements` predicted *"signing fails outright"* — it does not, it fails
+quietly, which is worse, because `LoginScreen.swift:131` makes "Continue with Apple" the only way into
+the app. Fixed through the App Store Connect API with an Admin **Team Key**: a bare
+`POST /v1/bundleIdCapabilities` for `APPLE_ID_AUTH` returns **409 "Please select at least one
+configuration for Sign In with Apple"** — it needs `settings: [{key: APPLE_ID_AUTH_APP_CONSENT, options:
+[{key: PRIMARY_APP_CONSENT}]}]`, which returns 201. A provisioning profile is a SNAPSHOT of the App ID's
+capabilities at generation time, so the profile then had to be deleted and recreated; there is no refresh.
+
+**2 · An unsigned archive cannot carry an entitlement.** Builds 38-42 archived with
+`CODE_SIGNING_ALLOWED=NO` and let `-exportArchive` sign from `ExportOptions.plist`. That works only for
+an app with NO entitlements: the unsigned archive never runs ProcessProductPackaging, emits no `.xcent`,
+and export therefore signs with the profile's baseline only. Verified directly — `codesign -d
+--entitlements` on that archive says *"code object is not signed at all"*. **`ios/project.yml` now signs
+the archive itself**, with `CODE_SIGN_STYLE: Manual`, `DEVELOPMENT_TEAM`, `CODE_SIGN_IDENTITY` and
+`PROVISIONING_PROFILE_SPECIFIER` kept TARGET-scoped, never passed on the command line — as command-line
+overrides they also hit SwiftPM's `BiyaherongUI_BiyaherongUI` resource bundle, which rejects
+provisioning profiles.
+
+**The lesson worth keeping: on this pipeline an exit code is not evidence.** Apple reported success three
+times tonight while doing nothing. The only check that held up was decoding the artifact and reading its
+entitlements back.
 
 `web-demo/` not updated — build-config and compile fixes with no user-facing behaviour of their own.
 

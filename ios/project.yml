@@ -110,7 +110,21 @@ targets:
         # uses an _iPad suffix, not the plist-style ~ipad, so it was silently dropped — verified
         # absent from the real archive's Info.plist. Moot now that the app is iPhone-only.)
         SWIFT_VERSION: "6.0"
-        CODE_SIGN_STYLE: Automatic
+        # MANUAL signing, and these four lines must stay TARGET-scoped. Passing them as
+        # `xcodebuild` command-line overrides applies them to EVERY target, including SwiftPM's
+        # generated resource bundle `BiyaherongUI_BiyaherongUI`, which then fails with "does not
+        # support provisioning profiles, but provisioning profile ... has been manually specified".
+        #
+        # Builds 38-42 dodged this by archiving with CODE_SIGNING_ALLOWED=NO and letting
+        # `-exportArchive` sign from ExportOptions.plist. That trick works ONLY for an app with no
+        # entitlements. Verified 2026-08-18: an unsigned archive never runs ProcessProductPackaging,
+        # produces no .xcent, and export then signs with the profile's baseline entitlements only —
+        # `com.apple.developer.applesignin` is silently dropped and the login dies at runtime. Now
+        # that the app HAS an entitlement, the archive itself must be signed.
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: 3C29G97AU5
+        CODE_SIGN_IDENTITY: "Apple Distribution"
+        PROVISIONING_PROFILE_SPECIFIER: "Biyaherong App Store"
         # Sign in with Apple. The button was a fake until now — it called no
         # AuthenticationServices API at all, which PORTING_NOTES.md already recorded as an App
         # Store rejection — and DemoApp/Sources/BiyaherongUI/LoginAppleAuth.swift is the real call.
@@ -121,7 +135,6 @@ targets:
         # `ios-free-unsigned` workflow archives with CODE_SIGNING_ALLOWED=NO, so entitlements are
         # never applied there and the sign-in cannot work in that .ipa. Use `ios-testflight`.
         CODE_SIGN_ENTITLEMENTS: Biyaherong.entitlements
-        # DEVELOPMENT_TEAM: ABCDE12345   # optional: put your 10-char Team ID here to skip the Xcode UI step
 
 # A SHARED scheme must exist on disk. Xcode silently auto-creates one when you open the
 # project locally, but a headless `xcodebuild -scheme Biyaherong` (Codemagic) fails with
