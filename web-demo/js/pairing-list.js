@@ -162,7 +162,7 @@ var BiyaPairingList = (function () {
     centre.appendChild(el('div', 'pgl-title', T.tournaments));
     centre.appendChild(el('div', 'pgl-sub', T.listSub));
     header.appendChild(centre);
-    header.appendChild(el('div', 'pgl-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pgl-logo'));
     root.appendChild(header);
 
     var list = doc.tournaments;

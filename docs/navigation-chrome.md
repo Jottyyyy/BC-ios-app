@@ -73,7 +73,8 @@ component replaces the glyph *inside* the button and never the button's box. On 
 
 ## Scope
 
-**In:** back, on all 19 Swift sites and all 23 browser sites, and the hamburger — which exists on
+**In:** back, on all 20 Swift sites and all 24 browser sites — Profile joined both when the tab
+bar was removed and it needed a way out — and the hamburger, which exists on
 exactly one screen, the Analysis Board, in each language.
 
 **Out, by explicit choice:** the nine Analysis toolbar emoji (📂 ✏️ 💡 🔄 ▶), the four transport

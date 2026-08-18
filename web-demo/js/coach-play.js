@@ -129,7 +129,7 @@ var BiyaCoachPlay = (function () {
     centre.appendChild(el('div', 'cgp-coach-name', coach && coach.name ? coach.name : ''));
     centre.appendChild(el('div', 'cgp-status', statusLine(game)));
     h.appendChild(centre);
-    h.appendChild(el('div', 'cgp-logo'));
+    h.appendChild(BiyaIcons.brandLogoEl('cgp-logo'));
     return h;
   }
 

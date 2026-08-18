@@ -345,8 +345,15 @@ function run() {
     + 'sample-puzzle tab');
   expect(/BiyaLogin\.shared\(\)\.isSignedIn\(\)\s*\?\s*'home'\s*:\s*'login'/.test(appJs),
     'app.js gates the FIRST screen on the session');
-  expect(/appCard\(\)\.classList\.add\('an-mode'\)/.test(appJs.slice(appJs.indexOf('function renderLogin'))),
-    'renderLogin hides the tab bar');
+  // This used to assert `renderLogin` adds `an-mode`, whose only CSS rule was
+  // `.app-card.an-mode .tabbar { display: none }`. With Home as the app root there is no tab bar,
+  // so the class and its twenty add/remove calls are gone; what still matters is that the gate
+  // owns the whole box.
+  expect(/view\.classList\.add\('flush'\)/.test(appJs.slice(appJs.indexOf('function renderLogin'))),
+    'renderLogin owns the whole phone box — a login screen with a gutter is not a gate');
+  // Comment-stripped: the note in `renderLogin` explaining that `an-mode` was removed must not
+  // read as the removal having failed. Same trap `home_chrome_check.js` blanks comments for.
+  expect(!/an-mode/.test(code(appJs)), 'and `an-mode` is gone entirely, with the bar it hid');
   expect(/BiyaLogin\.selfTest\(\)/.test(appJs), 'index.html?selftest runs the login self-test');
 
   // 12. The `--lg-*` custom properties, both directions. One set but never read is dead code; one

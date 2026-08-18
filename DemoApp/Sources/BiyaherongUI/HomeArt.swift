@@ -165,7 +165,9 @@ struct HomeCardIcon: View {
 struct HomeAppIcon<S: Shape>: View {
     let size: CGFloat
     let shape: S
-    var asset: HomeArt.Asset = .appIcon
+    /// Defaults to the BRAND mark, so a new call site cannot draw the app icon by omission — which
+    /// is exactly how the Play-with-Coach ring kept the knight after the header had moved on.
+    var asset: HomeArt.Asset = .brandLogo
 
     var body: some View {
         Group {

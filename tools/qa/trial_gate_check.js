@@ -19,8 +19,9 @@
  * So the invariants here are deliberately about the ROUTER, not about any screen:
  *
  *   1. Both languages compute "locked" the same way, from the live store and not a cached flag.
- *   2. The open set is the same on both sides — asserted by mapping the Swift tab INDICES through
- *      the browser's own tab table, rather than trusting that 0 and 3 mean what they used to.
+ *   2. The open set is the same on both sides. This used to mean mapping Swift tab INDICES through
+ *      the browser's tab table; with Home as the app root there are no indices, so it now means
+ *      that neither language has a tab bar left and that Profile is the one ungated destination.
  *   3. Every wired Home tile goes through the gate, and the two deliberate exemptions (Sign out,
  *      and the offer itself) are exactly those two.
  *   4. The browser re-checks on every paint, because an entitlement can lapse between taps.
@@ -72,35 +73,31 @@ const APP_CODE = code(APP);
 
 // ── 2. The open set is the same on both sides ───────────────────────────────────
 //
-// Swift names tabs by index and the browser by id, so this maps one through the other rather than
-// asserting two lists that only look alike.
+// This used to map Swift tab INDICES through the browser's `TABS` table, because the two languages
+// named the open set differently — `[0, 3]` against `{ home, profile }`. With Home as the app root
+// there are no indices: every destination is a pushed route raised by a Home tile, so the open set
+// is "Home, which is underneath everything" plus "Profile, which owns Sign out".
 {
-  const swiftTabs = PHONE_CODE.match(/private static let openTabs: Set<Int> = \[([\d, ]+)\]/);
-  expect(!!swiftTabs, 'PhoneApp declares openTabs');
-  const idx = swiftTabs ? swiftTabs[1].split(',').map((n) => Number(n.trim())) : [];
+  // Home is not a route in Swift at all — it is what the ZStack draws when nothing covers it.
+  expect(/home\(basis: basis\)/.test(PHONE_CODE),
+    'Home is the root the pushed routes are raised over');
+  expect(!/PhoneTabBar|var tab = 0|openTabs|visibleTab|gatedTab/.test(PHONE_CODE),
+    'no tab bar, and none of the tab-index machinery that came with it, survives in Swift');
+  expect(!/var TABS =|renderTabbar/.test(APP_CODE),
+    'nor in the browser');
 
-  // The browser's tab table is the shared vocabulary.
-  const tabIds = [...APP.matchAll(/\{ id: '(\w+)', ico: ICON\.\w+, lbl: '[^']+' \}/g)].map((m) => m[1]);
-  expect(tabIds.length === 4, `the browser declares ${tabIds.length} tabs, expected 4`);
-
-  const open = new Set(idx.map((i) => tabIds[i]));
-  expect(open.has('home') && open.has('profile'),
-    `Swift openTabs ${JSON.stringify(idx)} maps to ${JSON.stringify([...open])}, expected home+profile`);
-  expect(open.size === 2, 'and to nothing else');
+  // Profile is the ONE destination raised without `gated`, and it is raised from the avatar.
+  const profile = PHONE_CODE.slice(PHONE_CODE.indexOf('onAvatar:'),
+                                   PHONE_CODE.indexOf('onPuzzles:'));
+  expect(/showProfile = true/.test(profile), 'the Home avatar raises Profile');
+  expect(!/gated/.test(profile), 'and does NOT gate it — Profile owns Sign out');
 
   const jsOpen = APP.match(/var OPEN_ROUTES = \{([^}]*)\}/);
   expect(!!jsOpen, 'app.js declares OPEN_ROUTES');
   const jsKeys = jsOpen ? jsOpen[1].split(',').map((s) => s.split(':')[0].trim()).filter(Boolean) : [];
-  // login and paywall are routes, not tabs: the gate must not wall the screens it routes TO.
-  expect(jsKeys.includes('login') && jsKeys.includes('paywall'),
-    'OPEN_ROUTES keeps the login gate and the paywall itself reachable');
-  for (const id of open) {
-    expect(jsKeys.includes(id), `OPEN_ROUTES is missing ${id}, which Swift keeps open`);
-  }
-  for (const id of jsKeys) {
-    expect(['login', 'paywall'].includes(id) || open.has(id),
-      `OPEN_ROUTES keeps ${id} open but Swift does not`);
-  }
+  expect(jsKeys.sort().join(',') === 'home,login,paywall,profile',
+    `OPEN_ROUTES is ${jsKeys.join(',')}, expected exactly home + profile + the login gate and the `
+    + 'paywall it routes to');
 }
 
 // ── 3. Every wired Home tile goes through the gate ──────────────────────────────
@@ -130,25 +127,46 @@ const APP_CODE = code(APP);
     .test(APP_CODE), 'app.js gates the Home tiles with the same two exemptions');
 }
 
-// ── 4. The tab bar and the content area both read the gated values ──────────────
+// ── 4. Every destination is raised through the gate, and closes back to Home ────
 {
-  expect(/PhoneTabBar\(tab: gatedTab\)/.test(PHONE_CODE), 'the tab bar takes the gated binding');
-  expect(!/PhoneTabBar\(tab: \$tab\)/.test(PHONE_CODE), 'and not the raw @State binding');
-  expect(/switch visibleTab \{/.test(PHONE_CODE),
-    'the content area switches on visibleTab, so a mid-session lapse cannot leave a gated tab up');
-  expect(/private var visibleTab: Int \{ locked && !PhoneApp\.openTabs\.contains\(tab\) \? 0 : tab \}/
-    .test(PHONE_CODE), 'and visibleTab falls back to Home');
+  // Six flags, six Home tiles, and `gated` on every one but the avatar's.
+  for (const flag of ['showPuzzles', 'showAnalysis', 'showCoach', 'showPairing', 'showOpenings']) {
+    expect(new RegExp('@State private var ' + flag + ' = false').test(PHONE_CODE),
+      `PhoneApp declares ${flag}`);
+    const raises = (PHONE_CODE.match(new RegExp(flag + '\\s*=\\s*true', 'g')) || []).length;
+    // One raise per flag — a second entry point would bypass `gated`. `showAnalysis` is the
+    // one documented exception: spec 2.10's hand-off closes Play vs Coach and opens the
+    // Analysis Board on the reviewed game, and Coach itself was gated on the way in.
+    const allowed = flag === 'showAnalysis' ? 2 : 1;
+    expect(raises === allowed,
+      `${flag} is raised ${raises} times, expected ${allowed} — a second entry point bypasses the gate`);
+    const lowers = (PHONE_CODE.match(new RegExp(flag + '\\s*=\\s*false', 'g')) || []).length;
+    expect(lowers >= 1, `${flag} has no way back to Home`);
+  }
 
-  expect(/leaveCurrentPuzzle\(\);\s*\n\s*if \(locked\(\) && !isOpenRoute\(t\.id\)\) \{ goPaywall\(\); return; \}/
-    .test(APP_CODE), 'the browser tab bar gates AFTER cancelling the solver');
+  expect(/onChange\(of: coachStore\.pendingHandoff\)[\s\S]{0,400}showAnalysis = true/
+    .test(PHONE_CODE),
+    "showAnalysis's second raise is the coach hand-off, not a new door into the Board");
 
-  // The router backstop, and it has to run before the dispatch chain.
+  // Profile is the sixth, and the deliberate exception: raised, and closed, but never gated.
+  expect(/showProfile = true/.test(PHONE_CODE) && /showProfile = false/.test(PHONE_CODE),
+    'Profile is raised from the avatar and closed by its own back button');
+
+  // The browser's backstop is now the ONLY re-check, since there is no tab bar to intercept.
   const guardAt = APP_CODE.indexOf('if (locked() && !isOpenRoute(current)) {');
   const firstBranch = APP_CODE.indexOf("if (current === 'login') renderLogin();");
   expect(guardAt > 0, 'app.js render() has the backstop guard');
   expect(guardAt > 0 && firstBranch > guardAt, 'and it runs before the route dispatch');
   expect(/paywallReturn = 'home';/.test(APP_CODE),
     'the backstop returns to Home, not to the screen it just walled');
+
+  // Every screen can be left. This is the client's actual requirement, and it is what replaced
+  // the tab bar: `docs/home-screen.md` named "a way back from the six destinations" as the one
+  // thing missing before Home could be the root.
+  expect(/function renderProfile\(\)[\s\S]{0,400}screen-back nav-icon/.test(APP_CODE),
+    'the browser Profile has a back button — it was the one screen in either language without one');
+  expect(/PhoneHeader\(title: "Profile", onBack: onExit\)/.test(PHONE_CODE),
+    'and so does the Swift one');
 }
 
 // ── 5. The paywall is a gate, not a trap ────────────────────────────────────────

@@ -91,7 +91,7 @@ var BiyaCoachColor = (function () {
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'cgc-title', STR.chooseSide));
-    header.appendChild(el('div', 'cgc-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('cgc-logo'));
     root.appendChild(header);
 
     if (draft) {

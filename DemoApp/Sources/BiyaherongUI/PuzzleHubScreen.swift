@@ -20,14 +20,6 @@ struct PuzzleHubScreen: View {
     /// cached flag — the exact drift the RN app had between `@is_premium` and the server.
     @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
-    /// Called with `true` while any route is pushed on top of the hub, so the host can hide the
-    /// app's tab bar. The browser does exactly this — every pushed puzzle route calls
-    /// `appCard().classList.add('an-mode')`, whose only job is `.tabbar { display: none }`
-    /// (web-demo/js/app.js). Without it the solver screens draw a tab bar the web twin does not
-    /// have, and lose ~90pt of the height the board wants.
-    ///
-    /// Defaulted, so the macOS demo's `AppShell` call site is unaffected.
-    var onPushedChange: (Bool) -> Void = { _ in }
     var onPaywall: () -> Void = {}
     @State private var path: [PuzzleRoute] = []
     /// The cap the user just hit, held as its message so the overlay is one branch and not five.
@@ -44,10 +36,6 @@ struct PuzzleHubScreen: View {
                 }
         }
         .tint(PuzzlePalette.gold)
-        // `path.count` rather than `path.isEmpty`: pushing solver-on-top-of-home keeps the flag
-        // true, and `onChange` on a Bool that never changes value would not fire on the way in.
-        .onChange(of: path.count) { _, count in onPushedChange(count > 0) }
-        .onDisappear { onPushedChange(false) }
         // Above the NavigationStack, because a cap can be hit from a pushed route (Play home on
         // the way into the solver) and the lock card has to cover that too.
         .overlay(alignment: .center) { capOverlay }

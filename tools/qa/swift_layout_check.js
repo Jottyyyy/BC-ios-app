@@ -265,16 +265,30 @@ function lineOf(file, re) {
   }
 }
 
-// ---- 6. the tab bar hides on pushed puzzle routes ----------------------------
-// The browser does this with `an-mode` on every pushed route; the app must match, or the solver
-// screens draw a tab bar the web twin does not have.
+// ---- 6. there is no tab bar, and no machinery for hiding one ------------------
+//
+// This rule used to be its opposite: `if !puzzlePushed { PhoneTabBar(...) }`, plus the
+// `onPushedChange` plumbing the hub needed to report its depth so the host could hide the bar on a
+// pushed route. Home is the app root now — every destination covers the whole phone — so the bar,
+// the flag and the plumbing are all gone, and the assertion is inverted so none of them can come
+// back without someone reading this.
+//
+// `docs/home-screen.md` had named this as the fix for a grid ~74pt over-constrained by hosting
+// Home as tab 0, and named the one prerequisite: a way back from every destination. That is what
+// replaced it.
 {
   const phone = code.get('PhoneView.swift') || '';
   const hub = code.get('PuzzleHubScreen.swift') || '';
-  expect(/if !puzzlePushed \{ PhoneTabBar/.test(phone),
-    'PhoneView.swift — PhoneTabBar must be hidden while the Puzzles tab has a route pushed.');
-  expect(/onPushedChange/.test(hub) && /onPushedChange/.test(phone),
-    'PuzzleHubScreen must report its pushed depth and PhoneView must consume it.');
+  expect(!/PhoneTabBar/.test(phone), 'PhoneView.swift — no tab bar; Home is the app root.');
+  expect(!/puzzlePushed/.test(phone),
+    'PhoneView.swift — `puzzlePushed` existed only to hide the bar; it should be gone with it.');
+  expect(!/onPushedChange/.test(hub) && !/onPushedChange/.test(phone),
+    'PuzzleHubScreen no longer reports its pushed depth — nothing consumes it.');
+  // What replaced it: the hub is raised and closed like every other pushed route.
+  expect(/if showPuzzles \{/.test(phone),
+    'PhoneView.swift — the Puzzle Hub is a pushed route now, raised by the Home tile.');
+  expect(/onExit: \{ showPuzzles = false \}/.test(phone),
+    'PhoneView.swift — and its back button closes it to Home.');
 }
 
 const result = {

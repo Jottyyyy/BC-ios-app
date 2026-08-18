@@ -5,7 +5,7 @@ A single auto-renewing **monthly** subscription with a **7-day free trial**, ver
 
 **Nothing in the app is usable until that trial is started.** Home draws — the six cards, the
 quote, the offer banner — so the user can see what they are buying, and every tile, every content
-tab and every route beyond it lands on the paywall instead. Profile stays open, because it owns
+tile and every route beyond it lands on the paywall instead. Profile stays open, because it owns
 Sign out. This is the round-4 client decision: *"kada click lagi mong dalhin doon na go for free
 trial."*
 
@@ -62,8 +62,8 @@ One guard per language, at the only place every route transition passes through.
 | | Swift | Browser |
 |---|---|---|
 | The predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `app.js` `locked()` — the same two calls |
-| Tabs left open | `PhoneApp.openTabs = [0, 3]` (Home, Profile) | `OPEN_ROUTES` — plus `login` and `paywall`, which are routes rather than tabs |
-| Tab bar | `PhoneTabBar(tab: gatedTab)` — a `Binding` that raises the paywall and leaves `tab` alone | the tab `onclick`, after `leaveCurrentPuzzle()` |
+| Left open | Home (the root everything is raised over) and Profile, raised from the avatar without `gated` | `OPEN_ROUTES` — plus `login` and `paywall`, which are the routes it sends people *to* |
+| Every destination | a `show*` flag raised in exactly one place, inside `gated` | the Home tile handler |
 | Home tiles | `gated { … }` around every wired destination | one check in `renderHome`'s handler |
 | Mid-session lapse | `visibleTab` re-resolves on every render | `render()` re-checks before the dispatch chain |
 
@@ -78,12 +78,14 @@ Four things about it are deliberate:
 - **The paywall stays dismissible.** Back returns to Home. A locked user can look at the app; they
   just cannot open any of it.
 - **The lapse case is handled by re-resolving, not by remembering.** `Transaction.updates` can
-  revoke an entitlement while the user is standing on the Puzzles tab, so both languages re-check
+  revoke an entitlement while the user is standing inside the Puzzle Hub, so both languages re-check
   on every paint rather than only at tap time.
 
-`tools/qa/trial_gate_check.js` pins all of it, including the cross-language part: the Swift tab
-*indices* are mapped through the browser's own tab table, so `[0, 3]` is verified to still mean
-Home and Profile rather than assumed to.
+`tools/qa/trial_gate_check.js` pins all of it. It used to map the Swift tab *indices* through the
+browser's own tab table, because the two languages named the open set differently — `[0, 3]` against
+`{ home, profile }`. With Home as the app root there are no indices: the gate now asserts that
+neither language has a tab bar left, that every `show*` flag is raised in exactly one gated place,
+and that Profile is the single ungated destination.
 
 **It also closed a real hole.** Before this, `app.js` gated only the four puzzle modes — Play vs
 Coach, the Analysis Board and the Swiss round ceiling had **no premium reference at all** in the
@@ -176,7 +178,7 @@ cases.
 | File | Role |
 |---|---|
 | `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | `locked`, `openTabs`, `visibleTab`, `gatedTab`, `gated(_:)` — the whole Swift half |
-| `web-demo/js/app.js` | `locked()`, `OPEN_ROUTES`, `isOpenRoute()`, the tab-bar check, the `render()` backstop |
+| `web-demo/js/app.js` | `locked()`, `OPEN_ROUTES`, `isOpenRoute()`, the Home tile check, the `render()` backstop |
 | `tools/qa/trial_gate_check.js` | The cross-language gate on both of the above |
 
 ## How to test
@@ -217,11 +219,11 @@ real trial, renewal, expiry and billing-retry paths.
 
 In `web-demo/index.html`, set the **Subscription** picker to **Free**:
 
-- every Home tile and the Puzzles/Play tabs land on **"Start Your 7-Day Free Trial"**;
+- every Home tile lands on **"Start Your 7-Day Free Trial"**;
 - Back from the paywall returns to Home;
 - Profile still opens, and **Sign out** still works;
 - switching the picker to **Trial**, **Active** or **Grace** opens everything normally;
-- switching it back to **Free** *while standing on the Puzzles tab* bounces to the paywall on the
+- switching it back to **Free** *while standing inside the Puzzle Hub* bounces to the paywall on the
   next paint — that is the `render()` backstop, and it is the case a tap-time-only gate misses.
 
 ## Before this can ship

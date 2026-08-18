@@ -782,7 +782,7 @@ var BiyaPremium = (function () {
       + (store.isPremium() ? STRINGS.premium : STRINGS.goPremium) + '</div>'
       + (store.isPremium()
         ? '<span class="pw-active">' + STRINGS.active + '</span>'
-        : '<img class="pw-logo" src="assets/images/app-icon.png" alt="" '
+        : '<img class="pw-logo" src="assets/images/brand-logo.png" alt="" '
           + 'style="margin-left:auto">');
     head.querySelector('.pw-back').onclick = onClose;
     root.appendChild(head);

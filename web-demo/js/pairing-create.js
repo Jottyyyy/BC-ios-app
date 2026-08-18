@@ -83,7 +83,7 @@ var BiyaPairingCreate = (function () {
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pgc-title', T.newTournament));
-    header.appendChild(el('div', 'pgc-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pgc-logo'));
     root.appendChild(header);
 
     var body = el('div', 'pgc-body');

@@ -78,7 +78,10 @@ struct CoachSelectScreen: View {
                     .tracking(CoachSelect.titleSmallLetterSpacing)
             }
             Spacer()
-            Color.clear.frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
+            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. Swift had
+            // an invisible counterweight of the same size, so this is a drop-in: same footprint,
+            // no longer blank.
+            HomeLogo(size: CoachSelect.backBtnWidth)
         }
         .padding(.top, CoachSelect.backBtnMarginTop)
         .padding(.leading, CoachSelect.backBtnMarginLeft)
@@ -365,7 +368,10 @@ struct CoachGameScreen: View {
                     .padding(.top, CoachPlay.headerRoleMarginTop)
             }
             Spacer()
-            Color.clear.frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
+            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. Swift had
+            // an invisible counterweight of the same size, so this is a drop-in: same footprint,
+            // no longer blank.
+            HomeLogo(size: CoachSelect.backBtnWidth)
         }
         .padding(.horizontal, CoachPlay.playHeaderPaddingHorizontal)
         .padding(.top, CoachPlay.playHeaderPaddingTop)

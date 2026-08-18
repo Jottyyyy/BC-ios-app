@@ -474,7 +474,7 @@ var BiyaPairingDetail = (function () {
                         T.roundsMeta(t.rounds.length, ST.totalRoundsOf(t))));
     centre.appendChild(meta);
     header.appendChild(centre);
-    header.appendChild(el('div', 'pgd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pgd-logo'));
     root.appendChild(header);
 
     var tabs = el('div', 'pgd-tabs');

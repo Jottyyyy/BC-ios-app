@@ -2074,6 +2074,120 @@ languages came to disagree: `TextField(axis: .vertical)` grows from **one line**
 showed a 160 pt paste target and the app a single-line input. Both take the metric now, and
 `replay_opening_tree.js` compares it because it loops over every `LAYOUT` key.
 
+## Home as the app root — the tab bar removed (2026-08-18)
+
+Client: *"kailangan ko lang mga back button para makapag-back yung mga user sa home page."*
+
+### The decision was already recorded, including its blocker
+
+`docs/home-screen.md` had carried both halves for as long as the screen has existed: that hosting
+Home inside a tab bar costs **~74 pt straight out of the grid** on every device, that the icon slot
+is what gives way (artwork at 50–75 % of design size), and that the structural fix is to make Home
+the app root — *"which would need a way back from the six destinations, which this screen
+deliberately does not have."*
+
+So this is not a new design. It is the recorded fix, plus the prerequisite the client asked for in
+the same sentence.
+
+### What the shape change actually is
+
+`PhoneApp` had two navigation models at once: a four-index `switch` for Home/Puzzles/Play/Profile,
+and a set of `show*` booleans raising Analysis, Pairing, Play vs Coach and Opening Tree as ZStack
+siblings over it. The second model already had everything the first needed — a back button, a
+`.transition`, full-screen coverage — so the change is not a new architecture but the deletion of
+the older of the two. Puzzles and Profile become `show*` flags like the rest.
+
+`OPEN_ROUTES` in the browser needed no edit at all, which is the tell: it had been keyed by route
+name the whole time, and only Swift was thinking in indices.
+
+### Two screens that were only reachable through the bar
+
+- **`PlayPhone`** (+ `phoneBoard`, `PlayPhoneBoard`) — the pre-port sample play screen. Its browser
+  twin was deleted a round earlier; this file recorded why the Swift one outlived it — `BoardView`
+  lived inside `PlayView.swift` and had to be lifted first. It was, and the tab bar was the screen's
+  last door. **`LegacyCoachSelect` is deliberately kept**: the macOS demo's `Panel.play` renders it
+  through `PlayView`, which is the engine/board harness rather than a phone screen.
+- **`LearnPhone`** — already unreachable before this change. No tab hosted it, nothing referenced
+  it. Dead code that read as a screen.
+
+### `an-mode` / `op-mode`: two classes whose only job was hiding the bar
+
+21 `classList.add/remove` calls across the browser, and exactly two CSS rules —
+`.app-card.an-mode .tabbar { display: none }` and its `op-mode` twin. Every pushed route dutifully
+set a class that, without a tab bar, does nothing. All of it is gone. Worth recording because the
+calls *looked* like a layout mechanism and were bookkeeping for a single `display: none`.
+
+### DEVIATION recorded: `HomeMetricsCheck`'s container heights are no longer verified here
+
+§4's five reference containers were "device minus safe areas minus the ~74pt tab bar". They grew by
+that 74, written as `reclaimedFromTabBar` so §4 and §5 cannot drift apart.
+
+§5 asserted, with a strict `<`, that the icon clamp **engages** on a 4.7" phone — a statement about
+a shell that no longer exists, and one that removing the bar may well invert. Rather than weaken it
+to a `<=` that would pass either way (a vacuous assertion this repo does not accept), it became two:
+
+1. the clamp still engages when the grid really is that tight — the old SE box, kept precisely
+   because it is the tight case;
+2. the same phone *without* the bar gets a strictly larger `iconBox` than with it.
+
+The second is monotonic and therefore true by construction, and it is the change expressed as
+arithmetic rather than as prose. **Neither has been run**: `HomeMetricsCheck` is a macOS executable
+and no JS gate carries those numbers. `swift run HomeMetricsCheck` on a Mac is the confirmation.
+
+## Every logo slot holds the brand mark (2026-08-18)
+
+Client: *"yang ganyang image palitan mo lahat ng Biyaherong Coach logo please, lahat."*
+
+### The knight had three draw sites left, and one of them was a divergence
+
+`HomeScreen.coachRing`, `home.js`'s `playCoach` card art, and `premium.js`'s `.pw-logo`. The last is
+what the client screenshotted, and it was the only place in either language that clipped the knight
+to a **true circle** — while `PaywallScreen.swift` had been drawing the collage in a squircle the
+whole time. A cross-language divergence that no gate compared, because art is a file reference
+rather than a value.
+
+`HomeAppIcon`'s `asset:` parameter now defaults to `.brandLogo` rather than `.appIcon`. That is the
+mechanism that let the coach ring keep the knight after the Home header moved on: it omitted the
+argument, and the default was the wrong thing to inherit.
+
+### Nine rings that were half a port
+
+`tools/metrics/puzzle_styles.json` → `shared.logo._source = "components/AppLogo.tsx"`. The RN
+component is a View with a 2 px gold border, `borderRadius: size / 2` and **`overflow: hidden`** —
+that last property is only meaningful around a child, and the child is the app's logo. The browser
+ported the ring to nine headers and never the image. Swift ported it to three (the pairing headers,
+via `HomeLogo`), left an invisible `Color.clear` counterweight in two coach headers, drew an empty
+`Circle()` in the Streak solver, and skipped the slot entirely in the rest.
+
+Filled: all thirteen browser sites through one `BiyaIcons.brandLogoEl(cls)` helper, and the three
+Swift sites where the replacement is footprint-identical.
+
+**Known gap, deliberately not closed blind:** the Swift Puzzle Hub, solver, Daily and Thematic
+headers, and the coach colour screen, have **no logo slot at all** — their browser twins do. Adding
+one is a layout change, and there is no Swift compiler on this checkout; inventing five headers'
+geometry blind is exactly what the extraction discipline exists to prevent. Recorded here rather
+than half-done.
+
+### DEVIATION: the rings are squircles, not circles
+
+`AppLogo.tsx` uses `borderRadius: size / 2` — a circle. The ports use `--brand-radius: 24%`, the
+login hero's 30/124 proportion.
+
+The reason is the same one recorded for the Home header last round: the mark is a square collage
+with a wordmark across its bottom edge, and a circular clip cuts the "APP" badge off. The RN app
+crops it too; at 30 px the difference is between a legible mark and a blue disc. A percentage rather
+than a length because the rings run 30–40 px and a fixed radius reads as a circle at one end and a
+square at the other.
+
+### The knight file is kept on purpose
+
+`Images/app-icon.png` is byte-identical to `ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png`
+(md5 `2d05a4c4…`): the shipped app icon and the bundled asset are one file. The client chose to keep
+the knight there — a photo collage with a wordmark is unreadable at 60 px — so the asset stays, the
+`HomeArt.Asset` case stays, and `Diagnostics.swift`'s count of 6 PNGs is unchanged. What changed is
+that nothing inside the app draws it, and `home_chrome_check.js` §7 keeps it that way with two
+named exemptions: the iOS icon, and `login.js`'s 404 fallback.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had

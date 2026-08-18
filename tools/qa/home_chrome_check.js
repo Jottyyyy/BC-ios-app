@@ -69,11 +69,14 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
   expect(/HomeAppIcon\([^)]*asset: \.brandLogo/s.test(logo),
     'HomeLogo draws HomeArt.Asset.brandLogo');
   expect(!/asset: \.appIcon/.test(logo), 'HomeLogo does not draw the app icon');
-  // The knight is not deleted — it is still the coach ring and the iOS icon. It just is not this.
-  expect(/HomeAppIcon\(size: ring, shape: shape\)/.test(CODE['HomeScreen.swift']),
-    'the Play-with-Coach ring still draws the app icon (default asset)');
+  // This used to assert the OPPOSITE for the Play-with-Coach ring — that it still took
+  // `HomeAppIcon`'s `.appIcon` default. The client asked for the brand mark everywhere, so the
+  // ring draws it explicitly now and the knight is gone from the app entirely.
+  expect(/HomeAppIcon\(size: ring, shape: shape, asset: \.brandLogo\)/
+    .test(CODE['HomeScreen.swift']),
+    'the Play-with-Coach ring draws the brand mark');
   expect(/case appIcon = "app-icon"/.test(read(UI, 'HomeArt.swift')),
-    'and HomeArt still declares it');
+    'HomeArt still DECLARES the knight — it is the iOS app icon, and Diagnostics counts its file');
 
   const src = HOME_JS.match(/class="home-logo"><img src="'\s*\+\s*ART\s*\+\s*'([\w.-]+)"/);
   expect(!!src, 'home.js still builds the header logo from ART + a filename');
@@ -202,6 +205,78 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
   expect(decls === 8, `HomeScreen declares ${decls} callbacks, expected 8 (was 10)`);
   expect(params === decls, `${params} init parameters against ${decls} properties`);
   expect(assigns === decls, `${assigns} assignments against ${decls} properties`);
+}
+
+// ── 7. No gold knight anywhere inside the app ───────────────────────────────────
+//
+// `app-icon.png` is the **app icon** — byte-identical to
+// `ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png` — and it stays there, because a photo
+// collage with a wordmark turns to mud at 60 px. What it must not be is a logo *inside* the app,
+// which is what the client screenshotted: a 30 px gold knight in the paywall header, in a
+// `border-radius: 50%` circle, while the Swift paywall had been drawing the collage all along.
+//
+// Two exemptions, both named and both justified — anything else is a regression.
+{
+  const EXEMPT = {
+    // The 404 fallback: if `brand-logo.png` is missing, a knight beats a broken-image box.
+    'login.js': /BRAND_FALLBACK = 'assets\/images\/app-icon\.png'/,
+  };
+
+  for (const f of fs.readdirSync(path.join(WEB, 'js')).filter((x) => x.endsWith('.js'))) {
+    const src = code(fs.readFileSync(path.join(WEB, 'js', f), 'utf8'));
+    if (!/app-icon/.test(src)) { passed++; continue; }
+    const allowed = EXEMPT[f];
+    expect(!!allowed && allowed.test(src),
+      `web-demo/js/${f} draws app-icon.png — the gold knight is the APP icon, not an in-app logo`);
+    // An exemption must be the ONLY mention, or it is covering for a second one.
+    expect((src.match(/app-icon/g) || []).length === 1,
+      `web-demo/js/${f} mentions app-icon more than once; the exemption covers exactly one`);
+  }
+  for (const f of ['app.css', 'coach.css', 'pairing.css', 'theme.css']) {
+    expect(!/app-icon/.test(code(fs.readFileSync(path.join(WEB, 'css', f), 'utf8'))),
+      `web-demo/css/${f} references app-icon`);
+  }
+
+  // Swift: `.appIcon` may be declared, preloaded and counted — but not DRAWN.
+  for (const f of fs.readdirSync(UI).filter((x) => x.endsWith('.swift'))) {
+    const src = code(fs.readFileSync(path.join(UI, f), 'utf8'));
+    expect(!/HomeAppIcon\([^)]*asset: \.appIcon/s.test(src),
+      `${f} draws HomeAppIcon with the knight`);
+  }
+  // And nothing may take it by default any more, so a NEW call site cannot get it by omission.
+  expect(/var asset: HomeArt\.Asset = \.brandLogo/.test(read(UI, 'HomeArt.swift')),
+    "HomeAppIcon defaults to the brand mark, so a new call site cannot draw the knight by accident");
+}
+
+// ── 8. Every logo ring holds the mark ───────────────────────────────────────────
+//
+// `tools/metrics/puzzle_styles.json` -> `shared.logo._source` is `components/AppLogo.tsx`: a View
+// with a 2px gold border, `borderRadius: size / 2` and `overflow: hidden` — a ring AROUND an image.
+// The browser ported the ring to nine headers and never the image, so all nine drew an empty gold
+// circle next to the title.
+{
+  const RINGS = ['pzh-logo', 'pz-logo', 'pzd-logo',
+                 'cgs-logo', 'cgc-logo', 'cgp-logo',
+                 'pgl-logo', 'pgc-logo', 'pgd-logo'];
+  const allJs = fs.readdirSync(path.join(WEB, 'js')).filter((x) => x.endsWith('.js'))
+    .map((f) => fs.readFileSync(path.join(WEB, 'js', f), 'utf8')).join('\n');
+  const allCss = ['app.css', 'coach.css', 'pairing.css']
+    .map((f) => fs.readFileSync(path.join(WEB, 'css', f), 'utf8')).join('\n');
+
+  for (const cls of RINGS) {
+    expect(!new RegExp("el\\('div', '" + cls + "'\\)").test(allJs),
+      `${cls} is still built as a bare div — an empty gold ring is what this section exists for`);
+    expect(new RegExp("brandLogoEl\\('" + cls + "'\\)").test(allJs),
+      `${cls} is not built through BiyaIcons.brandLogoEl`);
+    expect(new RegExp('\\.' + cls + ' img').test(allCss),
+      `${cls} has no rule sizing the mark inside it`);
+    expect(!new RegExp('\\.' + cls + '[^{]*\\{[^}]*border-radius:\\s*50%').test(allCss),
+      `${cls} is a circle — that crops the wordmark off the mark`);
+  }
+  // One source for the asset path, so nine headers cannot drift.
+  expect(/var BRAND_SRC = 'assets\/images\/brand-logo\.png';/
+    .test(fs.readFileSync(path.join(WEB, 'js', 'icons.js'), 'utf8')),
+    'icons.js owns the brand asset path');
 }
 
 // ---- report ------------------------------------------------------------------

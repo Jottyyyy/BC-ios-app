@@ -58,9 +58,14 @@
 
 /* AppLogo(30): circle, 2pt gold border, gold glow. Spec line 1808. */
 .pgl-logo, .pgc-logo, .pgd-logo {
-  width: 30px; height: 30px; border-radius: 15px; flex: 0 0 auto;
+  width: 30px; height: 30px; border-radius: var(--brand-radius); flex: 0 0 auto; overflow: hidden;
   border: 2px solid var(--gold); background: var(--card-alt);
   box-shadow: 0 0 6px rgba(253, 176, 34, .6);
+}
+/* The Swift twins (`PairingScreens.swift`, `PairingDetailScreens.swift`) have drawn `HomeLogo`
+   here all along; the browser drew an empty ring. */
+.pgl-logo img, .pgc-logo img, .pgd-logo img {
+  width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;
 }
 
 /* ---- List ---- */
