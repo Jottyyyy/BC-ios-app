@@ -9,6 +9,91 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (added) — Opening Tree: the tile that did nothing now opens openingtree.com
+
+Fourth round of client feedback: *"yung opening trainer pag cliniclick ko ayaw mabuksan … simple
+lang ang logic at gusto ko mangyari dyan katulad dito mismo https://www.openingtree.com/ … ito repo
+nyan … naimplement ko na yan, tignan mo na lang dito."* `web-demo/` updated to match.
+
+**The tile was not broken — its screen was never built.** `HomeScreen.onOpeningTrainer` is declared
+and **defaulted to `{}`**, `PhoneView.home(basis:)` simply omits the argument, and `app.js`'s Home
+handler has no branch for the `'openingTrainer'` action `home.js` has emitted since the tile was
+drawn. The button pressed, dimmed, and called an empty closure. `onVideos` still does; `onSearch`
+and `onDonate` did too until the entry above this one removed the controls that raised them.
+
+**What was built** is the RN app's own openingtree.com rebuild —
+`analysis-board/openingtree.tsx`, 1,457 lines, three screens behind one `view` state — as a pure
+Core module, a JS twin, and three screens per language.
+
+**Two rules carry the whole feature, and both are asserted by name.**
+
+*A node's statistics belong to the MOVER.* `wins`/`draws`/`losses` describe how the side that
+**played** that move fared, so the score inverts on the opponent's plies — which is what makes a
+two-colour tree legible, and is openingtree.com's own convention. Backwards, every second row of the
+move list is exactly wrong in a way that looks entirely plausible: Black's replies would read as
+*your* results, and only a hand-checked game would show it.
+
+*The candidate sort ties by SAN.* Count descending, equal counts by SAN ascending. `Dictionary`
+order is unspecified in Swift and `sort` is not stable, so without the tie-break one tree renders in
+a different order on every run **and** in a different order from the browser — at which point no
+replay can compare the two.
+
+**Keyed by SAN, not by FEN, on purpose.** A SAN path is the line you *played*, so `1.e4 c5 2.Nf3`
+and `1.Nf3 c5 2.e4` stay separate branches. Merging transpositions is right for an opening **book**
+— `OpeningBook` keys by `positionKey` and does exactly that — and wrong for "how do I actually
+play". Two behaviours that look like bugs are kept because they are not: an unreadable move
+**truncates** the game rather than dropping it (everything before it is real data, and real PGN
+carries null moves and exporter quirks), while a game whose *first* move will not parse is counted
+separately in `rejectedCount` rather than silently vanishing. And legality is judged by the
+position, with SAN re-generated from the parsed move, so `Qxf7` / `Qxf7#` / an over-disambiguated
+spelling all collapse onto one branch.
+
+**Games come from a pasted PGN, with no network.** Both Lichess and Chess.com let you download all
+your games as a PGN, so the offline path is the real one, and it reuses `PGN.splitGames` /
+`mainlineTokens` — already pinned to the PHP `PgnImportService` by the `pgn_split` and `pgn_tokens`
+goldens, so multi-game splitting, RAV skipping and NAG stripping are the backend's behaviour rather
+than a second implementation of it. **My Coach games**, **Lichess** and **Chess.com** are declared,
+drawn and labelled "Needs internet"; they refuse with a named message instead of failing silently,
+because the download belongs beside `ContentClient` — spec §0.1 makes that the only place in the app
+allowed to open a `URLSession`, and a second `fetch` in a click handler is the exact leak that rule
+exists to prevent.
+
+**One validation bug found by its own test.** `PGN.mainlineTokens` is a tokenizer, not a validator:
+`"not a game"` comes back as three move tokens, so a `games.isEmpty` check passes and builds an
+empty tree. Both languages now check **positions**, after the replay, which is the only thing that
+knows whether the PGN held any chess.
+
+**Extract, don't transcribe.** New `tools/metrics/extract_opening_styles.js` walks `openingtree.tsx`
+into a committed `opening_styles.json` — 87 style keys, 328 properties, 12 functions, 23 colours,
+zero unresolved values — and `opening-metrics.js`'s `selfTestSource` asserts all 131 constants
+against it, including the three W/D/L colours, which live in `renderWdlBar`'s inline styles and are
+the reason the extractor names that function explicitly. It is also the **first extractor that works
+from a worktree**: it takes a `FRONTEND_ROOT` override, for the same reason `tools/oracle` takes
+`LARAVEL_ROOT`. The other four still hardcode the relative path and fail there.
+
+**Two CSS namespaces, and the bug that forced them.** `buildBorder`, `inputBorder` and `infoBorder`
+each name a **width** in `LAYOUT` and a **colour** in `PALETTE`. Under one `--op-*` prefix the colour
+pass silently overwrote the width and three borders rendered with `#243654` as their thickness, i.e.
+not at all. Geometry is `--op-*`, colour is `--opc-*`, and the replay asserts the build button takes
+one of each.
+
+**The tile's copy changed with it:** "Opening Tree / Explore Your Openings". "Master Your
+Repertoire" describes the Chessable-style SM-2 trainer specced in
+`specs/BIYAHERONG-PORT-SPEC.md` §4, which is a different feature and remains unbuilt.
+
+**Gates.** New `tools/qa/replay_opening_tree.js` — 344 assertions comparing the Swift source text
+with the JS that runs, covering both algorithmic rules, every metric, every string, the online
+source set, the `--op-*`/`--opc-*` contract, the index.html load order and the router branches in
+both languages. Four mutants killed, including inverting the inversion and dropping the SAN
+tie-break. New `opening_tree` ParityRunner group (66 assertions, floor 60) — **no golden file**,
+because the source is TypeScript rather than a Laravel controller and there is no PHP oracle to
+generate one; the JS twin is the differential partner instead. New `docs/opening-tree.md`.
+`js_goldens` 33,010 → 33,643 across 76 suites; `nav_icons_check` 1,047 → 1,048 after the new back
+button was made to go through the shared component, which it caught.
+
+**Still not built:** the SM-2 trainer, and the two online downloads. Both are described where they
+would land rather than left as silence.
+
 ### 2026-08-18 (changed) — Nothing opens without the trial: one gate per language, at the router
 
 Fourth round of client feedback: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi

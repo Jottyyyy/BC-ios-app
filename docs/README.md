@@ -50,6 +50,10 @@ Feature- and subsystem-level documentation for this repo.
   built, the shared solver core, the selection ladders over SQLite, and the local progress store.
   Plus the style extraction, the metrics layer and all eleven screens — Hub, Play Puzzles, Daily,
   Thematic, Streak and Turbo — in both languages. **Complete (phases A–G).**
+- [`opening-tree.md`](opening-tree.md) — the openingtree.com-style move tree over your own games:
+  SAN-keyed, with win/draw/loss per candidate **from the mover's point of view**, built from a pasted
+  PGN with no network. The destination the Opening Tree Home tile had been missing since the screen
+  was written.
 - [`pairing-engine.md`](pairing-engine.md) — Swiss pairing (FIDE Dutch), Berger round-robin schedules
   and the four tie-breaks, as one pure module: the priority ladder that replaces the server's silent
   repeat pairing, and the property tests over whole simulated tournaments that prove it.

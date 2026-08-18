@@ -159,6 +159,7 @@
     else if (current === 'pairing') renderPairingList();
     else if (current === 'pairing-create') renderPairingCreate();
     else if (current === 'pairing-detail') renderPairingDetail();
+    else if (current === 'openings') renderOpenings();
     else if (current === 'puzzles') renderPuzzleHub();
     else if (current === 'puzzle-play') renderPuzzlePlayHome();
     else if (current === 'puzzle-solve') renderPuzzleSolver();
@@ -444,6 +445,51 @@
   }
 
   /* ======================================================================== *
+   *  OPENING TREE — see js/opening-tree.js, opening-store.js, openings.js
+   *
+   *  A pushed route, like Pairing: reached from a Home tile, not a tab, and its
+   *  three screens of its own leave no room for the app's.
+   *
+   *  `openingForm` is router-scoped for the reason every other pushed route's
+   *  state is: `render()` runs again on every repaint, so a half-typed PGN held
+   *  inside the screen would be lost on the first one.
+   * ======================================================================== */
+
+  var openingForm = null;
+  var openingMode = 'list';
+
+  function openingsGo(mode) { openingMode = mode; current = 'openings'; renderTabbar(); render(); }
+
+  function renderOpenings() {
+    appCard().classList.add('an-mode');   // a pushed route: no tab bar, full height
+    var store = BiyaOpeningStore.shared();
+    if (!openingForm) openingForm = BiyaOpenings.emptyForm();
+    BiyaOpenings.render(view, store, openingForm, openingMode, {
+      onExit: function () { current = 'home'; renderTabbar(); render(); },
+      onBuild: function () { openingForm = BiyaOpenings.emptyForm(); openingsGo('form'); },
+      onCancel: function () { openingsGo('list'); },
+      onChanged: render,
+      onSubmit: function () {
+        // The clock is injected rather than read inside the builder, so the same call is
+        // reproducible in a test — the rule `pairing-store.js` follows for `createdAtMs`.
+        var r = BiyaOpenings.submit(openingForm, Date.now());
+        if (r.error) { openingForm.error = r.error; render(); return; }
+        store.add(r.tree);
+        store.openTree(r.tree.id);
+        openingForm = null;
+        openingsGo('list');
+      },
+      onOpen: function (id) { store.openTree(id); openingsGo('list'); },
+      onDelete: function (id) { store.remove(id); render(); },
+      onClose: function () { store.closeTree(); render(); },
+      onPlay: function (san) { store.play(san); render(); },
+      onBack: function () { store.stepBack(); render(); },
+      onForward: function () { store.stepForward(); render(); },
+      onReset: function () { store.reset(); render(); }
+    });
+  }
+
+  /* ======================================================================== *
    *  HOME TAB — see js/home.js
    * ======================================================================== */
   function renderHome() {
@@ -468,6 +514,9 @@
       // home.js has emitted 'pairing' since the tile was drawn; there was simply nothing here to
       // catch it.
       else if (action === 'pairing') pairingGo('pairing');
+      // home.js has emitted 'openingTrainer' since the tile was drawn and nothing caught it —
+      // the tile did nothing at all, which is the bug the client reported. This is where it goes.
+      else if (action === 'openingTrainer') openingsGo('list');
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
     });

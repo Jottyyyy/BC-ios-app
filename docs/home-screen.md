@@ -92,6 +92,17 @@ of the standard translucent blue — the swiss artwork is otherwise too low-cont
 **One precedence rule that must not be violated:** a premium user's gold banner **always** outranks the
 Colorful purple, in both themes. The gold state is the reward and it always wins.
 
+## The Opening Trainer tile is the Opening Tree now
+
+`HomeCard.openingTrainer` keeps its enum case — it is what `home.js` emits and what the router
+matches — but reads **"Opening Tree" / "Explore Your Openings"**. "Master Your Repertoire" described
+the Chessable-style SM-2 trainer specced in `specs/BIYAHERONG-PORT-SPEC.md` §4, which is not what the
+tile opens. See [`opening-tree.md`](opening-tree.md).
+
+Its callback was the last one on this screen with no destination but `onVideos`. It had defaulted to
+`{}` since the screen was written, and `PhoneView.home(basis:)` simply never passed it — which is
+why the tile pressed, dimmed, and did nothing at all.
+
 ## Key files
 
 | File | Role |

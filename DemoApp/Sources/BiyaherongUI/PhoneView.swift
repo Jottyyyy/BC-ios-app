@@ -67,6 +67,11 @@ struct PhoneApp: View {
     /// screen, which cannot be retired until `BoardView` is lifted out of `PlayView.swift`.
     @StateObject private var coachStore = CoachStore()
     @State private var showCoach = false
+    /// The Opening Tree, presented the same way and for the same reason: three screens of its own,
+    /// reached from the Home tile. The tile has existed since the screen was written and its
+    /// callback was never passed — this is the destination it was waiting for.
+    @StateObject private var openingStore = OpeningTreeStore()
+    @State private var showOpenings = false
     /// True while the Puzzles tab has a route pushed on top of the hub — the tab bar hides, the
     /// way it does in the browser. See `PuzzleHubScreen.onPushedChange`.
     @State private var puzzlePushed = false
@@ -209,6 +214,17 @@ struct PhoneApp: View {
                     .background(PairingList.containerBackgroundColor)
                     .transition(.move(edge: .bottom))
                 }
+                if showOpenings {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        OpeningTreeRootScreen(store: openingStore,
+                                              onExit: { showOpenings = false })
+                    }
+                    .background(OpeningPalette.screenBg)
+                    .transition(.move(edge: .bottom))
+                }
                 if showCoach {
                     VStack(spacing: 0) {
                         #if os(macOS)
@@ -291,7 +307,9 @@ struct PhoneApp: View {
     }
 
     /// Only the callbacks with a real destination today are wired; the rest are the empty closures
-    /// the screen is designed around and stay that way until those screens exist.
+    /// the screen is designed around and stay that way until those screens exist. `onVideos` is the
+    /// last one left — `onOpeningTrainer` got its screen in round 4, and `onSearch` / `onDonate`
+    /// were removed with the controls that raised them.
     ///
     /// Every wired destination goes through `gated`, so a user who has not started the trial gets
     /// the paywall instead. `onAvatar` and `onMembership` deliberately do not: one leads to Sign
@@ -318,6 +336,11 @@ struct PhoneApp: View {
                    onPlayCoach: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showCoach = true
+                       }
+                   },
+                   onOpeningTrainer: gated {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showOpenings = true
                        }
                    },
                    onPairing: gated {
