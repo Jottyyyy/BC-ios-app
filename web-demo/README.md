@@ -76,7 +76,7 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 
 ## 🗂️ Ano ang laman
 
-4-tab na phone app (tulad ng tunay):
+Home ang app root — lahat ng iba ay bubukas mula sa isang tile at may back button pabalik:
 
 - **Home** — ang landing dashboard: header (avatar · brand logo), 3×2 grid ng anim na card, hourly na
   Taglish quote, at ang Membership banner. May Sky / Colorful na tema (pumili sa itaas ng phone).
@@ -101,7 +101,7 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 | **Mga puzzle** | `js/puzzles.js` (tingnan ang format sa baba) |
 | **Piece artwork** | palitan ang mga `.svg` sa `assets/pieces/`, o gamitin ang `piece-path` attribute |
 | **Chess rules** (move gen, SAN, atbp.) | `js/engine.js` — tapos patakbuhin ang `?selftest` |
-| **App layout / mga tab** | `js/app.js` + `css/app.css` |
+| **App layout / routing** | `js/app.js` + `css/app.css` |
 
 ---
 

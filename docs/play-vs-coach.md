@@ -170,9 +170,13 @@ a mutant pins the difference.
 `CoachMetrics.swift` generates `public enum CoachSelect`; the pre-port sample screen declared
 `struct CoachSelect: View`. That is a redeclaration error, and it sat in the repo unnoticed because
 nothing here compiles Swift. The view is now `LegacyCoachSelect`, and `swift_symbol_check.js`
-reports duplicate top-level types. It is also why the **Swift** sample Play tab is still reachable
-while the browser one was deleted: `BoardView` lives inside `PlayView.swift`, so retiring the pair
-means extracting it first.
+reports duplicate top-level types.
+
+It was also why the **Swift** sample Play tab outlived the browser one: `BoardView` lived inside
+`PlayView.swift`, so retiring the pair meant extracting it first. That extraction happened
+(`BoardView.swift`), and removing the tab bar took the screen's last door — `PlayPhone` and its
+board chrome are deleted. `LegacyCoachSelect` stays: the macOS demo's `Panel.play` still renders it
+through `PlayView`, which is the board harness, not a phone screen.
 
 ## How to test
 

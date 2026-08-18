@@ -96,13 +96,24 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
     let zero = HomeScreenMetrics(scale: 1.0).tile(inGridContent: .zero)
     expect(zero.height == 0 && zero.width == 0, "tile is zero for a zero container")
 
+    /// What the bottom tab bar took out of every container before Home became the app root.
+    /// `docs/home-screen.md`'s figure, kept as one number so §4 and §5 cannot drift apart.
+    let reclaimedFromTabBar: CGFloat = 74
+    /// The five reference devices, as they measured *with* the bar.
+    let tallerWithoutTabBar = [CGSize(width: 375, height: 572.5),    // iPhone SE 3
+                               CGSize(width: 393, height: 684.5),    // iPhone 15
+                               CGSize(width: 430, height: 763),      // iPhone 15 Pro Max
+                               CGSize(width: 834, height: 1050),     // iPad 11"
+                               CGSize(width: 1024, height: 1247)]    // iPad 12.9"
+
     // ── 4. Band budget — the never-scroll invariant, as arithmetic ───────────
-    // Measured content boxes (device minus safe areas minus the ~74pt tab bar).
-    let containers = [CGSize(width: 375, height: 572.5),    // iPhone SE 3
-                      CGSize(width: 393, height: 684.5),    // iPhone 15
-                      CGSize(width: 430, height: 763),      // iPhone 15 Pro Max
-                      CGSize(width: 834, height: 1050),     // iPad 11"
-                      CGSize(width: 1024, height: 1247)]    // iPad 12.9"
+    //
+    // Measured content boxes: device minus safe areas. They used to be measured minus the tab
+    // bar as well; Home is the app root now, so every one of them grew by `reclaimedFromTabBar`.
+    // Written as a sum rather than as five new literals so the change is legible — and so the
+    // pair of assertions in §5 can compare the two shells directly.
+    let containers = tallerWithoutTabBar.map { CGSize(width: $0.width,
+                                                      height: $0.height + reclaimedFromTabBar) }
     for c in containers {
         let m = HomeScreenMetrics(basis: c)
         let grid = m.gridHeight(container: c)
@@ -115,14 +126,28 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
         }
     }
 
-    // ── 5. The icon clamp: engages only where the design does not fit ────────
-    // A 4.7" phone inside the tab-bar shell is genuinely over-constrained; the artwork gives way
-    // rather than the title being clipped.
-    let se = CGSize(width: 375, height: 572.5)
+    // ── 5. The icon clamp, and what removing the tab bar bought ──────────────
+    //
+    // Two assertions, and the second is the point of the whole change.
+    //
+    // The clamp still works: give the grid the box a 4.7" phone had *inside the tab bar* and the
+    // artwork still gives way rather than the title being clipped. That box no longer occurs on
+    // any device — it is kept here precisely because it is the tight case.
+    let tightBox = CGSize(width: 375, height: 572.5)
+    let tightM = HomeScreenMetrics(basis: tightBox)
+    let tightTile = tightM.tile(inGridContent: tightM.gridContent(container: tightBox))
+    let tightIcon = tightM.iconBox(rowHeight: tightTile.height, card: .puzzles)
+    expect(tightIcon < tightM.iconSize,
+           "the icon clamp still engages when the grid really is that tight")
+
+    // And the artwork got room back. `docs/home-screen.md` recorded the cost of hosting Home as
+    // tab 0 — "~74 pt, which comes straight out of the grid", leaving the icons at 50-75% of
+    // their design size. This is that sentence as arithmetic: same phone, no bar, bigger icon.
+    let se = CGSize(width: 375, height: 572.5 + reclaimedFromTabBar)
     let seM = HomeScreenMetrics(basis: se)
     let seTile = seM.tile(inGridContent: seM.gridContent(container: se))
-    expect(seM.iconBox(rowHeight: seTile.height, card: .puzzles) < seM.iconSize,
-           "icon clamp engages on a 4.7\" phone")
+    expect(seM.iconBox(rowHeight: seTile.height, card: .puzzles) > tightIcon,
+           "removing the tab bar gives the 4.7\" phone's artwork room back")
     // With generous height it must be a no-op — the design renders at full size.
     let roomy = HomeScreenMetrics(scale: 1.0)
     expectNear(roomy.iconBox(rowHeight: 400, card: .puzzles), roomy.iconSize, "icon clamp is a no-op when there is room")

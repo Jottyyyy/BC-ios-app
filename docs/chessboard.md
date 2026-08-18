@@ -84,7 +84,6 @@ Horizontal centring is the parent stack's job, which a `VStack` already does.
 | The five puzzle solvers | `geo.size.width` (full bleed, like `.pz-board`) |
 | Play vs Coach | `geo.size.width` |
 | Analysis Board | `AnalysisBoard.size(screenWidth:pixelRatio:)` — snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. Pinned to the RN source; do not replace it with the plain width. |
-| Legacy Play tab | `PlayPhoneBoard.edge(screenWidth:)` — width minus the eval bar, its gap and the row padding |
 | The two macOS demo panels | a constant (480 / 460); they are fixed-size desktop panels |
 
 ---
@@ -158,12 +157,15 @@ Labels carry the *logical* file/rank, so they follow a flip. The two macOS demo 
 
 ---
 
-## Tab bar
+## There is no tab bar
 
-The app's tab bar is hidden while the Puzzles tab has a route pushed, matching the browser, where
-every pushed route calls `appCard().classList.add('an-mode')` and `.app-card.an-mode .tabbar` is
-`display: none`. `PuzzleHubScreen` reports its depth through `onPushedChange`; `PhoneApp` holds the
-flag. The Analysis Board, Pairing and Play vs Coach are `ZStack` siblings that already cover the bar.
+This section used to describe how the bar was hidden on a pushed puzzle route: the browser set
+`an-mode`, `PuzzleHubScreen` reported its depth through `onPushedChange`, and `PhoneApp` held the
+flag. **Home is the app root now**, so every screen covers the whole phone and none of that
+machinery exists. `swift_layout_check.js` §6 asserts the inverse, so it cannot come back unnoticed.
+
+The board therefore always has the full height it computes from the WIDTH — the sizing rule above
+never had to account for a bar, and now nothing does.
 
 ---
 

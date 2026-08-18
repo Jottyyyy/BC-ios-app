@@ -95,11 +95,15 @@ const MUTANTS = [
       + 'asked twice to be rid of would return',
   },
   {
-    id: 'tab_bar_shown_on_pushed_routes',
+    // Replaces `tab_bar_shown_on_pushed_routes`, whose anchor
+    // (`if !puzzlePushed { PhoneTabBar(tab: gatedTab) }`) no longer exists: Home became the app
+    // root and the bar went with it. A mutant whose `from:` string is gone never applies, which
+    // reads as a pass and proves nothing — so it is replaced rather than deleted.
+    id: 'puzzle_hub_left_as_a_bare_tab',
     file: 'PhoneView.swift',
-    from: 'if !puzzlePushed { PhoneTabBar(tab: gatedTab) }',
-    to: 'PhoneTabBar(tab: gatedTab)',
-    why: 'the tab bar left visible on pushed puzzle routes',
+    from: 'if showPuzzles {',
+    to: 'if true {',
+    why: 'the Puzzle Hub drawn unconditionally over Home, i.e. as a tab again',
   },
 ];
 

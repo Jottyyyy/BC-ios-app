@@ -67,7 +67,7 @@ and `65` over a zero basis. Both self-checks assert the two shares add back up t
   The real `ASAuthorizationAppleIDButton` that will replace this renders in San Francisco, so matching it
   now means the control does not visibly change size when the simulation goes away.
 - **The gate is the LAST `ZStack` sibling in `PhoneApp`**, not a `.fullScreenCover` — that does not exist
-  on macOS, and this view renders inside the desktop phone frame. Last, so it covers the tab bar and all
+  on macOS, and this view renders inside the desktop phone frame. Last, so it covers all
   three pushed routes (Analysis, Pairing, Play vs Coach).
 
 ## The session
@@ -96,7 +96,7 @@ cannot read a key must still open.
 | `DemoApp/Sources/BiyaherongUI/LoginStore.swift` | The session, persisted behind an injected `CoachGame.Storage`. The one seam a real Apple sign-in replaces. |
 | `DemoApp/Sources/BiyaherongUI/LoginMetricsCheck.swift` | The runnable self-check (no XCTest in this toolchain). |
 | `DemoApp/Sources/LoginMetricsCheck/main.swift` | `swift run LoginMetricsCheck`. |
-| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | The gate (`PhoneApp`, last ZStack sibling) and the Profile tab's **Account** card. |
+| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | The gate (`PhoneApp`, last ZStack sibling) and the Profile screen's **Account** card. |
 | `DemoApp/Sources/BiyaherongUI/HomeArt.swift` | `HomeArt.Asset.brandLogo` and the generalised `HomeAppIcon(size:shape:asset:)`. |
 | `DemoApp/Sources/BiyaherongUI/Images/brand-logo.png` | The brand mark, copied from the RN app's `assets/images/icon.png`. |
 | `web-demo/js/login.js` | The browser twin — the same pure layer, the same store, plus the DOM renderer. |

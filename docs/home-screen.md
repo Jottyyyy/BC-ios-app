@@ -1,7 +1,8 @@
 # home-screen — the app's landing dashboard
 
 A dark-navy, **never-scrolling**, single-viewport dashboard: a header, a 3×2 grid of six equal cards, an
-hourly-rotating Taglish quote, and a bottom banner. It is the first tab of the phone app.
+hourly-rotating Taglish quote, and a bottom banner. **It is the app root** — every other screen
+is raised over it by a tile and closed by its own back button.
 
 It is **presentation only** — no networking, no persistence, no navigation. Every dynamic value is a view
 input and every tap is a closure the caller supplies, so the screen is a pure function of its arguments.
@@ -9,7 +10,7 @@ input and every tap is a closure the caller supplies, so the screen is a pure fu
 Ported from the React Native app's `app/(app)/user/home.tsx` in the sibling
 `../BYAHERONG-COACH-FRONTEND` repo — from its real StyleSheet numbers, not from prose.
 
-- **Run it (Windows):** open `web-demo/index.html`. Home is the default tab. The hero bar above the phone
+- **Run it (Windows):** open `web-demo/index.html`. Home is the first screen after sign-in. The hero bar above the phone
   has **Device**, **Home theme** (Sky / Colorful) and **Membership** (Free / Premium) pickers.
 - **Run it (macOS):** `cd DemoApp && swift run DemoApp` → the **Phone UI** panel. The Sky/Colorful picker
   sits above the phone frame.
@@ -67,10 +68,14 @@ Two things about that are worth knowing before touching the layout:
 
 ### When the design does not fit
 
-**The design is over-constrained inside a tab bar, on every device — not just small ones.** The original RN
-home screen is a full-height Stack screen with no tab bar; hosting it as tab 0 here costs ~74 pt, which
-comes straight out of the grid. A 4.7" phone ends up with ~74–93 pt per row against the ~115 pt the full
-card content wants, and even a 6.7" phone is short of the design's 72 pt icon.
+**This section used to open "the design is over-constrained inside a tab bar, on every device".** It
+is not any more — the bar is gone and the ~74 pt it cost came back to the grid. What follows is kept
+because the clamp it describes still exists and still has to be correct; it simply engages far less
+often now.
+
+The original RN home screen is a full-height Stack screen with no tab bar, and hosting it as tab 0
+here cost ~74 pt straight out of the grid. A 4.7" phone got ~74–93 pt per row against the ~115 pt
+the full card content wants, and even a 6.7" phone was short of the design's 72 pt icon.
 
 Something has to give, and the order is deliberate: **the icon slot shrinks first, the card's internal gap
 second, and text is never clipped.** In practice the artwork renders at roughly 50–75% of its nominal
@@ -81,9 +86,14 @@ the spec.
 Verified across 7 devices × 2 themes: no title, subtitle or CTA is ever cut off, the six tiles stay
 identical to within 0.016 px, row pitch stays equal, and nothing scrolls.
 
-If full-size icons matter more than the tab bar, the fix is structural rather than a tweak: make the home
-screen the app root without a tab bar, as the original does. That would need a way back from the six
-destinations, which this screen deliberately does not have.
+**That fix is what shipped.** This paragraph used to read: *"If full-size icons matter more than the
+tab bar, the fix is structural rather than a tweak: make the home screen the app root without a tab
+bar, as the original does. That would need a way back from the six destinations, which this screen
+deliberately does not have."*
+
+Both halves happened. Home is the app root; every destination is a pushed route with a back button
+that returns to it, including Profile, which had none in either language. `HomeMetricsCheck` §5 is
+the arithmetic: same 4.7" phone, no bar, measurably bigger artwork.
 
 ## The two themes
 
@@ -128,7 +138,7 @@ why the tile pressed, dimmed, and did nothing at all.
 | `DemoApp/Sources/BiyaherongUI/HomeMetricsCheck.swift` | The runnable self-check (no XCTest in this toolchain). |
 | `tools/qa/home_chrome_check.js` | The cross-language gate on this file's header and banner band: the brand asset, the squircle proportion, the counterweight, the absence of Donate/search, and the two-line band height. |
 | `DemoApp/Sources/BiyaherongUI/Images/` | The six art assets. Declared `.copy` in `Package.swift`, so **every lookup passes `subdirectory: "Images"`**. |
-| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | Hosts it as tab 0 and supplies the scale basis. |
+| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | Hosts it as the app ROOT, raises every pushed route over it, and supplies the scale basis. |
 | `web-demo/js/home.js` | The browser mirror. Its top half is a line-for-line port of the pure layer. |
 | `web-demo/css/app.css` (`---- Home ----`) | The mirror's styling, on `css/theme.css` tokens. |
 
@@ -156,7 +166,7 @@ read as a circle at the small end and a square at the large one.
 
 **`scaleBasis` is not cosmetic.** The host passes the whole phone shell, matching the original's
 `Dimensions.get('window')`. Deriving the scalar from the screen's own box instead would make every icon and
-font ~19% smaller than the design, because that box is already inset by the safe areas and the tab bar. The
+font ~19% smaller than the design, because that box is already inset by the safe areas. The
 *layout* still uses the real container — only the scalar differs.
 
 The empty/loading appearance is the correct first paint, not an error state: `?` on gold, no badge,

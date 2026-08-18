@@ -2,7 +2,7 @@ import SwiftUI
 
 // Public entry points for the app targets.
 //
-//  • BiyaherongPhoneRoot — the iPhone/iPad app: boots straight into the tab UI.
+//  • BiyaherongPhoneRoot — the iPhone/iPad app: boots straight into Home, which is the app root.
 //  • BiyaherongMacRoot   — the macOS engine-demo shell (sidebar of panels).
 //
 // The `@main` App structs that show these live in the app targets (the DemoApp

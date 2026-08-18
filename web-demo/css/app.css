@@ -130,23 +130,16 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 
 .screen-title { font-weight: 800; font-size: 27px; letter-spacing: -.4px; margin: 6px 18px 12px; }
 .screen-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 18px 12px; }
+/* A screen-head with a back button in it. `.nav-icon` carries the shared icon size and
+   Apple's 44px minimum hit width — see docs/navigation-chrome.md. */
+.screen-head.with-back { justify-content: flex-start; gap: 4px; }
+.screen-back {
+  width: 40px; height: 40px; flex: none; padding: 0; border: 0; background: none;
+  cursor: pointer; color: var(--fg); font-size: 24px; display: grid; place-items: center;
+}
+.screen-back:active { opacity: .6; }
 .screen-head .screen-title { margin: 0; }
 
-/* ---- Bottom tab bar ------------------------------------------------------- */
-.tabbar {
-  position: sticky; bottom: 0; z-index: 20; display: flex;
-  padding: 10px 8px calc(20px + env(safe-area-inset-bottom, 0px));
-  background: rgba(15, 26, 46, .82); backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3); border-top: 1px solid var(--hairline);
-}
-.tab {
-  flex: 1; background: none; border: 0; cursor: pointer; color: var(--muted-fg);
-  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0;
-  transition: color .15s ease;
-}
-.tab .ico { font-size: 19px; line-height: 1; }
-.tab .lbl { font-size: 10px; font-weight: 500; letter-spacing: .2px; }
-.tab.active { color: var(--gold); }
 
 /* ---- Cards ---------------------------------------------------------------- */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
@@ -406,10 +399,9 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 /* Seven bands, in the order the RN source renders them (board.tsx:4565-4712). Every number
    arrives as an --an-* custom property set by analysis.js from BiyaAnalysisMetrics, so no
    layout constant is written here — the same rule home.js follows with --h-*.
-   The screen owns the whole phone box: `.view.flush` kills the gutter and `.app-card.an-mode`
-   hides the tab bar, because the original is a pushed route with no tab bar and seven bands
-   cannot spare the ~60px. */
-.app-card.an-mode .tabbar { display: none; }
+   The screen owns the whole phone box: `.view.flush` kills the gutter. It used to also carry
+   `.app-card.an-mode` to hide the tab bar; there is no tab bar any more, so the class and its
+   twenty add/remove calls went with it. */
 
 .an-view {
   height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
@@ -2727,7 +2719,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
    TWO namespaces on purpose: --op-* is geometry, --opc-* is colour. They collided otherwise —
    `buildBorder`, `inputBorder` and `infoBorder` each name a WIDTH in LAYOUT and a COLOUR in
    PALETTE, and a single prefix let the colour silently overwrite the width. */
-.app-card.op-mode .tabbar { display: none; }
 
 .op-view {
   height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;

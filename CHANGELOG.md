@@ -9,6 +9,83 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — Home is the app root: the tab bar is gone, every screen has a back button
+
+Client: *"pwede ba paremove ako nito, hindi ko naman to need, kailangan ko lang mga back button para
+makapag-back yung mga user sa home page."* `web-demo/` updated to match.
+
+**The repo had already written this change down, and named the one thing missing.**
+`docs/home-screen.md` has carried this paragraph since the screen was ported:
+
+> If full-size icons matter more than the tab bar, the fix is structural rather than a tweak: make
+> the home screen the app root without a tab bar, as the original does. **That would need a way back
+> from the six destinations, which this screen deliberately does not have.**
+
+Both halves are done. The original RN home screen is a full-height Stack screen with no tab bar;
+hosting it as tab 0 cost **~74 pt straight out of the grid**, which is why the card artwork has been
+rendering at 50–75 % of its design size on every device. That height is back.
+
+**Swift.** `PhoneApp` stops being a four-index `switch` and becomes what it already was for
+Analysis, Pairing, Play vs Coach and Opening Tree: a Home root with pushed-route siblings. Out go
+`tab`, `visibleTab`, `gatedTab`, `openTabs`, `puzzlePushed` and `PhoneTabBar`; in come `showPuzzles`
+and `showProfile`, raised by the Puzzles tile and the header avatar. `PuzzleHubScreen` already had
+`onExit:` and the shared back button, so it needed only rewiring — and it loses `onPushedChange`,
+which existed solely to tell the host to hide a bar that no longer exists.
+
+**`ProfilePhone` gains a back button, and it is the point of the change.** It was the one screen in
+either language with **no way out at all** — the tab bar was its only exit, in both. Swift gets a new
+`PhoneHeader` (`PhoneTitle` with a `NavIconButton`, which `docs/navigation-chrome.md` makes the only
+permitted back control); the browser gets the matching `.screen-back` on `renderProfile`'s head.
+
+**Three screens went with the bar**, all of them reachable only through it:
+
+- **`PlayPhone`** and its `phoneBoard` / `PlayPhoneBoard` chrome — the pre-port sample play screen.
+  Its browser twin was deleted a round ago, and `docs/play-vs-coach.md` recorded the single reason
+  this one survived: *"`BoardView` lives inside `PlayView.swift`, so retiring the pair means
+  extracting it first."* That extraction happened; the bar was its last door.
+  **`LegacyCoachSelect` stays** — the macOS demo's `Panel.play` renders it through `PlayView`, which
+  is the board harness, not a phone screen.
+- **`LearnPhone`** — unreachable *before* this change. No tab hosted it and nothing referenced it.
+
+**`an-mode` and `op-mode` are gone too, and that is 21 call sites.** Both classes had exactly one
+CSS rule each — `.tabbar { display: none }` — so with no bar they were 21 `classList` calls and two
+rules doing nothing at all. The browser also loses `TABS`, `renderTabbar()` and its 19 call sites,
+and `<nav id="tabbar">`.
+
+`OPEN_ROUTES` needed **no change**: it was already keyed by route name rather than tab index.
+
+**Gates.** Four moved with the change, and none of them lost an invariant:
+
+- `trial_gate_check.js` — §2 used to map the Swift tab **indices** through the browser's `TABS`
+  table, because `[0, 3]` and `{ home, profile }` were two spellings of one set. There are no
+  indices now, so it asserts instead that neither language has a bar left, that every `show*` flag
+  is raised in **exactly one** gated place, and that Profile is the single ungated destination. §4
+  gained the back-button assertions — the client's actual requirement, now pinned. 39 → 50.
+  `showAnalysis` is allowed a second raise, and the gate checks it really is the documented coach
+  hand-off rather than a new door.
+- `swift_layout_check.js` §6 — inverted. It asserted the bar was hidden on pushed routes; it now
+  asserts no bar, no `puzzlePushed` and no `onPushedChange` exist, and that the hub is raised and
+  closed like every other route. 277 → 282.
+- `swift_layout_mutation_test.js` — the `tab_bar_shown_on_pushed_routes` mutant's anchor string no
+  longer exists. **A mutant that never applies reads as a pass and proves nothing**, so it is
+  replaced (by one that draws the hub unconditionally over Home, i.e. as a tab again) rather than
+  deleted. 10/10 still killed.
+- `replay_login.js` — asserted `renderLogin` adds `an-mode`. Now asserts the gate owns the whole box
+  and that `an-mode` is gone entirely — comment-stripped, so the note explaining the removal does
+  not read as the removal failing.
+
+**One number could not be verified here.** `HomeMetricsCheck` §4 hardcoded five container heights
+described as *"device minus safe areas minus the ~74pt tab bar"*, and §5 asserted with a strict `<`
+that the icon clamp **engages** on a 4.7" phone. Both are rewritten around one named
+`reclaimedFromTabBar = 74`, and §5 became two assertions instead of one: the clamp still engages
+when the grid really is that tight, **and** the same phone without the bar gets measurably more
+artwork. The second is the change stated as arithmetic. `HomeMetricsCheck` is a macOS executable and
+no JS gate carries those numbers, so **`swift run HomeMetricsCheck` on a Mac is the only thing that
+confirms it** — it has not run here.
+
+`js_goldens` 33,952 → 33,967 across 78 suites. In the browser the Home grid is visibly larger: the
+card artwork now renders at 70 px against a nominal 72, where the tab bar had it near 50.
+
 ### 2026-08-18 (fixed) — Play vs Coach rendered unstyled: `coach.css` was never linked
 
 Client screenshot: the coach select screen with no styling at all — raw text edge to edge, the five

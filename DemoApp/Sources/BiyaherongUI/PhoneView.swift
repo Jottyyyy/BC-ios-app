@@ -53,18 +53,23 @@ struct PhoneApp: View {
 
     /// The Puzzle Hub's state. One store for all five modes and every screen inside them.
     @StateObject private var puzzleStore = PuzzleHubStore()
-    @StateObject private var gameVM = ChessGameVM()
-    @State private var tab = 0
-    /// The Analysis Board is a pushed route in the original, with no tab bar — its seven bands
-    /// cannot spare the height. It therefore covers the whole phone rather than living in a tab.
+    /// The Analysis Board is a pushed route in the original. It covers the whole phone, which is
+    /// now what EVERY destination does — see the note on `body`.
     @State private var showAnalysis = false
+    /// The Puzzle Hub. It was tab 1 until the tab bar was removed; it is a pushed route now, like
+    /// everything else reached from a Home tile.
+    @State private var showPuzzles = false
+    /// Profile. Reached from the Home header's avatar, which is the only door it has ever had
+    /// besides the tab bar — so it is the one screen that needed a back button of its own.
+    @State private var showProfile = false
     /// The Pairing Manager is a pushed route too, for the same reason: it is reached from a Home
     /// tile, not a tab, and its three tabs of its own leave no room for the app's.
     @StateObject private var pairingStore = PairingStore()
     @State private var showPairing = false
     /// Play vs Coach, presented the same way and for the same reason: three screens of its own,
-    /// reached from the Home tile. It is NOT the Play tab — that still shows the pre-port sample
-    /// screen, which cannot be retired until `BoardView` is lifted out of `PlayView.swift`.
+    /// reached from the Home tile. It used to share the app with a *second* play screen on tab 2 —
+    /// the pre-port sample, kept alive only because `BoardView` lived inside `PlayView.swift`.
+    /// That lift happened; the tab bar removal took its last door; the screen is gone.
     @StateObject private var coachStore = CoachStore()
     @State private var showCoach = false
     /// The Opening Tree, presented the same way and for the same reason: three screens of its own,
@@ -72,12 +77,9 @@ struct PhoneApp: View {
     /// callback was never passed — this is the destination it was waiting for.
     @StateObject private var openingStore = OpeningTreeStore()
     @State private var showOpenings = false
-    /// True while the Puzzles tab has a route pushed on top of the hub — the tab bar hides, the
-    /// way it does in the browser. See `PuzzleHubScreen.onPushedChange`.
-    @State private var puzzlePushed = false
     /// The simulated sign-in. It gates the whole app: until it is signed in, `LoginScreen` covers
-    /// every sibling below, tab bar included. Persisted, so this is the first screen once and not
-    /// on every launch. See docs/login.md.
+    /// every sibling below. Persisted, so this is the first screen once and not on every launch.
+    /// See docs/login.md.
     @StateObject private var loginStore = LoginStore()
     /// The subscription. One store for the whole shell, so every gate reads the same live
     /// entitlement rather than a cached copy — the failure the RN app had, where a stale
@@ -117,32 +119,29 @@ struct PhoneApp: View {
     /// second wall in front of the first one.
     private var locked: Bool { loginStore.isSignedIn && !premium.isPremium }
 
-    /// The two tabs a locked user keeps. **Home**, so the offer has something to sell against; and
-    /// **Profile**, because it owns Sign out — walling it strands a user who signed in with the
-    /// wrong Apple Account, and Restore Purchases lives on the paywall they would then be unable
-    /// to leave.
-    private static let openTabs: Set<Int> = [0, 3]
+    /// The two destinations a locked user keeps. **Home**, so the offer has something to sell
+    /// against; and **Profile**, because it owns Sign out — walling it strands a user who signed in
+    /// with the wrong Apple Account, and Restore Purchases lives on the paywall they would then be
+    /// unable to leave.
+    ///
+    /// This used to be `openTabs: Set<Int> = [0, 3]`, and the browser had to map those indices
+    /// through its own tab table to know what they meant. With Home as the root there are no
+    /// indices: the open set is "Home, plus Profile", and Home is simply what is underneath.
+    private var profileIsOpen: Bool { true }
 
-    /// What the content area actually draws.
+    /// Every pushed route is closed while locked, by construction: each one is raised by a Home
+    /// tile and by nothing else, and every tile goes through `gated`. `showProfile` is the single
+    /// deliberate exception, raised straight from `onAvatar`.
     ///
     /// Resolved on every render rather than only at tap time: `Transaction.updates` can revoke an
-    /// entitlement mid-session, and a user standing on the Puzzles tab when that happens must not
-    /// keep playing it until they next tap something.
-    private var visibleTab: Int { locked && !PhoneApp.openTabs.contains(tab) ? 0 : tab }
-
-    /// The tab bar's binding. A locked tap raises the paywall and leaves `tab` alone, so closing
-    /// the paywall returns to where they were rather than to whatever they were refused.
-    private var gatedTab: Binding<Int> {
-        Binding(get: { tab },
-                set: { next in
-                    if locked && !PhoneApp.openTabs.contains(next) { openPaywall() } else { tab = next }
-                })
-    }
+    /// entitlement mid-session, and a user standing inside the Puzzle Hub when that happens must
+    /// not keep playing it until they next tap something.
+    private var lockedOut: Bool { locked }
 
     /// Wraps a Home tile's action. Runs it, or raises the paywall in its place while locked.
     ///
-    /// Every pushed route — Analysis, Play vs Coach, Pairing — is reachable ONLY from a Home tile,
-    /// so wrapping the tiles closes those three as well without a flag of their own.
+    /// Every destination — Puzzles, Analysis, Play vs Coach, Pairing, Opening Tree — is reachable
+    /// ONLY from a Home tile, so wrapping the tiles closes all five without a flag of their own.
     private func gated(_ action: @escaping () -> Void) -> () -> Void {
         { if locked { openPaywall() } else { action() } }
     }
@@ -157,36 +156,47 @@ struct PhoneApp: View {
                                height: shell.size.height
                                    + shell.safeAreaInsets.top + shell.safeAreaInsets.bottom)
             // A ZStack sibling rather than `.fullScreenCover`, which does not exist on macOS — and
-            // this view renders inside the macOS demo (AppShell.swift:46). It also has to cover
-            // `PhoneTabBar`, which is a plain VStack sibling and not a real TabView.
+            // this view renders inside the macOS demo (AppShell.swift:46).
+            //
+            // **Home is the root.** There is no tab bar: every destination is a sibling raised by a
+            // Home tile and closed by its own back button, which is what the original RN app does
+            // and what `docs/home-screen.md` named as the fix for a grid that was ~74 pt
+            // over-constrained by hosting Home as tab 0.
             ZStack {
                 VStack(spacing: 0) {
                     #if os(macOS)
                     statusBar   // simulated status bar for the desktop phone-frame preview only
                     #endif
-                    Group {
-                        switch visibleTab {
-                        case 0: home(basis: basis)
-                        // The Puzzles tab is the HUB now, not the ten hand-made samples. Those
-                        // use the opposite move convention (`solution[0]` is the solver's, where
-                        // the corpus has `moves[0]` belonging to the opponent), so the two cannot
-                        // share a solver — which is why the old screen is retired to a dev entry
-                        // rather than adapted.
-                        case 1: PuzzleHubScreen(store: puzzleStore, premium: premium,
-                                                onExit: { tab = 0 },
-                                                onPushedChange: { puzzlePushed = $0 },
-                                                onPaywall: { openPaywall() })
-                        case 2: PlayPhone(vm: gameVM)
-                        default: ProfilePhone(store: puzzleStore, login: loginStore,
-                                              premium: premium, onPaywall: { openPaywall() })
-                        }
+                    home(basis: basis)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if showPuzzles {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        // The HUB, not the ten hand-made samples. Those use the opposite move
+                        // convention (`solution[0]` is the solver's, where the corpus has
+                        // `moves[0]` belonging to the opponent), so the two cannot share a solver —
+                        // which is why the old screen is a dev entry rather than adapted.
+                        PuzzleHubScreen(store: puzzleStore, premium: premium,
+                                        onExit: { showPuzzles = false },
+                                        onPaywall: { openPaywall() })
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Hidden while the Puzzles tab has a route pushed, matching the browser, where
-                    // every pushed route sets `an-mode` and `.app-card.an-mode .tabbar` is
-                    // `display: none`. The Analysis Board, Pairing and Coach are ZStack siblings
-                    // below and already cover the bar; only the Puzzle Hub lives inside a tab.
-                    if !puzzlePushed { PhoneTabBar(tab: gatedTab) }
+                    .background(PuzzlePalette.screenBg)
+                    .transition(.move(edge: .bottom))
+                }
+                if showProfile {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        ProfilePhone(store: puzzleStore, login: loginStore, premium: premium,
+                                     onExit: { showProfile = false },
+                                     onPaywall: { openPaywall() })
+                    }
+                    .background(Theme.background)
+                    .transition(.move(edge: .bottom))
                 }
                 if showAnalysis {
                     VStack(spacing: 0) {
@@ -259,10 +269,10 @@ struct PhoneApp: View {
                     .background(PaywallPalette.screenBg)
                     .transition(.move(edge: .bottom))
                 }
-                // LAST sibling on purpose: the login gate has to cover the tab bar and all three
-                // pushed routes above, not sit behind them. A ZStack sibling for the same reason
-                // they are — `.fullScreenCover` does not exist on macOS and this view renders
-                // inside the desktop phone frame.
+                // LAST sibling on purpose: the login gate has to cover every pushed route above,
+                // not sit behind them. A ZStack sibling for the same reason they are —
+                // `.fullScreenCover` does not exist on macOS and this view renders inside the
+                // desktop phone frame.
                 //
                 // It cross-fades rather than sliding: signing in reveals the app that was always
                 // there, where the routes above are pushes onto it.
@@ -326,8 +336,14 @@ struct PhoneApp: View {
                    isColorful: homeColorful,
                    scaleBasis: basis,
                    // Not gated: Profile owns Sign out, and the membership banner IS the offer.
-                   onAvatar: { tab = 3 },
-                   onPuzzles: gated { tab = 1 },
+                   onAvatar: { withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                       showProfile = true
+                   } },
+                   onPuzzles: gated {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showPuzzles = true
+                       }
+                   },
                    onAnalysis: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showAnalysis = true
@@ -365,29 +381,6 @@ struct PhoneApp: View {
     }
 }
 
-struct PhoneTabBar: View {
-    @Binding var tab: Int
-    private let items = [("Home", "square.grid.2x2.fill"), ("Puzzles", "puzzlepiece.fill"),
-                         ("Play", "checkerboard.rectangle"), ("Profile", "person.crop.circle")]
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(items.indices, id: \.self) { i in
-                Button { withAnimation(.easeInOut(duration: 0.15)) { tab = i } } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: items[i].1).font(Theme.nunito(19, .semiBold))
-                        Text(items[i].0).font(Theme.nunito(10, .medium))
-                    }
-                    .foregroundStyle(tab == i ? Theme.violet : Theme.mutedForeground)
-                    .frame(maxWidth: .infinity)
-                }.buttonStyle(.plain)
-            }
-        }
-        .padding(.top, 10).padding(.bottom, 22)
-        .background(.ultraThinMaterial)
-        .overlay(Rectangle().fill(Theme.border).frame(height: 1), alignment: .top)
-    }
-}
-
 // ── Shared building blocks ───────────────────────────────────────────────────
 
 struct PhoneTitle: View {
@@ -398,6 +391,41 @@ struct PhoneTitle: View {
             Spacer()
         }.padding(.horizontal, 18).padding(.top, 4)
     }
+}
+
+/// `PhoneTitle` with a way out.
+///
+/// A second type rather than an optional `onBack:` on the first: `PhoneTitle` is the plain
+/// left-aligned heading the desktop panels use, and a defaulted closure would let a screen forget
+/// its exit silently. Here the back button is not optional — it is the only exit there is.
+///
+/// The icon is `NavIconButton`, never a `<-` character: `docs/navigation-chrome.md` makes that the
+/// one permitted back control and `tools/qa/nav_icons_check.js` fails a screen that draws its own.
+struct PhoneHeader: View {
+    let title: String
+    let onBack: () -> Void
+    var body: some View {
+        HStack(spacing: 0) {
+            NavIconButton(.back, size: PhoneChrome.backIcon, tint: Theme.foreground, action: onBack)
+                .frame(width: PhoneChrome.backBox, height: PhoneChrome.backBox)
+            Text(title).font(Theme.nunito(PhoneChrome.titleSize, .bold))
+                .foregroundStyle(Theme.foreground)
+            Spacer()
+        }
+        .padding(.horizontal, PhoneChrome.headerPaddingH)
+        .padding(.top, PhoneChrome.headerPaddingTop)
+    }
+}
+
+/// The header's numbers. Named rather than inlined because `swift_layout_check.js` allows no
+/// numeric literal in a view body — and because `PhoneTitle`'s 30/18/4 above are exactly that,
+/// grandfathered in.
+enum PhoneChrome {
+    static let backIcon: CGFloat = 24
+    static let backBox: CGFloat = 40
+    static let titleSize: CGFloat = 30
+    static let headerPaddingH: CGFloat = 18
+    static let headerPaddingTop: CGFloat = 4
 }
 
 /// The Analysis Board's and Play's promotion picker: a row of square tiles, no labels.
@@ -485,28 +513,6 @@ struct PuzzlePromotionOverlay: View {
     }
 }
 
-/// The legacy Play tab's board chrome. `size` is now measured, not assumed: it used to default to
-/// 344 and be called with a hard-coded 330, which meant the board was the wrong width on every
-/// phone that is not the design baseline. It goes through `ChessBoardBand` like every other board.
-func phoneBoard(_ board: BoardView, size: CGFloat) -> some View {
-    ChessBoardBand(edge: size) { _ in board }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-}
-
-/// What `PlayPhone` reserves beside the board: the eval bar's 14pt, the 8pt gap, and the row's
-/// 16pt padding on each side. Named rather than inlined so the board edge below reads as one
-/// subtraction instead of four magic numbers.
-private enum PlayPhoneBoard {
-    static let evalBarWidth: CGFloat = 14
-    static let evalBarGap: CGFloat = 8
-    static let rowPaddingH: CGFloat = 16
-    static func edge(screenWidth: CGFloat) -> CGFloat {
-        max(0, screenWidth - rowPaddingH * 2 - evalBarWidth - evalBarGap)
-    }
-}
-
 func phoneCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: 10) {
         Text(title.uppercased()).font(Theme.nunito(11, .semiBold)).tracking(0.7).foregroundStyle(Theme.mutedForeground)
@@ -518,159 +524,35 @@ func phoneCard<Content: View>(_ title: String, @ViewBuilder _ content: () -> Con
     .padding(.horizontal, 18)
 }
 
-// ── Puzzles tab ─────────────────────────────────────────────────────────────────
+// ── What used to live here ──────────────────────────────────────────────────────
 //
-// `PuzzlesPhone` lived here and is gone: the tab shows `PuzzleHubScreen` now. The ten hand-made
-// samples it drew survive at `AppShell`'s `.samples` panel, which is the engine spot-check they
-// were written for. Two unreachable copies of a retired screen would be one too many.
+// Three screens, all of them reached only through the bottom tab bar, all of them gone with it:
+//
+//   • `PuzzlesPhone` — the ten hand-made samples. Already replaced by `PuzzleHubScreen`; the
+//     samples survive at `AppShell`'s `.samples` panel, the engine spot-check they were written
+//     for.
+//   • `PlayPhone` + `phoneBoard` + `PlayPhoneBoard` — the pre-port sample play screen. Its browser
+//     twin was deleted a round earlier and `docs/play-vs-coach.md` recorded the one thing keeping
+//     this one alive: `BoardView` lived inside `PlayView.swift`. It does not any more, and the tab
+//     bar was its last door. `LegacyCoachSelect` STAYS — the macOS demo's `Panel.play` renders it
+//     through `PlayView`, which is the board harness, not a phone screen.
+//   • `LearnPhone` — unreachable even before this change. No tab hosted it and nothing referenced
+//     it; it was dead code that read as a screen.
 
-struct PlayPhone: View {
-    @ObservedObject var vm: ChessGameVM
-    private var coachLevel: Int { (Coaches.all.firstIndex { $0.id == vm.coach?.id } ?? 0) + 1 }
-
-    var body: some View {
-        if vm.started {
-            // One GeometryReader, at the top — the board edge below is derived from this width.
-            GeometryReader { geo in gameView(edge: PlayPhoneBoard.edge(screenWidth: geo.size.width)) }
-        } else {
-            LegacyCoachSelect(vm: vm)
-        }
-    }
-
-    private func gameView(edge: CGFloat) -> some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Play").font(Theme.nunito(30, .bold)).foregroundStyle(Theme.foreground)
-                    Spacer()
-                    Button { vm.backToSelect() } label: {
-                        Label("Change", systemImage: "arrow.left.arrow.right").font(Theme.nunito(14, .medium)).foregroundStyle(Theme.violet)
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, 18).padding(.top, 4)
-
-                HStack(spacing: 10) {
-                    if let c = vm.coach {
-                        CoachAvatar(name: c.name, size: 40, level: CoachArt.level(forCoachId: c.id))
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 6) { Text(c.name).font(Theme.nunito(14, .semiBold)); TitleBadge(c.title) }
-                            StrengthDots(level: coachLevel)
-                        }
-                        Spacer()
-                        Text("\(c.rating)").font(Theme.nunito(16, .bold)).foregroundStyle(Theme.violet)
-                    } else {
-                        Image(systemName: "person.2.fill").font(Theme.nunito(18, .semiBold)).foregroundStyle(Theme.violet)
-                        Text("Pass & play").font(Theme.nunito(14, .semiBold))
-                        Spacer()
-                    }
-                }.padding(.horizontal, 18)
-
-                HStack(alignment: .top, spacing: PlayPhoneBoard.evalBarGap) {
-                    EvalBar(whitePct: vm.whiteWinPct, height: edge)
-                    phoneBoard(BoardView(pieces: vm.pieces, selected: vm.selected, legalTargets: vm.legalTargets,
-                                         lastMove: vm.lastMove, flipped: vm.flipped, checkSquare: vm.checkKingSquare,
-                                         boardSize: edge, onTap: { vm.tap($0) }), size: edge)
-                        .overlay { if vm.pendingPromotion != nil { PromotionOverlay(color: vm.position.sideToMove) { vm.choosePromotion($0) } } }
-                }.padding(.horizontal, PlayPhoneBoard.rowPaddingH)
-
-                HStack(spacing: 6) {
-                    Text(vm.thinking ? "\(vm.coach?.name ?? "Coach") is thinking…" : vm.statusText)
-                        .font(Theme.nunito(12, .medium))
-                        .foregroundStyle(vm.status == .checkmate ? Theme.negative : (vm.status == .check ? Theme.warning : Theme.mutedForeground))
-                    Spacer()
-                    Text("Material \(vm.materialDiff > 0 ? "+" : "")\(vm.materialDiff)")
-                        .font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.mutedForeground)
-                }.padding(.horizontal, 18)
-
-                MoveRibbon(sans: vm.history).padding(.horizontal, 18)
-
-                HStack(spacing: 10) {
-                    Button(action: { vm.newGame() }) {
-                        Label("New game", systemImage: "arrow.clockwise").frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Theme.violetGradient, in: RoundedRectangle(cornerRadius: Theme.radius))
-                            .foregroundStyle(Theme.onGold).fontWeight(.semibold)
-                    }.buttonStyle(.plain)
-                    controlIcon("arrow.uturn.backward") { vm.undo() }.disabled(vm.history.isEmpty || vm.thinking)
-                    controlIcon("arrow.up.arrow.down") { withAnimation { vm.flipped.toggle() } }
-                }.padding(.horizontal, 18)
-                Spacer(minLength: 8)
-            }
-        }
-    }
-
-    private func controlIcon(_ name: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: name).frame(width: 46, height: 40)
-                .background(Theme.muted, in: RoundedRectangle(cornerRadius: Theme.radius))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius).stroke(Theme.border))
-                .foregroundStyle(Theme.foreground)
-        }.buttonStyle(.plain)
-    }
-}
-
-// ── Learn tab ────────────────────────────────────────────────────────────────
-
-struct LearnPhone: View {
-    @State private var before = 60
-    @State private var after = -30
-    @State private var color = "w"
-    @State private var isBest = false
-
-    private var cpLoss: Int { max(0, color == "w" ? (before - after) : (after - before)) }
-    private var isBrill: Bool { GameReview.isBrilliantMove(san: "x", color: color, evalBefore: before, evalAfter: after) }
-    private var cls: String { GameReview.classifyMove(cpLoss: cpLoss, isBestMove: isBest, isBrilliant: isBrill) }
-    private var winAfter: Double { GameReview.evalToWinPct(evalCp: after, color: color) }
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                PhoneTitle(title: "Learn")
-                HStack(spacing: 16) {
-                    RingGauge(value: winAfter / 100, size: 104,
-                              color: winAfter >= 50 ? Theme.positive : Theme.warning,
-                              center: "\(Int(round(winAfter)))", caption: "% win")
-                    VStack(alignment: .leading, spacing: 12) {
-                        ClassificationBadge(classification: cls)
-                        HStack(spacing: 6) { Image(systemName: "arrow.down.right"); Text("\(cpLoss) cp lost") }
-                            .font(Theme.nunito(15, .regular)).foregroundStyle(Theme.mutedForeground)
-                        Text("How every move is graded — the exact ladder from the verified engine.")
-                            .font(Theme.nunito(12, .medium)).foregroundStyle(Theme.mutedForeground)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }.padding(.horizontal, 18)
-
-                phoneCard("Evaluation (centipawns)") {
-                    VStack(spacing: 12) { sliderRow("Before", $before); sliderRow("After", $after) }
-                }
-                phoneCard("Context") {
-                    VStack(spacing: 12) {
-                        Picker("", selection: $color) { Text("White to move").tag("w"); Text("Black to move").tag("b") }.pickerStyle(.segmented)
-                        Toggle("Played the engine's best move", isOn: $isBest)
-                    }
-                }
-                Spacer(minLength: 8)
-            }
-        }
-    }
-
-    private func sliderRow(_ label: String, _ v: Binding<Int>) -> some View {
-        HStack {
-            Text(label).font(Theme.nunito(15, .regular)).frame(width: 66, alignment: .leading)
-            Slider(value: Binding(get: { Double(v.wrappedValue) }, set: { v.wrappedValue = Int($0) }), in: -1500...1500, step: 5)
-            Text("\(v.wrappedValue)").font(.system(size: 15, design: .monospaced)).frame(width: 52, alignment: .trailing).foregroundStyle(Theme.mutedForeground)
-        }
-    }
-}
-
-// ── Profile tab ──────────────────────────────────────────────────────────────
+// ── Profile ──────────────────────────────────────────────────────────────
 
 struct ProfilePhone: View {
     /// Reads the hub's store, not the retired sample solver — otherwise the profile would show a
     /// rating and a solve count from a screen the user can no longer reach.
     @ObservedObject var store: PuzzleHubStore
-    /// The session, so this tab can end it. It is the only way back to the login screen once the
-    /// sign-in has been persisted.
+    /// The session, so this screen can end it. It is the only way back to the login screen once
+    /// the sign-in has been persisted.
     @ObservedObject var login: LoginStore
-    /// The subscription, so this tab can show its state and route to the paywall.
+    /// The subscription, so this screen can show its state and route to the paywall.
     @ObservedObject var premium: PremiumStore
+    /// Back to Home. Profile is reached from the Home header's avatar and had no way out at all
+    /// while the tab bar existed — it was the only screen in either language without one.
+    let onExit: () -> Void
     let onPaywall: () -> Void
     private var initial: String { String(login.displayName.prefix(1)) }
     private var accuracy: Double {
@@ -692,7 +574,7 @@ struct ProfilePhone: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                PhoneTitle(title: "Profile")
+                PhoneHeader(title: "Profile", onBack: onExit)
 
                 HStack(spacing: 14) {
                     Text(initial).font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
