@@ -118,7 +118,13 @@ public enum Entitlement {
         case premium(trial: Bool)
         /// Full access, but the entitlement is stale and unrefreshed. Show the countdown.
         case grace(daysLeft: Int)
-        /// The free tier. Never a dead app — this is what makes the offline design safe.
+        /// No entitlement.
+        ///
+        /// The daily caps in `DailyLimits` still describe this state exactly, and the parity
+        /// suite still pins them — but since the round-4 trial gate the SHELL no longer lets a
+        /// `.free` user reach a screen that could consume one. They are what a LAPSED
+        /// subscriber's counters mean, not a playable tier. The gate is `PhoneApp.locked` in
+        /// Swift and `locked()` in `web-demo/js/app.js`; see `docs/subscription.md`.
         case free
 
         /// Everything premium unlocks is unlocked in `.grace` too. One predicate, so no gate has to

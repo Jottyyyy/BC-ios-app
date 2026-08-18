@@ -93,6 +93,25 @@
   // app. Signing in persists, so this is the first screen once and not on every launch —
   // Profile > Sign out is the way back to it.
   var current = BiyaLogin.shared().isSignedIn() ? 'home' : 'login';
+
+  /* ---- the trial gate ----------------------------------------------------- *
+   * Client decision, round 4: nothing is usable until the 7-day free trial is started, and every
+   * tap a locked user makes lands on the offer. This REVERSES what docs/subscription.md was
+   * written around, where the free tier was genuinely playable.
+   *
+   * The twin of `PhoneApp.locked` / `openTabs` / `gatedTab` in PhoneView.swift, and it lives at
+   * the same place: the router, not the screens. `gate()` and the per-mode caps below are
+   * untouched — they still describe what a LAPSED subscriber's counters mean.
+   *
+   * Home stays reachable so the offer has something to sell against, and Profile because it owns
+   * Sign out: walling it strands a user who signed in with the wrong account, and Restore lives on
+   * the paywall they would then be unable to leave.                                              */
+  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1 };
+  function locked() {
+    return BiyaLogin.shared().isSignedIn() && !BiyaPremium.shared().isPremium();
+  }
+  function isOpenRoute(id) { return !!OPEN_ROUTES[id]; }
+
   function renderTabbar() {
     tabbarEl.innerHTML = '';
     TABS.forEach(function (t) {
@@ -100,8 +119,10 @@
       b.innerHTML = '<span class="ico">' + t.ico + '</span><span class="lbl">' + t.lbl + '</span>';
       b.onclick = function () {
         // The solver owns timers and an in-flight search; leaving by the tab bar has to cancel
-        // both, or a stale opponent reply lands on whatever screen comes next.
+        // both, or a stale opponent reply lands on whatever screen comes next. Cancelled before
+        // the gate check too: a refused tap still LEFT the puzzle as far as the user is concerned.
         leaveCurrentPuzzle();
+        if (locked() && !isOpenRoute(t.id)) { goPaywall(); return; }
         current = t.id; renderTabbar(); render();
       };
       tabbarEl.appendChild(b);
@@ -117,6 +138,16 @@
     // The Analysis Board also hides the tab bar: it is a pushed route in the original, and its
     // seven bands cannot spare the height. Cleared here for the same reason .flush is.
     appCard().classList.remove('an-mode');
+    // The trial gate's backstop. Every transition is intercepted at its source — the tab bar above
+    // and the Home tiles in renderHome — but an entitlement can lapse BETWEEN taps (the demo
+    // picker below does exactly that), so the router re-checks on every paint rather than trusting
+    // that no route can outlive its permission. `paywallReturn` is forced to Home: returning to
+    // the screen that was just walled would bounce straight back here.
+    if (locked() && !isOpenRoute(current)) {
+      paywallReturn = 'home';
+      current = 'paywall';
+      renderTabbar();
+    }
     if (current === 'login') renderLogin();
     else if (current === 'paywall') renderPaywall();
     else if (current === 'home') renderHome();
@@ -128,6 +159,7 @@
     else if (current === 'pairing') renderPairingList();
     else if (current === 'pairing-create') renderPairingCreate();
     else if (current === 'pairing-detail') renderPairingDetail();
+    else if (current === 'openings') renderOpenings();
     else if (current === 'puzzles') renderPuzzleHub();
     else if (current === 'puzzle-play') renderPuzzlePlayHome();
     else if (current === 'puzzle-solve') renderPuzzleSolver();
@@ -413,6 +445,51 @@
   }
 
   /* ======================================================================== *
+   *  OPENING TREE — see js/opening-tree.js, opening-store.js, openings.js
+   *
+   *  A pushed route, like Pairing: reached from a Home tile, not a tab, and its
+   *  three screens of its own leave no room for the app's.
+   *
+   *  `openingForm` is router-scoped for the reason every other pushed route's
+   *  state is: `render()` runs again on every repaint, so a half-typed PGN held
+   *  inside the screen would be lost on the first one.
+   * ======================================================================== */
+
+  var openingForm = null;
+  var openingMode = 'list';
+
+  function openingsGo(mode) { openingMode = mode; current = 'openings'; renderTabbar(); render(); }
+
+  function renderOpenings() {
+    appCard().classList.add('an-mode');   // a pushed route: no tab bar, full height
+    var store = BiyaOpeningStore.shared();
+    if (!openingForm) openingForm = BiyaOpenings.emptyForm();
+    BiyaOpenings.render(view, store, openingForm, openingMode, {
+      onExit: function () { current = 'home'; renderTabbar(); render(); },
+      onBuild: function () { openingForm = BiyaOpenings.emptyForm(); openingsGo('form'); },
+      onCancel: function () { openingsGo('list'); },
+      onChanged: render,
+      onSubmit: function () {
+        // The clock is injected rather than read inside the builder, so the same call is
+        // reproducible in a test — the rule `pairing-store.js` follows for `createdAtMs`.
+        var r = BiyaOpenings.submit(openingForm, Date.now());
+        if (r.error) { openingForm.error = r.error; render(); return; }
+        store.add(r.tree);
+        store.openTree(r.tree.id);
+        openingForm = null;
+        openingsGo('list');
+      },
+      onOpen: function (id) { store.openTree(id); openingsGo('list'); },
+      onDelete: function (id) { store.remove(id); render(); },
+      onClose: function () { store.closeTree(); render(); },
+      onPlay: function (san) { store.play(san); render(); },
+      onBack: function () { store.stepBack(); render(); },
+      onForward: function () { store.stepForward(); render(); },
+      onReset: function () { store.reset(); render(); }
+    });
+  }
+
+  /* ======================================================================== *
    *  HOME TAB — see js/home.js
    * ======================================================================== */
   function renderHome() {
@@ -426,6 +503,10 @@
     BiyaHome.render(view, function (action) {
       // Only the actions with a real destination in this demo are wired; the rest are the empty
       // callbacks the screen is designed around (§12).
+      //
+      // The trial gate, twin of `PhoneApp.gated` in PhoneView.swift. `avatar` and `membership` are
+      // deliberately outside it: one leads to Sign out, the other IS the offer.
+      if (locked() && action !== 'avatar' && action !== 'membership') { goPaywall(); return; }
       if (action === 'puzzles') { current = 'puzzles'; renderTabbar(); render(); }
       else if (action === 'playCoach') { current = 'play'; renderTabbar(); render(); }
       else if (action === 'analysis') { current = 'analysis'; renderTabbar(); render(); }
@@ -433,6 +514,9 @@
       // home.js has emitted 'pairing' since the tile was drawn; there was simply nothing here to
       // catch it.
       else if (action === 'pairing') pairingGo('pairing');
+      // home.js has emitted 'openingTrainer' since the tile was drawn and nothing caught it —
+      // the tile did nothing at all, which is the bug the client reported. This is where it goes.
+      else if (action === 'openingTrainer') openingsGo('list');
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
     });
