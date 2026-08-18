@@ -18,15 +18,38 @@ No Cursor/Copilot rule files exist in this repo — this is the only assistant g
 
 ## Workflow (follow for every change)
 
-1. **Read the docs first.** Before adding a feature or fixing a bug, read `docs/README.md` + the relevant
+**`main` is not a workbench.** Every bug fix and every feature is done on a branch in its own git worktree
+and lands on `main` through a pull request; commit to `main` only when the user explicitly says to.
+Read-only work — questions, reviews, explaining code — needs no worktree.
+
+1. **Read `CHANGELOG.md` first.** It is newest-first and 2500+ lines — read the entries at the **top**, not
+   the whole file, then grep it for the area you are about to touch. It is the record of *why* the code
+   looks the way it does, and it names the doc you need next. Then read `docs/README.md` + the relevant
    `docs/<area>.md`; for engine/parity work also read `PORTING_NOTES.md`. Understand before you touch.
-2. **Log every change in `CHANGELOG.md`** — a dated entry (Added / Changed / Fixed): what changed, why, and
-   whether `web-demo/` was updated.
-3. **Every new feature gets a doc** at `docs/<feature>.md` (what it does · key files · how to test). Update
-   the doc in the same change when behavior changes.
-4. **Mirror user-facing features into `web-demo/`** so they are visible on Windows (the user tests there). If
+2. **Open a worktree** — one task per worktree, all work inside it, on a branch named `fix/<slug>`,
+   `feat/<slug>` or `docs/<slug>`. This instruction authorises the `EnterWorktree` tool. Runbook and exact
+   commands: **`docs/git-workflow.md`**. Branches are cut from `origin/main`, so push `main` first if it has
+   local commits. A fresh worktree has **no gitignored artifacts** — `Goldens/` and `.build/` are absent, so
+   regenerate goldens (`php tools/oracle/generate_goldens.php`) before trusting a parity run; an
+   unregenerated one is vacuous, not green. `puzzles.sqlite` is committed and comes along.
+3. **Log the change in `CHANGELOG.md`** — a new entry at the **top**, under `## [Unreleased]`, shaped
+   `### YYYY-MM-DD (added|changed|fixed|docs) — Title` (those four tags only; older entries drift). Say what
+   changed, **why**, and whether `web-demo/` was updated.
+4. **Every new feature gets a doc** at `docs/<feature>.md` (what it does · key files · how to test), listed
+   in `docs/README.md`. Update the doc — in the same commit — whenever behavior changes.
+5. **Mirror user-facing features into `web-demo/`** so they are visible on Windows (the user tests there). If
    a feature genuinely can't be mirrored, say why in the CHANGELOG.
-5. Keep this file **under 200 lines**.
+6. **Run the gate before you land.** On this Windows checkout that is `node tools/qa/js_goldens.js`,
+   `swift_lint.js` and `swift_symbol_check.js`; where Swift exists, `swift run ParityRunner` must exit 0.
+   **CI builds the iOS app and runs none of this** — a red gate merged is a regression shipped.
+7. **Commit messages say what and why** — `fix:`/`feat:`/`docs:` + an imperative subject, one logical change
+   per commit. Never `push` as a message. Never force-push a branch anyone else may have pulled.
+8. **Land via PR**, never by pushing `main`. Push the branch, hand the user the compare link, and let them
+   merge; the CHANGELOG entry is the PR body. Pushing `main` from two machines is exactly where this
+   history's four `Merge origin/main` commits came from.
+9. **Clean up after the merge** — remove the worktree and delete the branch. A stale worktree holds stale
+   `Goldens/` and gets edited by mistake.
+10. Keep this file **under 200 lines**.
 
 ## Commands
 

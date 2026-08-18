@@ -16,6 +16,8 @@ Feature- and subsystem-level documentation for this repo.
   algorithm's rules, the documented deviations from the real PHP backend, and invented constants.
   **Read this for any `Sources/` (engine) work.**
 - **[`../ios/BUILD-iOS.md`](../ios/BUILD-iOS.md)** — iOS build / signing / TestFlight / sideload runbook.
+- **[`git-workflow.md`](git-workflow.md)** — the git runbook: a worktree per task, setting a fresh one up,
+  the pre-land gate, landing via PR, and cleanup. **Read this before starting any fix or feature.**
 - **[`../web-demo/README.md`](../web-demo/README.md)** — end-user run steps for the Windows browser demo.
 
 ## Feature docs
