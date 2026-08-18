@@ -67,6 +67,11 @@ struct PhoneApp: View {
     /// screen, which cannot be retired until `BoardView` is lifted out of `PlayView.swift`.
     @StateObject private var coachStore = CoachStore()
     @State private var showCoach = false
+    /// The Opening Tree, presented the same way and for the same reason: three screens of its own,
+    /// reached from the Home tile. The tile has existed since the screen was written and its
+    /// callback was never passed — this is the destination it was waiting for.
+    @StateObject private var openingStore = OpeningTreeStore()
+    @State private var showOpenings = false
     /// True while the Puzzles tab has a route pushed on top of the hub — the tab bar hides, the
     /// way it does in the browser. See `PuzzleHubScreen.onPushedChange`.
     @State private var puzzlePushed = false
@@ -78,8 +83,9 @@ struct PhoneApp: View {
     /// entitlement rather than a cached copy — the failure the RN app had, where a stale
     /// `@is_premium` in AsyncStorage disagreed with the server. See docs/subscription.md.
     @StateObject private var premium = PremiumStore()
-    /// The paywall is reached on demand — the "⭐ Go Premium" banner, or a gate the user just hit —
-    /// never as a wall in front of a new install. The free tier is genuinely playable.
+    /// The paywall. Reached from the "⭐ Go Premium" banner, from a cap a subscriber's lapse put
+    /// them under — and, since round 4 of client feedback, from **every** tap a user without an
+    /// entitlement makes. See `locked` below.
     @State private var showPaywall = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -87,6 +93,59 @@ struct PhoneApp: View {
     // make the memberwise initializer private, so only the file-local no-argument form would be
     // reachable from Roots.swift. Spelling it out keeps both call sites obviously valid.
     init(homeColorful: Bool = false) { self.homeColorful = homeColorful }
+
+    // ── The trial gate ───────────────────────────────────────────────────────
+    //
+    // Client decision, round 4: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi
+    // sila naka 7-days free trial … kada click lagi mong dalhin doon na go for free trial."*
+    //
+    // This REVERSES the policy `docs/subscription.md` was written around, where the free tier was
+    // genuinely playable and the paywall was reached on demand. Home still draws — the user has to
+    // see what the trial buys — but every tile and every content tab now lands on the paywall
+    // instead of a screen.
+    //
+    // It lives here, at the shell, and nowhere else. `Entitlement`, `DailyLimits` and every
+    // per-feature gate in `PuzzleHubScreen` / `CoachScreens` are untouched: they are parity-tested
+    // Core with `requireMinCounts` floors, they still describe the state a LAPSED subscriber
+    // returns to, and one guard at the only choke point is the difference between a rule and a
+    // checklist of screens somebody will forget to add to.
+
+    /// A signed-in user with no entitlement at all — the state every fresh install is in.
+    ///
+    /// `isSignedIn` is half of it because the login gate is the ZStack's LAST sibling and covers
+    /// the paywall: raising a paywall behind the login screen would be invisible, and would put a
+    /// second wall in front of the first one.
+    private var locked: Bool { loginStore.isSignedIn && !premium.isPremium }
+
+    /// The two tabs a locked user keeps. **Home**, so the offer has something to sell against; and
+    /// **Profile**, because it owns Sign out — walling it strands a user who signed in with the
+    /// wrong Apple Account, and Restore Purchases lives on the paywall they would then be unable
+    /// to leave.
+    private static let openTabs: Set<Int> = [0, 3]
+
+    /// What the content area actually draws.
+    ///
+    /// Resolved on every render rather than only at tap time: `Transaction.updates` can revoke an
+    /// entitlement mid-session, and a user standing on the Puzzles tab when that happens must not
+    /// keep playing it until they next tap something.
+    private var visibleTab: Int { locked && !PhoneApp.openTabs.contains(tab) ? 0 : tab }
+
+    /// The tab bar's binding. A locked tap raises the paywall and leaves `tab` alone, so closing
+    /// the paywall returns to where they were rather than to whatever they were refused.
+    private var gatedTab: Binding<Int> {
+        Binding(get: { tab },
+                set: { next in
+                    if locked && !PhoneApp.openTabs.contains(next) { openPaywall() } else { tab = next }
+                })
+    }
+
+    /// Wraps a Home tile's action. Runs it, or raises the paywall in its place while locked.
+    ///
+    /// Every pushed route — Analysis, Play vs Coach, Pairing — is reachable ONLY from a Home tile,
+    /// so wrapping the tiles closes those three as well without a flag of their own.
+    private func gated(_ action: @escaping () -> Void) -> () -> Void {
+        { if locked { openPaywall() } else { action() } }
+    }
 
     var body: some View {
         // The home screen's responsive scalar is derived from the whole phone screen, matching the
@@ -106,7 +165,7 @@ struct PhoneApp: View {
                     statusBar   // simulated status bar for the desktop phone-frame preview only
                     #endif
                     Group {
-                        switch tab {
+                        switch visibleTab {
                         case 0: home(basis: basis)
                         // The Puzzles tab is the HUB now, not the ten hand-made samples. Those
                         // use the opposite move convention (`solution[0]` is the solver's, where
@@ -127,7 +186,7 @@ struct PhoneApp: View {
                     // every pushed route sets `an-mode` and `.app-card.an-mode .tabbar` is
                     // `display: none`. The Analysis Board, Pairing and Coach are ZStack siblings
                     // below and already cover the bar; only the Puzzle Hub lives inside a tab.
-                    if !puzzlePushed { PhoneTabBar(tab: $tab) }
+                    if !puzzlePushed { PhoneTabBar(tab: gatedTab) }
                 }
                 if showAnalysis {
                     VStack(spacing: 0) {
@@ -153,6 +212,17 @@ struct PhoneApp: View {
                     // invent two constants, the extracted screen fill and the Analysis Board's
                     // present timing are reused deliberately.
                     .background(PairingList.containerBackgroundColor)
+                    .transition(.move(edge: .bottom))
+                }
+                if showOpenings {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        OpeningTreeRootScreen(store: openingStore,
+                                              onExit: { showOpenings = false })
+                    }
+                    .background(OpeningPalette.screenBg)
                     .transition(.move(edge: .bottom))
                 }
                 if showCoach {
@@ -237,7 +307,13 @@ struct PhoneApp: View {
     }
 
     /// Only the callbacks with a real destination today are wired; the rest are the empty closures
-    /// the screen is designed around and stay that way until those screens exist.
+    /// the screen is designed around and stay that way until those screens exist. `onVideos` is the
+    /// last one left — `onOpeningTrainer` got its screen in round 4, and `onSearch` / `onDonate`
+    /// were removed with the controls that raised them.
+    ///
+    /// Every wired destination goes through `gated`, so a user who has not started the trial gets
+    /// the paywall instead. `onAvatar` and `onMembership` deliberately do not: one leads to Sign
+    /// out, the other IS the paywall.
     ///
     /// Arguments must follow `HomeScreen.init`'s declaration order — `userName` is first, and
     /// `onAnalysis` sits between `onPuzzles` and `onPlayCoach`.
@@ -249,19 +325,25 @@ struct PhoneApp: View {
                    subscriptionEndsAt: premium.expiresAt,
                    isColorful: homeColorful,
                    scaleBasis: basis,
+                   // Not gated: Profile owns Sign out, and the membership banner IS the offer.
                    onAvatar: { tab = 3 },
-                   onPuzzles: { tab = 1 },
-                   onAnalysis: {
+                   onPuzzles: gated { tab = 1 },
+                   onAnalysis: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showAnalysis = true
                        }
                    },
-                   onPlayCoach: {
+                   onPlayCoach: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showCoach = true
                        }
                    },
-                   onPairing: {
+                   onOpeningTrainer: gated {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showOpenings = true
+                       }
+                   },
+                   onPairing: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showPairing = true
                        }

@@ -1,0 +1,2973 @@
+{
+  "_generated": "tools/metrics/extract_opening_styles.js — do not hand-edit",
+  "_source": "app/(app)/user/analysis-board/openingtree.tsx",
+  "openingTree": {
+    "_spec": "client round 4 — the openingtree.com-style tree",
+    "_source": "app/(app)/user/analysis-board/openingtree.tsx",
+    "_bindings": [
+      "styles"
+    ],
+    "styles": {
+      "container": {
+        "flex": 1,
+        "backgroundColor": "#0F1A2E"
+      },
+      "header": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "space-between",
+        "paddingHorizontal": 16,
+        "paddingTop": 16,
+        "paddingBottom": 14
+      },
+      "backButton": {
+        "width": 40,
+        "height": 40,
+        "justifyContent": "center",
+        "alignItems": "center"
+      },
+      "backIcon": {
+        "fontSize": 26,
+        "color": "#FFFFFF"
+      },
+      "headerTitle": {
+        "fontSize": 20,
+        "fontWeight": "bold",
+        "color": "#FFFFFF"
+      },
+      "fetchBanner": {
+        "marginHorizontal": 16,
+        "marginBottom": 8,
+        "backgroundColor": "#111E33",
+        "borderRadius": 10,
+        "paddingHorizontal": 14,
+        "paddingVertical": 10,
+        "borderWidth": 1,
+        "borderColor": "#1E3050"
+      },
+      "fetchBannerRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "marginBottom": 6
+      },
+      "fetchBannerLabel": {
+        "flex": 1,
+        "color": "#FFFFFF",
+        "fontSize": 13,
+        "fontWeight": "600"
+      },
+      "fetchBannerCount": {
+        "color": "#FDB022",
+        "fontSize": 13,
+        "fontWeight": "700"
+      },
+      "fetchProgressTrack": {
+        "height": 4,
+        "backgroundColor": "#1A2942",
+        "borderRadius": 2,
+        "overflow": "hidden"
+      },
+      "fetchProgressFill": {
+        "height": 4,
+        "backgroundColor": "#FDB022",
+        "borderRadius": 2
+      },
+      "fetchBannerDone": {
+        "borderColor": "#2E7D32",
+        "backgroundColor": "#0D2010"
+      },
+      "fetchBannerDoneText": {
+        "color": "#4CAF50",
+        "fontSize": 13,
+        "fontWeight": "700",
+        "textAlign": "center"
+      },
+      "fetchBannerError": {
+        "borderColor": "#5C1010",
+        "backgroundColor": "#1A0808"
+      },
+      "fetchBannerErrorText": {
+        "color": "#EF5350",
+        "fontSize": 13,
+        "fontWeight": "600",
+        "textAlign": "center"
+      },
+      "listContent": {
+        "paddingHorizontal": 16,
+        "paddingBottom": 16,
+        "gap": 10
+      },
+      "treeCard": {
+        "backgroundColor": "#1A2942",
+        "borderRadius": 14,
+        "padding": 14,
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 10
+      },
+      "treeName": {
+        "fontSize": 15,
+        "fontWeight": "700",
+        "color": "#FFFFFF",
+        "marginBottom": 4
+      },
+      "treeMeta": {
+        "fontSize": 12,
+        "color": "#8BA3C7",
+        "lineHeight": 18
+      },
+      "treeActions": {
+        "gap": 8,
+        "alignItems": "flex-end"
+      },
+      "loadBtn": {
+        "backgroundColor": "rgba(253,176,34,0.15)",
+        "borderRadius": 8,
+        "paddingHorizontal": 14,
+        "paddingVertical": 6
+      },
+      "loadBtnText": {
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "fontSize": 13
+      },
+      "deleteBtn": {
+        "paddingHorizontal": 14,
+        "paddingVertical": 6
+      },
+      "deleteBtnText": {
+        "color": "#EF5350",
+        "fontWeight": "600",
+        "fontSize": 13
+      },
+      "newAnalysisContainer": {
+        "paddingHorizontal": 16,
+        "paddingVertical": 12,
+        "borderTopWidth": 1,
+        "borderTopColor": "#1A2942"
+      },
+      "newAnalysisBtn": {
+        "backgroundColor": "#1B5E20",
+        "borderRadius": 14,
+        "paddingVertical": 16,
+        "alignItems": "center",
+        "borderWidth": 1,
+        "borderColor": "#2E7D32"
+      },
+      "newAnalysisBtnText": {
+        "color": "#FFFFFF",
+        "fontWeight": "700",
+        "fontSize": 16
+      },
+      "centered": {
+        "flex": 1,
+        "justifyContent": "center",
+        "alignItems": "center",
+        "paddingHorizontal": 32,
+        "paddingBottom": 60
+      },
+      "emptyIcon": {
+        "fontSize": 56,
+        "marginBottom": 12
+      },
+      "emptyTitle": {
+        "fontSize": 18,
+        "fontWeight": "700",
+        "color": "#FFFFFF",
+        "marginBottom": 8,
+        "textAlign": "center"
+      },
+      "emptySubtitle": {
+        "fontSize": 14,
+        "color": "#8BA3C7",
+        "textAlign": "center",
+        "lineHeight": 22
+      },
+      "formContent": {
+        "paddingHorizontal": 16,
+        "paddingBottom": 32
+      },
+      "sectionLabel": {
+        "fontSize": 13,
+        "fontWeight": "600",
+        "color": "#8BA3C7",
+        "textTransform": "uppercase",
+        "letterSpacing": 0.8,
+        "marginTop": 20,
+        "marginBottom": 8
+      },
+      "toggleRow": {
+        "flexDirection": "row",
+        "gap": 8
+      },
+      "toggleBtn": {
+        "flex": 1,
+        "backgroundColor": "#1A2942",
+        "borderRadius": 10,
+        "paddingVertical": 12,
+        "alignItems": "center",
+        "borderWidth": 1,
+        "borderColor": "#243654"
+      },
+      "toggleBtnActive": {
+        "backgroundColor": "#FDB022",
+        "borderColor": "#FDB022"
+      },
+      "toggleBtnText": {
+        "color": "#8BA3C7",
+        "fontWeight": "600",
+        "fontSize": 14
+      },
+      "toggleBtnTextActive": {
+        "color": "#0F1A2E"
+      },
+      "textInput": {
+        "backgroundColor": "#1A2942",
+        "borderRadius": 10,
+        "borderWidth": 1,
+        "borderColor": "#243654",
+        "color": "#FFFFFF",
+        "fontSize": 15,
+        "paddingHorizontal": 14,
+        "paddingVertical": 12
+      },
+      "maxGamesInfoBox": {
+        "backgroundColor": "#1A2B40",
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#2A3D57",
+        "padding": 12,
+        "marginTop": 20,
+        "marginBottom": 4
+      },
+      "maxGamesInfoTitle": {
+        "color": "#FDB022",
+        "fontSize": 14,
+        "fontWeight": "600",
+        "marginBottom": 4
+      },
+      "maxGamesInfoSub": {
+        "color": "#8FA8C4",
+        "fontSize": 13,
+        "lineHeight": 19
+      },
+      "analyzeBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 14,
+        "paddingVertical": 16,
+        "alignItems": "center",
+        "marginTop": 16
+      },
+      "analyzeBtnText": {
+        "color": "#0F1A2E",
+        "fontWeight": "700",
+        "fontSize": 16
+      },
+      "explorerContent": {
+        "paddingBottom": 32
+      },
+      "explorerWrapper": {
+        "flex": 1
+      },
+      "movesScroll": {
+        "flex": 1
+      },
+      "movesContent": {
+        "paddingBottom": 32
+      },
+      "boardContainer": {
+        "alignItems": "center",
+        "marginBottom": 12
+      },
+      "navRow": {
+        "flexDirection": "row",
+        "justifyContent": "center",
+        "gap": 10,
+        "paddingHorizontal": 16,
+        "marginBottom": 10
+      },
+      "navBtn": {
+        "backgroundColor": "#1A2942",
+        "borderRadius": 10,
+        "paddingHorizontal": 16,
+        "paddingVertical": 10,
+        "borderWidth": 1,
+        "borderColor": "#243654"
+      },
+      "navBtnDisabled": {
+        "opacity": 0.35
+      },
+      "navBtnText": {
+        "color": "#FFFFFF",
+        "fontWeight": "600",
+        "fontSize": 14
+      },
+      "historyStrip": {
+        "marginHorizontal": 16,
+        "marginBottom": 10,
+        "backgroundColor": "#111E33",
+        "borderRadius": 10,
+        "paddingHorizontal": 14,
+        "paddingVertical": 8
+      },
+      "historyText": {
+        "color": "#FDB022",
+        "fontSize": 13,
+        "fontWeight": "600",
+        "flexWrap": "wrap"
+      },
+      "moveRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "backgroundColor": "#1A2942",
+        "borderRadius": 12,
+        "padding": 12,
+        "marginHorizontal": 16,
+        "marginBottom": 8,
+        "gap": 12
+      },
+      "moveSan": {
+        "fontSize": 17,
+        "fontWeight": "700",
+        "color": "#FFFFFF",
+        "width": 54
+      },
+      "moveStatRow": {
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 4
+      },
+      "moveCount": {
+        "fontSize": 12,
+        "color": "#8BA3C7"
+      },
+      "moveWdl": {
+        "fontSize": 12,
+        "color": "#8BA3C7"
+      },
+      "wdlBar": {
+        "flexDirection": "row",
+        "height": 6,
+        "borderRadius": 3,
+        "overflow": "hidden"
+      },
+      "wdlSegment": {},
+      "moveChevron": {
+        "fontSize": 22,
+        "color": "#5A6E87",
+        "fontWeight": "bold"
+      },
+      "noMovesBox": {
+        "marginHorizontal": 16,
+        "backgroundColor": "#1A2942",
+        "borderRadius": 12,
+        "padding": 20,
+        "alignItems": "center"
+      },
+      "noMovesText": {
+        "color": "#8BA3C7",
+        "fontSize": 14,
+        "textAlign": "center"
+      },
+      "engineToggleBtn": {
+        "marginHorizontal": 16,
+        "marginTop": 8,
+        "marginBottom": 4,
+        "paddingVertical": 8,
+        "paddingHorizontal": 14,
+        "borderRadius": 10,
+        "backgroundColor": "#1A2942",
+        "borderWidth": 1,
+        "borderColor": "#2A3F5A",
+        "alignSelf": "flex-start"
+      },
+      "engineToggleBtnOn": {
+        "borderColor": "#4CAF50",
+        "backgroundColor": "#0D2010"
+      },
+      "engineToggleBtnText": {
+        "fontSize": 13,
+        "fontWeight": "600",
+        "color": "#8BA3C7"
+      },
+      "engineToggleBtnTextOn": {
+        "color": "#4CAF50"
+      },
+      "engineSection": {
+        "marginHorizontal": 16,
+        "marginBottom": 6,
+        "backgroundColor": "#111E33",
+        "borderRadius": 10,
+        "borderWidth": 1,
+        "borderColor": "#1E3050",
+        "paddingHorizontal": 12,
+        "paddingVertical": 8,
+        "gap": 4
+      },
+      "engineAnalyzingRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 4
+      },
+      "engineLineRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "paddingVertical": 3,
+        "gap": 8
+      },
+      "engineChipEval": {
+        "fontSize": 12,
+        "fontWeight": "700",
+        "minWidth": 42
+      },
+      "engineChipSan": {
+        "fontSize": 13,
+        "fontWeight": "700",
+        "minWidth": 40
+      },
+      "engineLinePv": {
+        "flex": 1,
+        "fontSize": 12,
+        "color": "#8BA3C7"
+      },
+      "engineLineText": {
+        "fontSize": 13,
+        "color": "#8BA3C7"
+      },
+      "engineDepthChip": {
+        "fontSize": 11,
+        "color": "#4A6080",
+        "marginTop": 2
+      },
+      "premiumCtaBtn": {
+        "backgroundColor": "transparent",
+        "borderRadius": 14,
+        "paddingVertical": 14,
+        "alignItems": "center",
+        "marginBottom": 10,
+        "borderWidth": 1,
+        "borderColor": "#FDB022"
+      },
+      "premiumCtaBtnText": {
+        "color": "#FDB022",
+        "fontWeight": "700",
+        "fontSize": 15
+      },
+      "modalOverlay": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.72)",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "paddingHorizontal": 32
+      },
+      "modalCard": {
+        "backgroundColor": "#111E33",
+        "borderRadius": 20,
+        "borderWidth": 1,
+        "borderColor": "#1E3050",
+        "paddingHorizontal": 28,
+        "paddingTop": 28,
+        "paddingBottom": 24,
+        "width": "100%",
+        "alignItems": "center"
+      },
+      "modalIconRow": {
+        "width": 56,
+        "height": 56,
+        "borderRadius": 28,
+        "backgroundColor": "#1A2942",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "marginBottom": 16
+      },
+      "modalIcon": {
+        "fontSize": 26
+      },
+      "modalTitle": {
+        "fontSize": 17,
+        "fontWeight": "700",
+        "color": "#FFFFFF",
+        "marginBottom": 10,
+        "textAlign": "center"
+      },
+      "modalMessage": {
+        "fontSize": 14,
+        "color": "#8BA3C7",
+        "textAlign": "center",
+        "lineHeight": 22,
+        "marginBottom": 24
+      },
+      "modalBtn": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 12,
+        "paddingVertical": 13,
+        "paddingHorizontal": 40,
+        "alignItems": "center"
+      },
+      "modalBtnText": {
+        "color": "#0F1A2E",
+        "fontWeight": "700",
+        "fontSize": 15
+      }
+    },
+    "extraStyles": null,
+    "moduleConstants": {
+      "ENGINE_MOVE_COLORS": [
+        "rgba(76,175,80,0.9)",
+        "rgba(68,138,255,0.85)",
+        "rgba(255,152,0,0.85)"
+      ]
+    },
+    "renderConstants": {
+      "renderArrows": {
+        "moves": {
+          "text": "getSortedMoves().slice(0, 5)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getSortedMoves().slice(0, 5)"
+            }
+          ]
+        },
+        "verboseMoves": {
+          "text": "chessRef.current.moves({ verbose: true })",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "chessRef.current.moves({ verbose: true })"
+            }
+          ]
+        },
+        "colors": {
+          "text": "['#FDB022', '#4488FF', '#88BBFF', '#88BBFF', '#88BBFF']",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "['#FDB022', '#4488FF', '#88BBFF', '#88BBFF', '#88BBFF']"
+            }
+          ]
+        },
+        "strokeW": {
+          "text": "SQUARE_SIZE * 0.14",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "SQUARE_SIZE * 0.14",
+              "ref": "SQUARE_SIZE",
+              "ratio": 0.14
+            }
+          ]
+        },
+        "headSize": {
+          "text": "SQUARE_SIZE * 0.32",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "SQUARE_SIZE * 0.32",
+              "ref": "SQUARE_SIZE",
+              "ratio": 0.32
+            }
+          ]
+        },
+        "View[0].style": {
+          "text": "{ position: 'absolute', top: 0, left: 0, width: BOARD_SIZE, height: BOARD_SIZE }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ position: 'absolute', top: 0, left: 0, width: BOARD_SIZE, height: BOARD_SIZE }"
+            }
+          ]
+        },
+        "View[0].pointerEvents": {
+          "text": "none",
+          "literal": "none"
+        },
+        "Svg[0].width": {
+          "text": "BOARD_SIZE",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "BOARD_SIZE",
+              "ref": "BOARD_SIZE",
+              "ratio": 1
+            }
+          ]
+        },
+        "Svg[0].height": {
+          "text": "BOARD_SIZE",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "BOARD_SIZE",
+              "ref": "BOARD_SIZE",
+              "ratio": 1
+            }
+          ]
+        },
+        "vm": {
+          "text": "(verboseMoves as any[]).find((m: any) => m.san === san)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "(verboseMoves as any[]).find((m: any) => m.san === san)"
+            }
+          ]
+        },
+        "from": {
+          "text": "squareToPixel(vm.from, boardFlipped)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "squareToPixel(vm.from, boardFlipped)"
+            }
+          ]
+        },
+        "to": {
+          "text": "squareToPixel(vm.to, boardFlipped)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "squareToPixel(vm.to, boardFlipped)"
+            }
+          ]
+        },
+        "dx": {
+          "text": "to.x - from.x",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "to.x",
+              "ref": "to.x",
+              "ratio": 1
+            },
+            {
+              "sign": -1,
+              "text": "from.x",
+              "ref": "from.x",
+              "ratio": 1
+            }
+          ]
+        },
+        "dy": {
+          "text": "to.y - from.y",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "to.y",
+              "ref": "to.y",
+              "ratio": 1
+            },
+            {
+              "sign": -1,
+              "text": "from.y",
+              "ref": "from.y",
+              "ratio": 1
+            }
+          ]
+        },
+        "len": {
+          "text": "Math.sqrt(dx * dx + dy * dy)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "Math.sqrt(dx * dx + dy * dy)"
+            }
+          ]
+        },
+        "ux": {
+          "text": "dx / len",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "dx / len"
+            }
+          ]
+        },
+        "uy": {
+          "text": "dy / len",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "dy / len"
+            }
+          ]
+        },
+        "lx": {
+          "text": "to.x - ux * headSize * 0.7",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "to.x",
+              "ref": "to.x",
+              "ratio": 1
+            },
+            {
+              "sign": -1,
+              "text": "ux * headSize * 0.7"
+            }
+          ]
+        },
+        "ly": {
+          "text": "to.y - uy * headSize * 0.7",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "to.y",
+              "ref": "to.y",
+              "ratio": 1
+            },
+            {
+              "sign": -1,
+              "text": "uy * headSize * 0.7"
+            }
+          ]
+        },
+        "tip": {
+          "text": "{ x: to.x, y: to.y }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ x: to.x, y: to.y }"
+            }
+          ]
+        },
+        "left": {
+          "text": "{ x: tip.x - ux * headSize - (-uy) * headSize * 0.6, y: tip.y - uy * headSize - ux * headSize * 0.6 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ x: tip.x - ux * headSize - (-uy) * headSize * 0.6, y: tip.y - uy * headSize - ux * headSize * 0.6 }"
+            }
+          ]
+        },
+        "right": {
+          "text": "{ x: tip.x - ux * headSize + (-uy) * headSize * 0.6, y: tip.y - uy * headSize + ux * headSize * 0.6 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ x: tip.x - ux * headSize + (-uy) * headSize * 0.6, y: tip.y - uy * headSize + ux * headSize * 0.6 }"
+            }
+          ]
+        },
+        "color": {
+          "text": "colors[idx] ?? colors[2]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "colors[idx] ?? colors[2]"
+            }
+          ]
+        },
+        "React.Fragment[0].key": {
+          "text": "san",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "san",
+              "ref": "san",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].x1": {
+          "text": "from.x",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "from.x",
+              "ref": "from.x",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].y1": {
+          "text": "from.y",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "from.y",
+              "ref": "from.y",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].x2": {
+          "text": "lx",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "lx",
+              "ref": "lx",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].y2": {
+          "text": "ly",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "ly",
+              "ref": "ly",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].stroke": {
+          "text": "color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "color",
+              "ref": "color",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].strokeWidth": {
+          "text": "strokeW",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "strokeW",
+              "ref": "strokeW",
+              "ratio": 1
+            }
+          ]
+        },
+        "Line[0].strokeLinecap": {
+          "text": "round",
+          "literal": "round"
+        },
+        "Line[0].opacity": {
+          "text": "0.82",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.82",
+              "value": 0.82
+            }
+          ]
+        },
+        "Polygon[0].points": {
+          "text": "`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`"
+            }
+          ]
+        },
+        "Polygon[0].fill": {
+          "text": "color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "color",
+              "ref": "color",
+              "ratio": 1
+            }
+          ]
+        },
+        "Polygon[0].opacity": {
+          "text": "0.82",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.82",
+              "value": 0.82
+            }
+          ]
+        }
+      },
+      "renderWdlBar": {
+        "View[0].style": {
+          "text": "styles.wdlBar",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.wdlBar",
+              "ref": "styles.wdlBar",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].style": {
+          "text": "[styles.wdlSegment, { flex: wins, backgroundColor: '#4CAF50' }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.wdlSegment, { flex: wins, backgroundColor: '#4CAF50' }]"
+            }
+          ]
+        },
+        "View[2].style": {
+          "text": "[styles.wdlSegment, { flex: draws, backgroundColor: '#888888' }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.wdlSegment, { flex: draws, backgroundColor: '#888888' }]"
+            }
+          ]
+        },
+        "View[3].style": {
+          "text": "[styles.wdlSegment, { flex: losses, backgroundColor: '#EF5350' }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.wdlSegment, { flex: losses, backgroundColor: '#EF5350' }]"
+            }
+          ]
+        }
+      },
+      "renderFetchBanner": {
+        "pct": {
+          "text": "Math.min((fetchedCount / fetchMaxGames) * 100, 100)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "Math.min((fetchedCount / fetchMaxGames) * 100, 100)"
+            }
+          ]
+        },
+        "View[0].style": {
+          "text": "styles.fetchBanner",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBanner",
+              "ref": "styles.fetchBanner",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].style": {
+          "text": "styles.fetchBannerRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerRow",
+              "ref": "styles.fetchBannerRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "ActivityIndicator[0].size": {
+          "text": "small",
+          "literal": "small"
+        },
+        "ActivityIndicator[0].color": {
+          "text": "#FDB022",
+          "literal": "#FDB022"
+        },
+        "ActivityIndicator[0].style": {
+          "text": "{ marginRight: 8 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ marginRight: 8 }"
+            }
+          ]
+        },
+        "Text[0].style": {
+          "text": "styles.fetchBannerLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerLabel",
+              "ref": "styles.fetchBannerLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[1].style": {
+          "text": "styles.fetchBannerCount",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerCount",
+              "ref": "styles.fetchBannerCount",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].style": {
+          "text": "styles.fetchProgressTrack",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchProgressTrack",
+              "ref": "styles.fetchProgressTrack",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[3].style": {
+          "text": "[styles.fetchProgressFill, { width: `${pct}%` as any }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.fetchProgressFill, { width: `${pct}%` as any }]"
+            }
+          ]
+        },
+        "View[4].style": {
+          "text": "styles.fetchBanner",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBanner",
+              "ref": "styles.fetchBanner",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[5].style": {
+          "text": "styles.fetchBannerRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerRow",
+              "ref": "styles.fetchBannerRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "ActivityIndicator[1].size": {
+          "text": "small",
+          "literal": "small"
+        },
+        "ActivityIndicator[1].color": {
+          "text": "#4CAF50",
+          "literal": "#4CAF50"
+        },
+        "ActivityIndicator[1].style": {
+          "text": "{ marginRight: 8 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ marginRight: 8 }"
+            }
+          ]
+        },
+        "Text[2].style": {
+          "text": "styles.fetchBannerLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerLabel",
+              "ref": "styles.fetchBannerLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[6].style": {
+          "text": "[styles.fetchBanner, styles.fetchBannerDone]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.fetchBanner, styles.fetchBannerDone]"
+            }
+          ]
+        },
+        "Text[3].style": {
+          "text": "styles.fetchBannerDoneText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerDoneText",
+              "ref": "styles.fetchBannerDoneText",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[7].style": {
+          "text": "[styles.fetchBanner, styles.fetchBannerError]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.fetchBanner, styles.fetchBannerError]"
+            }
+          ]
+        },
+        "Text[4].style": {
+          "text": "styles.fetchBannerErrorText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.fetchBannerErrorText",
+              "ref": "styles.fetchBannerErrorText",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "renderListView": {
+        "View[0].style": {
+          "text": "{ flex: 1 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ flex: 1 }"
+            }
+          ]
+        },
+        "View[1].style": {
+          "text": "styles.centered",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.centered",
+              "ref": "styles.centered",
+              "ratio": 1
+            }
+          ]
+        },
+        "ActivityIndicator[0].size": {
+          "text": "large",
+          "literal": "large"
+        },
+        "ActivityIndicator[0].color": {
+          "text": "#FDB022",
+          "literal": "#FDB022"
+        },
+        "View[2].style": {
+          "text": "styles.centered",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.centered",
+              "ref": "styles.centered",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[0].style": {
+          "text": "styles.emptyIcon",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.emptyIcon",
+              "ref": "styles.emptyIcon",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[1].style": {
+          "text": "styles.emptyTitle",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.emptyTitle",
+              "ref": "styles.emptyTitle",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[2].style": {
+          "text": "styles.emptySubtitle",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.emptySubtitle",
+              "ref": "styles.emptySubtitle",
+              "ratio": 1
+            }
+          ]
+        },
+        "FlatList[0].data": {
+          "text": "savedTrees",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "savedTrees",
+              "ref": "savedTrees",
+              "ratio": 1
+            }
+          ]
+        },
+        "FlatList[0].keyExtractor": {
+          "text": "item => String(item.id)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "item => String(item.id)"
+            }
+          ]
+        },
+        "FlatList[0].contentContainerStyle": {
+          "text": "styles.listContent",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.listContent",
+              "ref": "styles.listContent",
+              "ratio": 1
+            }
+          ]
+        },
+        "FlatList[0].renderItem": {
+          "text": "({ item }) => ( <View style={styles.treeCard}> <View style={{ flex: 1 }}> <Text style={styles.treeName}>{item.name}</Text> <Text style={styles.treeMeta}> {item.platform === 'lichess' ? 'Lichess' : 'Chess.com'} · {item.username} ·{' '} {item.color.charAt(0).toUpperCase() + item.color.slice(1)} </Text> <Text style={styles.treeMeta}>{item.game_count} games</Text> </View> <View style={styles.treeActions}> <TouchableOpacity onPress={() => handleLoadTree(item.id, item.color)} style={styles.loadBtn}> <Text style={styles.loadBtnText}>Load</Text> </TouchableOpacity> <TouchableOpacity onPress={() => handleDeleteTree(item.id)} style={styles.deleteBtn}> <Text style={styles.deleteBtnText}>Delete</Text> </TouchableOpacity> </View> </View> )",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "({ item }) => ( <View style={styles.treeCard}> <View style={{ flex: 1 }}> <Text style={styles.treeName}>{item.name}</Text> <Text style={styles.treeMeta}> {item.platform === 'lichess' ? 'Lichess' : 'Chess.com'} · {item.username} ·{' '} {item.color.charAt(0).toUpperCase() + item.color.slice(1)} </Text> <Text style={styles.treeMeta}>{item.game_count} games</Text> </View> <View style={styles.treeActions}> <TouchableOpacity onPress={() => handleLoadTree(item.id, item.color)} style={styles.loadBtn}> <Text style={styles.loadBtnText}>Load</Text> </TouchableOpacity> <TouchableOpacity onPress={() => handleDeleteTree(item.id)} style={styles.deleteBtn}> <Text style={styles.deleteBtnText}>Delete</Text> </TouchableOpacity> </View> </View> )"
+            }
+          ]
+        },
+        "View[3].style": {
+          "text": "styles.treeCard",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.treeCard",
+              "ref": "styles.treeCard",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[4].style": {
+          "text": "{ flex: 1 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ flex: 1 }"
+            }
+          ]
+        },
+        "Text[3].style": {
+          "text": "styles.treeName",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.treeName",
+              "ref": "styles.treeName",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[4].style": {
+          "text": "styles.treeMeta",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.treeMeta",
+              "ref": "styles.treeMeta",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[5].style": {
+          "text": "styles.treeMeta",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.treeMeta",
+              "ref": "styles.treeMeta",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[5].style": {
+          "text": "styles.treeActions",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.treeActions",
+              "ref": "styles.treeActions",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[0].onPress": {
+          "text": "() => handleLoadTree(item.id, item.color)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => handleLoadTree(item.id, item.color)"
+            }
+          ]
+        },
+        "TouchableOpacity[0].style": {
+          "text": "styles.loadBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.loadBtn",
+              "ref": "styles.loadBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[6].style": {
+          "text": "styles.loadBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.loadBtnText",
+              "ref": "styles.loadBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[1].onPress": {
+          "text": "() => handleDeleteTree(item.id)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => handleDeleteTree(item.id)"
+            }
+          ]
+        },
+        "TouchableOpacity[1].style": {
+          "text": "styles.deleteBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.deleteBtn",
+              "ref": "styles.deleteBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[7].style": {
+          "text": "styles.deleteBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.deleteBtnText",
+              "ref": "styles.deleteBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[6].style": {
+          "text": "styles.newAnalysisContainer",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.newAnalysisContainer",
+              "ref": "styles.newAnalysisContainer",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].style": {
+          "text": "styles.premiumCtaBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.premiumCtaBtn",
+              "ref": "styles.premiumCtaBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].onPress": {
+          "text": "() => router.push('/(app)/user/premium' as any)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => router.push('/(app)/user/premium' as any)"
+            }
+          ]
+        },
+        "TouchableOpacity[2].activeOpacity": {
+          "text": "0.8",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.8",
+              "value": 0.8
+            }
+          ]
+        },
+        "Text[8].style": {
+          "text": "styles.premiumCtaBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.premiumCtaBtnText",
+              "ref": "styles.premiumCtaBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[3].style": {
+          "text": "styles.newAnalysisBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.newAnalysisBtn",
+              "ref": "styles.newAnalysisBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[3].onPress": {
+          "text": "() => setView('form')",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => setView('form')"
+            }
+          ]
+        },
+        "TouchableOpacity[3].activeOpacity": {
+          "text": "0.8",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.8",
+              "value": 0.8
+            }
+          ]
+        },
+        "Text[9].style": {
+          "text": "styles.newAnalysisBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.newAnalysisBtnText",
+              "ref": "styles.newAnalysisBtnText",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "renderFormView": {
+        "ScrollView[0].contentContainerStyle": {
+          "text": "styles.formContent",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.formContent",
+              "ref": "styles.formContent",
+              "ratio": 1
+            }
+          ]
+        },
+        "ScrollView[0].keyboardShouldPersistTaps": {
+          "text": "handled",
+          "literal": "handled"
+        },
+        "Text[0].style": {
+          "text": "styles.sectionLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.sectionLabel",
+              "ref": "styles.sectionLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[0].style": {
+          "text": "styles.toggleRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.toggleRow",
+              "ref": "styles.toggleRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[0].key": {
+          "text": "p",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "p",
+              "ref": "p",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[0].style": {
+          "text": "[styles.toggleBtn, platform === p && styles.toggleBtnActive]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.toggleBtn, platform === p && styles.toggleBtnActive]"
+            }
+          ]
+        },
+        "TouchableOpacity[0].onPress": {
+          "text": "() => setPlatform(p)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => setPlatform(p)"
+            }
+          ]
+        },
+        "Text[1].style": {
+          "text": "[styles.toggleBtnText, platform === p && styles.toggleBtnTextActive]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.toggleBtnText, platform === p && styles.toggleBtnTextActive]"
+            }
+          ]
+        },
+        "Text[2].style": {
+          "text": "styles.sectionLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.sectionLabel",
+              "ref": "styles.sectionLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[0].style": {
+          "text": "styles.textInput",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.textInput",
+              "ref": "styles.textInput",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[0].placeholder": {
+          "text": "Your chess platform username",
+          "literal": "Your chess platform username"
+        },
+        "TextInput[0].placeholderTextColor": {
+          "text": "#5A6E87",
+          "literal": "#5A6E87"
+        },
+        "TextInput[0].value": {
+          "text": "username",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "username",
+              "ref": "username",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[0].onChangeText": {
+          "text": "setUsername",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "setUsername",
+              "ref": "setUsername",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[0].autoCapitalize": {
+          "text": "none",
+          "literal": "none"
+        },
+        "TextInput[0].autoCorrect": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "Text[3].style": {
+          "text": "styles.sectionLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.sectionLabel",
+              "ref": "styles.sectionLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].style": {
+          "text": "styles.toggleRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.toggleRow",
+              "ref": "styles.toggleRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[1].key": {
+          "text": "c",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "c",
+              "ref": "c",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[1].style": {
+          "text": "[styles.toggleBtn, playerColor === c && styles.toggleBtnActive]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.toggleBtn, playerColor === c && styles.toggleBtnActive]"
+            }
+          ]
+        },
+        "TouchableOpacity[1].onPress": {
+          "text": "() => setPlayerColor(c)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => setPlayerColor(c)"
+            }
+          ]
+        },
+        "Text[4].style": {
+          "text": "[styles.toggleBtnText, playerColor === c && styles.toggleBtnTextActive]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.toggleBtnText, playerColor === c && styles.toggleBtnTextActive]"
+            }
+          ]
+        },
+        "Text[5].style": {
+          "text": "styles.sectionLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.sectionLabel",
+              "ref": "styles.sectionLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[1].style": {
+          "text": "styles.textInput",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.textInput",
+              "ref": "styles.textInput",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[1].keyboardType": {
+          "text": "number-pad",
+          "literal": "number-pad"
+        },
+        "TextInput[1].value": {
+          "text": "maxGamesInput",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "maxGamesInput",
+              "ref": "maxGamesInput",
+              "ratio": 1
+            }
+          ]
+        },
+        "TextInput[1].onChangeText": {
+          "text": "text => { const n = text.replace(/[^0-9]/g, ''); if (n === '') { setMaxGamesInput(''); return; } const num = parseInt(n, 10); setMaxGamesInput(String(Math.min(num, 1000))); }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "text => { const n = text.replace(/[^0-9]/g, ''); if (n === '') { setMaxGamesInput(''); return; } const num = parseInt(n, 10); setMaxGamesInput(String(Math.min(num, 1000))); }"
+            }
+          ]
+        },
+        "TextInput[1].placeholder": {
+          "text": "e.g. 500",
+          "literal": "e.g. 500"
+        },
+        "TextInput[1].placeholderTextColor": {
+          "text": "#5A6E87",
+          "literal": "#5A6E87"
+        },
+        "TextInput[1].maxLength": {
+          "text": "4",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "4",
+              "value": 4
+            }
+          ]
+        },
+        "n": {
+          "text": "text.replace(/[^0-9]/g, '')",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "text.replace(/[^0-9]/g, '')"
+            }
+          ]
+        },
+        "num": {
+          "text": "parseInt(n, 10)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "parseInt(n, 10)"
+            }
+          ]
+        },
+        "View[2].style": {
+          "text": "styles.maxGamesInfoBox",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.maxGamesInfoBox",
+              "ref": "styles.maxGamesInfoBox",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[6].style": {
+          "text": "styles.maxGamesInfoTitle",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.maxGamesInfoTitle",
+              "ref": "styles.maxGamesInfoTitle",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[7].style": {
+          "text": "styles.maxGamesInfoSub",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.maxGamesInfoSub",
+              "ref": "styles.maxGamesInfoSub",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].style": {
+          "text": "styles.analyzeBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.analyzeBtn",
+              "ref": "styles.analyzeBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].onPress": {
+          "text": "handleAnalyze",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "handleAnalyze",
+              "ref": "handleAnalyze",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].activeOpacity": {
+          "text": "0.85",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.85",
+              "value": 0.85
+            }
+          ]
+        },
+        "Text[8].style": {
+          "text": "styles.analyzeBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.analyzeBtnText",
+              "ref": "styles.analyzeBtnText",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "renderExplorerView": {
+        "sortedMoves": {
+          "text": "getSortedMoves()",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "getSortedMoves()"
+            }
+          ]
+        },
+        "isFetching": {
+          "text": "fetchStatus === 'fetching'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "fetchStatus === 'fetching'"
+            }
+          ]
+        },
+        "View[0].style": {
+          "text": "styles.explorerWrapper",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.explorerWrapper",
+              "ref": "styles.explorerWrapper",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[1].style": {
+          "text": "styles.boardContainer",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.boardContainer",
+              "ref": "styles.boardContainer",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].style": {
+          "text": "{ width: BOARD_SIZE, height: BOARD_SIZE }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ width: BOARD_SIZE, height: BOARD_SIZE }"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].board": {
+          "text": "boardPosition",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "boardPosition",
+              "ref": "boardPosition",
+              "ratio": 1
+            }
+          ]
+        },
+        "DragDropChessBoard[0].chess": {
+          "text": "chessRef.current",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "chessRef.current",
+              "ref": "chessRef.current",
+              "ratio": 1
+            }
+          ]
+        },
+        "DragDropChessBoard[0].userColor": {
+          "text": "boardFlipped ? 'b' : 'w'",
+          "condition": "boardFlipped",
+          "whenTrue": {
+            "text": "'b'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'b'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "'w'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'w'"
+              }
+            ]
+          }
+        },
+        "DragDropChessBoard[0].disabled": {
+          "text": "true",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "true"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].dragEnabled": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].selectedSquare": {
+          "text": "null",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "null"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].onSquarePress": {
+          "text": "() => {}",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => {}"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].onDragMove": {
+          "text": "() => {}",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => {}"
+            }
+          ]
+        },
+        "DragDropChessBoard[0].showLegalMoves": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "ScrollView[0].style": {
+          "text": "styles.movesScroll",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.movesScroll",
+              "ref": "styles.movesScroll",
+              "ratio": 1
+            }
+          ]
+        },
+        "ScrollView[0].contentContainerStyle": {
+          "text": "styles.movesContent",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.movesContent",
+              "ref": "styles.movesContent",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[3].style": {
+          "text": "styles.navRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navRow",
+              "ref": "styles.navRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[0].style": {
+          "text": "[styles.navBtn, moveStack.length === 0 && styles.navBtnDisabled]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.navBtn, moveStack.length === 0 && styles.navBtnDisabled]"
+            }
+          ]
+        },
+        "TouchableOpacity[0].onPress": {
+          "text": "handleBack",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "handleBack",
+              "ref": "handleBack",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[0].disabled": {
+          "text": "moveStack.length === 0",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "moveStack.length === 0"
+            }
+          ]
+        },
+        "Text[0].style": {
+          "text": "styles.navBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtnText",
+              "ref": "styles.navBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[1].style": {
+          "text": "[styles.navBtn, (sortedMoves.length === 0 || isFetching) && styles.navBtnDisabled]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.navBtn, (sortedMoves.length === 0 || isFetching) && styles.navBtnDisabled]"
+            }
+          ]
+        },
+        "TouchableOpacity[1].onPress": {
+          "text": "handleForward",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "handleForward",
+              "ref": "handleForward",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[1].disabled": {
+          "text": "sortedMoves.length === 0 || isFetching",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "sortedMoves.length === 0 || isFetching"
+            }
+          ]
+        },
+        "Text[1].style": {
+          "text": "styles.navBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtnText",
+              "ref": "styles.navBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].style": {
+          "text": "styles.navBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtn",
+              "ref": "styles.navBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[2].onPress": {
+          "text": "handleReset",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "handleReset",
+              "ref": "handleReset",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[2].style": {
+          "text": "styles.navBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtnText",
+              "ref": "styles.navBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[3].style": {
+          "text": "styles.navBtn",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtn",
+              "ref": "styles.navBtn",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[3].onPress": {
+          "text": "() => setBoardFlipped(f => !f)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => setBoardFlipped(f => !f)"
+            }
+          ]
+        },
+        "Text[3].style": {
+          "text": "styles.navBtnText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.navBtnText",
+              "ref": "styles.navBtnText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[4].style": {
+          "text": "[styles.engineToggleBtn, engineEnabled && styles.engineToggleBtnOn]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.engineToggleBtn, engineEnabled && styles.engineToggleBtnOn]"
+            }
+          ]
+        },
+        "TouchableOpacity[4].onPress": {
+          "text": "() => setEngineEnabled(e => !e)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => setEngineEnabled(e => !e)"
+            }
+          ]
+        },
+        "TouchableOpacity[4].activeOpacity": {
+          "text": "0.75",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.75",
+              "value": 0.75
+            }
+          ]
+        },
+        "Text[4].style": {
+          "text": "[styles.engineToggleBtnText, engineEnabled && styles.engineToggleBtnTextOn]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.engineToggleBtnText, engineEnabled && styles.engineToggleBtnTextOn]"
+            }
+          ]
+        },
+        "View[4].style": {
+          "text": "styles.engineSection",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineSection",
+              "ref": "styles.engineSection",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[5].style": {
+          "text": "styles.engineAnalyzingRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineAnalyzingRow",
+              "ref": "styles.engineAnalyzingRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "ActivityIndicator[0].size": {
+          "text": "small",
+          "literal": "small"
+        },
+        "ActivityIndicator[0].color": {
+          "text": "#90CAF9",
+          "literal": "#90CAF9"
+        },
+        "ActivityIndicator[0].style": {
+          "text": "{ marginRight: 6 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ marginRight: 6 }"
+            }
+          ]
+        },
+        "Text[5].style": {
+          "text": "styles.engineLineText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineLineText",
+              "ref": "styles.engineLineText",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[6].style": {
+          "text": "styles.engineAnalyzingRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineAnalyzingRow",
+              "ref": "styles.engineAnalyzingRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[6].style": {
+          "text": "styles.engineLineText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineLineText",
+              "ref": "styles.engineLineText",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[7].key": {
+          "text": "index",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "index",
+              "ref": "index",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[7].style": {
+          "text": "styles.engineLineRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineLineRow",
+              "ref": "styles.engineLineRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[7].style": {
+          "text": "[styles.engineChipEval, { color: getEvalColor(move.eval_display) }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.engineChipEval, { color: getEvalColor(move.eval_display) }]"
+            }
+          ]
+        },
+        "Text[8].style": {
+          "text": "[styles.engineChipSan, { color: ENGINE_MOVE_COLORS[index] || '#E0E0E0' }]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "[styles.engineChipSan, { color: ENGINE_MOVE_COLORS[index] || '#E0E0E0' }]"
+            }
+          ]
+        },
+        "Text[9].style": {
+          "text": "styles.engineLinePv",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineLinePv",
+              "ref": "styles.engineLinePv",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[9].numberOfLines": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "Text[10].style": {
+          "text": "styles.engineDepthChip",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.engineDepthChip",
+              "ref": "styles.engineDepthChip",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[8].style": {
+          "text": "styles.historyStrip",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.historyStrip",
+              "ref": "styles.historyStrip",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[11].style": {
+          "text": "styles.historyText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.historyText",
+              "ref": "styles.historyText",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[12].style": {
+          "text": "styles.sectionLabel",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.sectionLabel",
+              "ref": "styles.sectionLabel",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[9].style": {
+          "text": "styles.noMovesBox",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.noMovesBox",
+              "ref": "styles.noMovesBox",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[13].style": {
+          "text": "styles.noMovesText",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.noMovesText",
+              "ref": "styles.noMovesText",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[5].key": {
+          "text": "san",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "san",
+              "ref": "san",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[5].style": {
+          "text": "styles.moveRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveRow",
+              "ref": "styles.moveRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "TouchableOpacity[5].onPress": {
+          "text": "() => handleMovePress(san)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "() => handleMovePress(san)"
+            }
+          ]
+        },
+        "TouchableOpacity[5].activeOpacity": {
+          "text": "0.75",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "0.75",
+              "value": 0.75
+            }
+          ]
+        },
+        "Text[14].style": {
+          "text": "styles.moveSan",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveSan",
+              "ref": "styles.moveSan",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[10].style": {
+          "text": "{ flex: 1 }",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "{ flex: 1 }"
+            }
+          ]
+        },
+        "View[11].style": {
+          "text": "styles.moveStatRow",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveStatRow",
+              "ref": "styles.moveStatRow",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[15].style": {
+          "text": "styles.moveCount",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveCount",
+              "ref": "styles.moveCount",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[16].style": {
+          "text": "styles.moveWdl",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveWdl",
+              "ref": "styles.moveWdl",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[17].style": {
+          "text": "styles.moveChevron",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "styles.moveChevron",
+              "ref": "styles.moveChevron",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "extractMovesFromPgn": {},
+      "squareToPixel": {
+        "col": {
+          "text": "square.charCodeAt(0) - 97",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "square.charCodeAt(0)"
+            },
+            {
+              "sign": -1,
+              "text": "97",
+              "value": 97
+            }
+          ]
+        },
+        "row": {
+          "text": "8 - parseInt(square[1], 10)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "8",
+              "value": 8
+            },
+            {
+              "sign": -1,
+              "text": "parseInt(square[1], 10)"
+            }
+          ]
+        },
+        "dc": {
+          "text": "flipped ? 7 - col : col",
+          "condition": "flipped",
+          "whenTrue": {
+            "text": "7 - col",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "7",
+                "value": 7
+              },
+              {
+                "sign": -1,
+                "text": "col",
+                "ref": "col",
+                "ratio": 1
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "col",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "col",
+                "ref": "col",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "dr": {
+          "text": "flipped ? 7 - row : row",
+          "condition": "flipped",
+          "whenTrue": {
+            "text": "7 - row",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "7",
+                "value": 7
+              },
+              {
+                "sign": -1,
+                "text": "row",
+                "ref": "row",
+                "ratio": 1
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "row",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "row",
+                "ref": "row",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "return.x": {
+          "text": "dc * SQUARE_SIZE + SQUARE_SIZE / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "dc * SQUARE_SIZE"
+            },
+            {
+              "sign": 1,
+              "text": "SQUARE_SIZE / 2",
+              "ref": "SQUARE_SIZE",
+              "ratio": 0.5
+            }
+          ]
+        },
+        "return.y": {
+          "text": "dr * SQUARE_SIZE + SQUARE_SIZE / 2",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "dr * SQUARE_SIZE"
+            },
+            {
+              "sign": 1,
+              "text": "SQUARE_SIZE / 2",
+              "ref": "SQUARE_SIZE",
+              "ratio": 0.5
+            }
+          ]
+        }
+      },
+      "addGamesToTree": {
+        "chess": {
+          "text": "new Chess()",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "new Chess()"
+            }
+          ]
+        },
+        "sanList": {
+          "text": "game.moves.split(' ').map(s => s.trim()).filter(Boolean)",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "game.moves.split(' ').map(s => s.trim()).filter(Boolean)"
+            }
+          ]
+        },
+        "lower": {
+          "text": "username.toLowerCase()",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "username.toLowerCase()"
+            }
+          ]
+        },
+        "win": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "draw": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "loss": {
+          "text": "false",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "false"
+            }
+          ]
+        },
+        "node": {
+          "text": "root",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "root",
+              "ref": "root",
+              "ratio": 1
+            }
+          ]
+        },
+        "moverColor": {
+          "text": "chess.turn() === 'w' ? 'black' : 'white'",
+          "condition": "chess.turn() === 'w'",
+          "whenTrue": {
+            "text": "'black'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'black'"
+              }
+            ]
+          },
+          "whenFalse": {
+            "text": "'white'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "'white'"
+              }
+            ]
+          }
+        },
+        "n": {
+          "text": "node[mv.san]",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "node[mv.san]"
+            }
+          ]
+        }
+      },
+      "getNodeAtCurrentPosition": {
+        "node": {
+          "text": "currentTree",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "currentTree",
+              "ref": "currentTree",
+              "ratio": 1
+            }
+          ]
+        }
+      },
+      "getSortedMoves": {},
+      "getEvalColor": {}
+    },
+    "colorMaps": {
+      "getEvalColor": [
+        {
+          "when": "!evalDisplay",
+          "value": "#8BA3C7"
+        },
+        {
+          "when": "evalDisplay.startsWith('+') || evalDisplay.startsWith('M')",
+          "value": "#4CAF50"
+        },
+        {
+          "when": "evalDisplay.startsWith('-') || evalDisplay.startsWith('M-')",
+          "value": "#F44336"
+        },
+        {
+          "when": null,
+          "value": "#8BA3C7"
+        }
+      ]
+    },
+    "inlineStyles": {
+      "View[0].position": {
+        "text": "'absolute'",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "'absolute'"
+          }
+        ]
+      },
+      "View[0].top": {
+        "text": "0",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "0",
+            "value": 0
+          }
+        ]
+      },
+      "View[0].left": {
+        "text": "0",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "0",
+            "value": 0
+          }
+        ]
+      },
+      "View[0].width": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[0].height": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[2].flex": {
+        "text": "wins",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "wins",
+            "ref": "wins",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[2].backgroundColor": {
+        "text": "'#4CAF50'",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "'#4CAF50'"
+          }
+        ]
+      },
+      "View[3].flex": {
+        "text": "draws",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "draws",
+            "ref": "draws",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[3].backgroundColor": {
+        "text": "'#888888'",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "'#888888'"
+          }
+        ]
+      },
+      "View[4].flex": {
+        "text": "losses",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "losses",
+            "ref": "losses",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[4].backgroundColor": {
+        "text": "'#EF5350'",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "'#EF5350'"
+          }
+        ]
+      },
+      "ActivityIndicator[0].marginRight": {
+        "text": "8",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "8",
+            "value": 8
+          }
+        ]
+      },
+      "View[8].width": {
+        "text": "`${pct}%` as any",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "`${pct}%` as any"
+          }
+        ]
+      },
+      "ActivityIndicator[1].marginRight": {
+        "text": "8",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "8",
+            "value": 8
+          }
+        ]
+      },
+      "View[13].flex": {
+        "text": "1",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "1",
+            "value": 1
+          }
+        ]
+      },
+      "View[17].flex": {
+        "text": "1",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "1",
+            "value": 1
+          }
+        ]
+      },
+      "View[25].width": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "View[25].height": {
+        "text": "BOARD_SIZE",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "BOARD_SIZE",
+            "ref": "BOARD_SIZE",
+            "ratio": 1
+          }
+        ]
+      },
+      "ActivityIndicator[3].marginRight": {
+        "text": "6",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "6",
+            "value": 6
+          }
+        ]
+      },
+      "Text[31].color": {
+        "text": "getEvalColor(move.eval_display)",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "getEvalColor(move.eval_display)"
+          }
+        ]
+      },
+      "Text[32].color": {
+        "text": "ENGINE_MOVE_COLORS[index] || '#E0E0E0'",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "ENGINE_MOVE_COLORS[index] || '#E0E0E0'"
+          }
+        ]
+      },
+      "View[33].flex": {
+        "text": "1",
+        "terms": [
+          {
+            "sign": 1,
+            "text": "1",
+            "value": 1
+          }
+        ]
+      }
+    }
+  },
+  "palette": {
+    "_note": "Every colour literal in the StyleSheet, by frequency.",
+    "counts": {
+      "#FDB022": 11,
+      "#8BA3C7": 11,
+      "#FFFFFF": 10,
+      "#1A2942": 10,
+      "#0F1A2E": 4,
+      "#111E33": 4,
+      "#1E3050": 3,
+      "#4CAF50": 3,
+      "#243654": 3,
+      "#2E7D32": 2,
+      "#0D2010": 2,
+      "#EF5350": 2,
+      "#5C1010": 1,
+      "#1A0808": 1,
+      "rgba(253,176,34,0.15)": 1,
+      "#1B5E20": 1,
+      "#1A2B40": 1,
+      "#2A3D57": 1,
+      "#8FA8C4": 1,
+      "#5A6E87": 1,
+      "#2A3F5A": 1,
+      "#4A6080": 1,
+      "rgba(0,0,0,0.72)": 1
+    }
+  }
+}

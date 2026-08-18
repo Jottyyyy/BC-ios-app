@@ -139,7 +139,7 @@ var BiyaHome = (function () {
     { id: 'puzzles', title: 'Play Puzzles', sub: 'Train Your Tactics', art: 'puzzle_knight.png', fill: '#4CAF50' },
     { id: 'analysis', title: 'Analysis Board', sub: 'Analyze Games', art: 'analysis.png', fill: '#FF9800' },
     { id: 'videos', title: 'Tutorial Videos', sub: 'Learn From FM Deniel', art: 'video_icon.png', fill: '#E91E63' },
-    { id: 'openingTrainer', title: 'Opening Trainer', sub: 'Master Your Repertoire', art: 'opening_book.svg', fill: '#00BFA5' },
+    { id: 'openingTrainer', title: 'Opening Tree', sub: 'Explore Your Openings', art: 'opening_book.svg', fill: '#00BFA5' },
     { id: 'playCoach', title: 'Play with\nCoach', sub: null, art: 'app-icon.png', fill: '#1B1050' },
     { id: 'pairing', title: 'Pairing\nManager', sub: 'Tournaments', art: 'swiss.png', fill: '#0D2137' }
   ];

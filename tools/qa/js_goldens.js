@@ -45,6 +45,12 @@ var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
 var SLAYOUT = require(path.join(__dirname, 'swift_layout_check.js'));
 var NAVICONS = require(path.join(__dirname, 'nav_icons_check.js'));
 var HCHROME = require(path.join(__dirname, 'home_chrome_check.js'));
+var TGATE = require(path.join(__dirname, 'trial_gate_check.js'));
+var OTREE = require(path.join(JS, 'opening-tree.js'));
+var OMET = require(path.join(JS, 'opening-metrics.js'));
+var OSTORE = require(path.join(JS, 'opening-store.js'));
+var OSCREENS = require(path.join(JS, 'openings.js'));
+var ROTREE = require(path.join(__dirname, 'replay_opening_tree.js'));
 var SLAYOUTMUT = require(path.join(__dirname, 'swift_layout_mutation_test.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
@@ -156,6 +162,14 @@ record('board layout invariants', LAYOUT.selfTest());
 record('swift layout invariants', SLAYOUT.selfTest());
 record('nav icon invariants', NAVICONS.selfTest());
 record('home chrome invariants', HCHROME.selfTest());
+record('trial gate invariants', TGATE.selfTest());
+record('opening-tree.selfTest', OTREE.selfTest());
+record('opening-metrics.selfTest', OMET.selfTest());
+record('opening-metrics vs RN source',
+  OMET.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'opening_styles.json'))));
+record('opening-store.selfTest', OSTORE.selfTest());
+record('openings.selfTest', OSCREENS.selfTest());
+record('swift opening tree vs JS', ROTREE.selfTest());
 // …and the proof those greps can still fail.
 record('swift layout mutation', SLAYOUTMUT.selfTest());
 // Where the search runs, and the frame budget it must respect when it runs in-thread.

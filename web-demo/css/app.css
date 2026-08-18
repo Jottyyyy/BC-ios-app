@@ -2693,3 +2693,214 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 .pw-profile-cta:active { opacity: .82; }
+
+/* ---- Opening Tree ---------------------------------------------------------- */
+/* Three screens behind one class family, mirroring OpeningTreeScreens.swift. Every number arrives
+   as an --op-* custom property set by js/openings.js from BiyaOpeningMetrics, which is itself
+   asserted against tools/metrics/opening_styles.json — so no layout constant is written here, the
+   same rule the Home and Analysis screens follow.
+
+   TWO namespaces on purpose: --op-* is geometry, --opc-* is colour. They collided otherwise —
+   `buildBorder`, `inputBorder` and `infoBorder` each name a WIDTH in LAYOUT and a COLOUR in
+   PALETTE, and a single prefix let the colour silently overwrite the width. */
+.app-card.op-mode .tabbar { display: none; }
+
+.op-view {
+  height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: var(--opc-screenBg); color: var(--opc-text); font-family: var(--font);
+}
+
+/* header */
+.op-header {
+  flex: none; display: flex; align-items: center;
+  padding: var(--op-headerPadTop) var(--op-screenPadH) var(--op-headerPadBottom);
+}
+.op-back {
+  /* Height and colour only. `.nav-icon` owns the icon size, the 44px minimum WIDTH and the
+     pressed state — see the note beside it. */
+  height: var(--op-backSize); flex: none;
+  background: none; border: 0; cursor: pointer; padding: 0;
+  color: var(--opc-text); font-size: var(--op-backIconSize);
+}
+.op-title { flex: 1; text-align: center; font-weight: 800; font-size: var(--op-titleSize); }
+.op-balance { width: var(--op-backSize); height: var(--op-backSize); flex: none; }
+
+/* list */
+.op-list {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--op-listGap);
+  padding: 0 var(--op-screenPadH) var(--op-screenPadH);
+}
+.op-card {
+  display: flex; align-items: center; gap: var(--op-cardGap);
+  background: var(--opc-card); border-radius: var(--op-cardRadius); padding: var(--op-cardPad);
+}
+.op-card-main { flex: 1; min-width: 0; }
+.op-tree-name {
+  font-size: var(--op-treeNameSize); font-weight: 700; color: var(--opc-text);
+  margin-bottom: var(--op-treeNameGap);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-tree-meta {
+  font-size: var(--op-treeMetaSize); color: var(--opc-muted); line-height: var(--op-treeMetaLine);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-card-actions {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: var(--op-actionGap); flex: none;
+}
+.op-load {
+  background: var(--opc-loadFill); color: var(--opc-gold); border: 0; cursor: pointer;
+  border-radius: var(--op-loadRadius); padding: var(--op-loadPadV) var(--op-loadPadH);
+  font: 700 var(--op-loadTextSize)/1 inherit;
+}
+.op-delete {
+  background: none; color: var(--opc-danger); border: 0; cursor: pointer;
+  padding: var(--op-loadPadV) var(--op-loadPadH); font: 600 var(--op-loadTextSize)/1 inherit;
+}
+.op-load:active, .op-delete:active { opacity: .7; }
+
+/* empty */
+.op-empty {
+  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 0 var(--op-emptyPadH) var(--op-emptyPadBottom);
+}
+.op-empty-icon {
+  font-size: var(--op-emptyIconSize); margin-bottom: var(--op-emptyIconGap); line-height: 1;
+}
+.op-empty-title {
+  font-size: var(--op-emptyTitleSize); font-weight: 700; margin-bottom: var(--op-emptyTitleGap);
+}
+.op-empty-sub {
+  font-size: var(--op-emptySubSize); color: var(--opc-muted); line-height: var(--op-emptySubLine);
+}
+
+/* footer */
+.op-footer {
+  flex: none; padding: var(--op-footerPadV) var(--op-screenPadH);
+  border-top: var(--op-footerBorder) solid var(--opc-card);
+}
+.op-build {
+  width: 100%; background: var(--opc-buildBg); color: var(--opc-text); cursor: pointer;
+  border: var(--op-buildBorder) solid var(--opc-buildBorder);
+  border-radius: var(--op-buildRadius); padding: var(--op-buildPadV) 0;
+  font: 700 var(--op-buildTextSize)/1 inherit;
+}
+.op-build:active { opacity: .85; }
+
+/* form */
+.op-form {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 0 var(--op-screenPadH) var(--op-formPadBottom);
+}
+.op-label {
+  font-size: var(--op-labelSize); font-weight: 600; color: var(--opc-muted);
+  letter-spacing: var(--op-labelTracking);
+  margin: var(--op-labelTop) 0 var(--op-labelBottom);
+}
+.op-input {
+  width: 100%; box-sizing: border-box; background: var(--opc-card); color: var(--opc-text);
+  border: var(--op-inputBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-inputRadius);
+  padding: var(--op-inputPadV) var(--op-inputPadH);
+  font: 400 var(--op-inputTextSize)/1.4 inherit;
+}
+.op-textarea { min-height: 160px; resize: vertical; font-family: ui-monospace, monospace; }
+.op-toggles { display: flex; gap: var(--op-toggleGap); }
+.op-toggle {
+  flex: 1 1 0; min-width: 0; background: var(--opc-card); color: var(--opc-muted); cursor: pointer;
+  border: var(--op-toggleBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-toggleRadius); padding: var(--op-togglePadV) 0;
+  font: 600 var(--op-toggleTextSize)/1 inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-toggle.active {
+  background: var(--opc-gold); border-color: var(--opc-gold); color: var(--opc-onGold);
+}
+.op-note {
+  background: var(--opc-infoBg);
+  border: var(--op-infoBorder) solid var(--opc-infoBorder);
+  border-radius: var(--op-infoRadius); padding: var(--op-infoPad);
+  margin: var(--op-infoTop) 0 var(--op-infoBottom);
+}
+.op-note-title {
+  color: var(--opc-gold); font-size: var(--op-infoTitleSize); font-weight: 600;
+  margin-bottom: var(--op-infoTitleGap);
+}
+.op-note-sub {
+  color: var(--opc-infoText); font-size: var(--op-infoSubSize); line-height: var(--op-infoSubLine);
+}
+.op-error {
+  background: var(--opc-errorBg); border: var(--op-infoBorder) solid var(--opc-errorBorder);
+  border-radius: var(--op-infoRadius); padding: var(--op-infoPad);
+  margin-top: var(--op-infoBottom);
+  color: var(--opc-errorText); font-size: var(--op-infoSubSize); font-weight: 600;
+}
+.op-submit {
+  width: 100%; background: var(--opc-gold); color: var(--opc-onGold); border: 0; cursor: pointer;
+  border-radius: var(--op-submitRadius); padding: var(--op-submitPadV) 0;
+  margin-top: var(--op-submitTop); font: 700 var(--op-submitTextSize)/1 inherit;
+}
+.op-submit:active { opacity: .85; }
+
+/* explorer */
+.op-board { flex: none; margin-bottom: var(--op-boardGap); }
+.op-board chess-board { width: 100%; --board-radius: 0; }
+.op-history {
+  flex: none; background: var(--opc-cardDeep); color: var(--opc-gold);
+  border-radius: var(--op-historyRadius);
+  padding: var(--op-historyPadV) var(--op-historyPadH);
+  margin: 0 var(--op-screenPadH) var(--op-historyBottom);
+  font: 600 var(--op-historySize)/1.4 inherit;
+}
+.op-nav {
+  flex: none; display: flex; justify-content: center; gap: var(--op-navGap);
+  padding: 0 var(--op-screenPadH); margin-bottom: var(--op-navBottom);
+}
+.op-navbtn {
+  background: var(--opc-card); color: var(--opc-text); cursor: pointer;
+  border: var(--op-navBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-navRadius);
+  padding: var(--op-navPadV) var(--op-navPadH);
+  font: 600 var(--op-navTextSize)/1 inherit;
+}
+.op-navbtn.disabled { opacity: var(--op-navDisabledOpacity); cursor: default; }
+.op-navbtn:not(.disabled):active { opacity: .7; }
+.op-moves {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 0 var(--op-screenPadH) var(--op-movesPadBottom);
+  display: flex; flex-direction: column; gap: var(--op-rowBottom);
+}
+.op-move {
+  display: flex; align-items: center; gap: var(--op-rowGap); width: 100%; text-align: left;
+  background: var(--opc-card); border: 0; cursor: pointer; color: inherit; font-family: inherit;
+  border-radius: var(--op-rowRadius); padding: var(--op-rowPad);
+}
+.op-move:active { opacity: .85; }
+.op-san {
+  width: var(--op-sanWidth); flex: none;
+  font: 700 var(--op-sanSize)/1 inherit; color: var(--opc-text);
+}
+.op-stats { flex: 1; min-width: 0; }
+.op-statline {
+  display: flex; justify-content: space-between; margin-bottom: var(--op-statGap);
+  font-size: var(--op-statSize); color: var(--opc-muted);
+}
+.op-bar {
+  display: flex; height: var(--op-barHeight); border-radius: var(--op-barRadius);
+  overflow: hidden; background: var(--opc-cardDeep);
+}
+.op-seg { height: 100%; }
+.op-seg-win { background: var(--opc-win); }
+.op-seg-draw { background: var(--opc-draw); }
+.op-seg-loss { background: var(--opc-loss); }
+.op-chevron {
+  flex: none; font-size: var(--op-chevronSize); font-weight: bold;
+  color: var(--opc-chevron); line-height: 1;
+}
+.op-nomoves {
+  margin: 0 var(--op-screenPadH); background: var(--opc-card);
+  border-radius: var(--op-noMovesRadius); padding: var(--op-noMovesPad);
+  text-align: center; color: var(--opc-muted); font-size: var(--op-noMovesSize);
+}

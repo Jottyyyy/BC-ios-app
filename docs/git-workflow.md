@@ -112,6 +112,39 @@ https://github.com/Jottyyyy/BC-ios-app/compare/main...fix/<slug>?expand=1
 
 If `gh` is ever installed, `gh pr create --fill` replaces both steps. **Never `git push origin main`.**
 
+### When two PRs are open at once, expect a conflict — and it is always the same one
+
+Round 4 opened four PRs from one round of feedback. Three merged; the fourth came back
+*"This branch has conflicts that must be resolved"* on four files:
+
+```
+CHANGELOG.md   PORTING_NOTES.md   tools/qa/js_goldens.js   web-demo/README.md
+```
+
+**None of them is a code conflict.** They are the repo's **append-only** files, and every PR in a
+round writes at the same anchor in each: the top of `## [Unreleased]`, the top of the notes, and the
+`require`/`record` pair a new gate adds to the registry. Two branches inserting at one anchor is a
+conflict by construction, no matter how unrelated the features are.
+
+The resolution is therefore mechanical: **keep both sides, in either order.** Only a file where the
+two branches edited the *same sentence* needs thought — in round 4 that was `web-demo/README.md`
+alone, where one branch rewrote the Home line while the other added a bullet under it.
+
+Resolve it on the **branch**, not in the GitHub web editor, so the gate runs before it lands:
+
+```bash
+git merge origin/main          # in the branch's worktree
+# resolve; then regenerate, because Goldens/ is per-worktree
+export LARAVEL_ROOT="…/BYAHERONG-COACH-LARAVEL"
+php tools/oracle/generate_goldens.php && php tools/eco/build_eco.php
+node tools/qa/js_goldens.js
+git add -A && git commit --no-edit && git push
+```
+
+**The cheaper fix is upstream of all this:** land a round's PRs one at a time, or stack them
+(`git rebase <previous-branch>`) so each is cut from the one before rather than from `main`. Four
+independent branches off one `main` guarantees six pairwise conflicts in these files.
+
 ## 7 · Clean up after the merge
 
 ```bash

@@ -131,14 +131,22 @@ enum BoardTheme: String, CaseIterable, Identifiable, Sendable {
 
 /// How a board draws its squares and indicators.
 ///
-/// The defaults reproduce what `BoardView` renders today, exactly, so Play and Puzzles are unchanged
-/// when no style is supplied. The Analysis Board passes `.analysis(theme:)`.
+/// The default squares are `BoardTheme.classic` — the SAME pair the real RN board draws
+/// (`tools/metrics/puzzle_styles.json` -> `shared.board.lightSquare/darkSquare`), which was
+/// extracted long ago and then read by nobody while every non-Analysis board rendered the invented
+/// blue instead. Taking the extracted values here is a parity fix, not a repaint: it is what
+/// `DragDropChessBoard.tsx` has always shown. `tools/qa/board_layout_check.js` now pins both
+/// languages to that JSON so the pair cannot drift from the source again.
+///
+/// The INDICATORS deliberately stay the app's gold: `replacesFill` is false on this path, so
+/// `lastMove` and `selected` are translucent tints laid OVER the square rather than replacements,
+/// and gold-on-brown is exactly what the Analysis Board already renders.
 ///
 /// `replacesFill` is the load-bearing difference: the Analysis Board's highlights **replace** the
 /// square colour, while the existing board tints translucent layers over it.
 struct BoardStyle: Equatable {
-    var light: Color = Theme.boardLight
-    var dark: Color = Theme.boardDark
+    var light: Color = BoardTheme.classic.light
+    var dark: Color = BoardTheme.classic.dark
     var lastMove: Color = Theme.accent.opacity(0.32)
     var selected: Color = Theme.accent.opacity(0.55)
     var check: Color = Theme.negative.opacity(0.5)

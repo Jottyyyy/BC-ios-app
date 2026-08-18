@@ -69,6 +69,203 @@ logo asset, deleting the counterweight, and trimming `bannerHeight`. `HomeMetric
 (the radius at all three reference scales, and `.brandLogo` added to the artwork-resolves list);
 `home.js`'s own `selfTest` gains `logoRadius` in its metrics table. `js_goldens` 32,971 → 33,058
 across 70 suites.
+### 2026-08-18 (fixed) — Every board was drawing a colour the source app never had
+
+Fourth round of client feedback, first ask: *"doon sa lahat ng board sa puzzle natin dapat ganto
+kulay ng chess board para mas maliwanag at mas maaliwalas."* The attached screenshot is **this
+app's own Analysis Board** on its default `classic` theme — so the question was not "what colour
+should the puzzles be", it was "why is one screen already right and the other seven wrong".
+`web-demo/` updated to match.
+
+**They were wrong because a working extraction was read by nobody.**
+`tools/metrics/extract_puzzle_styles.js` has walked the real `DragDropChessBoard.tsx` into
+`puzzle_styles.json` → `shared.board` since the puzzle screens landed, carrying the source app's
+palette — `#F0D9B5` / `#B58863` and the two highlight fills. `grep -r 'shared.board'` across every
+`.js` and `.swift` returns **zero hits**. Both languages hardcoded an invented `#5BA3F5` /
+`#2C4A73` blue instead, in three places: `BoardStyle`'s defaults, `theme.css`'s `--board-light` /
+`--board-dark`, and a third copy as the `var()` fallbacks inside `chess-board.js`'s `:host` block.
+The five puzzle solvers, Play vs Coach and both macOS panels have therefore drawn a colour the RN
+app never had for the whole life of the port. The Analysis Board escaped only by accident:
+`BoardTheme.default == .classic` is the extracted pair reached by a different route.
+
+**Nothing could see it.** No suite anywhere asserted a square colour literal. The two Swift
+assertions were *relative* — `plain.light == Theme.boardLight` — so they tracked the wrong value
+happily, and the JS twin compared against `BOARD_THEMES.classic`, a different constant entirely.
+The two languages agreed with **each other**, which is precisely the trap `CLAUDE.md` names:
+*two hand-typed copies agreeing is not verification.* It is the annotation badge's `+`-for-`-` one
+layer down, and it took a client screenshot to surface it.
+
+**Fixed by deleting the copies, not by repainting.** `BoardStyle.light`/`.dark` now default to
+`BoardTheme.classic.light`/`.dark`; `theme.css` and the `chess-board.js` fallbacks take the same
+hexes. One pair, one source, four writers pointing at it. Because every non-Analysis board inherits
+`BoardStyle()` by passing no `style:` at all, and `--board-light` is read *only* by `<chess-board>`,
+this is one line per language — `PuzzleSolverParts`' `PuzzleBoardBand` alone carries Play Puzzles,
+Daily, Thematic, Streak and Turbo.
+
+**The indicators deliberately stay gold.** `lastMove` / `selected` remain `Theme.accent` at
+0.32 / 0.55 laid *over* the square (`replacesFill == false`), not the RN board's solid `#F6F669` /
+`#CDD26A`. Gold-on-brown is what the approved screenshot shows, and the solid pair would collide
+with the Puzzle Streak's `--hl-sol-from` / `--hl-sol-to` solution highlights.
+
+`Theme.boardLight` / `Theme.boardDark` keep their values — they are still the `PlayView` level
+capsule and the `PuzzleView` rating chip — and gain a comment saying they must never go back on a
+board. The Analysis Board's three-theme picker is untouched: `analysis.js` sets the two properties
+on its own root, so `classic` / `green` / `blue` still work.
+
+**Gate.** New `board_layout_check.js` §8 pins all five writers to `shared.board` — including the
+Swift ones, read as text, since there is no compiler on this checkout — and bans `#5BA3F5` /
+`#2C4A73` from any of them outright. 812 → 829 invariants, `js_goldens` 32,971 → 32,988. Both
+directions were mutation-checked: reverting `theme.css` and reverting `BoardStyle` each break two
+assertions by name. `AnalysisMetricsCheck`'s relative assertion was re-pointed at
+`BoardTheme.classic` and gained its inverse, so `Theme.boardLight` can never quietly become a
+square again.
+### 2026-08-18 (added) — Opening Tree: the tile that did nothing now opens openingtree.com
+
+Fourth round of client feedback: *"yung opening trainer pag cliniclick ko ayaw mabuksan … simple
+lang ang logic at gusto ko mangyari dyan katulad dito mismo https://www.openingtree.com/ … ito repo
+nyan … naimplement ko na yan, tignan mo na lang dito."* `web-demo/` updated to match.
+
+**The tile was not broken — its screen was never built.** `HomeScreen.onOpeningTrainer` is declared
+and **defaulted to `{}`**, `PhoneView.home(basis:)` simply omits the argument, and `app.js`'s Home
+handler has no branch for the `'openingTrainer'` action `home.js` has emitted since the tile was
+drawn. The button pressed, dimmed, and called an empty closure. `onVideos` still does; `onSearch`
+and `onDonate` did too until the entry above this one removed the controls that raised them.
+
+**What was built** is the RN app's own openingtree.com rebuild —
+`analysis-board/openingtree.tsx`, 1,457 lines, three screens behind one `view` state — as a pure
+Core module, a JS twin, and three screens per language.
+
+**Two rules carry the whole feature, and both are asserted by name.**
+
+*A node's statistics belong to the MOVER.* `wins`/`draws`/`losses` describe how the side that
+**played** that move fared, so the score inverts on the opponent's plies — which is what makes a
+two-colour tree legible, and is openingtree.com's own convention. Backwards, every second row of the
+move list is exactly wrong in a way that looks entirely plausible: Black's replies would read as
+*your* results, and only a hand-checked game would show it.
+
+*The candidate sort ties by SAN.* Count descending, equal counts by SAN ascending. `Dictionary`
+order is unspecified in Swift and `sort` is not stable, so without the tie-break one tree renders in
+a different order on every run **and** in a different order from the browser — at which point no
+replay can compare the two.
+
+**Keyed by SAN, not by FEN, on purpose.** A SAN path is the line you *played*, so `1.e4 c5 2.Nf3`
+and `1.Nf3 c5 2.e4` stay separate branches. Merging transpositions is right for an opening **book**
+— `OpeningBook` keys by `positionKey` and does exactly that — and wrong for "how do I actually
+play". Two behaviours that look like bugs are kept because they are not: an unreadable move
+**truncates** the game rather than dropping it (everything before it is real data, and real PGN
+carries null moves and exporter quirks), while a game whose *first* move will not parse is counted
+separately in `rejectedCount` rather than silently vanishing. And legality is judged by the
+position, with SAN re-generated from the parsed move, so `Qxf7` / `Qxf7#` / an over-disambiguated
+spelling all collapse onto one branch.
+
+**Games come from a pasted PGN, with no network.** Both Lichess and Chess.com let you download all
+your games as a PGN, so the offline path is the real one, and it reuses `PGN.splitGames` /
+`mainlineTokens` — already pinned to the PHP `PgnImportService` by the `pgn_split` and `pgn_tokens`
+goldens, so multi-game splitting, RAV skipping and NAG stripping are the backend's behaviour rather
+than a second implementation of it. **My Coach games**, **Lichess** and **Chess.com** are declared,
+drawn and labelled "Needs internet"; they refuse with a named message instead of failing silently,
+because the download belongs beside `ContentClient` — spec §0.1 makes that the only place in the app
+allowed to open a `URLSession`, and a second `fetch` in a click handler is the exact leak that rule
+exists to prevent.
+
+**One validation bug found by its own test.** `PGN.mainlineTokens` is a tokenizer, not a validator:
+`"not a game"` comes back as three move tokens, so a `games.isEmpty` check passes and builds an
+empty tree. Both languages now check **positions**, after the replay, which is the only thing that
+knows whether the PGN held any chess.
+
+**Extract, don't transcribe.** New `tools/metrics/extract_opening_styles.js` walks `openingtree.tsx`
+into a committed `opening_styles.json` — 87 style keys, 328 properties, 12 functions, 23 colours,
+zero unresolved values — and `opening-metrics.js`'s `selfTestSource` asserts all 131 constants
+against it, including the three W/D/L colours, which live in `renderWdlBar`'s inline styles and are
+the reason the extractor names that function explicitly. It is also the **first extractor that works
+from a worktree**: it takes a `FRONTEND_ROOT` override, for the same reason `tools/oracle` takes
+`LARAVEL_ROOT`. The other four still hardcode the relative path and fail there.
+
+**Two CSS namespaces, and the bug that forced them.** `buildBorder`, `inputBorder` and `infoBorder`
+each name a **width** in `LAYOUT` and a **colour** in `PALETTE`. Under one `--op-*` prefix the colour
+pass silently overwrote the width and three borders rendered with `#243654` as their thickness, i.e.
+not at all. Geometry is `--op-*`, colour is `--opc-*`, and the replay asserts the build button takes
+one of each.
+
+**The tile's copy changed with it:** "Opening Tree / Explore Your Openings". "Master Your
+Repertoire" describes the Chessable-style SM-2 trainer specced in
+`specs/BIYAHERONG-PORT-SPEC.md` §4, which is a different feature and remains unbuilt.
+
+**Gates.** New `tools/qa/replay_opening_tree.js` — 344 assertions comparing the Swift source text
+with the JS that runs, covering both algorithmic rules, every metric, every string, the online
+source set, the `--op-*`/`--opc-*` contract, the index.html load order and the router branches in
+both languages. Four mutants killed, including inverting the inversion and dropping the SAN
+tie-break. New `opening_tree` ParityRunner group (66 assertions, floor 60) — **no golden file**,
+because the source is TypeScript rather than a Laravel controller and there is no PHP oracle to
+generate one; the JS twin is the differential partner instead. New `docs/opening-tree.md`.
+`js_goldens` 33,010 → 33,643 across 76 suites; `nav_icons_check` 1,047 → 1,048 after the new back
+button was made to go through the shared component, which it caught.
+
+**Still not built:** the SM-2 trainer, and the two online downloads. Both are described where they
+would land rather than left as silence.
+
+### 2026-08-18 (changed) — Nothing opens without the trial: one gate per language, at the router
+
+Fourth round of client feedback: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi
+sila naka 7-days free trial … kada click lagi mong dalhin doon na go for free trial."*
+`web-demo/` updated to match.
+
+**This reverses the policy the subscription was designed around.** `docs/subscription.md` opened
+with *"a genuinely playable free tier … the paywall is reached on demand … never as a wall in front
+of a new install"*, and `Entitlement.Access.free` was commented *"Never a dead app — this is what
+makes the offline design safe."* Both now say the opposite, and say so explicitly rather than
+quietly: the free tier's caps are still real, still parity-tested, and still describe exactly what
+a **lapsed** subscriber returns to — they are simply unreachable by someone who never subscribed.
+
+**Nothing in Core changed.** `Entitlement`, `DailyLimits`, `PremiumStore` and every per-feature
+gate in `PuzzleHubScreen` / `CoachScreens` are untouched: they sit behind `requireMinCounts` floors
+that `CLAUDE.md` forbids lowering, `Entitlement.resolve` already fails closed to `.free` with no
+subscription, and re-deriving a policy the shell can express in one guard would have been the wrong
+layer. What was added is that guard, once per language, at the router.
+
+| | Swift (`PhoneView.swift`) | Browser (`app.js`) |
+|---|---|---|
+| Predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `locked()`, the same two calls |
+| Open set | `openTabs = [0, 3]` — Home, Profile | `OPEN_ROUTES`, plus `login`/`paywall` |
+| Tab bar | `PhoneTabBar(tab: gatedTab)` — a `Binding` whose setter raises the paywall and leaves `tab` alone | the tab `onclick`, after `leaveCurrentPuzzle()` |
+| Tiles | `gated { … }` on every wired destination | one check in `renderHome`'s handler |
+| Lapse mid-session | `visibleTab`, re-resolved every render | `render()`'s backstop, before the dispatch |
+
+**Home still draws.** The client asked for *"kada click"*, not for a blank wall, and an offer needs
+something to sell against — the six cards, the quote and the membership banner are what the trial
+buys. **Profile stays open too**, because it owns Sign out: walling it strands a user who signed in
+with the wrong Apple Account, and Restore Purchases is on the paywall they would then be unable to
+leave. Those are the only two exemptions, and the gate asserts there are exactly two.
+
+**Gating the tiles is enough for the pushed routes.** Analysis, Play vs Coach and Pairing are
+reachable *only* from a Home tile — the gate asserts each `show* = true` has at most one other
+setter — so three screens are closed by four wrapped closures and no flag of their own.
+
+**The lapse case is why both halves re-resolve rather than remember.** `Transaction.updates` can
+revoke an entitlement while the user is standing on the Puzzles tab; a tap-time-only gate would let
+them keep playing until they next tapped something. Swift resolves `visibleTab` on every render and
+the browser re-checks before its dispatch chain, forcing `paywallReturn` to Home — returning to the
+screen that was just walled would bounce straight back.
+
+**It closed a real divergence on the way.** `app.js` gated only the four puzzle modes: Play vs
+Coach, the Analysis Board and the Swiss round ceiling had **no premium reference at all** in the
+browser (`coach-select.js`, `analysis.js`, `pairing-create.js` contain none), while Swift gated all
+three. `replay_premium.js` asserts the JS *puzzle* gates and the *Swift* coach/review gates
+separately, so the drift passed every suite — and the client, who tests on Windows, was looking at
+an app with no locks on it. One router guard closes all of it.
+
+**Gate.** New `tools/qa/trial_gate_check.js`, 39 invariants. The cross-language ones are the point:
+the Swift tab **indices** are mapped through the browser's own tab table, so `[0, 3]` is *verified*
+to still mean Home and Profile rather than assumed to, and each side's open set is checked against
+the other's. Four mutants killed — an ungated tile, the raw `$tab` binding, walling Profile in one
+language only, and deleting the browser backstop. `swift_layout_mutation_test.js`'s
+`tab_bar_shown_on_pushed_routes` anchor moved to `gatedTab` (it had gone vacuous — "anchor not
+found" is a pass in the suite's own eyes only until you read it). `js_goldens` 32,971 → 33,010.
+
+**Still outstanding, unchanged by this:** the 7-day introductory offer does not exist in App Store
+Connect yet (`docs/subscription.md` § *Before this can ship*). Until it does, `trialEligible` is
+false and the CTA promises something the store will not honour — which matters a great deal more
+now that it is the only door in.
 
 ### 2026-08-18 (changed) — Book strip deleted, engine lines numbered, and one real vector back/☰ icon everywhere
 
