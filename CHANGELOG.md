@@ -75,6 +75,67 @@ passed there drew nothing. `board_layout_check.js` 812→with the book classes a
 `book_band_reintroduced` (10/10 killed); `replay_coach` now asserts **four** transport glyphs, not
 five.
 
+### 2026-08-18 (fixed) — A fresh checkout failed the QA gate on Windows: text files are now pinned to LF
+
+Found by dogfooding the worktree rule added in the entry below this one — the first `git worktree add`
+produced a checkout that failed `node tools/qa/js_goldens.js` with **8 assertion failures across
+ReplayLogin and ReplayPremium**, on a branch whose diff touched nothing but Markdown.
+
+**The cause.** The repo stores LF, but `core.autocrlf=true` (the Git-for-Windows default) materialises
+CRLF on checkout, and there was no `.gitattributes` to say otherwise. `tools/qa/replay_login.js` and
+`replay_premium.js` read multi-line Swift string literals — the ones written with a trailing `\`
+continuation — straight out of `LoginMetrics.swift` and the paywall strings, and they do not strip the
+`\r`. Every such string came back with literal `\r\n` and unjoined continuations, so all 8 compared
+unequal against the JS twin. **This was invisible for the whole project so far** because the Swift in the
+existing checkout was written locally with LF and never round-tripped through a checkout; anyone cloning
+this repo on Windows would have hit it on day one.
+
+Proof rather than inference: converting the single file `LoginMetrics.swift` to LF and re-running took
+`ReplayLogin` from *383 passed, 2 failed* to **385 passed, 0 failed**, with `git diff` reporting no
+content change.
+
+**The fix.** A new `.gitattributes` — `* text=auto eol=lf` plus explicit `binary` for `.png`, `.webp`,
+`.mp3`, `.ttf`, `.sqlite` and `.pdf`. Every checkout on every platform now lands the same bytes the
+tooling expects. **Nothing committed changes** — the blobs were already LF; this only governs what is
+written into the working tree. As a bonus it also stops `php tools/eco/build_eco.php` from dirtying
+`DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` and `web-demo/js/eco-data.js` with line-ending-only diffs.
+
+`web-demo/` unaffected.
+
+### 2026-08-18 (docs) — A worktree per task, changelog-first, and landing via PR
+
+Process, not code. `web-demo/` unaffected — nothing user-facing changed.
+
+**Why.** `CLAUDE.md` is the only assistant guide in this repo and it said nothing about git, so all 19
+commits went straight to `main` — eight of them messaged `push` — and four `Merge origin/main` commits
+exist purely because two machines (Windows for editing and the JS gate, macOS for `swift build` and Xcode)
+both pushed `main` and collided. Nothing was ever read as a diff before it shipped, and there was no branch
+to abandon when a change went wrong.
+
+**The rule.** `main` is not a workbench. Every bug fix and every feature is done on a branch in its own git
+worktree and lands through a pull request the user merges; committing to `main` takes an explicit
+instruction. Read-only work — questions, reviews, explaining code — needs no worktree.
+
+**`CLAUDE.md` — the `## Workflow` section went from 5 rules to 10** (163 → 186 lines, still inside its own
+200-line cap). New: read the **top** of this file before starting anything, open a worktree, run the gate
+before landing, write commit messages that say what and why, land via PR, clean the worktree up afterwards.
+The four existing rules are kept — and the "read first" one now points here *first* and says to read the
+top, not the file, because at 2500+ lines "read `CHANGELOG.md`" would otherwise be the wrong instruction.
+The entry shape is pinned to `### YYYY-MM-DD (added|changed|fixed|docs) — Title`, since the tag has drifted
+across the 38 entries below this one (`(fix)`, `(feature)`, `(phase 8)`, `(latest)`, and several with none).
+
+**`docs/git-workflow.md` — new**, linked from `docs/README.md` under the runbooks. It carries the commands
+so the ten rules stay short, and it records two things found by dogfooding this very change: `EnterWorktree`
+rewrites `fix/foo` into the branch `worktree-fix+foo` (rename it with `git branch -m`), and a worktree
+session refuses any shell command it cannot prove stays inside the worktree — no `cd`, no `/tmp`, no long
+`&&` chains. It also spells out the trap that a fresh worktree has **no `Goldens/`**, because they are
+gitignored: `swift run ParityRunner` there is vacuous rather than green until
+`php tools/oracle/generate_goldens.php` has been run.
+
+**`.gitignore`** — added `.claude/worktrees/` and `.claude/settings.local.json`. `EnterWorktree` puts
+worktrees *inside* the repo and nothing was ignoring them, so the first one would have shown up as
+untracked and been swallowed by a `git add -A`. `.claude/settings.json` stays committable on purpose.
+
 ### 2026-08-18 (changed) — Analysis Board: readable engine lines, no dead book box, longer variations, tap-to-play
 
 Client feedback on a TestFlight build, four asks, all delivered. `web-demo/` updated to match.

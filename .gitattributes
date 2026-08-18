@@ -1,0 +1,21 @@
+# Text files are LF in the repo AND in the working tree, on every platform.
+#
+# Without this, `core.autocrlf=true` (the Git-for-Windows default) materialises CRLF on checkout, and
+# the QA gate breaks on any fresh clone or `git worktree add`: tools/qa/replay_login.js and
+# replay_premium.js parse multi-line Swift string literals with `\` continuations and do not strip the
+# `\r`, so ReplayLogin and ReplayPremium fail with 8 phantom string mismatches. The same files pass in a
+# checkout whose Swift was written locally with LF — which is why this was invisible until the first
+# worktree. It also stops `php tools/eco/build_eco.php` from dirtying eco.tsv and eco-data.js with
+# line-ending-only diffs.
+#
+# The blobs in the repo are already LF, so this changes nothing that is committed — only what lands in
+# the working tree.
+* text=auto eol=lf
+
+# Binary assets — never normalised, never diffed as text.
+*.png    binary
+*.webp   binary
+*.mp3    binary
+*.ttf    binary
+*.sqlite binary
+*.pdf    binary
