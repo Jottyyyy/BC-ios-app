@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Apple's privacy manifest. REQUIRED since May 2024 for any app that calls a "required reason"
+  API; App Store Connect's binary scan flags the upload without it.
+
+  Placement: this is the APP-level manifest, and `ios/project.yml`'s `sources: - path: App`
+  already sweeps this folder, so it needs no entry of its own. A per-package manifest is for
+  DISTRIBUTED third-party SDKs; `BiyaherongUI` is a first-party local package, so this file
+  covers its `UserDefaults` use as well as the app target's.
+
+  Only ONE of Apple's five required-reason categories applies here. Checked, not assumed:
+    • UserDefaults      — YES. EngineSettings, CoachStore, LoginStore, OpeningTreeStore,
+                          AnalysisEngineSettings and KeychainStorage all read or write it.
+    • FileTimestamp     — no. Nothing reads creationDate/modificationDate.
+    • DiskSpace         — no. Nothing reads volumeAvailableCapacity.
+                          (`Diagnostics.swift` reads `.fileSizeKey` on one bundled file, which is
+                          the size of a known file, not free space — a different API and not on
+                          Apple's list.)
+    • SystemBootTime    — no.
+    • ActiveKeyboards   — no.
+
+  Nothing is collected and nothing is tracked, because nothing leaves the device: the app makes
+  no network calls of its own. The two Apple frameworks that do talk to Apple — StoreKit for the
+  subscription and AuthenticationServices for Sign in with Apple — handle their own data under
+  Apple's own manifest, not this one. `tools/qa/replay_login.js` and `replay_premium.js` fail the
+  build if a URLSession or a third URL ever appears, so that claim stays a test, not a comment.
+
+  See docs/app-store-readiness.md.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<!--
+			  CA92.1 — "Access info from the app itself, and from app group containers the app is
+			  a member of." That is exactly this app: every read and write is its own settings,
+			  its own saved games and its own session key. There is no app group, no SDK reading
+			  it, and no value derived from another app.
+			-->
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

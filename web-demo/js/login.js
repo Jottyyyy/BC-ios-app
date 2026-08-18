@@ -201,6 +201,52 @@ var BiyaLogin = (function () {
       ? STRINGS.appleProviderLabel : STRINGS.noProviderLabel;
   }
 
+  /* -- what "delete my account" erases, and what it does not (mirrors LoginAccountData).
+   *
+   *    One list in two languages, because the cost of drift here is either a leftover or a wiped
+   *    subscription. replay_login.js compares all four arrays AND checks the erased keys against
+   *    the declarations they mirror in the other Swift files. -- */
+  var ACCOUNT_DATA = {
+    erasedKeys: [
+      'biya.auth.session.v1',     /* LoginSession.storageKey */
+      'biya.coach.takeback.v1',   /* CoachStore.takeBackKey */
+      'biya.analysis.engine.v1'   /* EngineSettings.storageKey */
+    ],
+    erasedKeyPrefixes: ['biya.coach.draft.v1.'],   /* CoachGame.draftKeyPrefix */
+    /* Swift-side mechanism: on iOS these are files in Application Support/Biyaherong. The browser
+     * has no such folder, so the twin erases keys only — but the LIST is shared, because it is the
+     * list that must not drift. */
+    erasedFiles: ['puzzle-progress.json', 'pairing.json', 'openings.json', 'analysis-library.json'],
+    /* KEPT. The entitlement snapshot, because Apple requires that deleting an account does not
+     * forfeit a paid subscription; and the daily counters, because clearing them would make
+     * "delete, sign in again" a free reset of every free-tier cap. */
+    keptKeys: ['biya.store.subscription.v1', 'biya.store.usage.v1']
+  };
+
+  /* -- the sign-in state machine (mirrors LoginAuth in LoginMetrics.swift).
+   *
+   *    The browser cannot have an ASAuthorizationController, so what is shared is the DECISION
+   *    half: which event moves the screen where, and which of them the user is told about. The
+   *    branch that matters is that a CANCEL is not an error. -- */
+  var AUTH_PHASES = ['idle', 'requesting', 'failed'];
+  var AUTH_EVENTS = ['start', 'succeeded', 'cancelled', 'failed'];
+
+  /* This browser build has no real Apple sign-in, and says so out loud. replay_login.js asserts
+   * the flag is here AND that no Swift file carries it, so the stub can never be mistaken for the
+   * real call. */
+  var SIMULATED_AUTH = true;
+
+  function authNext(phase, event) {
+    if ((phase === 'idle' || phase === 'failed') && event === 'start') return 'requesting';
+    if (phase === 'requesting' && event === 'succeeded') return 'idle';
+    if (phase === 'requesting' && event === 'cancelled') return 'idle';
+    if (phase === 'requesting' && event === 'failed') return 'failed';
+    return phase;
+  }
+
+  function authShowsError(phase) { return phase === 'failed'; }
+  function authIsBusy(phase) { return phase === 'requesting'; }
+
   /* -- copy. Taglish, matching the original app's voice. The button label is Apple's required
    *    wording and stays English. -- */
   var STRINGS = {
@@ -218,17 +264,25 @@ var BiyaLogin = (function () {
     signedInWith: 'Signed in with',
     signOut: 'Sign out',
     sheetClose: 'Sige, salamat!',
+    authFailed: 'Hindi natuloy ang sign in. Subukan ulit.',
+    deleteAccount: 'Delete account',
+    deleteTitle: 'Burahin ang account?',
+    deleteConfirm: 'Burahin',
+    deleteCancel: 'Huwag na',
+    deleteBody: 'Mabubura lahat ng nasa device na ito: mga puzzle, rating, laro at settings mo. '
+      + 'Hindi na ito maibabalik.\n\nHindi kasama ang subscription mo. Hindi ito makakansela at '
+      + 'hindi mawawala — pamahalaan ito sa Settings > Apple Account > Subscriptions.',
     privacyTitle: 'Privacy',
-    privacyBody: 'Biyaherong Coach works 100% offline. It does not collect, store, or send any '
-      + 'personal information anywhere — there is no account server and no analytics.\n\n'
-      + 'Your puzzles, ratings, games and settings live on this device only. Signing in simply '
-      + 'remembers you here so you do not see this screen again.\n\n'
+    privacyBody: 'Biyaherong Coach works offline. It does not collect, store, or send any personal '
+      + 'information anywhere — there is no account server and no analytics.\n\n'
+      + 'Signing in goes through Apple, so the first sign-in needs internet. Nothing else does: '
+      + 'your puzzles, ratings, games and settings live on this device only.\n\n'
       + 'Walang datos na inilalabas. Lahat ay nasa device mo lang.',
     termsTitle: 'Terms',
     termsBody: 'Biyaherong Coach is for learning and enjoying chess. Play fair, be kind, and have '
       + 'fun.\n\nThe app is provided as-is for practice and study. Chess piece artwork is licensed '
-      + 'CC BY-SA, the Nunito typeface under the SIL Open Font License, and the app itself is GPL.'
-      + '\n\nMaglaro nang patas. Mag-enjoy!'
+      + 'CC BY-SA, the Nunito typeface under the SIL Open Font License, and the opening names '
+      + 'under CC0.\n\nMaglaro nang patas. Mag-enjoy!'
   };
 
   var TOPICS = ['privacy', 'terms'];
@@ -693,6 +747,9 @@ var BiyaLogin = (function () {
     leftoverFor: leftoverFor, heroTopFor: heroTopFor,
     driftPoint: driftPoint, usedKinds: usedKinds,
     isSignedIn: isSignedIn, providerLabel: providerLabel,
+    AUTH_PHASES: AUTH_PHASES, AUTH_EVENTS: AUTH_EVENTS, SIMULATED_AUTH: SIMULATED_AUTH,
+    ACCOUNT_DATA: ACCOUNT_DATA,
+    authNext: authNext, authShowsError: authShowsError, authIsBusy: authIsBusy,
     legalTitle: legalTitle, legalBody: legalBody,
     createStore: createStore, memoryStorage: memoryStorage, shared: shared,
     selfTest: selfTest,

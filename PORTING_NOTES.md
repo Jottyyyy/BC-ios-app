@@ -2188,6 +2188,134 @@ the knight there — a photo collage with a wordmark is unreadable at 60 px — 
 that nothing inside the app draws it, and `home_chrome_check.js` §7 keeps it that way with two
 named exemptions: the iOS icon, and `login.js`'s 404 fallback.
 
+## App Store blockers, and a licence claim with nothing behind it (2026-08-18)
+
+Client: *"make sure lang pag pinasa natin to 100 percent papasa."* Three blockers, all of them
+already recorded in this file or in the source, plus a fourth found on the way.
+
+### The simulated sign-in finally went away
+
+`LoginStore.swift`'s doc comment and this file both said it: a "Continue with Apple" that performs no
+Apple authentication is an App Store rejection. `LoginAppleAuth.swift` is the real
+`ASAuthorizationController`, and it is the **only** file in the package permitted to import
+`AuthenticationServices` — asserted positively (the call is there) and negatively (an exhaustive
+directory scan finds no other importer).
+
+**DEVIATION, and it is a product one:** `requestedScopes = []`. Apple can supply a name and an email;
+the app asks for neither. It shows `LoginStrings.defaultDisplayName` and persists nothing but the
+provider string, so collecting either would be data with no use — and would make the new privacy
+manifest's empty `NSPrivacyCollectedDataTypes` false. The two decisions are load-bearing on each
+other and must move together.
+
+**Deliberately NOT done:** `getCredentialState(forUserID:)` at launch. It is Apple's advice for
+server-backed apps; here it would add a launch-time round trip for a session that is purely local, and
+would let a network hiccup sign a user out of an offline app.
+
+**"100% offline" is now "offline after sign-in".** Apple's servers answer the sign-in, so a cold
+install with no network cannot get past the gate — and the gate is the last ZStack sibling covering
+the whole app. The export-compliance `NO` is untouched and still correct (a second Apple framework
+over OS-provided TLS, exactly like StoreKit), but the *product* claim was reworded in both languages
+rather than left standing. `replay_login.js` compares the legal bodies in full, so it could not have
+been changed in one.
+
+### The gate that was written to catch this, caught it
+
+`replay_login.js` banned the token `ASAuthorization` in all five login files. That ban was the thing
+keeping the simulation honest, and the correct response to it firing was **not** to delete it: it
+became an allowlist of one, with the networking bans (`URLSession`, `URLRequest`, `fetch(`,
+`XMLHttpRequest`, any URL) still applying to every file **including** the new one. Sign in with Apple
+reaching Apple is not the app opening a connection.
+
+**How the browser twin stays honest.** A browser has no `ASAuthorizationController`, so the mirror
+does not pretend. The two languages share the *decision* half — a 12-entry transition table, compared
+in full — and the branch that matters is that **a cancelled sign-in is not an error**. The asymmetry
+is then asserted explicitly in four directions rather than papered over: Swift has the call, no other
+Swift file imports the framework, the browser has neither, and the browser carries a `SIMULATED_AUTH`
+flag the Swift must not.
+
+### Account deletion: the keep list is the half that matters
+
+Guideline 5.1.1(v) follows from a real Sign in with Apple, so it ships in the same build. With no
+server, "delete" is local erasure — and two things are kept **on purpose**:
+
+- `biya.store.subscription.v1`, StoreKit's entitlement snapshot. Apple requires that deleting an
+  account not forfeit a paid subscription; `KeychainStorage` already outlives a delete-and-reinstall
+  deliberately. The confirmation copy names Settings > Apple Account > Subscriptions, because Apple
+  checks for exactly that.
+- `biya.store.usage.v1`, the daily free-tier counters. Clearing them would make "delete account, sign
+  in again" a free reset of every cap — a paywall bypass wearing a privacy feature's clothes.
+
+`store.reset()` runs **before** the erase: the hub's progress is live in memory and would otherwise be
+persisted back over the deleted file. The confirm is a **modal, not a route** — `trial_gate_check.js`
+asserts `OPEN_ROUTES` is exactly `home/login/paywall/profile`, and a destructive confirm is not
+somewhere you navigate to and press Back out of.
+
+The erase list is literals rather than references: the keys are statics on `@MainActor` stores this
+pure enum cannot reach. So `replay_login.js` reads both sides out of the source and asserts each copy
+still matches its original — the same trade this repo makes everywhere it cannot reach a constant.
+
+### DEVIATION: the app is not GPL, and the Terms sheet no longer says it is
+
+`README.md` and `CLAUDE.md` record decision #2 as "Stockfish (GPL) + publish the app's source
+openly". That decision has not been carried out — there is no `.cpp`, no NNUE, no submodule and no
+dependency, and `LocalEngine` is original work — yet the bundled Terms sheet told every user *"the app
+itself is GPL"*, with no LICENSE file in the repo at all.
+
+Corrected in the direction of truth: a `LICENSE` describing what ships, a `THIRD-PARTY-NOTICES.md`
+carrying the obligations actually owed (CC BY-SA piece art, which is copyleft; OFL Nunito; CC0 data),
+and the sheet naming those instead.
+
+**Adding a GPL LICENSE now would have been the wrong reflex.** GPLv3's anti-additional-restriction
+terms conflict with the App Store's, which is the VLC precedent. That is a real problem to solve in
+the commit that actually vendors Stockfish — and a licence grant, once published, cannot be
+withdrawn. `LICENSE` carries that note so the next person does not re-litigate it.
+
+## Five coaches, five clocks (2026-08-18)
+
+### The docs were wrong about which engine the coach runs
+
+`docs/engine-settings.md` said Play vs Coach "reads the same evaluation improvements only through
+`ChessAI`, which is untouched". `CoachStore.swift` calls `LocalEngine().analyze(...)`. The coach has
+been running the strong engine — transposition table, quiescence, null-move, LMR, PVS, `AnalysisEval`
+— all along; `ChessAI` is reachable only from the macOS demo's `Panel.play` harness and the parity
+tests. Corrected in both docs, and worth recording because it is the second time a prose claim about
+this pair has drifted from the call site.
+
+### DEVIATION: the flat 1 s movetime cap is gone
+
+`CoachEngine.movetimeCapMs = 1000` reproduced the Python service's cap, and its comment argued the
+case: *"the bots' real strength IS the strength of a 1-second search."* That was right about the
+number and wrong about what it preserved. The Python service ran real Stockfish; this runs
+`LocalEngine` at ~60k nodes/sec. Keeping the latency budget did not keep the strength — it flattened
+the top of the ladder, because `depth` is only a ceiling and the engine reaches a mean depth of 6.33
+at 1200 ms while levels 4 and 5 ask for 10 and 15.
+
+Now per level: 300 / 600 / 1000 / 2000 / 4000 ms. **Level 3 keeps exactly 1000**, so the change is
+anchored to the old behaviour at one point rather than being five new numbers at once.
+
+**Two interactions, decided rather than discovered.** `thinkMs` is a *floor* on the reply awaited in
+parallel with the search, so the reply is `max(search, floor)` and levels 4 and 5 simply stop being
+paced; raising the floors to match would slow down *fast* positions, which is the opposite of a
+floor's purpose. And `endgameScale` trims the floor only — nothing scales the search clock — but
+nothing needs to, because a sparse board reaches level 5's depth-15 ceiling long before 4 s, which is
+what `maxDepth` is for. Both are written beside the table.
+
+**The Elo labels were NOT re-derived.** They are display-only, and the client chose to leave them.
+Level 5 is labelled 2500; the honest estimate from depth and node rate is nearer 1700-2100. Recorded
+so nobody later reads the label as a measurement.
+
+### Two mutants went vacuous, and were re-pointed
+
+Both anchors were strings this change edited: `public static let movetimeCapMs = 1000` (deleted) and
+`3: Config(depth: 7, numMoves: 2),` (gained a field). A mutant whose anchor is gone never applies and
+reads as a pass — the harness reports it as BROKEN, which is quieter than a failure and easy to scroll
+past. Re-pointed, never deleted. The replacement for the first is a better mutant than the original:
+it starves level 5 back to level 3's clock, which *is* the defect this change fixes.
+
+`replay_coach.js`'s single `eq(MOVETIME_CAP_MS, movetimeCapMs)` became a per-level comparison plus a
+monotonicity assertion. "Both languages agree it is 1000" was exactly what the old line could not
+catch, and is why this survived as long as it did.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had

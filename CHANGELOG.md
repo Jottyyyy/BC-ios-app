@@ -9,6 +9,98 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — The three things that would have failed App Review, and a licence that was not true
+
+Client: *"make sure lang pag pinasa natin to sa [store] 100 percent papasa ah?"* Two audits over the
+code found three blockers, and **all three were already written down in this repo's own notes.**
+
+**1 · "Continue with Apple" performed no authentication.** `LoginStore.swift` said so in its own doc
+comment — *"The Apple sign-in is SIMULATED… there is no `AuthenticationServices` call"* — and
+`PORTING_NOTES.md` had already recorded the consequence: *"a 'Continue with Apple' button that
+performs no Apple authentication is an App Store rejection, so this is a development state, not a
+shippable one."* It is a real `ASAuthorizationController` now, in a new `LoginAppleAuth.swift`, with
+`requestedScopes = []` — a name or an email would be data the app has no use for and would make the
+new privacy manifest's empty `NSPrivacyCollectedDataTypes` untrue. `LoginStore` did not change at
+all; the store, the persistence and the fail-closed read were already the right shape.
+
+**2 · A real Sign in with Apple obliges in-app account deletion** (Guideline 5.1.1(v)), and there was
+none. It ships in the same build, on Profile's Account card, behind a confirmation. There is no
+server, so it erases the four local keys and the four JSON documents — and **deliberately keeps two**:
+the StoreKit entitlement snapshot, because Apple requires that deleting an account not forfeit a paid
+subscription, and the daily free-tier counters, because clearing those would make "delete, sign in
+again" a free reset of every cap. `store.reset()` runs first, or the live hub would persist the
+deleted progress straight back.
+
+**3 · No `PrivacyInfo.xcprivacy`**, while `UserDefaults` — a required-reason API — is read in six
+files. Required since May 2024; the binary scan flags the upload without it. Exactly one of Apple's
+five categories applies, checked rather than assumed (`Diagnostics.swift`'s `.fileSizeKey` is the size
+of a known file, not free space, and is on no list). Reason `CA92.1`.
+
+**4 · And the app told users it was GPL.** The bundled Terms sheet said *"the app itself is GPL"* with
+**no LICENSE file anywhere** — a licence claim with nothing behind it. The GPL plan belongs to
+Stockfish, which is not in this repo and has been deferred, so the sentence described a build that
+does not exist. Fixed by making the text true rather than the app GPL: a `LICENSE`, a
+`THIRD-PARTY-NOTICES.md` carrying the obligations actually owed today (CC BY-SA art, OFL font, CC0
+data), and the sheet naming those instead. Adding the GPL now would have been the wrong reflex —
+GPLv3 and the App Store's terms conflict, which is why VLC was pulled; that is a problem to solve
+when Stockfish lands.
+
+**The privacy sheet's "100% offline" also stopped being true**, and was reworded rather than left.
+The app still makes no network call of its own — the gates fail the build on a `URLSession` or any
+URL, in the new file too — but Apple's servers answer the sign-in, so the first launch needs a
+connection. The export-compliance `NO` is unaffected: `AuthenticationServices` is a second Apple
+framework over OS-provided TLS, the same reasoning already written there for StoreKit.
+
+**Gate.** `replay_login.js:318` **banned `ASAuthorization` outright** — it was written to catch
+exactly this change, and it did. It became an **allowlist of one** rather than a deletion:
+`LoginAppleAuth.swift` must make the call, an exhaustive directory scan proves no other file imports
+the framework, and the networking bans stay in force everywhere **including** the new file. The
+browser cannot have an `ASAuthorizationController`, so the twin shares the *decision* half instead —
+the 12-entry transition table, compared in full, whose load-bearing branch is that **a cancelled
+sign-in is not an error** — and carries a `SIMULATED_AUTH` flag the Swift must not. 386 → 457
+assertions. The deletion lists are compared on both sides, and each erased key is checked against the
+declaration it copies.
+
+`js_goldens` 34,151 → 34,260 across 78 suites. Mutation 159/159.
+
+**Not verified here, and it needs a Mac:** `swift build`. `LoginAppleAuth.swift` and
+`AccountDeletion.swift` were written blind against Swift 6 strict concurrency, and neither Codemagic
+workflow runs on push — both are manual. `ios-free-unsigned` will at least *compile* it.
+Whether `.xcprivacy` lands in Copy Bundle Resources is XcodeGen inference and must be confirmed in the
+archive.
+
+### 2026-08-18 (changed) — Five coaches, five clocks: the top of the ladder was two names on one opponent
+
+Client asked whether the engine is actually strong. It is more than the docs claimed — the coach runs
+`LocalEngine` (transposition table, quiescence, null-move, LMR, PVS, tapered eval), not the legacy
+`ChessAI`, which is reachable only from the macOS demo harness. Measured: 60.8k nodes/sec, 115/120
+real Lichess tactics at a 120k-node budget.
+
+But all five levels shared one `movetimeCapMs = 1000`. **Depth is only a ceiling**, so the clock is
+what actually sets strength — and the engine's own benchmark reaches a mean depth of 6.33 at 1200 ms
+while levels 4 and 5 ask for 10 and 15. They got neither and played identically: "Coach Pogi" and
+"Mommy Julie" were the same opponent in different art.
+
+Each level has its own clock now — **0.3 / 0.6 / 1 / 2 / 4 s**. **Level 3 keeps exactly 1000 ms**, so
+the middle of the ladder plays precisely as before and the new table is anchored to the old behaviour
+at one point. A sanctioned deviation from the Python service's flat cap, recorded in
+`PORTING_NOTES.md`.
+
+`thinkMs` was deliberately left alone. It is a **floor** on the reply, awaited in parallel with the
+search, so the reply lands at `max(search, floor)` and levels 4 and 5 simply stop being paced.
+Raising the floors to match would make *fast* positions — a book move, a forced recapture —
+artificially slow, which is the opposite of what a floor is for. Endgames are bounded by `depth`, not
+by this clock: a sparse board hits level 5's depth-15 ceiling long before 4 s, which is what
+`maxDepth` exists for. Both interactions are now written down beside the table rather than left to be
+discovered on a phone.
+
+**Two mutants went vacuous** and were re-pointed, not deleted: `movetimeCapMs = 1000` no longer
+exists, and `3: Config(depth: 7, numMoves: 2),` gained a third field. The replacement for the first is
+strictly better than what it replaced — it starves level 5 back to level 3's clock, which is the exact
+defect this change fixes. 159/159 killed. `replay_coach.js` gained a per-level comparison plus a
+monotonicity check; "both languages agree it is 1000" was precisely what the old single assertion
+could not catch, and is how this lived so long.
+
 ### 2026-08-18 (changed) — The Biyaherong Coach mark in every logo slot, and no gold knight left inside the app
 
 Client: *"yang ganyang image palitan mo lahat ng Biyaherong Coach logo please, lahat."* The

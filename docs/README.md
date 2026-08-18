@@ -68,6 +68,13 @@ Feature- and subsystem-level documentation for this repo.
   §7 concurrency defects one fix, and the offline game review over the Analysis Board's own
   classification maths. **Complete (spec §2.1–2.14, and every §7 fix from #24 to #40).**
 
+- [`account.md`](account.md) — Sign in with Apple (real now, not simulated) and the in-app account
+  deletion Apple requires alongside it: the shared state machine the browser twin mirrors, the
+  erase list, and the two keys that are deliberately KEPT. **Complete.**
+- [`app-store-readiness.md`](app-store-readiness.md) — what the submission needs that is not a
+  feature: the privacy manifest, the Sign in with Apple entitlement, and the licence correction —
+  plus the App Store Connect steps that cannot be done from this repo. **Read before submitting.**
+
 _More docs get added here as features are built._
 
 ## Specs (`specs/`) — the source prompts, not implementation docs

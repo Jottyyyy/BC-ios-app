@@ -113,15 +113,22 @@ const MUTANTS = [
   // `swift build` runs on a Mac, not here, so `replay_coach.js` is the only thing standing between
   // a wrong Swift constant and a shipped one. These prove it is not decorative.
   ['coach swift: a level depth drifts', 'CoachEngine.swift',
-   '3: Config(depth: 7, numMoves: 2),', '3: Config(depth: 6, numMoves: 2),',
+   '3: Config(depth: 7, numMoves: 2, movetimeMs: 1000),',
+   '3: Config(depth: 6, numMoves: 2, movetimeMs: 1000),',
    'L3 would search a ply shallower than the JS twin'],
   ['coach swift: L3 picks the best more often', 'CoachEngine.swift',
    'return rng() < 0.7 ? 0 : Swift.min(1, count - 1)',
    'return rng() < 0.8 ? 0 : Swift.min(1, count - 1)',
    'a strength change that no compiler would object to'],
-  ['coach swift: the movetime cap is lifted', 'CoachEngine.swift',
-   'public static let movetimeCapMs = 1000', 'public static let movetimeCapMs = 2000',
-   'every coach silently becomes stronger than the one people have played'],
+  // Was 'the movetime cap is lifted', anchored on `public static let movetimeCapMs = 1000`.
+  // That constant no longer exists — the movetime is per level now — and a mutant whose anchor is
+  // gone never applies and reads as a pass. Re-pointed at the same class of bug, in its new home:
+  // starve L5 back to L3's clock and the top two coaches collapse into one opponent again, which
+  // is exactly the defect the per-level table was introduced to fix.
+  ['coach swift: L5 is time-starved back to L3', 'CoachEngine.swift',
+   '5: Config(depth: 15, numMoves: 1, movetimeMs: 4000),',
+   '5: Config(depth: 15, numMoves: 1, movetimeMs: 1000),',
+   'the strongest coach silently plays no better than the middle of the ladder'],
   ['coach swift: repetition includes the ep square', 'CoachGame.swift',
    'omittingEmptySubsequences: false).prefix(3)',
    'omittingEmptySubsequences: false).prefix(4)',

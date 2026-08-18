@@ -2350,6 +2350,85 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 
 .lg-signout:active { opacity: .82; }
 
+/* Delete account. Quieter than Sign out on purpose — rarer and far more destructive — but on the
+   same card and one tap from the Home avatar, which is what Guideline 5.1.1(v) asks for. */
+.lg-delete {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.lg-delete:active { opacity: .82; }
+
+/* The confirm. A modal inside .app-card rather than a route: OPEN_ROUTES is asserted to be exactly
+   home/login/paywall/profile, and a destructive confirm is not somewhere you navigate to. */
+.lg-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .55);
+}
+
+.lg-confirm-box {
+  width: 100%;
+  max-width: 300px;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+
+.lg-confirm-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+
+.lg-confirm-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted-fg);
+  max-height: 40vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lg-confirm-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+.lg-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lg-confirm-no, .lg-confirm-yes {
+  flex: 1;
+  padding: 10px 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lg-confirm-no { background: rgba(255, 255, 255, .10); color: var(--fg); }
+.lg-confirm-yes { background: var(--red); color: #fff; }
+
 /* ---- entrances ---- */
 
 @keyframes lg-pop {

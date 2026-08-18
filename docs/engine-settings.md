@@ -91,10 +91,20 @@ same request twice returns identical lines *and* an identical node count — ass
 
 ## What is deliberately NOT covered by the preset
 
-- **Play vs Coach.** `CoachEngine.levelConfig` (depths 2/4/7/10/15 and a 1 s movetime cap) is the
-  spec's difficulty ladder. A preset that scaled the coach would mean a Level 1 "beginner" on
-  Maximum, which is not a beginner. It reads the same *evaluation* improvements only through
-  `ChessAI`, which is untouched — the coach plays exactly as it did.
+- **Play vs Coach.** `CoachEngine.levelConfig` is the spec's difficulty ladder and has its **own**
+  clock now — 0.3/0.6/1/2/4 s at depths 2/4/7/10/15. A preset that scaled the coach would mean a
+  Level 1 "beginner" on Maximum, which is not a beginner.
+
+  It used to be one flat 1 s cap for all five. Because depth is only a ceiling, the clock is what
+  really sets strength, so a flat clock meant a flat ladder at the top: the table above shows a mean
+  depth of 6.33 at 1200 ms, and levels 4 and 5 ask for 10 and 15. They got neither, and played
+  identically. Level 3 still gets exactly 1000 ms, so the middle of the ladder is unchanged and the
+  new table is anchored to the old behaviour at one point. A deviation, recorded in PORTING_NOTES.md.
+
+  This bullet previously said the coach "reads the same evaluation improvements only through
+  `ChessAI`". That was **wrong about the shipping app**: `CoachStore.swift` calls
+  `LocalEngine().analyze(...)`, so Play vs Coach has been running this engine and `AnalysisEval` all
+  along. `ChessAI` is reachable only from the macOS demo's `Panel.play` harness and the parity tests.
 - **The puzzle hint panel.** It keeps the default limits and its own 3 s budget: the Analysis
   Board's preset is that screen's setting, not the Puzzle Hub's.
 - **`ChessAI.evaluate`.** Parity-pinned to the five coach personas. `AnalysisEval` sits beside it,

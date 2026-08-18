@@ -32,6 +32,11 @@ targets:
       # without App Store Connect. See docs/subscription.md.
       - path: Biyaherong.storekit
         buildPhase: none
+      # Also not compiled — Sign in with Apple's entitlement, applied at SIGNING time via
+      # CODE_SIGN_ENTITLEMENTS below. It lives out here rather than under App/ because everything
+      # in App/ is swept into the target, and an entitlements plist does not belong in the bundle.
+      - path: Biyaherong.entitlements
+        buildPhase: none
     dependencies:
       - package: BiyaherongUI
         product: BiyaherongUI
@@ -70,13 +75,26 @@ targets:
         # The catalog itself MUST be committed to git — a build with this setting but no
         # catalog on disk still succeeds and silently ships with no icon keys at all.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # App/PrivacyInfo.xcprivacy needs no entry of its own: the `- path: App` source above
+        # sweeps it, and XcodeGen files a non-compilable type into Copy Bundle Resources, which is
+        # where Apple requires it. That is INFERENCE though, and the same paranoia the icon comment
+        # above earned applies — after `xcodegen generate`, confirm the archive really contains
+        # Biyaherong.app/PrivacyInfo.xcprivacy. No gate on Windows can see it.
         GENERATE_INFOPLIST_FILE: YES
-        # The app makes no network calls of its own — the only framework that talks to Apple is
-        # StoreKit, for the subscription, and it reads the device's own transaction cache. Its
-        # transport is OS-provided TLS, which is EXEMPT, so `NO` remains the correct declaration
-        # and stops App Store Connect halting every upload on the manual export-compliance
-        # question. `tools/qa/replay_premium.js` fails the build gate on any URLSession or on a
-        # third URL, so this claim stays a test rather than a comment.
+        # The app makes no network calls of its own. TWO Apple frameworks talk to Apple on its
+        # behalf — StoreKit for the subscription, which reads the device's own transaction cache,
+        # and AuthenticationServices for Sign in with Apple. Both use OS-provided TLS, which is
+        # EXEMPT, so `NO` remains the correct declaration and stops App Store Connect halting every
+        # upload on the manual export-compliance question.
+        #
+        # AuthenticationServices is the newer of the two and it does change one thing that is NOT
+        # an export question: the first sign-in needs a connection, so the app is no longer usable
+        # from a cold install with no network. "Offline after sign-in" is the honest claim, and the
+        # in-app privacy sheet was reworded to say exactly that.
+        #
+        # `tools/qa/replay_premium.js` and `replay_login.js` both fail the build gate on any
+        # URLSession or extra URL — in the new login file too — so this claim stays a test rather
+        # than a comment.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_CFBundleDisplayName: Biyaherong
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -88,6 +106,16 @@ targets:
         # absent from the real archive's Info.plist. Moot now that the app is iPhone-only.)
         SWIFT_VERSION: "6.0"
         CODE_SIGN_STYLE: Automatic
+        # Sign in with Apple. The button was a fake until now — it called no
+        # AuthenticationServices API at all, which PORTING_NOTES.md already recorded as an App
+        # Store rejection — and DemoApp/Sources/BiyaherongUI/LoginAppleAuth.swift is the real call.
+        #
+        # This setting is only one of THREE things that must be true. The other two are outside
+        # this repo: the capability must be enabled for this App ID in the Apple Developer portal
+        # (otherwise signing fails), and the build must actually be signed — codemagic.yaml's
+        # `ios-free-unsigned` workflow archives with CODE_SIGNING_ALLOWED=NO, so entitlements are
+        # never applied there and the sign-in cannot work in that .ipa. Use `ios-testflight`.
+        CODE_SIGN_ENTITLEMENTS: Biyaherong.entitlements
         # DEVELOPMENT_TEAM: ABCDE12345   # optional: put your 10-char Team ID here to skip the Xcode UI step
 
 # A SHARED scheme must exist on disk. Xcode silently auto-creates one when you open the
