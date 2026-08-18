@@ -93,7 +93,7 @@ that rule exists to prevent.
 |---|---|
 | `Sources/BiyaherongCoachCore/OpeningTree.swift` | **The whole algorithm** — the tree, the inversion, the sort, PGN → games, `Codable` persistence. Foundation-only. |
 | `web-demo/js/opening-tree.js` | The JS twin, and the half that actually runs on Windows. |
-| `DemoApp/Sources/BiyaherongUI/OpeningMetrics.swift` | Every number and colour, mirrored by `web-demo/js/opening-metrics.js`. |
+| `DemoApp/Sources/BiyaherongUI/OpeningMetrics.swift` | Every number and colour, mirrored by `web-demo/js/opening-metrics.js`. Includes `pgnMinHeight` — INVENTED (the RN form has no PGN box), taken from `pairing.css`'s `.pgd-modal-area` so the app's two paste-a-blob fields agree. |
 | `tools/metrics/extract_opening_styles.js` → `opening_styles.json` | The AST walk over `openingtree.tsx` that both metrics files are asserted against. **Committed.** |
 | `DemoApp/Sources/BiyaherongUI/OpeningTreeStore.swift` | `openings.json` in Application Support, plus the navigation state. |
 | `DemoApp/Sources/BiyaherongUI/OpeningTreeScreens.swift` | The three screens. |
@@ -104,6 +104,18 @@ that rule exists to prevent.
 **There is no golden file**, and that is the one departure from every other Core module: the source
 is TypeScript, not a Laravel controller, so there is no PHP oracle to generate one. The differential
 partner is the JS twin instead — the same standing-in the notation core uses.
+
+## The PGN box
+
+One field on the form has a minimum height, and both languages have to agree on it: a name and a
+username are one line, but a PGN that opens one line tall reads as a text input rather than as
+somewhere to paste four games. `OpeningLayout.pgnMinHeight` is that number — `--op-pgnMinHeight` in
+the browser, `field(_:placeholder:minHeight:)` in Swift, where `TextField(axis: .vertical)` grows
+from a single line and would otherwise be a quarter the size of its twin.
+
+It carries **no `resize`**. iOS has no resize handle, so the grip the browser used to draw was a
+control the app could not have — and inside `.op-form`, which scrolls, it put a second scrollbar
+hard against the first. See the shell rules in [`web-demo.md`](web-demo.md).
 
 ## How to test
 

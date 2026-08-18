@@ -94,10 +94,40 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 | `js/puzzle-store.js` | the four selectors: the ladders over a pool, the scoped Tier-3 wipe (spec fix #7), and the deterministic local-calendar daily index | `PuzzleSelection.swift`, `DemoApp/…/PuzzleStore.swift` |
 | `js/puzzle-progress.js` | everything the user does: the rated ledger, seen set, streak/rush state, drafts with a 24h TTL, the daily-goal counter | `PuzzleProgress.swift` |
 | `js/device.js` | iPhone model picker — sets the frame's real screen aspect ratio + bezel style | — (page chrome) |
-| `css/theme.css`, `css/app.css` | design tokens + shell styling | `Theme.swift` |
+| `css/theme.css` | design tokens. **Linked first** — every other sheet reads them | `Theme.swift` |
+| `css/app.css` | the shell, Home, the puzzle screens, the Analysis Board, the paywall, the Opening Tree | — |
+| `css/pairing.css` | the Pairing Manager (`--pgl-` list · `--pgc-` create · `--pgd-` detail) | — |
+| `css/coach.css` | Play vs Coach (`--cgs-` select · `--cgc-` colour · `--cgp-` game · `--cgx-` polish) | — |
 | `assets/` | pieces, sounds, coach avatars, fonts (copied from the app) | — |
 
 All scripts are classic `<script>` (no ES modules), so it works from `file://` with no build step.
+
+### Two shell rules, both of which shipped broken before they were gated
+
+**Every stylesheet in `css/` must be linked.** `coach.css` was not, from the commit that introduced
+Play vs Coach until round 4 — 507 correct lines that the page never loaded. It was invisible while
+the Play tab still showed the old sample screen, and the moment `app.js` routed Play to
+`BiyaCoachSelect.render` the whole feature rendered as raw UA buttons, white on white. A round
+earlier the problem had been *noticed* and a guard written, but that guard
+(`replay_login.js`) only asserts `app.css` is linked, so it never fired.
+
+**Every scroll container hides its own scrollbar**, with BOTH halves:
+
+```css
+.some-band { … overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.some-band::-webkit-scrollbar { width: 0; height: 0; }
+```
+
+`app.css:9` has stated the intent since the first commit — *"Hide scrollbars everywhere for an
+app-like look"* — but applies it to `html, body`, and **`scrollbar-width` does not inherit**, nor
+does `::-webkit-scrollbar` cascade. Ten bands were therefore showing the bare OS scrollbar, in a
+frame that is pretending to be a phone.
+
+**And no element sets `resize`.** iOS has no resize handle, so a drag-to-resize textarea is a
+control the Swift app cannot have — a cross-language divergence, not just an eyesore. `resize: none`
+on all five textareas.
+
+`tools/qa/web_shell_check.js` enforces all three, and is mutation-checked against each.
 
 **Where the engine runs is no longer "the main thread" flatly** — `js/engine-host.js` decides:
 

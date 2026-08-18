@@ -2019,6 +2019,61 @@ pair refuses with a named message. The download belongs in `ContentClient` (spec
 `URLSession` sites in the app), and putting a second one in a SwiftUI button is exactly the leak that
 rule exists to prevent. `replay_opening_tree.js` §7 asserts the two languages agree on the set.
 
+## The web shell — two things that were never wired (2026-08-18, round-4 follow-up)
+
+Both found by the client, both invisible to every suite, and both the same shape: something correct
+on disk that never reaches the page.
+
+### `coach.css` was never linked
+
+`web-demo/index.html` listed `theme.css`, `app.css`, `pairing.css` — and not `coach.css`. Since
+`bbb11ba`. The whole Play vs Coach family rendered with UA defaults the moment `app.js` started
+routing Play to it.
+
+**Why no gate caught it.** `docs/play-vs-coach.md` carried the caveat verbatim: *"the wiring has not
+been exercised in a real browser … `auditAppWiring()` reads `app.js` as source instead … that
+catches a control wired to nothing; it cannot catch a layout problem."* That was exactly right.
+Worse, the bug had already been **noticed** a round earlier (`CHANGELOG.md:590`) and the guard
+written for it — `replay_login.js:332-333` — asserts only that `app.css` is linked. A guard written
+for one file, for a class of bug that is about *all* files.
+
+The lesson is the one this repo keeps relearning in a new place: a check that reads the same source
+the code reads cannot see a wiring gap. `tools/qa/web_shell_check.js` asks the page instead — every
+stylesheet on disk is linked, every script is loaded or is a verified Worker.
+
+### The scrollbar rule was documentation, not enforcement
+
+`app.css:9`: *"Hide scrollbars everywhere for an app-like look (scrolling still works)"*, applied to
+`html, body`. **`scrollbar-width` is not an inherited property**, and a `::-webkit-scrollbar`
+pseudo-element matched on `html, body` does not cascade to descendants. Every nested scroll band has
+to declare both halves itself. Thirteen did not.
+
+Only the `.an-*` family had it right, because it is the most recently finished screen family and
+copied its own neighbours. The Opening Tree, added in this same round, inherited the omission from
+the puzzle screens it was modelled on.
+
+### DEVIATION resolved: `resize` is banned outright
+
+`resize: vertical` appeared on four textareas. **iOS has no resize handle**, so each one was an
+affordance the browser offered and the Swift app could not — a divergence the mirror is supposed to
+prevent, not create. `pairing.css`'s `.pgd-modal-area` already had `resize: none` and is where the
+Opening Tree's box was copied from, with that single line flipped.
+
+All five are `none`. The gate bans any other value, so the mirror cannot grow a control the app
+cannot have.
+
+### INVENTED constant: `OpeningLayout.pgnMinHeight = 160`
+
+The RN form has no PGN box, so there is nothing to extract. Taken from `.pgd-modal-area`'s 160 px,
+the app's other paste-a-blob field, so the two agree.
+
+It had been living as `min-height: 160px` inline in `app.css` — the only numeric literal in the
+`--op-*` block, contradicting the block's own header comment and `openings.js:8`. A number written
+in a stylesheet is a number no gate and no Swift twin can see, which is precisely how the two
+languages came to disagree: `TextField(axis: .vertical)` grows from **one line**, so the browser
+showed a 160 pt paste target and the app a single-line input. Both take the metric now, and
+`replay_opening_tree.js` compares it because it loops over every `LAYOUT` key.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had

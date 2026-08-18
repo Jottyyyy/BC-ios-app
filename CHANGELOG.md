@@ -9,6 +9,93 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — Play vs Coach rendered unstyled: `coach.css` was never linked
+
+Client screenshot: the coach select screen with no styling at all — raw text edge to edge, the five
+coaches as plain light-grey UA buttons with white text on them, a bare `0` where the take-back
+toggle should be. `web-demo/` only; the Swift app is unaffected.
+
+**`web-demo/index.html` linked `theme.css`, `app.css` and `pairing.css`, and never `coach.css`.**
+All 507 lines and all 21 `.cgs-*` rules are correct and have always been on disk; the page simply
+did not load them. It has been that way since `bbb11ba`, the commit that introduced Play vs Coach,
+and it was **invisible** for as long as the Play tab still showed the old sample screen. The moment
+`app.js`'s `renderPlay` started calling `BiyaCoachSelect.render`, a whole feature shipped unstyled.
+
+Exactly two classes on the screen resolved, and they are precisely what the screenshot shows
+working: `nav-icon` from `app.css` (why the back button is a grey square with a correct chevron in
+it) and `.view.flush` (why the text runs edge to edge with no gutter). Everything else fell through
+to the UA stylesheet, and `theme.css`'s `button { color: inherit }` is what made the labels white on
+a light button face.
+
+**The comment in `index.html` had been describing the fix for two rounds.** It read: *"These are
+LOADED but not yet ROUTED … the route is repointed once the stylesheet exists, so the screens never
+appear unstyled."* The route was repointed; the link was never added; the sentence written to
+prevent this outcome is what documented it. Rewritten to say what is true.
+
+**The screen was wrong in a second way the CSS could not fix.** With the stylesheet loaded, the
+five coach cards still showed a **bare digit** in each ring: `coach-select.js` built the avatar as
+`el('div', 'cgs-avatar', String(c.level))`, while `CoachScreens.avatar` in Swift has always drawn
+`CoachArt.image(level:)` — the coach's actual face. The five `.webp` portraits have been in
+`web-demo/assets/characters/` the whole time; nothing pointed at them. Nothing compared the two
+either, because art is a file reference rather than a value, and the divergence was invisible for
+as long as the whole screen looked wrong anyway. The browser draws the portrait now, at the same
+`avatarRegular` inside `ringRegular` the Swift frames it at, with `object-fit: cover` standing in
+for `scaledToFill` + `clipShape(Circle())` — and an `onerror` that falls back to the digit rather
+than a broken-image box, mirroring how `CoachArt` degrades to the ring alone.
+`replay_coach.js` pins all of it: 271 → 286.
+
+**Two green gates could not have caught it**, and one of them was written for this exact bug.
+`CHANGELOG.md:590` records it being noticed a round ago — *"after noticing that `css/coach.css` has
+been shipping unlinked"* — and the guard added then, `replay_login.js:332-333`, asserts only that
+`app.css` is linked, so it passed throughout. `coach_screen_test.js` reads `coach.css` **off disk**
+at line 25, which validates a file in complete isolation from whether the page loads it. Reading
+source cannot answer "what does the browser load".
+
+### 2026-08-18 (fixed) — Every scrollbar hidden, every resize grip removed
+
+Client: *"remove mo nga ito, pangit tignan itong scroll na ito … dapat walang ganyan."* The
+screenshot is two OS scrollbars side by side with a drag-resize grip between them. `web-demo/`
+updated, and the Swift half brought into line.
+
+**`app.css:9` has stated the rule since the first commit** — *"Hide scrollbars everywhere for an
+app-like look (scrolling still works)"* — and applies it to `html, body`. But **`scrollbar-width`
+does not inherit** and `::-webkit-scrollbar` matched on `html, body` does not cascade to
+descendants, so the rule was documentation rather than enforcement: thirteen scroll containers were
+showing the bare Windows scrollbar inside a frame pretending to be a phone. The `.an-*` bands all do
+it correctly and were the pattern; the other three screen families never picked it up.
+
+Fixed on all thirteen — `.op-list` / `.op-form` / `.op-moves` (Opening Tree), `.pzp-body` /
+`.pz-bottom` / `.pzd-content` / `.pzk-list` / `.pzr-list` (puzzles), `.lg-sheet-body` (the login
+legal sheet), `.pw-view` (**the paywall**, which since the trial gate is the first screen a locked
+user sees), `.an-view.editing .an-panels`, `pairing.css`'s `.pgc-body` and `coach.css`'s
+`.cgp-review-card`.
+
+**The resize grip goes everywhere, not just where it was seen.** `resize` is a drag handle that
+**does not exist on iOS**, so every `resize: vertical` in the browser mirror was a control the Swift
+app cannot have — a cross-language divergence, not merely an eyesore. Four textareas set it; the
+fifth, `pairing.css`'s `.pgd-modal-area`, already had `resize: none` and was the pattern the Opening
+Tree's box had been copied from with that one line changed. All five are `none` now.
+
+**One hardcoded number went with it.** `.op-textarea` carried `min-height: 160px` — the only
+numeric literal in the whole `--op-*` block, contradicting both the block's own header comment and
+`openings.js`'s. It is `OpeningLayout.pgnMinHeight` now, published as `--op-pgnMinHeight`, so
+`replay_opening_tree.js` compares it across languages automatically (344 → 346). Swift gained the
+matching minimum: `TextField(axis: .vertical)` grows from a **single line**, so the browser had been
+showing a 160 pt paste target while the app showed a one-line text input.
+
+**Gate.** New `tools/qa/web_shell_check.js` — 186 invariants over what `index.html` actually wires
+and how the scroll chrome behaves: every stylesheet on disk is linked and every link resolves;
+every script is loaded or is a verified Worker (`analysis-worker.js` is the one exemption, and the
+exemption is checked by finding the `new Worker` that loads it, so an orphan cannot hide behind the
+allow-list); every scroll container sets `scrollbar-width: none` **and** has a matching
+`::-webkit-scrollbar` rule; and no element sets `resize` to anything but `none`. Four mutants
+killed — unlinking `coach.css`, restoring the grip, stripping one band's `scrollbar-width`, and
+dropping an orphan stylesheet into `css/`. `js_goldens` 33,747 → 33,935 across 78 suites.
+
+This is the move `board_layout_check.js` exists for: **assert the CSS itself.** Every JS suite,
+every Swift check and every replay was green while two screens were visibly wrong, because all of
+them read source and none of them asked what the page loads.
+
 ### 2026-08-18 (changed) — Home chrome: the brand mark in, Donate and the search button out
 
 Fourth round of client feedback, three asks that all land on the Home screen. `web-demo/` updated

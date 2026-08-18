@@ -108,6 +108,11 @@ enum OpeningLayout {
     static let inputTextSize: CGFloat = 15
     static let inputPadH: CGFloat = 14
     static let inputPadV: CGFloat = 12
+    /// INVENTED — the RN form has no PGN box, so there is nothing to extract. Taken from
+    /// `pairing.css`'s `.pgd-modal-area`, the app's other paste-a-blob field, so the two agree.
+    /// It is the ONE field with a minimum: a name and a username are one line, and a PGN that
+    /// opens one line tall reads as a text input rather than as somewhere to paste four games.
+    static let pgnMinHeight: CGFloat = 160
     static let toggleGap: CGFloat = 8
     static let toggleRadius: CGFloat = 10
     static let togglePadV: CGFloat = 12

@@ -212,7 +212,8 @@ struct OpeningTreeBuildScreen: View {
                         field($username, placeholder: OpeningStrings.userPlaceholder)
                     } else if source == .pgn {
                         label(OpeningStrings.pgnLabel)
-                        field($pgn, placeholder: OpeningStrings.pgnPlaceholder)
+                        field($pgn, placeholder: OpeningStrings.pgnPlaceholder,
+                              minHeight: OpeningLayout.pgnMinHeight)
                     }
 
                     connectivityNote
@@ -235,8 +236,14 @@ struct OpeningTreeBuildScreen: View {
             .padding(.bottom, OpeningLayout.labelBottom)
     }
 
-    private func field(_ text: Binding<String>, placeholder: String) -> some View {
+    /// `minHeight` is nil for the one-line fields and `pgnMinHeight` for the PGN box.
+    ///
+    /// `TextField(axis: .vertical)` grows from a SINGLE line, so without it the browser opened a
+    /// 160 pt paste target and the app opened a text input — the same control at two sizes.
+    private func field(_ text: Binding<String>, placeholder: String,
+                       minHeight: CGFloat? = nil) -> some View {
         TextField(placeholder, text: text, axis: .vertical)
+            .frame(minHeight: minHeight, alignment: .topLeading)
             .textFieldStyle(.plain)
             .font(Theme.nunito(OpeningLayout.inputTextSize))
             .foregroundStyle(OpeningPalette.text)

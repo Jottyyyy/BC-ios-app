@@ -564,6 +564,40 @@ function run() {
     }
   }
 
+  // -- Both languages draw the coach's FACE, not a number ----------------------
+  //
+  // Swift has drawn `CoachArt.image(level:)` inside the ring since the screen was written; the
+  // browser drew `String(c.level)` -- a bare digit in an empty circle. Nothing compared them,
+  // because the art is a file reference rather than a value, and the divergence stayed invisible
+  // for as long as `coach.css` was unlinked and the whole screen looked wrong anyway.
+  {
+    const swiftAvatar = code(read(UI, 'CoachScreens.swift'));
+    const jsSelect = code(read(JS, 'coach-select.js'));
+
+    expect(/CoachArt\.image\(level: coach\.id\)/.test(swiftAvatar),
+      'Swift still draws the coach portrait inside the ring');
+    expect(/level-' \+ c\.level \+ '\.webp/.test(jsSelect),
+      'coach-select.js draws the same per-level portrait, not the level number');
+    expect(/face\.onerror/.test(jsSelect),
+      'and falls back rather than showing a broken-image box, the way CoachArt degrades to the ring');
+
+    // The five files both halves point at.
+    for (let level = 1; level <= 5; level += 1) {
+      expect(fs.existsSync(path.join(ROOT, 'web-demo', 'assets', 'characters',
+                                     'level-' + level + '.webp')),
+        'web-demo/assets/characters/level-' + level + '.webp is missing');
+      expect(fs.existsSync(path.join(UI, 'Characters', 'level-' + level + '.webp')),
+        'the Swift bundle is missing Characters/level-' + level + '.webp');
+    }
+
+    // Sized the way Swift frames it: the image is `avatarRegular` inside a ring of `ringRegular`.
+    const coachCss = read(path.join(ROOT, 'web-demo', 'css'), 'coach.css');
+    expect(/\.cgs-avatar img\s*\{[^}]*--cgs-card-size-avatar-regular/.test(coachCss),
+      'the portrait is sized from the avatar metric, not from the ring it sits in');
+    expect(/\.cgs-avatar img\s*\{[^}]*object-fit:\s*cover/.test(coachCss),
+      'and cropped like scaledToFill + clipShape(Circle())');
+  }
+
   // ── CoachReview: the adapter, against the JS ────────────────────────────────
   {
     const RV = require(path.join(JS, 'coach-review.js'));
