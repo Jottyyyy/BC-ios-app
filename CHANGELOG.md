@@ -9,6 +9,69 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — Analysis Board: readable engine lines, no dead book box, longer variations, tap-to-play
+
+Client feedback on a TestFlight build, four asks, all delivered. `web-demo/` updated to match.
+
+**1 · The engine panel is drawn at the move strip's size.** The source draws it at 9/10/8 pt; on a
+real phone the client could not read it (*"lakihan mo kasing laki ng chess notation"*). It is now
+`stripMove` (13) for the eval, best move, continuation and text, `altChip` (12) for the opening name
+and 11 for the depth chip — **derived** from those constants rather than re-typed, so "the same size
+as the notation" is true by construction. `engineEvalWidth` 36→44 and `engineSanWidth` 38→46 grew with
+the type, because `M-3` and `O-O-O` clip at 13 pt.
+
+The source assertions are **inverted, not deleted** — the ⩲/⩱ precedent. A new `deviates(…)` helper in
+both `AnalysisMetricsCheck.swift` and `analysis-metrics.js` pins that the RN source still holds its
+value *and* that ours differs in the intended direction.
+
+**2 · The opening book is a strip, and 3 · out of book it is gone.** `AnalysisOpeningPanel` →
+`AnalysisBookStrip`: one 44 pt horizontal row of `san · eco` chips, built only when there are
+continuations. No empty state, because a quarter-screen box saying "out of book" was the whole
+complaint.
+
+That box was the **layout**, not the styling: a `ScrollView` capped at 230 is greedy along its axis, so
+it drew all 230 pt whatever it held — and, being the root `VStack`'s only flexible child, it also
+claimed every spare pixel. **The engine panel is the flexible band now**
+(`.frame(maxHeight: .infinity, alignment: .bottom)` *after* `.background`; `flex: 1 1 auto;
+min-height: 0; justify-content: flex-end` in CSS), and the continuation may wrap to two lines. Bands
+re-modelled: `engineStripEstimate` 60→102, new `bookStripHeight` 44, `engineMaxRows` 5,
+`engineLineLimit` 2, and `bands(…)` takes `inBook`.
+
+**4 · Longer lines.** A PV can never exceed the search depth, so `pvPreview` 6→12 alone was a no-op at
+the default preset. `Search.extendPV` (transposition-table walk) is free but lengthened only **one line
+in twelve** — the PV's leaf was seen by quiescence, which stores no move. The new
+`Search.extendTail` searches shallowly from the leaf on a **scratch** `Search` and appends its PV:
+lines now reach **10–14 plies** where they stopped at 6. Bounded to the final snapshot, `depth 2` per
+probe, **4,000 nodes per line** and 14 plies total; measured cost +5–18% of search time. Every
+appended move is legality-checked and de-duplicated against the line's own positions.
+
+**Tap an engine line to play it out.** New `LinePreview` in Core — pure, value-typed, ParityRunner-
+asserted. Tapping a row walks the whole variation on the board (`◀ ▶`, tap a chip to jump), `✕`
+returns exactly where you were, `＋` commits it as a real variation. The move tree is untouched until
+then; only the board shows the previewed position, the arrows clear, and drags are refused. A stale
+snapshot's line refuses both to start and to walk.
+
+**And the bug that exposed.** With the panel flexible, flex shrank each row while its text kept its
+own height: on a 375-wide phone three wrapped rows (113 pt) were squeezed into a 61 pt band and the
+overflow painted over the move strip. Rows now keep their natural height in their own **clipped** box
+(`.an-rows` / `rowsBox`), and `AnalysisLayout.enginePlan(available:wanted:)` decides how many rows and
+how many lines each — **rows beat wrapping**, because three single-line rows fit an SE where three
+wrapped ones do not. The browser measures the other bands; SwiftUI computes the same budget from
+`engineAvailable(…)`; both go through the one shared pure function.
+
+**Gates.** `swift_layout_check.js` gains rule 4b (the Analysis root must have exactly one flexible
+child, ordered after `.background`, with a conditional book strip) and 4c (the rows box is clipped and
+capped by the plan) — 255→265, with three new mutants (10/10 killed). `board_layout_check.js`
+widens its bidirectional custom-property audit from `--an-eng-*` to all `--an-*` (24 pre-existing dead
+vars pinned in a shrink-only allowlist) and adds §3b/§3c, the CSS half of rules 4b and 4c — 64→799.
+It also caught two hardcoded column widths (`min-width: 40px/38px`) that step 1 had left behind.
+`engine_budget_check.js` is what caught the first unbounded extension freezing the UI for **2.9 s**;
+the worst block is now ~107 ms against a 320 ms ceiling. Parity floors raised: `search` 55→66,
+`analysis_session` 200→235.
+
+**Removed.** `AnalysisVM.playEngineRow` / `playUciMove` — nothing plays just a line's first move any
+more.
+
 ### 2026-08-16 (added) — A monthly subscription with a 7-day trial, enforced on-device with no server
 
 The app earns recurring revenue now: one auto-renewing **monthly** plan with a **7-day free trial**,

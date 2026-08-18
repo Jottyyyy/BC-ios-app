@@ -47,20 +47,41 @@ struct AnalysisBoardScreen: View {
                     .padding(.horizontal, AnalysisLayout.panelsPaddingH)
                     .frame(maxHeight: .infinity)
                 } else {
-                    statusLine
+                    // The preview bar takes the status line's row while a line is being walked —
+                    // the status describes the real cursor, which is not what the board is showing.
+                    if vm.previewing { previewBar } else { statusLine }
                     statusBand
                     if vm.autoplaying { autoplayBand }
                     AnalysisMoveStrip(tokens: vm.stripTokens,
                                       onTap: { vm.goTo(id: $0) },
                                       onLongPress: { vm.annotateOrManage(id: $0) })
-                    AnalysisOpeningPanel(rows: vm.bookRows, onPlay: { vm.playBookMove($0) })
+                    // Only when there IS a book. There is no empty state any more: a 230pt box
+                    // saying "out of book" was the whole complaint.
+                    if !vm.bookRows.isEmpty {
+                        AnalysisBookStrip(rows: vm.bookRows, onPlay: { vm.playBookMove($0) })
+                    }
+                    // The engine panel is THE flexible child now, and there must be exactly one:
+                    // delete it and the root `.frame(width:height:)` centres the whole column,
+                    // opening a navy gap above the header. It used to be the book panel, which
+                    // hoarded the slack whether or not it had anything to show.
+                    //
+                    // Its own frame is `maxHeight: .infinity, alignment: .bottom` and sits OUTSIDE
+                    // the background, so the panel still hugs its content and stays pinned to the
+                    // bottom — it claims the band without painting it.
+                    // How many rows, and whether they may wrap, is a function of the screen —
+                    // on a 375x667 SE three WRAPPED rows do not fit, and three single-line ones
+                    // do. Rows beat wrapping: see `AnalysisLayout.enginePlan`.
                     AnalysisEnginePanel(rows: vm.engineRows,
+                                        plan: enginePlan(size: geo.size),
                                         fraction: vm.evalFraction,
                                         depth: vm.depth,
                                         analyzing: vm.analyzing,
                                         symbol: vm.evalSymbol,
                                         opening: vm.openingText,
-                                        onPlay: { vm.playEngineRow($0) })
+                                        // Tapping a line WALKS it now instead of committing its
+                                        // first move — you can see what the engine means before
+                                        // deciding to keep it.
+                                        onPlay: { vm.previewLine($0) })
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -78,6 +99,18 @@ struct AnalysisBoardScreen: View {
         // The VM owns the review; the host owns the allowance. Handing the closure over on appear
         // keeps the analysis layer free of any notion of a subscription.
         .onAppear { vm.reviewGate = reviewGate }
+    }
+
+    /// The engine panel's row/line budget for this viewport. A pure function of the metrics and the
+    /// geometry — no measurement, and it does not have to be exact: `rowsBox` clips, so an answer a
+    /// point or two out costs a hidden row, never an overdrawn move strip.
+    private func enginePlan(size: CGSize) -> (rows: Int, lines: Int) {
+        let edge = AnalysisBoard.size(screenWidth: size.width, pixelRatio: displayScale)
+        let available = AnalysisLayout.engineAvailable(viewportHeight: size.height,
+                                                       edge: edge,
+                                                       inBook: !vm.bookRows.isEmpty,
+                                                       autoplaying: vm.autoplaying)
+        return AnalysisLayout.enginePlan(available: available, wanted: vm.engineRows.count)
     }
 
     // MARK: - 1. Header
@@ -206,6 +239,77 @@ struct AnalysisBoardScreen: View {
         .overlay(alignment: .top) {
             Rectangle().fill(AnalysisPalette.divider).frame(height: AnalysisLayout.statusBorder)
         }
+    }
+
+    // MARK: - 3b. The line-preview bar
+    //
+    // Takes the status line's row while an engine line is being walked on the board. Same paddings,
+    // same minimum height, same divider — so the band does not jump as it appears — but a different
+    // job: the status text describes the real cursor, and the real cursor is not what you are
+    // looking at. ✕ leaves exactly where you were; ＋ commits what is on screen as a variation.
+
+    private var previewBar: some View {
+        HStack(spacing: AnalysisLayout.previewGap) {
+            previewNav("◀") { vm.previewStep(-1) }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AnalysisLayout.previewGap) {
+                    ForEach(vm.previewTokens) { tok in
+                        Text(tok.san)
+                            .font(AnalysisType.mono(AnalysisType.previewPly, .bold))
+                            // Dark ink on the current chip: the arrow colours are saturated, and
+                            // the move strip's active token makes the same swap for the same reason.
+                            .foregroundStyle(tok.isCurrent ? AnalysisPalette.onGold
+                                             : tok.played ? AnalysisPalette.textPrimary
+                                                          : AnalysisPalette.textMuted)
+                            .lineLimit(AnalysisLayout.singleLine)
+                            .padding(.horizontal, AnalysisLayout.tokenPaddingH)
+                            .padding(.vertical, AnalysisLayout.tokenPaddingV)
+                            .background(
+                                RoundedRectangle(cornerRadius: AnalysisLayout.tokenRadius)
+                                    .fill(tok.isCurrent
+                                          ? AnalysisArrow.color(rank: vm.previewRank)
+                                          : Color.clear))
+                            .contentShape(Rectangle())
+                            .onTapGesture { vm.previewGo(to: tok.ply) }
+                    }
+                }
+            }
+            previewNav("▶") { vm.previewStep(1) }
+                .disabled(!vm.previewCanStepForward)
+            previewAction("✕", tint: AnalysisPalette.textSecondary) { vm.previewExit() }
+            previewAction("＋", tint: AnalysisPalette.gold) { vm.previewCommit() }
+        }
+        .padding(.horizontal, AnalysisLayout.statusLinePaddingH)
+        .padding(.vertical, AnalysisLayout.statusLinePaddingV)
+        .frame(minHeight: AnalysisLayout.statusLineMinHeight)
+        .background(AnalysisPalette.surface)
+        .overlay(alignment: .top) {
+            Rectangle().fill(AnalysisPalette.divider).frame(height: AnalysisLayout.statusBorder)
+        }
+    }
+
+    private func previewNav(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(Theme.nunito(AnalysisType.previewBtn))
+                .foregroundStyle(AnalysisPalette.textPrimary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func previewAction(_ label: String, tint: Color,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(Theme.nunito(AnalysisType.previewBtn, .bold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, AnalysisLayout.previewBtnPaddingH)
+                .padding(.vertical, AnalysisLayout.previewBtnPaddingV)
+                .background(
+                    RoundedRectangle(cornerRadius: AnalysisLayout.previewBtnRadius)
+                        .fill(AnalysisPalette.surfaceAlt))
+        }
+        .buttonStyle(.plain)
     }
 
     private var statusBand: some View {
@@ -509,63 +613,51 @@ struct AnalysisMoveStrip: View {
     }
 }
 
-// MARK: - 6. The opening panel
+// MARK: - 6. The opening book strip
 
-/// The ECO explorer, standing where `renderMasterDB` used to. The Lichess dependency is gone; these
-/// rows come from the bundled book.
-struct AnalysisOpeningPanel: View {
+/// The ECO explorer, reduced to one row of chips.
+///
+/// It used to be `AnalysisOpeningPanel`: a vertical list under `.frame(maxHeight: 230)` and
+/// `.frame(maxHeight: .infinity)`. A `ScrollView` is greedy along its scroll axis, so it drew the
+/// full 230pt to hold one line of "Out of book — no ECO continuations here." — a quarter of the
+/// screen of nothing, above engine rows squeezed to 9pt. That is what the client photographed.
+///
+/// Two changes, both of them the ask: the list became a strip, and **the empty state is gone
+/// entirely** — the caller does not build this view when `bookRows` is empty. Between them they
+/// hand the engine panel back the height it needed.
+struct AnalysisBookStrip: View {
     let rows: [OpeningBook.Continuation]
     let onPlay: (String) -> Void
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: AnalysisLayout.rowGap, pinnedViews: [.sectionHeaders]) {
-                Section {
-                    if rows.isEmpty {
-                        Text("Out of book — no ECO continuations here.")
-                            .font(Theme.nunito(AnalysisType.status, .medium))
-                            .foregroundStyle(AnalysisPalette.textMuted)
-                    }
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        Button { onPlay(row.san) } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: AnalysisLayout.rowSpacing) {
-                                Text(row.san)
-                                    .font(AnalysisType.mono(AnalysisType.stripMove, .bold))
-                                    .foregroundStyle(AnalysisPalette.textPrimary)
-                                    .frame(minWidth: AnalysisLayout.bookSanWidth, alignment: .leading)
-                                Text(row.entry.eco)
-                                    .font(AnalysisType.mono(AnalysisType.engineOpening, .bold))
-                                    .foregroundStyle(AnalysisPalette.gold)
-                                Text(row.entry.name)
-                                    .font(Theme.nunito(AnalysisType.altChip))
-                                    .foregroundStyle(AnalysisPalette.textSecondary)
-                                    .lineLimit(AnalysisLayout.singleLine)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, AnalysisLayout.rowPaddingH)
-                            .padding(.vertical, AnalysisLayout.rowPaddingV)
-                            .background(AnalysisPalette.surfaceAlt2,
-                                        in: RoundedRectangle(cornerRadius: AnalysisLayout.toolBtnRadius))
-                        }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AnalysisLayout.rowSpacing) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    Button { onPlay(row.san) } label: { chip(row) }
                         .buttonStyle(.plain)
-                    }
-                } header: {
-                    Text("Opening book")
-                        .font(Theme.nunito(AnalysisType.engineOpening, .bold))
-                        .foregroundStyle(AnalysisPalette.textMuted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, AnalysisLayout.rowPaddingV)
-                        .background(AnalysisPalette.screenBg)
                 }
             }
             .padding(.horizontal, AnalysisLayout.panelsPaddingH)
         }
-        // The band that gives way. It absorbs a short screen, a taller engine panel and a wrapped
-        // status line, so none of that can reach the board. `panelsMaxHeight` is a ceiling, not a
-        // fixed height — `bands(viewportHeight:boardEdge:)` computes the real one.
-        .frame(maxHeight: AnalysisLayout.panelsMaxHeight)
-        .frame(maxHeight: .infinity)
+        .frame(height: AnalysisLayout.bookStripHeight)
         .background(AnalysisPalette.screenBg)
+    }
+
+    /// `Nf6 · B30`. The opening NAME is dropped: it is the one thing here that cannot be made to
+    /// fit on one line, and the engine panel's info row already names the opening.
+    private func chip(_ row: OpeningBook.Continuation) -> some View {
+        HStack(spacing: AnalysisLayout.bookChipGap) {
+            Text(row.san)
+                .font(AnalysisType.mono(AnalysisType.stripMove, .bold))
+                .foregroundStyle(AnalysisPalette.textPrimary)
+            Text(row.entry.eco)
+                .font(AnalysisType.mono(AnalysisType.engineOpening, .bold))
+                .foregroundStyle(AnalysisPalette.gold)
+        }
+        .padding(.horizontal, AnalysisLayout.chipPaddingH)
+        .padding(.vertical, AnalysisLayout.chipPaddingV)
+        .background(AnalysisPalette.surfaceAlt2,
+                    in: RoundedRectangle(cornerRadius: AnalysisLayout.toolBtnRadius))
     }
 }
 
@@ -575,6 +667,10 @@ struct AnalysisOpeningPanel: View {
 /// (board.tsx:2772-2845). This is where the 3pt bar and the opening name actually live.
 struct AnalysisEnginePanel: View {
     let rows: [EngineRow]
+    /// How many rows to draw and how many lines each may wrap to, from `AnalysisLayout.enginePlan`.
+    /// Defaulted so the puzzle hub's suggestions panel, which has no viewport to measure, keeps the
+    /// full budget it always had.
+    var plan: (rows: Int, lines: Int) = (AnalysisLayout.engineMaxRows, AnalysisLayout.engineLineLimit)
     let fraction: CGFloat
     let depth: Int
     let analyzing: Bool
@@ -591,26 +687,13 @@ struct AnalysisEnginePanel: View {
                     .foregroundStyle(AnalysisPalette.textSecondary)
                     .padding(.vertical, AnalysisLayout.rowPaddingV)
             }
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                Button { onPlay(row) } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: AnalysisLayout.rowSpacing) {
-                        Text(row.evalText)
-                            .font(AnalysisType.mono(AnalysisType.engineEval, .bold))
-                            .foregroundStyle(AnalysisPalette.textPrimary)
-                            .frame(minWidth: AnalysisLayout.engineEvalWidth, alignment: .trailing)
-                        Text(row.san)
-                            .font(AnalysisType.mono(AnalysisType.engineSan, .heavy))
-                            .foregroundStyle(AnalysisArrow.color(rank: row.rank))
-                            .frame(minWidth: AnalysisLayout.engineSanWidth, alignment: .leading)
-                        Text(row.continuation)
-                            .font(AnalysisType.mono(AnalysisType.enginePv))
-                            .foregroundStyle(AnalysisPalette.textMuted)
-                            .lineLimit(AnalysisLayout.singleLine)
-                        Spacer(minLength: 0)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+            // The rows are their OWN box, clipped, and it is the only part of the panel allowed to
+            // give way. On a 375x667 SE five wrapped rows do not fit; the band shrinks, and without
+            // this the rows would draw over the move strip above. Clipping from the bottom loses the
+            // last line before the first, which is the right way round. The browser twin does the
+            // same with `.an-rows { flex: 0 1 auto; min-height: 0; overflow: hidden }`; both are
+            // asserted (swift_layout_check rule 4c, board_layout_check §3c).
+            rowsBox
             infoRow
         }
         .padding(.horizontal, AnalysisLayout.enginePaddingH)
@@ -621,6 +704,42 @@ struct AnalysisEnginePanel: View {
         .overlay(alignment: .top) {
             Rectangle().fill(AnalysisPalette.divider).frame(height: AnalysisLayout.statusBorder)
         }
+        // AFTER the background, deliberately: the panel claims the screen's leftover height so it
+        // is the root VStack's one flexible child, but it still hugs its content and paints only
+        // behind it. Putting this before `.background` would flood the band with surface colour —
+        // which is the mistake the book panel used to make.
+        .frame(maxHeight: .infinity, alignment: .bottom)
+    }
+
+    private var rowsBox: some View {
+        VStack(alignment: .leading, spacing: AnalysisLayout.rowGap) {
+            ForEach(Array(rows.prefix(plan.rows).enumerated()), id: \.offset) { _, row in
+                Button { onPlay(row) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: AnalysisLayout.rowSpacing) {
+                        Text(row.evalText)
+                            .font(AnalysisType.mono(AnalysisType.engineEval, .bold))
+                            .foregroundStyle(AnalysisPalette.textPrimary)
+                            .frame(minWidth: AnalysisLayout.engineEvalWidth, alignment: .trailing)
+                        Text(row.san)
+                            .font(AnalysisType.mono(AnalysisType.engineSan, .heavy))
+                            .foregroundStyle(AnalysisArrow.color(rank: row.rank))
+                            .frame(minWidth: AnalysisLayout.engineSanWidth, alignment: .leading)
+                        // Two lines, not one. At the move strip's 13pt a single line holds FEWER
+                        // moves than the old 9pt one did — "bigger text" and "more moves" cancel
+                        // out unless the continuation is allowed to wrap.
+                        Text(row.continuation)
+                            .font(AnalysisType.mono(AnalysisType.enginePv))
+                            .foregroundStyle(AnalysisPalette.textMuted)
+                            .lineLimit(plan.lines)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
     }
 
     private var microBar: some View {

@@ -451,6 +451,45 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   padding: var(--an-statusline-pad-v) var(--an-statusline-pad-h);
   background: var(--an-surface); border-top: 1px solid var(--an-divider);
 }
+/* 3b — the line-preview bar. Takes the STATUS LINE's row while an engine line is being walked, so
+   it borrows that row's paddings, min-height and top border and the band never jumps. Only the gap
+   and the two action buttons are its own. `.an-hidden` is toggled by paintPreviewBar. */
+.an-pvbar {
+  flex: none; min-height: var(--an-statusline-h);
+  display: flex; align-items: center; gap: var(--an-pv-gap);
+  padding: var(--an-statusline-pad-v) var(--an-statusline-pad-h);
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
+}
+.an-pvplies {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--an-pv-gap);
+  overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none;
+}
+.an-pvplies::-webkit-scrollbar { height: 0; }
+.an-pvnav {
+  flex: none; background: none; border: 0; cursor: pointer;
+  color: var(--an-text); font-size: var(--an-fs-pvbtn);
+}
+.an-pvnav:disabled { opacity: .35; cursor: default; }
+.an-pvply {
+  flex: none; border: 0; cursor: pointer; background: transparent;
+  color: var(--an-text-muted); font-family: var(--mono); font-weight: 700;
+  font-size: var(--an-fs-pvply);
+  padding: var(--an-token-pad-v) var(--an-token-pad-h);
+  border-radius: var(--an-token-r);
+}
+.an-pvply.played { color: var(--an-text); }
+/* The current ply's chip takes its LINE's arrow colour, set inline by paintPreviewBar, with dark
+   ink over it — the arrow colours are saturated, and `.an-move.active` makes the same swap. */
+.an-pvply.current { color: var(--an-on-gold); }
+.an-pvact {
+  flex: none; border: 0; cursor: pointer; color: var(--an-text-2);
+  background: var(--an-surface-alt); border-radius: var(--an-pv-btn-r);
+  font-size: var(--an-fs-pvbtn); font-weight: 700;
+  padding: var(--an-pv-btn-pv) var(--an-pv-btn-ph);
+}
+.an-pvact.gold { color: var(--an-gold); }
+.an-pvact:active { opacity: .75; }
+
 .an-status {
   flex: none; min-height: var(--an-status-h); display: flex; align-items: center; gap: 6px;
   justify-content: center;
@@ -515,7 +554,28 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .an-move.onpath, .an-alt.onpath { color: var(--an-gold); }
 .an-move.active, .an-alt.active { background: var(--an-gold); color: var(--an-on-gold); }
 
-/* 6 — panels: the ECO explorer, replacing the Lichess masters panel */
+/* 6a — the opening book, as ONE row of chips.
+   It used to be a 230px scrolling panel. A scrolling box is greedy along its axis, so it drew all
+   230px to hold one line of "out of book" text while the engine rows were squeezed to 9px beneath
+   it — a quarter of the screen of nothing. Now it is a strip, and out of book it is not drawn at
+   all: `.an-hidden` is set by paintBookStrip. */
+.an-bookstrip {
+  flex: none; height: var(--an-bookstrip-h); display: flex; align-items: center;
+  gap: var(--an-row-spacing); overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+  padding: 0 var(--an-panels-pad-h); background: var(--an-bg); scrollbar-width: none;
+}
+.an-bookstrip::-webkit-scrollbar { height: 0; }
+.an-bchip {
+  flex: none; display: flex; align-items: baseline; gap: var(--an-book-chip-gap);
+  background: var(--an-surface-alt2); border: 0; border-radius: var(--an-tool-radius);
+  color: var(--an-text); cursor: pointer;
+  padding: var(--an-chip-pad-v) var(--an-chip-pad-h);
+}
+.an-bchip:active { opacity: .75; }
+.an-hidden { display: none !important; }
+
+/* 6b — panels: EDIT MODE ONLY now. Kept, with its `flex: 1 1 auto` / `--an-panels-h` contract
+   intact, because Setup Position renders into it and board_layout_check.js asserts both. */
 /* The band that gives way. It absorbs every bit of slack — a short screen, a taller engine panel,
    a wrapped status line — so none of that can reach the board. `--an-panels-h` is what bandLayout
    says it should get; `flex: 1 1 auto` lets it shrink below that when the engine panel grows. */
@@ -545,8 +605,13 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 /* 7 — engine lines, pinned to the bottom */
+/* THE flexible band now, and there must be exactly one. It used to be `.an-panels`, which hoarded
+   the slack whether or not it had anything to show. `justify-content: flex-end` keeps the content
+   hugging the bottom exactly as it did when this band was `flex: none`, so a short panel does not
+   float up and leave a gap under the move strip. */
 .an-engine {
-  flex: none; background: var(--an-surface); border-top: 1px solid var(--an-divider);
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end;
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
   padding: var(--an-engine-pad-t) var(--an-engine-pad-h) var(--an-engine-pad-b);
 }
 .an-micro {
@@ -557,18 +622,33 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   height: 100%; width: 50%; background: var(--an-eval-fill);
   transition: width var(--an-eval-anim) ease;
 }
+/* The rows container. `.an-engine` is the band that gives way, and when it does the rows must be
+   DROPPED, not squashed: without `flex: none` below, a short screen shrinks each row while its text
+   keeps its own height, and the overflow paints straight over the move strip above. So the rows keep
+   their natural size and this box clips from the BOTTOM — you lose the third line before the first,
+   which is the right way round. Asserted by board_layout_check §3c. */
+.an-rows {
+  flex: 0 1 auto; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
 .an-erow {
-  display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+  flex: none;
+  display: flex; align-items: flex-start; gap: 6px; width: 100%; text-align: left;
   background: none; border: 0; color: var(--an-text); cursor: pointer; padding: 2px 3px;
   border-radius: var(--an-tool-radius);
 }
 .an-erow:active { background: var(--an-surface-alt); }
 .an-erow-empty { font-size: var(--an-fs-etext); color: var(--an-text-muted); padding: 3px; }
-.an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: 40px; flex: none; }
-.an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: 38px; flex: none; }
+/* Widths from the metrics layer, not literals: they grew with the type (36→44, 38→46) and two
+   hardcoded copies of 40/38 is exactly the drift `--an-*` exists to prevent. */
+.an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: var(--an-eeval-w); flex: none; }
+.an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: var(--an-esan-w); flex: none; }
+/* Two lines, not one. At the move strip's 13px a single line holds FEWER moves than the old 9px
+   one did, so "bigger text" and "more moves" cancel out unless the continuation can wrap. */
 .an-epv {
   font: 400 var(--an-fs-epv)/1.3 var(--mono); color: var(--an-text-2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--an-engine-lines); line-clamp: var(--an-engine-lines);
 }
 .an-info { display: flex; align-items: center; gap: 6px; padding: 3px 3px 0; }
 .an-depth {
@@ -862,6 +942,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
    because the editor is taller than the ECO list and wants the room the hidden bands free up. */
 .an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; }
 .an-view.editing .an-engine { display: none; }
+.an-view.editing .an-bookstrip { display: none; }
 .an-view.editing .an-strip { display: none; }
 /* board.tsx:4616 hides the whole status+toolbar row in edit mode, in its own words "to maximise
    board space". Neither the status line nor the nav buttons mean anything mid-edit. */

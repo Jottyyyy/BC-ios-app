@@ -37,14 +37,108 @@ public struct EngineRow: Equatable, Sendable {
     public let san: String
     public let continuation: String
     public let uci: String
+    /// The WHOLE line, so the panel can walk it on the board and not just play its first move.
+    /// Defaulted in the initialiser: the puzzle hub's suggestions panel shares `engineRows(from:)`
+    /// and a row with no line simply cannot be previewed.
+    public let pvUCI: [String]
     public let from: Int
     public let to: Int
     public let depth: Int
     public init(rank: Int, evalText: String, san: String, continuation: String,
-                uci: String, from: Int, to: Int, depth: Int) {
+                uci: String, from: Int, to: Int, depth: Int, pvUCI: [String] = []) {
         self.rank = rank; self.evalText = evalText; self.san = san
         self.continuation = continuation; self.uci = uci
         self.from = from; self.to = to; self.depth = depth
+        self.pvUCI = pvUCI
+    }
+}
+
+/// A candidate engine line being walked on the board without committing it.
+///
+/// Tapping an engine line used to play its FIRST move into the tree and nothing else — you could not
+/// see the variation the engine was actually recommending. This walks the whole line, and the move
+/// tree is not touched until the user asks for it with ＋.
+///
+/// Pure and value-typed on purpose. Every transition is a function of the previous value, so the
+/// whole interaction is assertable with no screen and no session — which is the only reason it is
+/// here in the Core rather than in `AnalysisVM`, where it started. `previewPosition` on the session
+/// below is the one part that needs a board.
+///
+/// Mirrored by web-demo/js/analysis.js's pure layer.
+public struct LinePreview: Equatable, Sendable {
+
+    /// One cell of the preview bar.
+    public struct Token: Equatable, Sendable {
+        /// 1-based, so it can be handed straight back to `jumped(to:)`.
+        public let ply: Int
+        public let san: String
+        public let played: Bool
+        public let isCurrent: Bool
+        public init(ply: Int, san: String, played: Bool, isCurrent: Bool) {
+            self.ply = ply; self.san = san; self.played = played; self.isCurrent = isCurrent
+        }
+    }
+
+    public let sans: [String]
+    /// Held as UCI rather than `Move` because that is what `EngineRow` carries across the Core
+    /// boundary, and re-resolving each one against the position it is played from is also the
+    /// legality check: a line left over from a previous position simply refuses to start.
+    public let uci: [String]
+    /// How many of the line's moves are on the board. Never 0 — "showing nothing" is `nil`.
+    public private(set) var ply: Int
+    /// Which engine line it came from, so the bar can borrow that line's arrow colour.
+    public let rank: Int
+
+    private init(sans: [String], uci: [String], ply: Int, rank: Int) {
+        self.sans = sans; self.uci = uci; self.ply = ply; self.rank = rank
+    }
+
+    /// Enter on the line's first move. nil when the row has nothing to walk.
+    public static func start(_ row: EngineRow) -> LinePreview? {
+        let tail = row.continuation.split(separator: " ").map(String.init)
+        let sans = ([row.san] + tail).filter { !$0.isEmpty }
+        // Trimmed to a common length so `sans.count == uci.count` holds for the whole preview: the
+        // continuation is capped at `pvPreview` SANs while `pvUCI` carries the engine's full line,
+        // and a ply you cannot label is a ply you should not be able to step to.
+        let n = min(sans.count, row.pvUCI.count)
+        guard n > 0 else { return nil }
+        return LinePreview(sans: Array(sans.prefix(n)), uci: Array(row.pvUCI.prefix(n)),
+                           ply: 1, rank: row.rank)
+    }
+
+    public var count: Int { uci.count }
+    public var canStepForward: Bool { ply < uci.count }
+    /// What ＋ commits: everything currently on the board, and nothing beyond it.
+    public var movesToCommit: [String] { Array(uci.prefix(ply)) }
+
+    /// Step inside the line. **nil means LEAVE the preview** — which is what ◀ at ply 1 does.
+    /// Stepping past the end is a no-op rather than an exit: the two ends are not symmetrical,
+    /// because there is somewhere to go back to and nowhere to go forward to.
+    public func stepped(_ delta: Int) -> LinePreview? {
+        let next = ply + delta
+        if next <= 0 { return nil }
+        if next > uci.count { return self }
+        var out = self
+        out.ply = next
+        return out
+    }
+
+    /// Jump straight to a ply by tapping its chip. Out of range is a no-op, never an exit.
+    public func jumped(to ply: Int) -> LinePreview {
+        guard ply > 0, ply <= uci.count else { return self }
+        var out = self
+        out.ply = ply
+        return out
+    }
+
+    public var tokens: [Token] {
+        var out: [Token] = []
+        out.reserveCapacity(sans.count)
+        for (i, san) in sans.enumerated() {
+            let n = i + 1
+            out.append(Token(ply: n, san: san, played: n <= ply, isCurrent: n == ply))
+        }
+        return out
     }
 }
 
@@ -233,10 +327,37 @@ public final class AnalysisSession {
         return out
     }
 
-    /// How many PV plies an engine row shows after the move itself (board.tsx:2827).
-    public static let pvPreview = 6
+    /// How many PV plies an engine row shows after the move itself.
+    ///
+    /// DEVIATION — the source shows 6 (board.tsx:2827). The client asked for more, and 6 was
+    /// throwing away real analysis: the stronger presets search 8-10 ply and the tail was being
+    /// clipped. It is not the binding constraint at the DEFAULT preset, though — a 1.2s search only
+    /// reaches ~6 ply, which is why `LocalEngine` now extends the PV from the transposition table
+    /// rather than the search having to go deeper. See docs/analysis-board.md.
+    public static let pvPreview = 12
 
     public var engineRows: [EngineRow] { AnalysisSession.engineRows(from: snapshot) }
+
+    /// Whether a row's line can start from the cursor at all. A snapshot can outlive the position it
+    /// was computed for, and a line that will not play is not a line worth entering.
+    public func canPreview(_ row: EngineRow) -> Bool {
+        guard let first = row.pvUCI.first else { return false }
+        return position.move(forUCI: first) != nil
+    }
+
+    /// The position a preview is showing, and the move that got there. nil when any ply fails to
+    /// resolve — same staleness guard as `canPreview`, applied to the whole walked prefix.
+    public func previewPosition(_ p: LinePreview) -> (position: ChessPosition, last: Move)? {
+        var pos = position
+        var last: Move?
+        for uci in p.uci.prefix(p.ply) {
+            guard let m = pos.move(forUCI: uci) else { return nil }
+            last = m
+            pos = pos.makeMove(m)
+        }
+        guard let l = last else { return nil }
+        return (pos, l)
+    }
 
     /// The same rows, from a snapshot alone.
     ///
@@ -264,7 +385,8 @@ public final class AnalysisSession {
                                  uci: first?.uci ?? "",
                                  from: first?.from ?? -1,
                                  to: first?.to ?? -1,
-                                 depth: line.depth))
+                                 depth: line.depth,
+                                 pvUCI: line.pv.map(\.uci)))
         }
         return out
     }

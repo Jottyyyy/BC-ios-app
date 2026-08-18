@@ -184,25 +184,89 @@ var BiyaAnalysisMetrics = (function () {
     stripMaxHeight: 44, stripPaddingH: 8, stripPaddingV: 6, stripGap: 2,
     panelsMaxHeight: 230, panelsPaddingH: 8,
     enginePaddingH: 6, enginePaddingTop: 3, enginePaddingBottom: 4,
+    // What the engine band typically occupies, for the budget below. Not a height — the panel is
+    // content-sized and claims the leftover itself. Was 60, for three single-line rows of 9-10pt
+    // type; at 13pt with the continuation allowed to wrap it is ~102.
+    engineStripEstimate: 102,
+    // The opening book when there IS one — a single row of chips, not the 230pt panel it used to
+    // be. Zero when out of book: the strip is simply not built.
+    bookStripHeight: 44, bookChipGap: 5,
+    engineMaxRows: 5, engineLineLimit: 2,
     // Move-strip tokens and branch chips — real values (movesStripMove, altChip).
     tokenPaddingH: 5, tokenPaddingV: 2, tokenRadius: 3, chipPaddingH: 8, chipPaddingV: 4,
     // Engine rows — real values (engineChipEval.width, engineLineRow).
-    engineEvalWidth: 36, engineRowGap: 4, engineRowPaddingV: 1, engineRowPaddingH: 2,
+    // DEVIATION on engineEvalWidth: source 36, sized for the 9pt eval it used to hold. At 13pt a
+    // mate score (M-3) or a two-digit eval (+10.5) clips, so the column grows with the type.
+    engineEvalWidth: 44, engineRowGap: 4, engineRowPaddingV: 1, engineRowPaddingH: 2,
     // Chrome this port introduces (the ECO panel and the branch picker replace a network panel and
     // a native modal). Small, local, and asserted so they cannot drift between the two languages.
     toolGap: 2, statusLineLimit: 2, singleLine: 1,
     rowGap: 3, rowSpacing: 6, rowPaddingH: 8, rowPaddingV: 5,
-    bookSanWidth: 46, engineSanWidth: 38,
+    // engineSanWidth grown with the type too — O-O-O and Qxd5+ are five glyphs.
+    bookSanWidth: 46, engineSanWidth: 46,
+    // The line-preview bar, which takes the STATUS LINE's row while an engine line is being walked
+    // — so it borrows that row's paddings and minimum height and the band never jumps. Only the gap
+    // and the two action buttons are its own.
+    previewGap: 4, previewBtnPaddingH: 7, previewBtnPaddingV: 3, previewBtnRadius: 5,
     scrimOpacity: 0.55, sheetPadding: 10, sheetRadius: 12, sheetMaxWidth: 280
   };
 
-  /** Bands are (fixed, flexible) pairs: the panels band gives way first, then the board. */
-  function bandLayout(viewportHeight, boardEdge) {
-    var fixed = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight + 60; // + engine strip
+  /**
+   * Bands are (fixed, flexible) pairs: the panels band gives way first, then the board.
+   *
+   * The book strip counts as fixed now. It used to be the flexible band — a 230px ceiling on a
+   * scrolling box, so it drew 230px to hold one line of "out of book" text while the engine rows
+   * were squeezed to 9px beneath it. It is 44px with a book and NOTHING without one; the engine
+   * panel claims the slack it used to hoard.
+   *
+   * `panels` is the EDIT-mode panel's budget now — the only thing still using that container.
+   */
+  function bandLayout(viewportHeight, boardEdge, inBook) {
+    var book = (inBook === false) ? 0 : BANDS.bookStripHeight;
+    var fixed = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
+      + BANDS.engineStripEstimate + book;
     var board = Math.min(boardEdge, Math.max(0, viewportHeight - fixed));
     var panels = Math.max(0, Math.min(BANDS.panelsMaxHeight, viewportHeight - fixed - board));
     return { fixed: fixed, board: board, panels: panels,
              total: fixed + board + panels, fits: fixed + board + panels <= viewportHeight };
+  }
+
+  /** Nunito's line height — what the rest of the app measures with; the mono face is close enough. */
+  var ENGINE_LINE_RATIO = 1.364;
+
+  /** Everything in the engine panel that is NOT a row: micro bar + margin, info row, padding. */
+  function engineChromeHeight() {
+    return EVAL_BAR.microHeight + EVAL_BAR.microMarginBottom
+      + TYPE.engineDepth * ENGINE_LINE_RATIO + BANDS.chipPaddingV * 2
+      + BANDS.enginePaddingTop + BANDS.enginePaddingBottom;
+  }
+  function engineRowHeight(lines) {
+    return lines * TYPE.enginePv * ENGINE_LINE_RATIO + BANDS.rowGap;
+  }
+  /** How many rows of `lines` lines each survive in `available` pixels. */
+  function engineRowsThatFit(available, lines) {
+    var perRow = engineRowHeight(lines);
+    if (perRow <= 0) return 0;
+    return Math.max(0, Math.floor((available - engineChromeHeight()) / perRow));
+  }
+  /**
+   * How many rows to draw, and how many lines each may wrap to.
+   *
+   * **Rows beat wrapping.** On a 375x667 SE three wrapped rows need 113px in a 61px band and the
+   * clip would hide one and a half of them; three SINGLE-line rows fit exactly. Seeing every move
+   * the engine considered, each truncated, beats seeing one and a half in full.
+   *
+   * A budget, not a measurement, so it can be a pixel or two out. That is safe: `.an-rows` clips, so
+   * a wrong answer costs a hidden row, never an overdrawn move strip.
+   */
+  function enginePlan(available, wanted) {
+    var want = Math.max(0, Math.min(wanted, BANDS.engineMaxRows));
+    if (!want) return { rows: 0, lines: BANDS.engineLineLimit };
+    if (engineRowsThatFit(available, BANDS.engineLineLimit) >= want) {
+      return { rows: want, lines: BANDS.engineLineLimit };
+    }
+    var single = engineRowsThatFit(available, 1);
+    return { rows: Math.max(1, Math.min(single, want)), lines: 1 };
   }
 
   // ---- Eval bar (spec 7.2) ---------------------------------------------------
@@ -560,8 +624,15 @@ var BiyaAnalysisMetrics = (function () {
     toolBtn: 20, navBtn: 18,
     autoplayBar: 12,
     stripNum: 12, stripMove: 13, altChip: 12,
-    engineEval: 9, engineSan: 10, enginePv: 9, engineText: 9,
-    engineDepth: 8, engineOpening: 9,
+    // DEVIATION — the engine panel is drawn at the MOVE STRIP's size (13), not the source's
+    // 9/10/8. The ported values are real and also unreadable on a real phone; the client asked for
+    // "kasing laki ng chess notation". The SOURCE values are still asserted, inverted, in
+    // selfTestSource, so the divergence stays visible and an accidental drift is still caught.
+    engineEval: 13, engineSan: 13, enginePv: 13, engineText: 13,
+    engineDepth: 11, engineOpening: 12,
+    // The line-preview bar. Its plies read at the move strip's size because it IS a move strip —
+    // for a line nobody has played yet. Its two action buttons take the branch-chip size.
+    previewPly: 13, previewBtn: 12,
     // Phase 11 — the annotation picker and the sidebar's own scale.
     annotationPickerTitle: 16, annotationSymbol: 20, annotationLabel: 10, annotationSection: 11
   };
@@ -728,6 +799,56 @@ var BiyaAnalysisMetrics = (function () {
       expect(w - boardSize(w, 3) < 8 / 3 + 1e-9, 'the board is edge-to-edge at ' + w + ' (snap only)');
     });
 
+    // 10c. The book strip costs height only when there IS a book.
+    var inBook = bandLayout(667, boardSize(375, 3), true);
+    var outOfBook = bandLayout(667, boardSize(375, 3), false);
+    expect(outOfBook.fixed === inBook.fixed - BANDS.bookStripHeight,
+      'out of book the strip costs nothing at all — it is not built, not emptied');
+    expect(outOfBook.board >= inBook.board,
+      'and the height it gives back goes to the board first on a short screen');
+    expect(BANDS.bookStripHeight * 4 < BANDS.panelsMaxHeight,
+      'the strip is a fraction of the 230pt panel it replaced (' + BANDS.bookStripHeight + ')');
+
+    // 10d. How much engine panel actually fits, per phone.
+    //
+    // The panel is the flexible band, so it can never overflow — the rows box CLIPS, and rows that
+    // do not fit are simply not drawn (`.an-rows`, and `rowsBox` in the Swift). These pin how many
+    // survive, which differs by device: a 375x667 SE spends 56% of its height on the board alone,
+    // so it gets fewer rows than a Pro Max. That is a fact about the screen, not something to
+    // assert away. Mirrors AnalysisMetricsCheck.swift §10d.
+    function engineRowsThatFit(available, lines) {
+      var lineH = TYPE.enginePv * 1.35;
+      var chrome = EVAL_BAR.microHeight + EVAL_BAR.microMarginBottom
+        + TYPE.engineDepth * 1.35 + BANDS.chipPaddingV * 2
+        + BANDS.enginePaddingTop + BANDS.enginePaddingBottom;
+      var perRow = lines * lineH + BANDS.rowGap;
+      if (perRow <= 0) return 0;
+      return Math.max(0, Math.floor((available - chrome) / perRow));
+    }
+    [[375, 667, 3, 1], [390, 844, 5, 3], [430, 932, 5, 5]].forEach(function (d) {
+      var edge = boardSize(d[0], 3);
+      var fixedNoEngine = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
+        + BANDS.bookStripHeight;
+      var available = d[1] - fixedNoEngine - edge;
+      expect(available > 0, 'there is room for an engine panel at ' + d[0] + 'x' + d[1]);
+      expect(engineRowsThatFit(available, 1) >= d[2],
+        'at ' + d[0] + 'x' + d[1] + ', in book, at least ' + d[2] + ' single-line engine rows fit '
+        + '(got ' + engineRowsThatFit(available, 1) + ')');
+      expect(engineRowsThatFit(available, BANDS.engineLineLimit) >= d[3],
+        'and at least ' + d[3] + ' WRAPPED rows (got '
+        + engineRowsThatFit(available, BANDS.engineLineLimit) + ')');
+    });
+    var seEdge = boardSize(375, 3);
+    var seFixedNoEngine = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
+      + BANDS.bookStripHeight;
+    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge, 1) >= ENGINE_LIMITS.multiPV,
+      'even a 375x667 SE shows every line the DEFAULT preset produces');
+    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge + BANDS.bookStripHeight, 1)
+      > engineRowsThatFit(667 - seFixedNoEngine - seEdge, 1),
+      'dropping the book strip buys the SE at least one more engine row');
+    expect(BANDS.engineMaxRows >= ENGINE_LIMITS.multiPV,
+      'and the row cap never hides a line the default preset produced');
+
     // 11. Timings.
     expect(TIMINGS.analysisDebounce === 300, 'analysis debounce is 300ms');
     expect(TIMINGS.draftAutosave === 800, 'draft autosave is 800ms');
@@ -815,6 +936,19 @@ var BiyaAnalysisMetrics = (function () {
     function expect(cond, what) { cond ? passed++ : failures.push(what); }
     var S = src.stylesheets.styles;
 
+    /**
+     * A value we DELIBERATELY do not take from the source. Both halves are asserted: the source
+     * still holds what it always held (so an extraction change is still caught), and ours differs
+     * in the intended direction. Same shape as the ⩲/⩱ correction below — a deviation is declared,
+     * never smuggled by deleting the assertion.
+     */
+    function deviates(styleKey, prop, mine, source, why) {
+      var real = S[styleKey] ? S[styleKey][prop] : undefined;
+      expect(real === source, styleKey + '.' + prop + ': the RN source should still be ' + source
+        + ', got ' + real + ' — if the source really changed, revisit the deviation');
+      expect(mine > real, styleKey + '.' + prop + ': ' + why + ' (' + mine + ' > ' + real + ')');
+    }
+
     function same(styleKey, prop, mine, label) {
       var real = S[styleKey] ? S[styleKey][prop] : undefined;
       expect(real === mine, (label || styleKey + '.' + prop) + ': encoded ' + mine + ' != source ' + real);
@@ -857,12 +991,23 @@ var BiyaAnalysisMetrics = (function () {
     same('movesStripNum', 'fontSize', TYPE.stripNum);
     same('movesStripMove', 'fontSize', TYPE.stripMove);
     same('altChipText', 'fontSize', TYPE.altChip);
-    same('engineChipEval', 'fontSize', TYPE.engineEval);
-    same('engineChipSan', 'fontSize', TYPE.engineSan);
-    same('engineLinePv', 'fontSize', TYPE.enginePv);
-    same('engineLineText', 'fontSize', TYPE.engineText);
-    same('engineDepthChip', 'fontSize', TYPE.engineDepth);
-    same('engineOpeningChip', 'fontSize', TYPE.engineOpening);
+    // DEVIATION — the engine panel is drawn at the move strip's size. The ported 9/10/8 are real
+    // and also unreadable on a real phone; see PORTING_NOTES.md.
+    var BIGGER = 'deliberately drawn larger than the source, to match the move strip';
+    deviates('engineChipEval', 'fontSize', TYPE.engineEval, 9, BIGGER);
+    deviates('engineChipSan', 'fontSize', TYPE.engineSan, 10, BIGGER);
+    deviates('engineLinePv', 'fontSize', TYPE.enginePv, 9, BIGGER);
+    deviates('engineLineText', 'fontSize', TYPE.engineText, 9, BIGGER);
+    deviates('engineDepthChip', 'fontSize', TYPE.engineDepth, 8, BIGGER);
+    deviates('engineOpeningChip', 'fontSize', TYPE.engineOpening, 9, BIGGER);
+    // …and the direction is not merely "bigger", it is exactly the notation's size, which is the
+    // thing that was actually asked for. Derived in Swift, asserted here.
+    ['engineEval', 'engineSan', 'enginePv', 'engineText'].forEach(function (k) {
+      expect(TYPE[k] === TYPE.stripMove,
+        'TYPE.' + k + ' matches the move strip (' + TYPE[k] + ' vs ' + TYPE.stripMove + ')');
+    });
+    expect(TYPE.engineOpening === TYPE.altChip, 'the opening name matches the branch chips');
+    expect(TYPE.engineDepth < TYPE.enginePv, 'the depth chip stays quieter than the moves');
 
     // Token, chip and engine-row geometry — also real StyleSheet values, not invented ones
     same('movesStripMove', 'paddingHorizontal', BANDS.tokenPaddingH);
@@ -870,7 +1015,8 @@ var BiyaAnalysisMetrics = (function () {
     same('movesStripMove', 'borderRadius', BANDS.tokenRadius);
     same('altChip', 'paddingHorizontal', BANDS.chipPaddingH);
     same('altChip', 'paddingVertical', BANDS.chipPaddingV);
-    same('engineChipEval', 'width', BANDS.engineEvalWidth);
+    deviates('engineChipEval', 'width', BANDS.engineEvalWidth, 36,
+             'widened with the type, or a mate score clips');
     same('engineLineRow', 'gap', BANDS.engineRowGap);
     same('engineLineRow', 'paddingVertical', BANDS.engineRowPaddingV);
     same('engineLineRow', 'paddingHorizontal', BANDS.engineRowPaddingH);
@@ -1339,6 +1485,8 @@ var BiyaAnalysisMetrics = (function () {
     ARROW: ARROW, ARROW_COLORS: ARROW_COLORS, arrowGeometry: arrowGeometry, arrowColor: arrowColor,
     BADGE: BADGE, badgeGeometry: badgeGeometry,
     BANDS: BANDS, bandLayout: bandLayout,
+    engineRowsThatFit: engineRowsThatFit, enginePlan: enginePlan,
+    engineRowHeight: engineRowHeight, engineChromeHeight: engineChromeHeight,
     EVAL_BAR: EVAL_BAR, EVAL_CLAMP: EVAL_CLAMP, evalBarFraction: evalBarFraction,
     GRAPH: GRAPH, graphPoint: graphPoint,
     CLASSIFICATIONS: CLASSIFICATIONS, CLASSIFICATION_ORDER: CLASSIFICATION_ORDER,

@@ -140,8 +140,13 @@ may not have — the same reasoning that commits `eco.tsv`.
 | 3b | Toolbar — 📂 · ✏️ · 💡 · 🔄 · ▶ · `⏮ ◀ ▶ ⏭` | fixed |
 | 4 | Autoplay speed bar — only while autoplaying | fixed |
 | 5 | Move strip — main line as tokens, branches inline as chips | fixed |
-| 6 | Panels — the **ECO explorer**, where the Lichess masters panel used to be | **flexible, ≤230 — the only one** |
-| 7 | Engine lines — **3pt** micro bar · ≤3 rows · depth + eval symbol + opening | fixed |
+| 6 | Opening book — one **strip of `san · eco` chips**, and nothing at all out of book | fixed 44, or **0** |
+| 7 | Engine lines — **3pt** micro bar · ≤5 rows at the move strip's size · depth + eval symbol + opening | **flexible — the only one** |
+
+Bands 3a and 6 both have a second face. While an engine line is being *previewed* the status line is
+replaced by the **preview bar** (`◀ Qxd5 O-O Nf6 d4 ▶ ✕ ＋`), built from the same paddings so the row
+never changes height. Band 6 is `.an-panels` in edit mode — Setup Position renders into the container
+the book panel used to own — and the book strip is hidden.
 
 Two things reading the source corrected:
 
@@ -180,6 +185,67 @@ calling it; both do now. `sizeBands()` publishes `--an-board-edge` and `--an-pan
 On a 375×667 SE the board *is* capped — and the assertions pin that the **panels** band is what gave
 way, not the board.
 
+#### The flexible band moved to the engine panel
+
+Client feedback on a TestFlight build: the opening-book box was a quarter of the screen holding one
+line of grey "out of book" text, while the engine lines underneath were 9 pt.
+
+That was the **layout**, not the styling. `AnalysisOpeningPanel` was a `ScrollView` inside
+`.frame(maxHeight: 230)` inside `.frame(maxHeight: .infinity)`. A scrolling view is greedy along its
+axis, so it drew all 230 pt whatever it contained — *and*, being the root `VStack`'s only flexible
+child, it also claimed every spare pixel. The band people actually read was content-sized at the
+bottom.
+
+So the flex moved. The book is a 44 pt strip of chips, built only when `bookRows` is non-empty, and
+**the engine panel is the flexible child now** — `.frame(maxHeight: .infinity, alignment: .bottom)`
+placed *after* `.background`, so the panel claims the band without painting it and its rows stay
+pinned to the bottom rather than floating in the slack. In CSS that is
+`flex: 1 1 auto; min-height: 0; justify-content: flex-end`.
+
+There must be **exactly one** flexible child, and that is now checked in both languages:
+
+- delete it and SwiftUI's `.frame(width:height:)` centres the whole column, opening a navy gap above
+  the header — `swift_layout_check.js` rule 4b;
+- add a second and they fight over the slack, and a fixed band can be squeezed to nothing while its
+  content paints over its neighbours — `board_layout_check.js` §3b pins `flex: none` on every other
+  band of `.an-view`.
+
+Neither check stands in for the other: the two renderers degrade *differently* when the flexible
+child goes missing (flex leaves the gap at the bottom, SwiftUI centres), which is exactly why both
+need pinning.
+
+#### On a short screen the rows are DROPPED, not squashed — and rows beat wrapping
+
+Making the engine panel flexible exposed the next thing. Flex shrinks a child while its *text* keeps
+its own height, so on a 375-wide phone three wrapped rows (113 pt of content) were squeezed into a
+61 pt band and the overflow painted straight over the move strip. Measured in the browser, not
+guessed — `scrollHeight` on the panel did not show it, because the overflowing content belonged to
+children that had themselves been shrunk.
+
+Two changes, both symmetric across the languages:
+
+1. **The rows are their own clipped box** — `.an-rows { flex: 0 1 auto; min-height: 0; overflow:
+   hidden }`, and `rowsBox` with `.clipped()` in SwiftUI. Rows keep their natural height (`.an-erow
+   { flex: none }`) and the box clips from the *bottom*, so the third line is lost before the first.
+   The info row sits outside it, because the depth chip has to survive a short screen.
+2. **`AnalysisLayout.enginePlan(available:wanted:)`** decides how many rows to draw and whether they
+   may wrap. **Rows beat wrapping**: three single-line rows fit an SE where three wrapped rows do
+   not, and seeing every move the engine considered — each truncated — beats seeing one and a half
+   in full.
+
+The plan is a *budget*, not a measurement, so it may be a point or two out; the clip is what makes
+that safe. A wrong answer costs a hidden row, never an overdrawn strip.
+
+The two renderers obtain the input differently and that is fine: the browser **measures** the other
+bands (they are all `flex: none`, so summing their heights is exact), while SwiftUI computes it from
+`engineAvailable(viewportHeight:edge:inBook:autoplaying:)` because it has no DOM. What they must
+agree on is the *decision*, and that is one shared pure function, asserted in both metrics suites.
+
+⚠ `bands()`' `fixed` predates the second status row and omits `statusLineMinHeight`;
+`fixedWithoutEngine` is the honest total and is what the plan uses. Measured on an iPhone 15
+Pro Max: header 36 + board 405 + status line 36 + toolbar 38 + strip 44 = 559 of 814, leaving 255 for
+the engine — three wrapped rows with room to spare.
+
 ### The status line has its own row
 
 Band 3 is split. The source puts the status text and the toolbar on one `statusToolbarRow`, which
@@ -203,6 +269,7 @@ Everything the board *does* is a pure function of state, so it lives in **Core**
 | `stripTokens` | `board.tsx:3049-3120` |
 | `isStale` · `wantsAnalysis` | the restart policy (see below) |
 | `evalParts` | the raw score; the UI maps it through the metrics tables |
+| `LinePreview` · `canPreview` · `previewPosition` | new — see below |
 
 That split is the point. `ParityRunner`'s `analysis_session` group (95 assertions) and
 `analysis.js`'s self-test (91) assert the same behaviour in both languages, so the only thing left
@@ -214,6 +281,33 @@ publishes numbers; each platform maps them with the same table.
 
 `AnalysisSession` is **not `Sendable`** — it owns a `MoveTree`, a reference graph. It stays
 `@MainActor`, and only `ChessPosition` / `SearchLimits` / `AnalysisSnapshot` cross to the background.
+
+### Tap a line to play it out
+
+Tapping an engine row used to commit its **first move** to the tree and nothing else, so you could
+never see the variation the engine was actually recommending. Now the whole line walks on the board
+and the tree is not touched until you ask.
+
+`LinePreview` is a pure value type: `start(_ row:)`, `stepped(_:)`, `jumped(to:)`, `tokens`,
+`canStepForward`, `movesToCommit`. Two asymmetries are deliberate and asserted:
+
+- `stepped` returning **nil means leave the preview** — that is what `◀` at ply 1 does. Stepping past
+  the *end* is a no-op instead, because there is somewhere to go back to and nowhere to go forward.
+- `jumped(to:)` out of range is always a no-op, never an exit.
+
+It holds **UCI strings**, not `Move`s, because that is what `EngineRow` carries across the Core
+boundary — and re-resolving each one against the position it is played from *is* the staleness check:
+a snapshot can outlive its position, and such a line refuses both to start (`canPreview`) and to walk
+(`previewPosition`). `sans` and `uci` are trimmed to a common length at `start`, so a ply you cannot
+label is a ply you cannot step to.
+
+Only the **board** shows the previewed position. The strip, the engine rows, the book and the eval
+still describe the real cursor, because nothing has been played; the arrows are cleared, and the
+board refuses drags. Any navigation ends the preview — in both languages that is one line in the
+navigation funnel (`afterNavigation` / `afterMove`), not a guard scattered across ten call sites.
+
+`＋` commits `movesToCommit` through the ordinary `perform`/`play` path, so `MoveTree` branches and
+the strip draws branch chips with nothing new downstream.
 
 ## Threading and the engine budget
 
@@ -269,6 +363,51 @@ exceeds the budget (reporting the breach in dropped frames), and
 `tools/qa/worker_protocol_check.js` drives the worker's real message protocol in a fake worker scope
 — necessary because a worker bug is invisible from `file://`, invisible in Node, and *not* caught by
 the host's fallback, which only fires when construction throws.
+
+### Longer lines, without a longer think
+
+*"Damihan mo pa moves."* A principal variation can never be longer than the search was deep — the
+recursion stops writing to `line` at depth 0 and quiescence never writes to it at all — so at the
+default 1.2 s preset every line was exactly the six plies the panel showed. Raising
+`AnalysisSession.pvPreview` (6 → 12) removes the *display* cap but produces nothing on its own, and
+the user's choice was explicitly "no extra battery".
+
+Two mechanisms, in that order, both bounded:
+
+1. **`Search.extendPV`** walks the transposition table forward from the PV's end. Free — a handful of
+   lookups, no search. It is also *nearly useless on its own*, which is worth stating rather than
+   discovering later: the PV's last position was reached at depth 0 and handed to quiescence, which
+   stores no move, so the walk usually breaks on its first probe. Measured over four positions at
+   depth 6 it lengthened **one line in twelve**. It stays because a transposition does sometimes hand
+   back a free ply.
+2. **`Search.extendTail`** is what actually delivers. One shallow search from the leaf produces a real
+   continuation; its PV is appended and the probe repeats. Lines reach 10–14 plies where they used to
+   stop at 6.
+
+The bounds are what keep "think time unchanged" close to true. It runs on the **final** snapshot
+only, never once per iteration; only for the lines that will be drawn; `extendProbeDepth = 2` plies a
+probe; `extendProbeNodes = 4000` per line; `pvExtendLimit = 14` plies total. Depths 2, 3 and 4 all
+reach the limit — measured total search time was +21%/+6%/+5%, +66%/+21%/+9% and +99%/+31%/+13% over
+three positions, so the deeper probe buys nothing visible. Every appended move is legality-checked
+(the table is keyed on 32/64 bits and a collision returns a move from a different position) and
+de-duplicated against the line's own positions (a table of exact scores will walk a cycle forever).
+
+Two details the browser forced, and the Swift kept:
+
+- The probe runs on a **scratch `Search`** — its own table, killers and history — so it cannot reach
+  the real search's state and change a score.
+- The budget is in **nodes, not milliseconds**, because the engine's contract is that the same request
+  twice returns byte-identical lines *and* an identical node count.
+
+And one the browser needed alone: on the `file://` path the extension shares the UI thread, so the
+stepper does **one line per `next()`**. Doing all three at once measured 324 ms of frozen UI, and
+shrinking the budget until that fit simply starved lines two and three — the first line ate it. A
+line per chunk gives every line the same budget and keeps the worst block at ~107 ms.
+`engine_budget_check.js` is what found all of this; the first unbounded version measured **2.9
+seconds** of frozen UI.
+
+The probe's nodes are added to the reported count. Under-reporting work the engine really did would
+make the node figure a lie and hide the cost from anyone measuring it.
 
 ### The stale-search bug we do not reproduce
 
@@ -549,14 +688,38 @@ the screen uses:
 - `AnalysisBoard` — `size(screenWidth:pixelRatio:)`, the original's
   `floor(width * ratio / 8) * 8 / ratio`, so a square is always a whole number of device pixels.
 - `AnalysisLayout` — the seven bands. **They are (fixed, flexible) pairs, not seven literals:** seven fixed
-  heights overflow a 375×667 SE, so the panels band flexes down from its 230 max and the board band absorbs
-  the slack. "The bands sum to the viewport at 375×667, 390×844 and 430×932" is an assertion, not a hope.
+  heights overflow a 375×667 SE, so the flexible band gives way and the board band absorbs the slack.
+  "The bands sum to the viewport at 375×667, 390×844 and 430×932" is an assertion, not a hope.
+  `bands(viewportHeight:boardEdge:inBook:)` takes the book into account, because a strip that is
+  sometimes 44 and sometimes 0 changes the budget.
 - `AnalysisPalette`, `BoardTheme`, `BoardStyle`, `AnalysisIndicator` — colours and square fills.
 - `AnalysisArrow`, `AnalysisBadge` — pure geometry, returning points a renderer just draws.
 - `AnalysisEval`, `AnalysisGraph`, `AnalysisTables` — the eval bar/graph and the classification,
   annotation, eval-symbol and autoplay-speed tables.
 - `AnalysisTiming` — debounce 300 ms, autosave 800 ms, animation 400 ms, double-tap 350 ms. (`400` appears
   six more times in the source as `delayLongPress`; a bare grep would conflate the two.)
+
+### The engine panel is drawn larger than the source — declared, not smuggled
+
+The source draws the engine rows at 9/10/8 pt (`board.tsx`, pinned by `board_styles.json`). On a real
+phone the client could not read them: *"lakihan mo kasing laki ng chess notation"*. So they are drawn
+at the **move strip's** size instead — and derived from it (`engineEval = stripMove`), not re-typed,
+so "the same size as the notation" is true by construction.
+
+| cell | source | drawn |
+|---|---|---|
+| eval `−2.6` (`engineEval`) | 9 | **13** = `stripMove` |
+| best move `Qxd5` (`engineSan`) | 10 | **13** = `stripMove` |
+| continuation (`enginePv`) | 9 | **13** = `stripMove` |
+| `engineText` | 9 | **13** = `stripMove` |
+| opening name (`engineOpening`) | 9 | **12** = `altChip` |
+| depth chip `d:6` (`engineDepth`) | 8 | **11** — a chip as large as the moves would out-shout them |
+
+The source assertions are **not deleted, they are inverted** — the ⩲/⩱ precedent. `deviates(key, prop,
+ours, source, why)` asserts that the RN source still holds its value *and* that ours differs in the
+intended direction, so the divergence stays visible and an accidental drift is still caught. Column
+widths (`engineEvalWidth` 36→44, `engineSanWidth` 38→46) grew with the type, for the same reason and
+by the same mechanism: at 13 pt, `M-3` and `O-O-O` clip.
 
 **No numeric literal or arithmetic belongs in a view body.** Every number is a stored property or a pure
 function here. That rule is the only reason the layout can be asserted without a renderer — break it and

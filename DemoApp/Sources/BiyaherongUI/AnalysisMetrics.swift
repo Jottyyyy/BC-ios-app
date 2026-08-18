@@ -384,6 +384,11 @@ enum AnalysisLayout {
     static let navBtnMinWidth: CGFloat = 30
 
     static let autoplayPaddingV: CGFloat = 6
+    /// The autoplay bar's whole height — one line of `autoplayBar` type between its paddings. Only
+    /// `fixedWithoutEngine` needs it; the band itself is content-sized.
+    static var autoplayBandHeight: CGFloat {
+        AnalysisType.autoplayBar * engineLineRatio + autoplayPaddingV * 2
+    }
 
     static let stripMaxHeight: CGFloat = 44
     static let stripPaddingH: CGFloat = 8
@@ -396,7 +401,24 @@ enum AnalysisLayout {
     static let enginePaddingH: CGFloat = 6
     static let enginePaddingTop: CGFloat = 3
     static let enginePaddingBottom: CGFloat = 4
-    static let engineStripEstimate: CGFloat = 60
+    /// What the engine band typically occupies, for the budget below. Not a frame — the panel is
+    /// content-sized and the `Spacer` above it absorbs the difference.
+    ///
+    /// Was 60, for three single-line rows of 9-10pt type. At the move strip's 13pt with the
+    /// continuation allowed to wrap, three rows plus the micro bar, the info row and the paddings
+    /// come to ~102: 7 (3pt bar + 4 margin) + 57 (3 × 17 + 2 gaps) + 22 (info row) + 7 (padding)
+    /// + 9 (three 3pt VStack gaps).
+    static let engineStripEstimate: CGFloat = 102
+
+    /// The opening book, when there IS one — a single row of chips, not the 230pt panel it used to
+    /// be. Zero when out of book: the strip is simply not built, which is the point.
+    static let bookStripHeight: CGFloat = 44
+    /// Rows the engine panel will draw, however many the engine produces. Five is what fits once
+    /// the book box stops eating the screen; `EngineSettings` never asks for more than five.
+    static let engineMaxRows = 5
+    /// The continuation may take a second line. At 13pt a single line fits fewer moves than the old
+    /// 9pt one did, so without this "bigger text" and "more moves" cancel out.
+    static let engineLineLimit = 2
 
     // Move-strip tokens and branch chips — real values (`movesStripMove`, `altChip`).
     static let tokenPaddingH: CGFloat = 5
@@ -408,7 +430,10 @@ enum AnalysisLayout {
     static let classMarkGap: CGFloat = 1
 
     // Engine rows — real values (`engineChipEval.width`, `engineLineRow`).
-    static let engineEvalWidth: CGFloat = 36
+    /// DEVIATION — source 36, which was sized for the 9pt eval it used to hold. At 13pt a mate
+    /// score (`M-3`) or a two-digit eval (`+10.5`) clips, so the column grows with the type. The
+    /// source value is still asserted, inverted, alongside the font sizes.
+    static let engineEvalWidth: CGFloat = 44
     static let engineRowGap: CGFloat = 4
     static let engineRowPaddingV: CGFloat = 1
     static let engineRowPaddingH: CGFloat = 2
@@ -424,11 +449,85 @@ enum AnalysisLayout {
     static let rowPaddingH: CGFloat = 8
     static let rowPaddingV: CGFloat = 5
     static let bookSanWidth: CGFloat = 46
-    static let engineSanWidth: CGFloat = 38
+    /// Between a book chip's SAN and its ECO code. The chips size to their content — a horizontal
+    /// strip has no columns to align.
+    static let bookChipGap: CGFloat = 5
+    /// Grown with the type, like `engineEvalWidth` — `O-O-O` and `Qxd5+` are five glyphs.
+    static let engineSanWidth: CGFloat = 46
+    /// The line-preview bar, which takes the STATUS LINE's row while an engine line is being walked
+    /// — so it borrows that row's paddings and minimum height and the band never jumps as it appears
+    /// and disappears. Only the gap and the two action buttons are its own.
+    static let previewGap: CGFloat = 4
+    static let previewBtnPaddingH: CGFloat = 7
+    static let previewBtnPaddingV: CGFloat = 3
+    static let previewBtnRadius: CGFloat = 5
     static let scrimOpacity: Double = 0.55
     static let sheetPadding: CGFloat = 10
     static let sheetRadius: CGFloat = 12
     static let sheetMaxWidth: CGFloat = 280
+
+    /// The board band's whole height: the top padding, the board, the gap, and the 8pt eval bar.
+    static func boardBandHeight(edge: CGFloat) -> CGFloat {
+        boardPaddingTop + edge + boardPaddingTop + AnalysisEval.mainHeight
+    }
+
+    /// Every band above the engine panel, at their real heights — including the status LINE, which
+    /// `bands()`' `fixed` omits because that constant predates the second status row.
+    static func fixedWithoutEngine(edge: CGFloat, inBook: Bool, autoplaying: Bool) -> CGFloat {
+        headerBtnHeight + boardBandHeight(edge: edge)
+            + statusLineMinHeight + statusMinHeight + stripMaxHeight
+            + (autoplaying ? autoplayBandHeight : 0)
+            + (inBook ? bookStripHeight : 0)
+    }
+
+    /// What is left for the engine panel — the band that gives way.
+    static func engineAvailable(viewportHeight: CGFloat, edge: CGFloat,
+                                inBook: Bool, autoplaying: Bool) -> CGFloat {
+        max(0, viewportHeight - fixedWithoutEngine(edge: edge, inBook: inBook,
+                                                   autoplaying: autoplaying))
+    }
+
+    /// The line-height the engine rows are laid out with. Nunito's, because that is what the rest of
+    /// this app measures with and the mono face is close enough for a budget.
+    static let engineLineRatio: CGFloat = HomeType.nunitoLineHeightRatio
+
+    /// Everything in the engine panel that is NOT a row: the micro bar and its margin, the info row,
+    /// and the panel's own padding.
+    static var engineChromeHeight: CGFloat {
+        AnalysisEval.microHeight + AnalysisEval.microMarginBottom
+            + AnalysisType.engineDepth * engineLineRatio + chipPaddingV * 2
+            + enginePaddingTop + enginePaddingBottom
+    }
+
+    static func engineRowHeight(lines: Int) -> CGFloat {
+        CGFloat(lines) * AnalysisType.enginePv * engineLineRatio + rowGap
+    }
+
+    /// How many rows of `lines` lines each survive in `available` points.
+    static func engineRowsThatFit(available: CGFloat, lines: Int) -> Int {
+        let perRow = engineRowHeight(lines: lines)
+        guard perRow > 0 else { return 0 }
+        return max(0, Int((available - engineChromeHeight) / perRow))
+    }
+
+    /// How many rows to draw, and how many lines each may wrap to.
+    ///
+    /// **Rows beat wrapping.** On a 375x667 SE five wrapped rows need 113pt in a 61pt band, and the
+    /// clip would hide two and a half of them; three SINGLE-line rows fit exactly. Seeing every move
+    /// the engine considered, each truncated, beats seeing one and a half in full — and the client
+    /// asked for more moves, not for longer ones at the cost of the other lines.
+    ///
+    /// This is a budget, not a measurement, so it can be a point or two out. That is safe: the rows
+    /// box clips, so a wrong answer costs a hidden row, never an overdrawn strip.
+    static func enginePlan(available: CGFloat, wanted: Int) -> (rows: Int, lines: Int) {
+        let want = max(0, min(wanted, engineMaxRows))
+        guard want > 0 else { return (0, engineLineLimit) }
+        if engineRowsThatFit(available: available, lines: engineLineLimit) >= want {
+            return (want, engineLineLimit)
+        }
+        let single = engineRowsThatFit(available: available, lines: 1)
+        return (max(1, min(single, want)), 1)
+    }
 
     struct Bands: Equatable {
         var fixed: CGFloat
@@ -440,8 +539,17 @@ enum AnalysisLayout {
 
     /// DEVIATION: the spec lists seven literal band heights, which overflow a 375×667 screen. The
     /// fixed bands keep their source values; the panels band gives way first, then the board.
-    static func bands(viewportHeight: CGFloat, boardEdge: CGFloat) -> Bands {
-        let fixed = headerBtnHeight + statusMinHeight + stripMaxHeight + engineStripEstimate
+    ///
+    /// The book strip counts as fixed now. It used to be the flexible band — a 230pt ceiling on a
+    /// greedy `ScrollView`, so it drew a 230pt box to hold one line of "out of book" text while the
+    /// engine rows were squeezed to 9pt beneath it. It is 44pt when there is a book and **nothing at
+    /// all** when there is not; the slack it used to hoard now belongs to a `Spacer` above the
+    /// engine panel, which lets that panel grow into whatever it needs.
+    ///
+    /// `panels` is the EDIT-mode panel's budget now — the only thing still using that container.
+    static func bands(viewportHeight: CGFloat, boardEdge: CGFloat, inBook: Bool = true) -> Bands {
+        let book = inBook ? bookStripHeight : 0
+        let fixed = headerBtnHeight + statusMinHeight + stripMaxHeight + engineStripEstimate + book
         let board = min(boardEdge, max(0, viewportHeight - fixed))
         let panels = max(0, min(panelsMaxHeight, viewportHeight - fixed - board))
         return Bands(fixed: fixed, board: board, panels: panels)
@@ -1125,12 +1233,27 @@ enum AnalysisType {
     static let stripNum: CGFloat = 12
     static let stripMove: CGFloat = 13
     static let altChip: CGFloat = 12
-    static let engineEval: CGFloat = 9
-    static let engineSan: CGFloat = 10
-    static let enginePv: CGFloat = 9
-    static let engineText: CGFloat = 9
-    static let engineDepth: CGFloat = 8
-    static let engineOpening: CGFloat = 9
+    // DEVIATION — the engine panel is drawn at the MOVE STRIP's size, not the source's 9/10/8.
+    //
+    // The source values are real and were ported faithfully; they are also unreadable on a real
+    // phone. The screenshot that prompted this shows three rows of 9pt mono under a 13pt move
+    // ribbon, and the client's first note was "lakihan mo kasing laki ng chess notation".
+    //
+    // Derived from `stripMove`/`altChip` rather than re-typed, so "the same size as the notation"
+    // is true by construction and cannot drift apart later. The SOURCE values are still asserted —
+    // inverted — in `AnalysisMetricsCheck` §12 and `analysis-metrics.js`'s `selfTestSource`, so the
+    // divergence stays visible and an ACCIDENTAL drift is still caught. See PORTING_NOTES.md.
+    static let engineEval: CGFloat = stripMove      // source: 9
+    static let engineSan: CGFloat = stripMove       // source: 10
+    static let enginePv: CGFloat = stripMove        // source: 9
+    static let engineText: CGFloat = stripMove      // source: 9
+    /// The one that is not a strip size: a depth chip as large as the moves would out-shout them.
+    static let engineDepth: CGFloat = 11            // source: 8
+    static let engineOpening: CGFloat = altChip     // source: 9
+    /// The line-preview bar. Its plies read at the move strip's size because it IS a move strip —
+    /// for a line nobody has played yet. Its two action buttons take the branch-chip size.
+    static let previewPly: CGFloat = stripMove
+    static let previewBtn: CGFloat = altChip
     // Phase 11 — the annotation picker's own scale.
     static let annotationPickerTitle: CGFloat = 16
     static let annotationSymbol: CGFloat = 20

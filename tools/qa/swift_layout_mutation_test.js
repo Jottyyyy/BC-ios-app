@@ -70,6 +70,29 @@ const MUTANTS = [
     why: 'the trailing Spacer removed, so the board competes for leftover height again',
   },
   {
+    id: 'analysis_root_loses_its_flexible_child',
+    file: 'AnalysisBoardScreen.swift',
+    from: '.frame(maxHeight: .infinity, alignment: .bottom)',
+    to: '.frame(maxWidth: .infinity)',
+    why: 'the engine panel stops claiming the leftover height, so the root frame centres the '
+      + 'whole column and a navy gap opens above the header',
+  },
+  {
+    id: 'engine_rows_overdraw_the_strip',
+    file: 'AnalysisBoardScreen.swift',
+    from: '.clipped()',
+    to: '',
+    why: 'the rows box unclipped, so on a short screen the rows that do not fit paint over the '
+      + 'move strip above',
+  },
+  {
+    id: 'book_strip_drawn_unconditionally',
+    file: 'AnalysisBoardScreen.swift',
+    from: 'if !vm.bookRows.isEmpty {',
+    to: 'if true {',
+    why: 'the empty opening-book box back again — the whole point of the change',
+  },
+  {
     id: 'tab_bar_shown_on_pushed_routes',
     file: 'PhoneView.swift',
     from: 'if !puzzlePushed { PhoneTabBar(tab: $tab) }',

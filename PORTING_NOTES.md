@@ -1572,3 +1572,178 @@ It archives with `CODE_SIGNING_ALLOWED=NO`, so there is no App ID with In-App Pu
 permanently, which is why that card is a first-class state in both languages and reachable in the
 browser with `?storefail`. `ios-testflight` is the only real store test path. Nothing in
 `codemagic.yaml` runs any test suite, so every gate in this feature is local.
+
+---
+
+## Analysis Board — client revision (2026-08-18): typography, bands, PV length, tap-to-play
+
+Four asks from a TestFlight screenshot, and what each one cost in deviations.
+
+### 1. The engine panel is drawn LARGER than the source — a declared deviation
+
+| key | source (`board_styles.json`) | drawn | derived from |
+|---|---|---|---|
+| `engineEval` | 9 | **13** | `stripMove` |
+| `engineSan` | 10 | **13** | `stripMove` |
+| `enginePv` | 9 | **13** | `stripMove` |
+| `engineText` | 9 | **13** | `stripMove` |
+| `engineOpening` | 9 | **12** | `altChip` |
+| `engineDepth` | 8 | **11** | — a depth chip as large as the moves would out-shout them |
+| `engineEvalWidth` | 36 | **44** | — `M-3` / `+10.5` clip at 13 pt |
+| `engineSanWidth` | 38 | **46** | — `O-O-O` / `Qxd5+` are five glyphs |
+
+The client's words were *"pwede ba yung text sa engine analysis lakihan mo kasing laki ng chess
+notation"*. The ported values are real and were extracted, not transcribed; they are also unreadable
+on a phone.
+
+**Mechanism: invert the assertion, never delete it** — the precedent is the ⩲/⩱ correction. A new
+`deviates(key, prop, ours, source, why)` in `AnalysisMetricsCheck.swift` and `analysis-metrics.js`
+asserts *both* halves: the RN source still holds its documented value, **and** ours differs in the
+intended direction. Delete the source half and an accidental drift stops being caught; that is the
+whole reason the helper exists rather than a bare `expect(TYPE.enginePv === 13)`.
+
+The sizes are **derived** (`static let engineEval: CGFloat = stripMove`) rather than re-typed, so
+"the same size as the notation" cannot drift apart later.
+
+⚠ The Swift half of this cannot fail on the Windows checkout — `AnalysisMetricsCheck` runs only on a
+Mac, and its constants are literals, not JSON reads. Both sides must move in the same commit or the
+JS gate stays green while a teammate's first `swift run AnalysisMetricsCheck` fails.
+
+### 2–3. The book panel became a strip, and the flexible band moved
+
+The 230 pt "out of book" box was a **layout** fault, not a styling one: a `ScrollView` is greedy along
+its axis, so `AnalysisOpeningPanel` drew its full 230 pt cap for one line of grey text — and being the
+root `VStack`'s only `maxHeight: .infinity` child, it also hoarded every spare pixel while the engine
+rows people read were content-sized at 9 pt.
+
+Deviations recorded:
+
+- **`AnalysisBookStrip` replaces `AnalysisOpeningPanel` on this screen.** Fixed `bookStripHeight = 44`,
+  a horizontal row of `san · eco` chips, **no empty state** — out of book it is not built at all. The
+  opening *name* is dropped from it; the engine panel's info row already names the opening.
+- **The engine panel is the flexible band.** `.frame(maxHeight: .infinity, alignment: .bottom)` placed
+  **after** `.background`, so it claims the band without painting it.
+- **`bands(viewportHeight:boardEdge:inBook:)`** gained the book parameter, and `engineStripEstimate`
+  went 60 → 102 (13 pt type, wrapped continuation, five rows).
+- **`panelsMaxHeight` keeps its meaning** — the *edit-mode* panel still uses that container, and
+  `AnalysisMetricsCheck`'s `se.panels < panelsMaxHeight` still has to hold. The strip got its own
+  constant rather than reusing it.
+- **`engineMaxRows = 5`**, **`engineLineLimit = 2`**. At 13 pt a one-line row fits *fewer* moves than
+  the old 9 pt one did, so without wrapping "bigger text" and "more moves" cancel out.
+
+**There must be exactly one flexible child**, and the two renderers fail *differently* when there is
+not — SwiftUI's `.frame(width:height:)` centres the whole column (a navy gap above the header), flex
+leaves the gap at the bottom. Both are now pinned: `swift_layout_check.js` rule 4b and
+`board_layout_check.js` §3b. Neither substitutes for the other.
+
+#### A short screen DROPS rows; it does not squash them
+
+Making the panel flexible exposed the next fault. Flex shrinks a child while its *text* keeps its own
+height, so on a 375-wide phone three wrapped rows (113 pt of content) were squeezed into a 61 pt band
+and the overflow painted straight over the move strip. It was **measured in the browser, not
+predicted** — `scrollHeight` on the panel did not reveal it, because the overflowing content belonged
+to children that had themselves been shrunk.
+
+- **The rows are their own clipped box.** `.an-rows { flex: 0 1 auto; min-height: 0; overflow: hidden }`
+  and `rowsBox` + `.clipped()` in SwiftUI; `.an-erow { flex: none }` so a row is never squashed. It
+  clips from the **bottom** — the third line is lost before the first. The info row sits outside, so
+  the depth chip survives a short screen.
+- **`enginePlan(available:wanted:)` decides rows and lines.** **Rows beat wrapping**: three
+  single-line rows fit an SE where three wrapped rows do not, and seeing every move the engine
+  considered, each truncated, beats seeing one and a half in full. It is a *budget*, not a
+  measurement; the clip is what makes an approximate answer safe.
+- **The two renderers obtain the input differently, deliberately.** The browser measures the sibling
+  bands (all `flex: none`, so the sum is exact); SwiftUI computes it from
+  `engineAvailable(viewportHeight:edge:inBook:autoplaying:)` because it has no DOM. They agree on the
+  *decision* — one shared pure function, asserted in both metrics suites — not on the method.
+- **`bands()`' `fixed` is not the honest total.** It predates the second status row and omits
+  `statusLineMinHeight`, which is why the check's own §10d budget over-estimated an SE by ~50 pt and
+  cheerfully claimed three wrapped rows would fit. `fixedWithoutEngine` is the complete figure and is
+  what the plan uses. `bands()` is left alone: it governs the edit-mode panels band and its
+  assertions are pinned to that meaning.
+
+`board_layout_check.js`'s widened `--an-*` audit also caught two hardcoded column widths
+(`.an-eeval { min-width: 40px }`, `.an-esan { min-width: 38px }`) that the typography step had left
+behind — the metrics said 44/46 and the CSS said 40/38. Both now read `var(--an-eeval-w)` /
+`var(--an-esan-w)`.
+
+### 4. Longer lines — two mechanisms, and an honest account of the first
+
+`AnalysisSession.pvPreview` 6 → 12 (source: 6, `board.tsx:2827`). **On its own this changes nothing at
+the default preset**: a PV can never be longer than the search was deep, and 1.2 s reaches ~6 ply.
+That is why the screenshot read `d:6` with six moves.
+
+- **`Search.extendPV`** — walks the transposition table forward from the PV's end. Free. Also nearly
+  useless alone: the PV's last position was reached at depth 0 and handed to `quiesce`, which stores
+  no move, so the walk breaks on its first probe. **Measured: one line in twelve lengthened.** Kept,
+  because a transposition does sometimes hand back a free ply, and it is the cheap half.
+- **`Search.extendTail`** — searches shallowly from the leaf and appends the resulting PV. This is what
+  delivers: **10–14 plies** where lines used to stop at 6.
+
+Bounds, all deliberate, because the user's stated choice was *"no extra battery"*:
+
+| bound | value | why |
+|---|---|---|
+| when | the **final** snapshot only | not once per iteration |
+| which | only the lines that will be drawn | |
+| `extendProbeDepth` | 2 | 2/3/4 all reach the limit; measured +21%/+6%/+5% vs +66%/+21%/+9% vs +99%/+31%/+13% |
+| `extendProbeNodes` | 4000 **per line** | nodes not milliseconds — determinism is part of the engine's contract |
+| `pvExtendLimit` | 14 | two above `pvPreview`, so the DISPLAY cap truncates, never the engine |
+
+Net measured cost: **+5–18%** of search time. Stated plainly because it is not free, and the user
+asked for no extra battery.
+
+Two invariants the probe must hold, both asserted in both languages: every appended move is **legal**
+in the position it is played from (the table is keyed on 32/64 bits, and a collision returns a move
+from a different position), and the line never **revisits** a position (a table of exact scores will
+walk a cycle forever).
+
+Implementation deviations:
+
+- The probe runs on a **scratch `Search`** — its own table, killers and history — so it cannot reach
+  the real search's state and change a score.
+- **The browser does one line per `next()`.** `engine_budget_check.js` measures the longest
+  uninterrupted block on the in-thread (`file://`) path; the first unbounded version measured **2.9
+  seconds** of frozen UI, and doing all three lines in one chunk still measured 324 ms. Shrinking the
+  budget until that fit simply starved lines two and three — the first line ate it. Swift does the
+  same work in one pass because its search is already off the main actor; **the results are
+  identical**, which is what the twins must agree on.
+- The stepper's contract changed: `analyzeSteps` now emits extra steps at the final depth, and
+  `onProgress` fires once more with the longer lines. Three assertions were rewritten to describe
+  that rather than the old one-step-per-depth shape.
+- Probe nodes are **added to the reported count**. Under-reporting work the engine really did would
+  make the node figure a lie and hide the cost from the budget gate.
+
+### Tap an engine line to play it out (new feature, no source counterpart)
+
+`LinePreview` lives in **Core**, not the view model. It began in `AnalysisVM`; moving it made the whole
+interaction assertable by ParityRunner with no screen, which is the same trade `AnalysisMetrics` made
+for numbers and `AnalysisSession` made for state.
+
+Decisions worth recording:
+
+- **It holds UCI strings, not `Move`s.** That is what `EngineRow` carries across the Core boundary, and
+  re-resolving each one against the position it is played from *is* the staleness check — a snapshot
+  can outlive its position, and such a line refuses both to start (`canPreview`) and to walk
+  (`previewPosition`).
+- **`sans` and `uci` are trimmed to a common length** at `start`. The continuation is capped at
+  `pvPreview` SANs while `pvUCI` carries the engine's full line; a ply you cannot label is a ply you
+  should not be able to step to.
+- **The two ends are asymmetric, deliberately.** `stepped(_:)` returning `nil` means *leave the
+  preview* — that is `◀` at ply 1 — while stepping past the end is a no-op, because there is somewhere
+  to go back to and nowhere to go forward. `jumped(to:)` out of range is always a no-op, never an exit.
+- **Only the board shows the previewed position.** The strip, engine rows, book and eval still describe
+  the real cursor, because nothing has been played. Overriding in `refresh()` rather than in the view
+  keeps the board band unaware that previewing exists.
+- **Any navigation ends the preview**, as one line in each language's navigation funnel
+  (`afterNavigation` / `afterMove`) rather than a guard at ten call sites. A board **tap** exits (a tap
+  is ambiguous); a **drag** is refused outright (it is not).
+- `＋` commits `movesToCommit` through the ordinary `perform`/`play` path, so `MoveTree` branches and
+  the strip draws branch chips with nothing new downstream.
+
+`EngineRow` gained `pvUCI`, defaulted to `[]` in the initialiser. An earlier version defaulted it to
+`[uci]` when a row was hand-built; that was removed — nothing hand-builds a row any more, and it was a
+Swift-only behaviour the JS twin did not have.
+
+**Removed:** `AnalysisVM.playEngineRow` and the browser's `playUciMove`. Nothing plays just a line's
+first move now, and dead code that looks live is worse than none.

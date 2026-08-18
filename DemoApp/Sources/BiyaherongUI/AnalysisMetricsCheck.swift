@@ -221,6 +221,75 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(se.panels < AnalysisLayout.panelsMaxHeight,
            "and the PANELS band is what gave way, not the board")
 
+    // ── 10c. The book strip costs height only when there IS a book ──
+    //
+    // The client's complaint, as an assertion. The old panel drew a 230pt box to hold one line of
+    // "out of book" text; now that case costs exactly nothing, and the difference is the strip.
+    for (w, h) in [(CGFloat(375), CGFloat(667)), (390, 844), (430, 932)] {
+        let edge = AnalysisBoard.size(screenWidth: w, pixelRatio: 3)
+        let withBook = AnalysisLayout.bands(viewportHeight: h, boardEdge: edge, inBook: true)
+        let without = AnalysisLayout.bands(viewportHeight: h, boardEdge: edge, inBook: false)
+        expect(without.fixed < withBook.fixed,
+               "out of book costs less fixed height at \(Int(w))x\(Int(h))")
+        expectNear(withBook.fixed - without.fixed, AnalysisLayout.bookStripHeight,
+                   "and the difference is exactly the strip at \(Int(w))x\(Int(h))")
+        expect(without.board == withBook.board,
+               "the board does NOT grow when the book goes — it is a function of width alone")
+        expect(without.fits(h) && withBook.fits(h), "both fit at \(Int(w))x\(Int(h))")
+    }
+    // The strip is a strip, not the panel it replaced.
+    expect(AnalysisLayout.bookStripHeight < AnalysisLayout.panelsMaxHeight / 4,
+           "the book strip is a fraction of the 230pt panel it replaced "
+           + "(\(AnalysisLayout.bookStripHeight))")
+
+    // ── 10d. How much engine panel actually fits, per phone ──
+    //
+    // The panel is the flexible band, so it can never overflow — the rows box CLIPS, and rows that
+    // do not fit are simply not drawn (`rowsBox`, and `.an-rows` in the browser). These pin how many
+    // survive. Mirrored assertion-for-assertion in analysis-metrics.js §10d.
+    //
+    // `engineRowsThatFit` is the honest number, and it differs by device: a 375×667 SE spends 56%
+    // of its height on the board alone, so it gets fewer rows than a Pro Max. That is a fact about
+    // the screen, not something to assert away.
+    func engineRowsThatFit(_ available: CGFloat, lines: Int) -> Int {
+        let lineH = AnalysisType.enginePv * HomeType.nunitoLineHeightRatio
+        let chrome = AnalysisEval.microHeight + AnalysisEval.microMarginBottom
+            + AnalysisType.engineDepth * HomeType.nunitoLineHeightRatio
+            + AnalysisLayout.chipPaddingV * 2
+            + AnalysisLayout.enginePaddingTop + AnalysisLayout.enginePaddingBottom
+        let perRow = CGFloat(lines) * lineH + AnalysisLayout.rowGap
+        guard perRow > 0 else { return 0 }
+        return max(0, Int((available - chrome) / perRow))
+    }
+    for (w, h, wantSingle, wantWrapped) in [(CGFloat(375), CGFloat(667), 3, 1),
+                                            (390, 844, 5, 3),
+                                            (430, 932, 5, 5)] {
+        let edge = AnalysisBoard.size(screenWidth: w, pixelRatio: 3)
+        let fixedNoEngine = AnalysisLayout.headerBtnHeight + AnalysisLayout.statusMinHeight
+            + AnalysisLayout.stripMaxHeight + AnalysisLayout.bookStripHeight
+        let available = h - fixedNoEngine - edge
+        expect(available > 0, "there is room for an engine panel at \(Int(w))x\(Int(h))")
+        expect(engineRowsThatFit(available, lines: 1) >= wantSingle,
+               "at \(Int(w))x\(Int(h)), in book, at least \(wantSingle) single-line engine rows fit "
+               + "(got \(engineRowsThatFit(available, lines: 1)))")
+        expect(engineRowsThatFit(available, lines: AnalysisLayout.engineLineLimit) >= wantWrapped,
+               "and at least \(wantWrapped) WRAPPED rows "
+               + "(got \(engineRowsThatFit(available, lines: AnalysisLayout.engineLineLimit)))")
+    }
+    // The default preset asks for three lines, and every supported phone must show all three.
+    let seFixedNoEngine = AnalysisLayout.headerBtnHeight + AnalysisLayout.statusMinHeight
+        + AnalysisLayout.stripMaxHeight + AnalysisLayout.bookStripHeight
+    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge, lines: 1)
+           >= AnalysisEngineLimits.multiPV,
+           "even a 375x667 SE shows every line the DEFAULT preset produces")
+    // Out of book buys back a whole strip's worth of rows on the smallest screen.
+    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge + AnalysisLayout.bookStripHeight,
+                             lines: 1)
+           > engineRowsThatFit(667 - seFixedNoEngine - seEdge, lines: 1),
+           "dropping the book strip buys the SE at least one more engine row")
+    expect(AnalysisLayout.engineMaxRows >= AnalysisEngineLimits.multiPV,
+           "and the row cap never hides a line the default preset produced")
+
     // ── 11. Timings ──
     expect(AnalysisTiming.analysisDebounceMs == 300, "analysis debounce is 300ms")
     expect(AnalysisTiming.draftAutosaveMs == 800, "draft autosave is 800ms")
@@ -278,11 +347,20 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expectNear(AnalysisType.stripNum, 12, "move numbers are 12")
     expectNear(AnalysisType.stripMove, 13, "move tokens are 13")
     expectNear(AnalysisType.altChip, 12, "branch chips are 12")
-    expectNear(AnalysisType.engineEval, 9, "the engine eval column is 9")
-    expectNear(AnalysisType.engineSan, 10, "the engine SAN column is 10")
-    expectNear(AnalysisType.enginePv, 9, "the engine continuation is 9")
-    expectNear(AnalysisType.engineDepth, 8, "the depth chip is 8")
-    expectNear(AnalysisType.engineOpening, 9, "the opening chip is 9")
+    // DEVIATION — the engine panel is drawn at the MOVE STRIP's size, not the source's 9/10/8.
+    // The ported values are real and also unreadable on a phone. What is asserted here is the
+    // relationship the client actually asked for; the source values themselves are pinned, and
+    // the direction of the deviation proved, against board_styles.json in §21 below.
+    for size in [AnalysisType.engineEval, AnalysisType.engineSan,
+                 AnalysisType.enginePv, AnalysisType.engineText] {
+        expectNear(size, AnalysisType.stripMove,
+                   "every engine cell is the move strip's size (\(size) vs \(AnalysisType.stripMove))")
+    }
+    expectNear(AnalysisType.engineOpening, AnalysisType.altChip,
+               "the opening name matches the branch chips")
+    expect(AnalysisType.engineDepth < AnalysisType.enginePv,
+           "the depth chip stays quieter than the moves it annotates")
+    expectNear(AnalysisType.engineDepth, 11, "the depth chip is 11")
 
     // ── 13. Token / chip / engine-row geometry, also from the real StyleSheet ──
     expectNear(AnalysisLayout.tokenPaddingH, 5, "move tokens pad 5 horizontally")
@@ -290,7 +368,9 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expectNear(AnalysisLayout.tokenRadius, 3, "move tokens round to 3")
     expectNear(AnalysisLayout.chipPaddingH, 8, "branch chips pad 8 horizontally")
     expectNear(AnalysisLayout.chipPaddingV, 4, "branch chips pad 4 vertically")
-    expectNear(AnalysisLayout.engineEvalWidth, 36, "the engine eval column is 36 wide")
+    expectNear(AnalysisLayout.engineEvalWidth, 44, "the engine eval column is 44 wide (source 36)")
+    expect(AnalysisLayout.engineSanWidth >= AnalysisLayout.engineEvalWidth,
+           "the SAN column is at least as wide as the eval one — O-O-O is five glyphs")
     expectNear(AnalysisLayout.engineRowGap, 4, "engine rows gap 4")
     expect(AnalysisLayout.statusLineLimit == 2, "the status line wraps to two lines")
     expect(AnalysisLayout.singleLine == 1, "single-line labels truncate at one")
@@ -400,6 +480,29 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
         expect(real != nil && near(real!, mine),
                "\(label ?? "\(key).\(prop)"): encoded \(mine) != source \(real.map { "\($0)" } ?? "missing")")
     }
+
+    /// A value we DELIBERATELY do not take from the source. Both halves are asserted: the source
+    /// still holds what it always held — so a change in the extraction is still caught — and ours
+    /// differs in the intended direction. Same shape as the ⩲/⩱ correction further down: a
+    /// deviation is declared, never smuggled by deleting the assertion.
+    func deviates(_ key: String, _ prop: String, _ mine: CGFloat, _ source: CGFloat, _ why: String) {
+        let real = sourceNumber(key, prop)
+        expect(real != nil && near(real!, source),
+               "\(key).\(prop): the RN source should still be \(source), got "
+               + "\(real.map { "\($0)" } ?? "missing") — if it really changed, revisit the deviation")
+        expect(real != nil && mine > real!, "\(key).\(prop): \(why) (\(mine) > \(source))")
+    }
+
+    // DEVIATION — the engine panel is drawn at the move strip's size. See PORTING_NOTES.md.
+    let bigger = "deliberately drawn larger than the source, to match the move strip"
+    deviates("engineChipEval", "fontSize", AnalysisType.engineEval, 9, bigger)
+    deviates("engineChipSan", "fontSize", AnalysisType.engineSan, 10, bigger)
+    deviates("engineLinePv", "fontSize", AnalysisType.enginePv, 9, bigger)
+    deviates("engineLineText", "fontSize", AnalysisType.engineText, 9, bigger)
+    deviates("engineDepthChip", "fontSize", AnalysisType.engineDepth, 8, bigger)
+    deviates("engineOpeningChip", "fontSize", AnalysisType.engineOpening, 9, bigger)
+    deviates("engineChipEval", "width", AnalysisLayout.engineEvalWidth, 36,
+             "widened with the type, or a mate score clips")
 
     matches("header", "paddingHorizontal", AnalysisLayout.headerPaddingH)
     matches("header", "paddingVertical", AnalysisLayout.headerPaddingV)

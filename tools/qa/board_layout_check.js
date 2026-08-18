@@ -87,6 +87,74 @@ if (panels) {
   expect(/min-height:\s*0/.test(panels), 'and `min-height: 0`, or it cannot actually shrink');
 }
 
+// ---- 3b. exactly one band gives way, and it is the engine panel --------------
+//
+// Out of edit mode `.an-panels` is hidden, so the flexible child is `.an-engine`. There must be
+// EXACTLY one: with none, a short column leaves a gap; with two, they fight over the slack and a
+// fixed band can be squeezed to nothing while its content paints over its neighbours.
+//
+// This is the CSS half of `swift_layout_check.js` rule 4b. Both languages need it, and they degrade
+// differently — flex leaves the gap at the bottom, SwiftUI centres the whole column — so neither
+// check stands in for the other.
+const VIEW_BANDS = ['.an-header', '.an-board', '.an-statusline', '.an-pvbar', '.an-status',
+                    '.an-autoplay', '.an-strip', '.an-bookstrip'];
+for (const sel of VIEW_BANDS) {
+  const band = rule(sel);
+  expect(band !== null, sel + ' exists as a band of .an-view');
+  if (band) {
+    expect(/flex:\s*none/.test(band),
+      sel + ' must be `flex: none` — a band that can shrink gets squeezed to nothing by the '
+      + 'engine panel and its content paints over its neighbours, got: '
+      + (/(flex:[^;]*)/.exec(band) || ['(no flex)'])[0]);
+  }
+}
+const engine = rule('.an-engine');
+expect(engine !== null, '.an-engine exists');
+if (engine) {
+  expect(/flex:\s*1\s+1\s+auto/.test(engine),
+    '.an-engine must be `flex: 1 1 auto` — it is the band that gives way now that the book box is '
+    + 'a strip, got: ' + (/(flex:[^;]*)/.exec(engine) || ['(no flex)'])[0]);
+  expect(/min-height:\s*0/.test(engine), 'and `min-height: 0`, or it cannot actually shrink');
+  expect(/justify-content:\s*flex-end/.test(engine),
+    'and `justify-content: flex-end`, so the rows stay pinned to the bottom rather than floating '
+    + 'in the middle of the slack');
+}
+// The book strip is drawn only when there IS a book — the whole point of the change.
+expect(/an-hidden/.test(JS) && /bookstrip[\s\S]{0,200}an-hidden/.test(JS),
+  'paintBookStrip hides the strip rather than filling it with an empty state');
+
+// ---- 3c. a short screen DROPS engine rows, it does not squash them -----------
+//
+// `.an-engine` is the band that gives way. Without `flex: none` on the rows, flex shrinks each row
+// while its TEXT keeps its own height, and the overflow paints straight over the move strip above —
+// which is what a 375x667 SE did. The rows keep their natural size and `.an-rows` clips from the
+// bottom, so the third line is lost before the first.
+const rowsBox = rule('.an-rows');
+expect(rowsBox !== null, '.an-rows exists');
+if (rowsBox) {
+  expect(/overflow:\s*hidden/.test(rowsBox),
+    '.an-rows must clip — an unclipped rows box paints over the move strip on a short screen');
+  expect(/min-height:\s*0/.test(rowsBox), 'and `min-height: 0`, or it cannot shrink to clip');
+  expect(/flex:\s*0\s+1\s+auto/.test(rowsBox),
+    '.an-rows shrinks but never grows, got: ' + (/(flex:[^;]*)/.exec(rowsBox) || ['(no flex)'])[0]);
+}
+// And the count of rows/lines is a decision, made once, by the shared metrics function — not two
+// copies of the arithmetic. `--an-engine-lines` is narrowed from the seed by `planEngine()`.
+expect(/function planEngine\s*\(/.test(JS), 'planEngine() exists');
+expect(/MET\.enginePlan\(/.test(JS),
+  'and it goes through MET.enginePlan — the same pure function AnalysisLayout.enginePlan mirrors '
+  + 'and both metrics suites assert, rather than a second copy of the budget');
+expect(/planEngine\(/.test(JS.slice(JS.indexOf('function sizeBands'), JS.indexOf('function planEngine'))),
+  'and sizeBands() calls it, so a resize re-plans');
+expect(/planEngine\(rows\.length\)/.test(JS),
+  'and paintEngine re-plans on every paint — a plan cached against the row count never recovers '
+  + 'from an early measurement of a half-laid-out screen');
+
+const erow = rule('.an-erow');
+expect(erow !== null && /flex:\s*none/.test(erow),
+  '.an-erow must be `flex: none` — a squashed row overflows its own box, got: '
+  + (/(flex:[^;]*)/.exec(erow || '') || ['(no flex)'])[0]);
+
 // ---- 4. the JS publishes what the CSS asks for -------------------------------
 for (const prop of ['--an-board-edge', '--an-panels-h']) {
   expect(CSS.includes('var(' + prop + ')'), 'the CSS reads ' + prop);
@@ -139,6 +207,56 @@ expect(!/an-status-left/.test(CSS + JS),
   const literals = [...JS.matchAll(/set\('--an-eng-[a-z0-9-]+',\s*(\d)/g)];
   expect(literals.length === 0,
     `no --an-eng-* property may be set from a literal, found ${literals.length}`);
+}
+
+// ---- and the SAME audit over every other --an-* property ---------------------
+//
+// The block above only covered `--an-eng-*`, the Engine SETTINGS panel. Everything else the screen
+// draws — the engine LINES' font sizes, the band heights, the book strip — went unaudited, so a
+// renamed `--an-fs-epv` would have drawn unstyled with nothing complaining. Same check, wider net.
+//
+// `--an-board-edge` and `--an-panels-h` are exempt: `sizeBands()` sets them through
+// `root.style.setProperty`, not the `set()` helper, and rule 4 above already pins both.
+{
+  const VIA_SIZE_BANDS = new Set(['--an-board-edge', '--an-panels-h']);
+
+  // PRE-EXISTING DEAD METRICS, found the moment this audit was widened past `--an-eng-*`. Every
+  // one is set by `applyMetricsVars()` and read by no rule in any stylesheet — the branch picker,
+  // the PGN modal and the variation modal are all styled by classes now, and their custom
+  // properties were never removed. Harmless, but they are 24 numbers pretending to matter.
+  //
+  // Listed rather than deleted so this change stays about the engine panel; the stale check below
+  // makes the list shrink-only, so cleaning them up later is a subtraction and nothing new can
+  // join them.
+  const KNOWN_DEAD = new Set([
+    '--an-success', '--an-danger',
+    '--an-md-pgn-scrim', '--an-md-pgn-bg', '--an-md-pgn-r', '--an-md-pgn-pad',
+    '--an-md-opt-bg', '--an-md-opt-r', '--an-md-opt-pv', '--an-md-opt-ph', '--an-md-opt-bw',
+    '--an-md-opt-bc', '--an-md-opt-main-bc', '--an-md-opt-main-bg', '--an-md-opt-fs',
+    '--an-md-opt-prev-fs',
+    '--an-md-var-bg', '--an-md-var-r', '--an-md-var-hw', '--an-md-var-hh',
+    '--an-md-pick-bg', '--an-md-pick-r', '--an-md-pick-pad', '--an-fs-pick-title',
+  ]);
+
+  const read = new Set([...CSS.matchAll(/var\(\s*(--an-[a-z0-9-]+)/g)].map((m) => m[1]));
+  const set = new Set([...JS.matchAll(/set\('(--an-[a-z0-9-]+)'/g)].map((m) => m[1]));
+  expect(read.size > 20, `only ${read.size} --an-* properties found — the parser probably rotted`);
+  // The dangerous direction: a rule reading a property nobody sets renders with nothing.
+  for (const name of read) {
+    if (VIA_SIZE_BANDS.has(name)) continue;
+    expect(set.has(name),
+      `app.css reads ${name} but analysis.js never sets it — that rule draws unstyled`);
+  }
+  for (const name of set) {
+    if (KNOWN_DEAD.has(name)) continue;
+    expect(read.has(name), `analysis.js sets ${name} but no rule reads it — dead metric`);
+  }
+  for (const name of KNOWN_DEAD) {
+    expect(!read.has(name),
+      `${name} is on the known-dead list but IS read now — take it off the list`);
+    expect(set.has(name),
+      `${name} is on the known-dead list but nothing sets it any more — take it off the list`);
+  }
 }
 
 const result = {

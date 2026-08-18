@@ -722,6 +722,35 @@ if let sharp = ChessPosition(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP
         h.check(legal, "line \(l.rank)'s PV survives the accelerators intact")
         h.check(!l.pv.isEmpty, "line \(l.rank) has a principal variation at all")
     }
+
+    // The tail extension. A PV can never be longer than the search was deep — the recursion stops
+    // writing to `line` at depth 0 — so at depth 6 every line used to be exactly six plies, which
+    // is what the client asked to see more of. `extendTail` searches on past that.
+    //
+    // Asserted through the PUBLIC result rather than by reaching into `Search`, so it is the
+    // shipped behaviour under test. Mirrored assertion-for-assertion in analysis-engine.js §11.
+    var extendedAny = false
+    for l in a.lines {
+        h.check(l.pvSAN.count == l.pv.count, "extended line \(l.rank): pv and pvSAN stay parallel")
+        h.check(l.pv.count <= LocalEngine.pvExtendLimit,
+                "extended line \(l.rank): stops at pvExtendLimit, got \(l.pv.count)")
+        if l.pv.count > l.depth { extendedAny = true }
+        // Position identity WITHOUT the clocks — the same rule threefold uses, and the same thing
+        // the engine's own Zobrist key stands for.
+        var p = sharp
+        var seen: Set<String> = [p.fen.split(separator: " ").prefix(4).joined(separator: " ")]
+        var noRepeat = true
+        for m in l.pv {
+            p = p.makeMove(m)
+            let key = p.fen.split(separator: " ").prefix(4).joined(separator: " ")
+            if !seen.insert(key).inserted { noRepeat = false; break }
+        }
+        h.check(noRepeat, "extended line \(l.rank): the line never revisits a position")
+    }
+    h.check(extendedAny, "the tail probe actually lengthens a line past the searched depth")
+    // The display cap must be the thing that truncates a line, not the engine.
+    h.check(LocalEngine.pvExtendLimit > AnalysisSession.pvPreview,
+            "pvExtendLimit stays above AnalysisSession.pvPreview")
 }
 
 // The Engine Settings the Analysis Board drives the search with (☰ > Engine). Mirrors
@@ -1227,14 +1256,94 @@ do {
         let rows = fake.engineRows
         h.check(rows[0].san == "e4", "the row names its move")
         h.check(rows[0].evalText == "+0.3", "the row formats its score, got \(rows[0].evalText)")
-        h.check(rows[0].continuation == "e5 Nf3 Nc6 Bb5 a6 Ba4",
-                "the continuation shows six plies after the move, got \(rows[0].continuation)")
+        h.check(rows[0].continuation == "e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6",
+                "the continuation shows every ply it has, up to pvPreview, "
+                + "got \(rows[0].continuation)")
+        h.check(AnalysisSession.pvPreview > 6,
+                "and pvPreview is past the source's 6, so a deep search is not clipped")
         h.check(rows[1].continuation == "d5", "a short PV shows what it has")
         h.check(!fake.isStale, "a snapshot matching the cursor is fresh")
         h.check(fake.evalParts.cp == 30, "evalParts carries the centipawns")
         h.check(fake.evalParts.mate == nil, "and no mate")
         h.check(fake.evalParts.winner == nil, "and no terminal winner")
+
+        // 12b. The line preview — the state machine behind "tap a line to play it out".
+        // `rows[0]` has eight SANs behind a one-move pv, which is exactly the shape the trim in
+        // `LinePreview.start` exists for. Mirrored assertion-for-assertion in analysis.js §12b.
+        if let trimmed = LinePreview.start(rows[0]) {
+            h.check(trimmed.sans.count == 1,
+                    "a line with more SANs than moves is trimmed to what can actually be played, "
+                    + "got \(trimmed.sans.count)")
+            h.check(trimmed.uci.count == trimmed.sans.count, "sans and uci are the same length")
+        } else { h.check(false, "a one-move line still previews") }
+        h.check(LinePreview.start(EngineRow(rank: 0, evalText: "", san: "", continuation: "",
+                                            uci: "", from: -1, to: -1, depth: 0)) == nil,
+                "a row with no line has nothing to preview")
     } else { h.check(false, "snapshot session") }
+
+    // 12c. The preview walked over a real four-ply line.
+    if let lp = newSession() {
+        var walk = lp.position
+        var moves: [Move] = []
+        for san in ["e4", "e5", "Nf3", "Nc6"] {
+            guard let m = walk.move(forSAN: san) else { break }
+            moves.append(m)
+            walk = walk.makeMove(m)
+        }
+        lp.snapshot = AnalysisSnapshot(
+            fen: ChessPosition.startFEN, depth: 4, nodes: 1,
+            lines: [EngineLine(rank: 1, score: .cp(30), pv: moves,
+                               pvSAN: ["e4", "e5", "Nf3", "Nc6"], depth: 4)],
+            isFinal: true, terminal: nil)
+        let row = lp.engineRows[0]
+        h.check(row.pvUCI.count == 4, "the row carries the WHOLE line, not just its first move")
+        h.check(lp.canPreview(row), "a line computed for this position can be walked")
+        if let p1 = LinePreview.start(row) {
+            h.check(p1.ply == 1, "a preview enters on the first move")
+            h.check(p1.sans.joined(separator: " ") == "e4 e5 Nf3 Nc6", "and labels every ply")
+            h.check(p1.rank == 0, "and it remembers which line it came from")
+
+            let toks = p1.tokens
+            h.check(toks.count == 4, "one token per ply")
+            h.check(toks[0].played && toks[0].isCurrent, "the first token is played and current")
+            h.check(!toks[1].played && !toks[1].isCurrent,
+                    "the ones ahead of the cursor are neither")
+            h.check(toks[3].ply == 4, "tokens are 1-based, so they hand back to jumped(to:)")
+
+            h.check(p1.stepped(-1) == nil, "stepping off the FRONT leaves the preview")
+            h.check(p1.stepped(1)?.ply == 2, "stepping forward advances one ply")
+            let pEnd = p1.jumped(to: 4)
+            h.check(pEnd.ply == 4, "a jump lands on the ply that was tapped")
+            h.check(pEnd.stepped(1) == pEnd, "stepping past the END is a no-op, NOT an exit")
+            h.check(p1.jumped(to: 9) == p1, "a jump out of range is a no-op")
+            h.check(p1.jumped(to: 0) == p1, "and so is a jump to ply 0")
+            h.check(p1.canStepForward, "ply 1 of 4 can step forward")
+            h.check(!pEnd.canStepForward, "the last ply cannot")
+            h.check(p1.movesToCommit.count == 1, "＋ commits only what is on the board")
+            h.check(pEnd.movesToCommit.count == 4, "and all of it once the line has been walked")
+
+            if let st1 = lp.previewPosition(p1) {
+                h.check(st1.last.uci == "e2e4", "the preview reports the move that got there")
+                h.check(st1.position.sideToMove == .black, "and the position after it")
+            } else { h.check(false, "the first ply resolves") }
+            if let stEnd = lp.previewPosition(pEnd) {
+                h.check(stEnd.position.fen == walk.fen,
+                        "walking the whole line reaches the line's end position")
+            } else { h.check(false, "the last ply resolves") }
+            h.check(lp.position.fen == ChessPosition.startFEN,
+                    "and the SESSION never moved — nothing was committed")
+
+            // A snapshot can outlive the position it was computed for. Such a line refuses to
+            // start AND refuses to walk — the guard that keeps a stale tap from playing nonsense.
+            if let stale = newSession(), let d4 = stale.position.move(forSAN: "d4") {
+                _ = stale.play(d4)
+                stale.snapshot = lp.snapshot
+                h.check(!stale.canPreview(row),
+                        "a line that no longer plays from here refuses to start")
+                h.check(stale.previewPosition(p1) == nil, "and refuses to walk")
+            } else { h.check(false, "stale session") }
+        } else { h.check(false, "the four-ply line previews") }
+    } else { h.check(false, "preview session") }
 
     // 13. mate and terminal scores
     if let mate = newSession() {
@@ -2934,9 +3043,9 @@ h.requireMinCounts([
     "rating": 390, "compare_moves": 6, "streak_target": 36, "streak_increment": 4, "streak_reset": 2,
     "daily_limits": 168, "daily_goal": 18, "game_review": 47, "classify": 88, "rating_tier": 14, "rush": 12,
     "perft": 17, "chess_ai": 2, "san_parse": 9000, "notation_extra": 30, "draw_rules": 30,
-    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 55,
+    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 66,
     "engine_settings": 70,
-    "eco": 1200, "review_book": 1500, "analysis_session": 200, "analysis_store": 80,
+    "eco": 1200, "review_book": 1500, "analysis_session": 235, "analysis_store": 80,
     "position_editor": 80,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
