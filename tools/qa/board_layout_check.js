@@ -271,6 +271,116 @@ expect(!/an-status-left/.test(CSS + JS),
   }
 }
 
+// ── 8. The square colours are the EXTRACTED pair, in both languages ──────────────
+//
+// `tools/metrics/extract_puzzle_styles.js` has captured the real RN board's palette into
+// `puzzle_styles.json` -> `shared.board` since the puzzle screens were ported — and NOTHING read
+// it. Every board outside the Analysis Board drew an invented `#5BA3F5`/`#2C4A73` blue instead,
+// in both languages, for as long as the port has existed. Nothing could see it: no suite anywhere
+// asserted a square colour literal, and the two languages agreed with each other, which is exactly
+// the "two hand-typed copies agreeing is not verification" trap CLAUDE.md names.
+//
+// So: pin every place a square colour is written to the extraction. Five writers, one source.
+{
+  const SRC = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'tools', 'metrics', 'puzzle_styles.json'), 'utf8'));
+  const THEME_CSS = fs.readFileSync(path.join(ROOT, 'web-demo', 'css', 'theme.css'), 'utf8');
+  const CB_JS = fs.readFileSync(path.join(ROOT, 'web-demo', 'js', 'chess-board.js'), 'utf8');
+  const AMET_JS = fs.readFileSync(path.join(ROOT, 'web-demo', 'js', 'analysis-metrics.js'), 'utf8');
+  const AMET_SWIFT = fs.readFileSync(
+    path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI', 'AnalysisMetrics.swift'), 'utf8');
+
+  const board = SRC.shared && SRC.shared.board
+    && SRC.shared.board.styles && SRC.shared.board.styles.styles;
+  expect(!!board, 'puzzle_styles.json still carries shared.board — the extractor was not narrowed');
+
+  const norm = (c) => String(c || '').trim().toUpperCase();
+  const LIGHT = norm(board && board.lightSquare && board.lightSquare.backgroundColor);
+  const DARK = norm(board && board.darkSquare && board.darkSquare.backgroundColor);
+  expect(/^#[0-9A-F]{6}$/.test(LIGHT) && /^#[0-9A-F]{6}$/.test(DARK),
+    `shared.board did not yield a hex pair (got ${LIGHT} / ${DARK})`);
+  expect(LIGHT !== DARK, 'the extracted light and dark squares are different colours');
+
+  /**
+   * The value of a `--name: value;` declaration in a flat stylesheet.
+   * Hand-parsed rather than built into a RegExp: the property name starts with `--`, and a
+   * dynamically assembled pattern around it is exactly the kind of escaping a gate should not own.
+   */
+  const cssVar = (css, name) => {
+    const at = css.indexOf(name + ':');
+    if (at < 0) return null;
+    const end = css.indexOf(';', at);
+    return end < 0 ? null : norm(css.slice(at + name.length + 1, end));
+  };
+
+  // (a) the browser's global default — the ONLY definition, read only by <chess-board>
+  expect(cssVar(THEME_CSS, '--board-light') === LIGHT,
+    `theme.css --board-light is ${cssVar(THEME_CSS, '--board-light')}, extraction says ${LIGHT}`);
+  expect(cssVar(THEME_CSS, '--board-dark') === DARK,
+    `theme.css --board-dark is ${cssVar(THEME_CSS, '--board-dark')}, extraction says ${DARK}`);
+
+  // (b) the component's own fallbacks, for a host that never loads theme.css. These are what a
+  //     stray `<chess-board>` renders, so a stale fallback is a real second palette.
+  const fallback = (name) => {
+    const at = CB_JS.indexOf('var(' + name + ',');
+    if (at < 0) return null;
+    const m = CB_JS.slice(at).match(/^var\([^,]+,\s*(#[0-9A-Fa-f]{6})\)/);
+    return m ? norm(m[1]) : null;
+  };
+  expect(fallback('--board-light') === LIGHT,
+    `chess-board.js falls back to ${fallback('--board-light')}, extraction says ${LIGHT}`);
+  expect(fallback('--board-dark') === DARK,
+    `chess-board.js falls back to ${fallback('--board-dark')}, extraction says ${DARK}`);
+
+  // (c) the Analysis Board's `classic` theme is the same pair by another route — the client's
+  //     reference screenshot IS that theme, and the whole point of this change is that the two
+  //     stop disagreeing.
+  const jsClassic = AMET_JS.match(
+    /classic:\s*\{[^}]*light:\s*'(#[0-9A-Fa-f]{6})'[^}]*dark:\s*'(#[0-9A-Fa-f]{6})'/);
+  expect(!!jsClassic, 'analysis-metrics.js still declares BOARD_THEMES.classic');
+  expect(!!jsClassic && norm(jsClassic[1]) === LIGHT && norm(jsClassic[2]) === DARK,
+    'BOARD_THEMES.classic is the extracted pair');
+
+  // (d) the Swift twin of (c). There is no compiler on this checkout, so it is read as text —
+  //     the same stand-in swift_lint.js and swift_symbol_check.js are.
+  const swiftClassic = (accessor) => {
+    const start = AMET_SWIFT.indexOf('var ' + accessor + ': Color {');
+    if (start < 0) return null;
+    const stop = AMET_SWIFT.indexOf('\n    }', start);
+    const m = AMET_SWIFT.slice(start, stop).match(
+      /case \.classic:\s*return Theme\.c\(0x([0-9A-Fa-f]{6})\)/);
+    return m ? '#' + norm(m[1]) : null;
+  };
+  expect(swiftClassic('light') === LIGHT,
+    `BoardTheme.classic.light is ${swiftClassic('light')}, extraction says ${LIGHT}`);
+  expect(swiftClassic('dark') === DARK,
+    `BoardTheme.classic.dark is ${swiftClassic('dark')}, extraction says ${DARK}`);
+
+  // (e) and the shared default — the one every puzzle solver, Play vs Coach and the two macOS
+  //     panels inherit by passing no `style:` at all — takes it from the theme rather than
+  //     restating a hex or falling back to the legacy blue.
+  const styleBody = AMET_SWIFT.slice(AMET_SWIFT.indexOf('struct BoardStyle: Equatable {'),
+                                     AMET_SWIFT.indexOf('func dotSize(square:'));
+  expect(/var light: Color = BoardTheme\.classic\.light/.test(styleBody)
+      && /var dark: Color = BoardTheme\.classic\.dark/.test(styleBody),
+    'BoardStyle defaults to BoardTheme.classic, not a hardcoded pair');
+  expect(!/var (light|dark): Color = Theme\.board(Light|Dark)/.test(styleBody),
+    'BoardStyle no longer defaults to the legacy Theme.boardLight/boardDark blue');
+
+  // (f) the legacy blue must not survive as a SQUARE anywhere. It is still a real colour — the
+  //     PlayView level capsule and the PuzzleView rating chip use it — so this checks the two
+  //     board writers specifically, not the constant's existence.
+  const SQUARE_WRITERS = [
+    ['theme.css --board-light', cssVar(THEME_CSS, '--board-light')],
+    ['theme.css --board-dark', cssVar(THEME_CSS, '--board-dark')],
+    ['chess-board.js light fallback', fallback('--board-light')],
+    ['chess-board.js dark fallback', fallback('--board-dark')],
+  ];
+  for (const [what, value] of SQUARE_WRITERS) {
+    expect(value !== '#5BA3F5' && value !== '#2C4A73', `${what} is still the invented blue`);
+  }
+}
+
 const result = {
   passed,
   failures,

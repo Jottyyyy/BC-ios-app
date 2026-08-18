@@ -9,6 +9,56 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — Every board was drawing a colour the source app never had
+
+Fourth round of client feedback, first ask: *"doon sa lahat ng board sa puzzle natin dapat ganto
+kulay ng chess board para mas maliwanag at mas maaliwalas."* The attached screenshot is **this
+app's own Analysis Board** on its default `classic` theme — so the question was not "what colour
+should the puzzles be", it was "why is one screen already right and the other seven wrong".
+`web-demo/` updated to match.
+
+**They were wrong because a working extraction was read by nobody.**
+`tools/metrics/extract_puzzle_styles.js` has walked the real `DragDropChessBoard.tsx` into
+`puzzle_styles.json` → `shared.board` since the puzzle screens landed, carrying the source app's
+palette — `#F0D9B5` / `#B58863` and the two highlight fills. `grep -r 'shared.board'` across every
+`.js` and `.swift` returns **zero hits**. Both languages hardcoded an invented `#5BA3F5` /
+`#2C4A73` blue instead, in three places: `BoardStyle`'s defaults, `theme.css`'s `--board-light` /
+`--board-dark`, and a third copy as the `var()` fallbacks inside `chess-board.js`'s `:host` block.
+The five puzzle solvers, Play vs Coach and both macOS panels have therefore drawn a colour the RN
+app never had for the whole life of the port. The Analysis Board escaped only by accident:
+`BoardTheme.default == .classic` is the extracted pair reached by a different route.
+
+**Nothing could see it.** No suite anywhere asserted a square colour literal. The two Swift
+assertions were *relative* — `plain.light == Theme.boardLight` — so they tracked the wrong value
+happily, and the JS twin compared against `BOARD_THEMES.classic`, a different constant entirely.
+The two languages agreed with **each other**, which is precisely the trap `CLAUDE.md` names:
+*two hand-typed copies agreeing is not verification.* It is the annotation badge's `+`-for-`-` one
+layer down, and it took a client screenshot to surface it.
+
+**Fixed by deleting the copies, not by repainting.** `BoardStyle.light`/`.dark` now default to
+`BoardTheme.classic.light`/`.dark`; `theme.css` and the `chess-board.js` fallbacks take the same
+hexes. One pair, one source, four writers pointing at it. Because every non-Analysis board inherits
+`BoardStyle()` by passing no `style:` at all, and `--board-light` is read *only* by `<chess-board>`,
+this is one line per language — `PuzzleSolverParts`' `PuzzleBoardBand` alone carries Play Puzzles,
+Daily, Thematic, Streak and Turbo.
+
+**The indicators deliberately stay gold.** `lastMove` / `selected` remain `Theme.accent` at
+0.32 / 0.55 laid *over* the square (`replacesFill == false`), not the RN board's solid `#F6F669` /
+`#CDD26A`. Gold-on-brown is what the approved screenshot shows, and the solid pair would collide
+with the Puzzle Streak's `--hl-sol-from` / `--hl-sol-to` solution highlights.
+
+`Theme.boardLight` / `Theme.boardDark` keep their values — they are still the `PlayView` level
+capsule and the `PuzzleView` rating chip — and gain a comment saying they must never go back on a
+board. The Analysis Board's three-theme picker is untouched: `analysis.js` sets the two properties
+on its own root, so `classic` / `green` / `blue` still work.
+
+**Gate.** New `board_layout_check.js` §8 pins all five writers to `shared.board` — including the
+Swift ones, read as text, since there is no compiler on this checkout — and bans `#5BA3F5` /
+`#2C4A73` from any of them outright. 812 → 829 invariants, `js_goldens` 32,971 → 32,988. Both
+directions were mutation-checked: reverting `theme.css` and reverting `BoardStyle` each break two
+assertions by name. `AnalysisMetricsCheck`'s relative assertion was re-pointed at
+`BoardTheme.classic` and gained its inverse, so `Theme.boardLight` can never quietly become a
+square again.
 ### 2026-08-18 (added) — Opening Tree: the tile that did nothing now opens openingtree.com
 
 Fourth round of client feedback: *"yung opening trainer pag cliniclick ko ayaw mabuksan … simple

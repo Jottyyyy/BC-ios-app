@@ -95,7 +95,9 @@ enum Theme {
     static let purple = c(0x9B6DD6)
     static let teal   = c(0x00BFA5)
 
-    // Chess board tints
+    // Legacy board tints. NOT board squares any more — `BoardStyle` draws `BoardTheme.classic`,
+    // the pair extracted from the real RN board. These two survive only as card chrome: the level
+    // capsule in `PlayView`, the rating chip in `PuzzleView`. Do not reuse them on a board.
     static let boardLight = c(0x5BA3F5)
     static let boardDark  = c(0x2C4A73)
 

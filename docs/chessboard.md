@@ -89,6 +89,43 @@ Horizontal centring is the parent stack's job, which a `VStack` already does.
 
 ---
 
+## Square colours
+
+**Classic Brown, `#F0D9B5` / `#B58863`, on every board in the app.** One pair, two languages, one
+source: `tools/metrics/puzzle_styles.json` → `shared.board.lightSquare` / `darkSquare`, extracted by
+`tools/metrics/extract_puzzle_styles.js` from the real RN board (`components/DragDropChessBoard.tsx`).
+
+| Writer | Where |
+|---|---|
+| Swift, every board | `BoardStyle`'s defaults — `AnalysisMetrics.swift`, `var light = BoardTheme.classic.light` |
+| Browser, every board | `--board-light` / `--board-dark` on `:root` — `web-demo/css/theme.css` |
+| Browser, no-stylesheet fallback | the `var(--board-light, …)` defaults in `chess-board.js`'s `:host` block |
+| Analysis Board only | `BoardTheme` / `BOARD_THEMES` — a per-screen override, `classic` by default |
+
+Nothing else may write one. A screen that wants a different board does it by passing
+`style:` (Swift) or setting the two custom properties on its own root (browser), the way the
+Analysis Board's theme picker does — never by restating a hex.
+
+**This was wrong for the whole life of the port, in both languages at once.** The extraction had
+carried the brown pair since the puzzle screens landed and *nothing read it*: `BoardStyle` and
+`theme.css` each hardcoded an invented `#5BA3F5` / `#2C4A73` blue, so the five puzzle solvers, Play
+vs Coach and the two macOS panels all drew a colour the source app never had. The Analysis Board
+was the only screen that happened to be right, because its theme picker defaults to `classic`.
+No suite could see it — not one asserted a square colour literal — and the two languages agreed
+with *each other*, which is the "two hand-typed copies agreeing is not verification" trap in
+`CLAUDE.md`.
+
+`tools/qa/board_layout_check.js` §8 closes it: all five writers above are pinned to the JSON, in
+Swift as well as JS, and the old blue is banned from any of them. Change the RN source, re-run the
+extractor, and the gate tells you which copies are stale.
+
+**Highlights stay gold and translucent.** `lastMove` and `selected` are `Theme.accent` at 0.32 /
+0.55 laid *over* the square (`replacesFill == false`), not the RN board's solid `#F6F669` /
+`#CDD26A`. That is deliberate: gold-on-brown is what the Analysis Board has always rendered, and it
+is the reading the client approved from a screenshot of that screen.
+
+---
+
 ## Coordinates
 
 On by default in both languages, matching `<chess-board>`'s `coordinates` attribute. Geometry is
@@ -141,7 +178,8 @@ flag. The Analysis Board, Pairing and Play vs Coach are `ZStack` siblings that a
 | `web-demo/js/puzzle-board.js` | the solver plumbing four puzzle modes share |
 | `tools/qa/swift_layout_check.js` | the SwiftUI layout gate |
 | `tools/qa/swift_layout_mutation_test.js` | proof that gate can still fail |
-| `tools/qa/board_layout_check.js` | the CSS half of the same rule |
+| `tools/qa/board_layout_check.js` | the CSS half of the same rule, plus §8 — the square-colour extraction pin |
+| `tools/metrics/puzzle_styles.json` | `shared.board` — the extracted square palette, the one source |
 
 ---
 
@@ -158,6 +196,10 @@ node tools/qa/swift_symbol_check.js    # no arguments
 Visually, in `web-demo/index.html` at an iPhone size: **Puzzles → 🔥 Streak → Start Streak**. The
 tab bar is gone, the board is edge-to-edge with coordinates, and the empty space is *below* the
 hint. Then the same for Daily, Thematic, Turbo and Play vs Coach.
+
+The squares are **brown** on all of them — `#F0D9B5` / `#B58863`. If any board is blue, something
+is writing a square colour that is not `BoardStyle` or `--board-light`/`--board-dark`, and
+`board_layout_check.js` §8 will name it.
 
 On a Mac, `swift build && swift run ParityRunner` must still exit 0 — none of this touches a domain
 engine — and `DemoApp/run-demo.sh` shows the same screens natively.
