@@ -85,40 +85,54 @@ struct HomeAvatar: View {
     }
 }
 
-/// App logo — circular, gold-ringed, gold-glowing. Sits at true screen centre because the header
-/// gives it all the space between the avatar and the search button.
+/// The brand mark — gold-ringed, gold-glowing, at true screen centre.
+///
+/// It draws `.brandLogo`, the "Byaherong COACH APP" collage, **not** `.appIcon`'s gold knight. The
+/// knight is the *app icon*; it stays on the Play-with-Coach ring and the iOS icon, and it had been
+/// standing in here for a brand mark the bundle has always contained — the login hero has drawn the
+/// real one since `docs/login.md` was written.
+///
+/// Which forces the shape. `Circle()` was right for a knight on a square field and is wrong for
+/// this: the collage carries a wordmark across the bottom, and a circle crops the "APP" badge off
+/// it. So a squircle, the same construction the login hero uses — and the radius is a PROPORTION
+/// of the size, not a constant, because `logoSize` scales from 41 pt to 92 pt across the device
+/// range and a fixed radius would read as a circle at one end and a square at the other.
 struct HomeLogo: View {
     let size: CGFloat
 
+    /// Kept out of the body: `swift_layout_check.js` allows no arithmetic there, and both the clip
+    /// and the ring have to be the *same* shape or the border would trace a different curve than
+    /// the mask.
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: (size * HomeLayout.logoRadiusRatio).rounded(),
+                         style: .continuous)
+    }
+
     var body: some View {
-        HomeAppIcon(size: size, shape: Circle())
+        HomeAppIcon(size: size, shape: shape, asset: .brandLogo)
             // `strokeBorder`, not `stroke`: stroke centres the line on the path, putting half of it
             // outside the shape. RN/CSS borders are drawn inside the box.
-            .overlay(Circle().strokeBorder(Theme.gold, lineWidth: HomeLayout.logoBorderWidth))
+            .overlay(shape.strokeBorder(Theme.gold, lineWidth: HomeLayout.logoBorderWidth))
             // Applied AFTER the clip, or the glow would be clipped away with the contents.
             // RN-iOS `shadowRadius` maps 1:1 onto SwiftUI's blur radius.
             .shadow(color: Theme.gold.opacity(HomeLayout.logoGlowOpacity), radius: HomeLayout.logoGlowRadius)
     }
 }
 
-struct HomeSearchButton: View {
-    var body: some View {
-        Text("🔍")
-            .font(.system(size: HomeLayout.searchEmojiSize))
-            .frame(width: HomeLayout.searchSize, height: HomeLayout.searchSize)
-            .background(HomePalette.searchFill, in: Circle())
-            .accessibilityLabel(Text("Search"))
-    }
-}
-
-/// `avatar | logo (optically centred) | search` — a fixed band.
+/// `avatar | logo (optically centred) | balance` — a fixed band.
+///
+/// The trailing slot used to be a magnifier button whose tap was never wired to anything:
+/// `onSearch` defaulted to `{}` and no host ever passed it. The client asked for it gone, so it is
+/// gone — but it cannot simply be deleted. The logo lands at true screen centre only because it is
+/// flanked by two equal-width controls; remove one and it drifts half an avatar to the right.
+/// Hence an explicit counterweight, and it takes `avatarSize` because the avatar is exactly what
+/// it is balancing.
 struct HomeHeader: View {
     let metrics: HomeScreenMetrics
     let userName: String
     let profileImage: Image?
     let isPremium: Bool
     let onAvatar: () -> Void
-    let onSearch: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -127,13 +141,12 @@ struct HomeHeader: View {
             }
             .buttonStyle(.homeControl)
 
-            // Expands to fill everything between the two 38pt controls and centres the logo inside
-            // it, so the logo lands at true screen centre regardless of the side elements.
+            // Expands to fill everything between the avatar and its counterweight, and centres the
+            // logo inside it, so the logo lands at true screen centre.
             HomeLogo(size: metrics.logoSize)
                 .frame(maxWidth: .infinity)
 
-            Button(action: onSearch) { HomeSearchButton() }
-                .buttonStyle(.homeControl)
+            Color.clear.frame(width: HomeLayout.avatarSize, height: HomeLayout.avatarSize)
         }
         .padding(.horizontal, HomeLayout.headerPaddingH)
         .frame(height: metrics.headerHeight)
@@ -234,9 +247,9 @@ struct HomeBanner: View {
                 .minimumScaleFactor(HomeLayout.subtitleMinScale)
         }
         .padding(.horizontal, HomeLayout.bannerPaddingH)
-        // Both banners take the SAME explicit height. An HStack sizes to its tallest child but does
-        // not stretch the shorter one, so without this the one-line "Unlock everything" banner
-        // would render visibly shorter than the two-line Donate banner.
+        // An explicit height, still sized for a TWO-line subtitle even though the surviving banner
+        // uses one. `bannerHeight` is a fixed band the grid's leftover is computed from, so
+        // shrinking it here would resize all six cards — see the note on `HomeMetrics.bannerHeight`.
         .frame(maxWidth: .infinity).frame(height: height)
         .background(fill, in: RoundedRectangle(cornerRadius: HomeLayout.bannerRadius, style: .continuous))
         .overlay {
@@ -248,13 +261,17 @@ struct HomeBanner: View {
     }
 }
 
-/// The Donate + Membership pair.
+/// The Membership banner, alone on its band.
+///
+/// It used to be the right half of a pair; the left half was Donate, which Apple does not permit
+/// an app to collect through, and whose tap was never wired to anything anyway. What is left keeps
+/// the row rather than becoming a bare banner, because the row owns the band height the grid is
+/// measured against.
 struct HomeBannerRow: View {
     let metrics: HomeScreenMetrics
     let isPremium: Bool
     let isColorful: Bool
     let subscriptionEndsAt: Date?
-    let onDonate: () -> Void
     let onMembership: () -> Void
 
     private var subtitleColor: Color {
@@ -267,18 +284,6 @@ struct HomeBannerRow: View {
 
     var body: some View {
         HStack(spacing: HomeLayout.bannerGap) {
-            Button(action: onDonate) {
-                HomeBanner(emoji: HomeDonate.emoji,
-                           title: HomeDonate.title,
-                           titleColor: Theme.foreground,
-                           subtitle: HomeDonate.subtitle,
-                           subtitleColor: subtitleColor,
-                           fill: isColorful ? HomePalette.sponsor : Theme.card,
-                           border: isColorful ? nil : HomePalette.bannerBorder,
-                           height: metrics.bannerHeight)
-            }
-            .buttonStyle(.homeBanner)
-
             Button(action: onMembership) {
                 HomeBanner(emoji: HomeMembership.emoji(isPremium: isPremium),
                            title: HomeMembership.title(isPremium: isPremium),

@@ -9,6 +9,67 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — Home chrome: the brand mark in, Donate and the search button out
+
+Fourth round of client feedback, three asks that all land on the Home screen. `web-demo/` updated
+to match.
+
+**1 · Donate is gone.** *"Paremove din sana ako ng donate, bawal donate sa Apple eh."* Correct —
+App Review does not permit an app to collect donations through anything but an approved non-profit
+flow, and this one was a `₱99` banner with no flow at all: `onDonate` defaulted to `{}` and neither
+`PhoneView` nor `app.js` ever passed it. Out go `enum HomeDonate`, `HomePalette.sponsor`, the
+`.home-banner.sponsor` skin, the `--home-sponsor` token, the JS `DONATE` table and the callback in
+both languages. The Membership banner keeps `flex: 1 1 0` and simply widens to the band.
+
+**What did NOT change is the point.** `bannerHeight` budgets a **second subtitle line** that
+nothing draws any more, because Donate's `"Help sponsor / a student"` was the two-line one and the
+pair was pinned to it. That height is not decoration: it feeds `fixedBandsHeight` → `gridHeight` →
+`tile(inGridContent:)`, so "tidying" it to one line after the deletion would have silently resized
+all six cards on every device. The band keeps its measurement; only its contents changed, and the
+new gate fails if anyone trims it.
+
+**2 · The header logo is the brand mark now.** *"Yung logo pala na kabayo palitan mo … dapat logo
+ng Biyaherong Coach ang nakalagay dyan."* The knight is `Images/app-icon.png` — the *app icon* —
+and it had been standing in for a brand mark the bundle has always contained: `brand-logo.png`, the
+"Byaherong COACH APP" collage the login hero has drawn since `docs/login.md` was written. Nothing
+new ships; `HomeLogo` points at the asset that was already there, so `Diagnostics.swift`'s hard
+count of 6 PNGs stays satisfied. The knight keeps the Play-with-Coach ring and the iOS app icon.
+
+That swap forces a shape change. The collage carries a wordmark across its bottom edge and the
+header clipped to a `Circle()`, which crops the "APP" badge clean off. So: a **squircle**, at the
+**login hero's own corner proportion** (`LoginLayout.logoRadius / LoginLayout.logoSize`) rather
+than a second hand-picked radius — it is the same mark on both screens and two different curves is
+what a second constant buys you. Swift takes that ratio by reference and cannot drift; `home.js`
+has to restate `30 / 124` because `login.js` is a separate IIFE with no load-order guarantee, which
+is exactly the assertion the new gate exists to make. A **ratio**, not a size, because `logoSize`
+spans 41–92 pt across the device range: a fixed radius reads as a circle at the small end and a
+square at the large one.
+
+**3 · The 🔍 button is gone.** *"Remove mo na din yung ito, hindi na need yan."* It was an emoji in
+a 38 pt circle whose tap went nowhere — `onSearch` defaulted to `{}` and no host ever passed it —
+so `HomeSearchButton`, `HomeLayout.searchSize`/`searchEmojiSize`, `HomePalette.searchFill`,
+`.home-search` and `--home-search-fill` all go with it.
+
+**But it is replaced, not deleted.** The logo lands at true screen centre only because it is
+flanked by two equal-width controls and expands into everything between them. Remove one side and
+it drifts half an avatar to the right — which reads as a rendering bug, not as a missing button. So
+the third slot becomes an explicit empty box, `Color.clear` at `HomeLayout.avatarSize` in Swift and
+`.home-header-balance` in CSS, and the gate asserts the two widths are the same number.
+
+`docs/navigation-chrome.md` listed Home's 🔍 as a deliberate emoji exception; that entry is now
+moot and says so.
+
+**Gate.** New `tools/qa/home_chrome_check.js` — 82 invariants across `HomeParts.swift`,
+`HomeScreen.swift`, `HomeMetrics.swift`, `home.js`, `app.css` and `theme.css`. It pins the brand
+asset in both languages, the squircle and its proportion against the login hero, the counterweight
+against `avatarSize`, the callback count on `HomeScreen` (8, was 10), exactly one banner per
+language, and the two-line band height. Comments are blanked before the negative checks so a note
+*explaining* a removal does not read as the removal failing. Three mutants killed: reverting the
+logo asset, deleting the counterweight, and trimming `bannerHeight`. `HomeMetricsCheck` gains §12
+(the radius at all three reference scales, and `.brandLogo` added to the artwork-resolves list);
+`home.js`'s own `selfTest` gains `logoRadius` in its metrics table. `js_goldens` 32,971 → 33,058
+across 70 suites.
+
 ### 2026-08-18 (changed) — Book strip deleted, engine lines numbered, and one real vector back/☰ icon everywhere
 
 Third round of client feedback, three asks. `web-demo/` updated to match.

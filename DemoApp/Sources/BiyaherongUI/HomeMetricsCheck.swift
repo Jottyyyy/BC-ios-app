@@ -236,7 +236,9 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
     }
 
     // ── 11. Bundled artwork resolves ─────────────────────────────────────────
-    for asset: HomeArt.Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon] {
+    // `.brandLogo` is on this list because the HEADER draws it now, not only the login hero — a
+    // missing file would leave the screen's most prominent element on the crown fallback.
+    for asset: HomeArt.Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon, .brandLogo] {
         expect(HomeArt.raster(asset) != nil, "\(asset.rawValue).png loads from Images/")
     }
     expect(HomeArt.vector(.openingBook) != nil,
@@ -245,6 +247,33 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
         expect(HomeArt.asset(for: card) != nil, "\(card) has card art")
     }
     expect(HomeArt.asset(for: .playCoach) == nil, "the coach card draws the app icon, not a card asset")
+
+    // ── 12. Header chrome, client round 4 ────────────────────────────────────
+    // The mark curves like the LOGIN HERO, by reference rather than by a second guess: it is the
+    // same brand collage, and a circle would crop its wordmark off.
+    expectNear(HomeLayout.logoRadiusRatio, LoginLayout.logoRadius / LoginLayout.logoSize,
+               "the header mark takes the login hero's corner proportion")
+    expect(HomeLayout.logoRadiusRatio > 0 && HomeLayout.logoRadiusRatio < 0.5,
+           "which is a squircle — neither a square nor a circle")
+    // A ratio, not a constant, because logoSize spans 41-92pt across the device range.
+    let radii: [(CGFloat, CGFloat)] = [(0.75, 10), (1.00, 13), (1.70, 22)]
+    for (s, want) in radii {
+        let m = HomeScreenMetrics(scale: s)
+        expectNear((m.logoSize * HomeLayout.logoRadiusRatio).rounded(), want,
+                   "header mark radius at scale \(s)")
+    }
+
+    // The banner band still budgets TWO subtitle lines although the one surviving banner has one.
+    // It feeds fixedBandsHeight -> gridHeight -> tile(inGridContent:), so trimming it here would
+    // resize all six cards — see the note on `HomeScreenMetrics.bannerHeight`.
+    let subLine = HomeType.naturalLineHeight(HomeLayout.bannerSubSize, .semiBold)
+    let oneLineBand = HomeLayout.bannerPaddingV * 2
+        + HomeType.naturalLineHeight(HomeLayout.bannerEmojiSize)
+        + HomeLayout.bannerStackSpacing * 2
+        + HomeType.naturalLineHeight(HomeLayout.bannerTitleSize, .extraBold)
+        + subLine
+    expectNear(HomeScreenMetrics(scale: 1.0).bannerHeight - oneLineBand, subLine,
+               "bannerHeight budgets a second subtitle line that nothing draws, on purpose")
 
     return HomeMetricsCheckResult(passed: passed, failures: failures)
 }

@@ -150,8 +150,13 @@ extension HomeScreenMetrics {
             + HomeType.naturalLineHeight(HomeLayout.quoteAttribSize, .bold)
     }
 
-    /// Both banners are pinned to the taller one's content (Donate's subtitle is two lines), so the
-    /// pair always reads as a matched set.
+    /// Sized for a **two-line** subtitle, which the one surviving banner does not have.
+    ///
+    /// Deliberate. This was the height of a Donate/Membership pair, pinned to Donate's two-line
+    /// "Help sponsor / a student" so the two read as a matched set. Donate is gone, but the height
+    /// is load-bearing in a way the banner is not: it feeds `fixedBandsHeight` -> `gridHeight` ->
+    /// `tile(inGridContent:)`, so dropping to one line here would silently resize all six cards on
+    /// every device. The band keeps its measurement; only its contents changed.
     var bannerHeight: CGFloat {
         HomeLayout.bannerPaddingV * 2
             + HomeType.naturalLineHeight(HomeLayout.bannerEmojiSize)
@@ -244,10 +249,15 @@ enum HomeLayout {
     static let premiumBadgeOffsetX: CGFloat = 4      // overhangs the avatar's right edge
     static let premiumBadgeOffsetY: CGFloat = 2      // …and its bottom edge
     static let premiumBadgeEmojiSize: CGFloat = 10
-    static let searchSize: CGFloat = 38
-    static let searchEmojiSize: CGFloat = 17
     static let avatarInitialSize: CGFloat = 18
     static let logoBorderWidth: CGFloat = 2
+    /// The header mark's corner radius, as a fraction of its size — see `HomeLogo`.
+    ///
+    /// Taken from the login hero's own proportion rather than picked again, because it is the SAME
+    /// mark: two brand logos with different corner curves on two screens of one app is the kind of
+    /// drift a second hand-typed constant guarantees. `logoSize` scales 41 -> 92 pt, so this has to
+    /// be a ratio; a fixed radius reads as a circle at the small end and a square at the large one.
+    static let logoRadiusRatio: CGFloat = LoginLayout.logoRadius / LoginLayout.logoSize
     static let coachRingBorderWidth: CGFloat = 2
 
     // Grid
@@ -327,7 +337,6 @@ enum HomePalette {
     static let openingTrainer = Theme.c(0x00BFA5)    // teal
     static let playCoach = Theme.c(0x1B1050)         // deep indigo — makes the gold ring blaze
     static let pairing = Theme.c(0x0D2137)           // very dark navy
-    static let sponsor = Theme.c(0x00838F)           // deep teal
     static let membership = Theme.c(0x5E35B1)        // deep purple
 
     /// Sky theme, Pairing card ONLY: the swiss artwork is too low-contrast to read on the standard
@@ -344,7 +353,6 @@ enum HomePalette {
     static let quoteAttrib = Theme.c(0xFDB022, 0.60)
 
     // Chrome
-    static let searchFill = Theme.c(0xFFFFFF, 0.06)
     static let bannerBorder = Theme.c(0x4A9FE8, 0.20)
 
     // Premium membership banner — a subtle gold wash.
@@ -545,9 +553,3 @@ enum HomeMembership {
     static func emoji(isPremium: Bool) -> String { isPremium ? premiumEmoji : freeEmoji }
 }
 
-enum HomeDonate {
-    static let emoji = "♟️"
-    static let title = "Donate"
-    /// Hard line break, middot separator, peso sign.
-    static let subtitle = "Help sponsor\na student · ₱99"
-}

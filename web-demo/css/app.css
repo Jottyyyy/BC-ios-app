@@ -305,10 +305,13 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-avatar .ha-initial { font-weight: 800; font-size: 18px; color: var(--on-gold); line-height: 1; }
 .home-avatar .ha-badge { position: absolute; bottom: -2px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-size: 10px; line-height: 1; }
 .home-logo-wrap { flex: 1; display: flex; justify-content: center; }
-.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: 50%; border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
+/* A squircle, not a circle: the mark is the "Byaherong COACH APP" collage and a circle crops its
+   wordmark off. --h-logo-r is set by home.js from the login hero's own radius proportion. */
+.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: var(--h-logo-r); border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
 .home-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.home-search { width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; background: var(--home-search-fill); font-size: 17px; line-height: 1; flex: none; }
-.home-search:active { opacity: .7; }
+/* Empty, and exactly the avatar's width. It is what keeps the logo at true screen centre now that
+   the magnifier button is gone — see the comment in home.js's header build. */
+.home-header-balance { width: 38px; height: 38px; flex: none; }
 
 /* Grid — `min-height: 0` / `min-width: 0` are load-bearing: without them a flex child refuses to
    shrink below its content size, the rows stop being exact thirds, and the screen overflows. */
@@ -372,7 +375,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-banners { flex: none; display: flex; gap: 8px; margin: 0 14px 10px; align-items: stretch; }
 .home-banner { flex: 1 1 0; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 8px; border-radius: 12px; text-align: center; background: var(--home-banner-fill); border: 1px solid var(--home-banner-border); }
 .home-banner:active { opacity: .85; }
-.home-banner.sponsor { background: var(--home-sponsor); border-color: transparent; }
 .home-banner.membership { background: var(--home-membership); border-color: transparent; }
 /* Premium's gold wash ALWAYS outranks the colorful purple — the gold state is the reward. */
 .home-banner.premium { background: var(--home-premium-fill); border-color: var(--home-premium-border); }

@@ -44,6 +44,7 @@ var SKEYS = require(path.join(__dirname, 'swift_source_keys.js'));
 var LAYOUT = require(path.join(__dirname, 'board_layout_check.js'));
 var SLAYOUT = require(path.join(__dirname, 'swift_layout_check.js'));
 var NAVICONS = require(path.join(__dirname, 'nav_icons_check.js'));
+var HCHROME = require(path.join(__dirname, 'home_chrome_check.js'));
 var SLAYOUTMUT = require(path.join(__dirname, 'swift_layout_mutation_test.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
@@ -154,6 +155,7 @@ record('board layout invariants', LAYOUT.selfTest());
 // the greedy one-axis frame that pushed the Streak solver into the middle of the phone.
 record('swift layout invariants', SLAYOUT.selfTest());
 record('nav icon invariants', NAVICONS.selfTest());
+record('home chrome invariants', HCHROME.selfTest());
 // …and the proof those greps can still fail.
 record('swift layout mutation', SLAYOUTMUT.selfTest());
 // Where the search runs, and the frame budget it must respect when it runs in-thread.
