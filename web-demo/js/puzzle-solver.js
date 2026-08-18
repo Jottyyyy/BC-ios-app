@@ -485,7 +485,7 @@ var BiyaPuzzleSolver = (function () {
       if (onExitCb) onExitCb();
     };
     header.appendChild(back);
-    header.appendChild(el('div', 'pz-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pz-logo'));
     header.appendChild(el('div', 'pz-spacer'));
     root.appendChild(header);
 

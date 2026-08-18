@@ -28,9 +28,11 @@ const MUTANTS = [
   {
     id: 'greedy_one_axis_frame',
     file: 'PuzzleStreakScreens.swift',
-    from: `Circle()
-                .strokeBorder(PuzzlePalette.gold, lineWidth: PuzzleStreakSolver.logoBorder)
-                .frame(width: PuzzleStreakSolver.logoSize, height: PuzzleStreakSolver.logoSize)`,
+    // The anchor moved when the empty gold ring became `HomeLogo` — `AppLogo.tsx` is a ring around
+    // an image, and neither language had ever put the image in it. Same `to:`, same bug reproduced;
+    // only the line it replaces changed. (A mutant whose `from:` no longer matches never applies,
+    // which reads as a pass and proves nothing, so it is re-pointed rather than dropped.)
+    from: 'HomeLogo(size: PuzzleStreakSolver.logoSize)',
     to: 'Color.clear.frame(width: PuzzleStreakSolver.backBtnW)',
     why: 'the original Streak header bug, verbatim: a Color spacer with a width and no height',
   },

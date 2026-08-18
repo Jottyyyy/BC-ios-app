@@ -289,7 +289,7 @@ var BiyaPuzzleStreak = (function () {
     header.appendChild(back);
     ui.counter = el('div', 'pzks-counter', '🔥 ' + st.streak.currentStreak);
     header.appendChild(ui.counter);
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var stats = el('div', 'pzks-stats');

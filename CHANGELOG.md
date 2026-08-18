@@ -9,6 +9,63 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — The Biyaherong Coach mark in every logo slot, and no gold knight left inside the app
+
+Client: *"yang ganyang image palitan mo lahat ng Biyaherong Coach logo please, lahat."* The
+screenshot is a ~30 px gold knight in a circle. `web-demo/` updated to match.
+
+**Three places still drew the knight**, and the screenshot is the third:
+
+- `HomeScreen.coachRing` — the Play-with-Coach tile, which omitted `asset:` and so took
+  `HomeAppIcon`'s `.appIcon` default.
+- `home.js`'s `playCoach` card art.
+- **`premium.js`'s `.pw-logo`** — the paywall header, at 30 px in a `border-radius: 50%` circle.
+  The only true circular crop of the knight in either language, and a **live divergence**: the
+  Swift paywall has been drawing the collage in a squircle all along.
+
+All three take the mark now, and `HomeAppIcon`'s default flipped to `.brandLogo` so a new call site
+cannot pick the knight up by omission — which is exactly how the coach ring kept it after the Home
+header had moved on.
+
+**And nine more logo slots were drawing nothing at all.**
+`tools/metrics/puzzle_styles.json` → `shared.logo._source` is `components/AppLogo.tsx`: a View with
+a 2 px gold border, a radius of half its size and `overflow: hidden` — **a ring around an image**.
+The browser ported the ring to nine headers (`.pzh-logo`, `.pz-logo`, `.pzd-logo`, `.cgs-logo`,
+`.cgc-logo`, `.cgp-logo`, `.pgl-logo`, `.pgc-logo`, `.pgd-logo`) and never the image, so an empty
+gold circle has been sitting beside the title on every puzzle, coach and pairing screen. Thirteen
+element sites now go through one helper — `BiyaIcons.brandLogoEl(cls)` — so the asset path exists
+once instead of thirteen times.
+
+Swift had the same gap in three places with an exact drop-in available, and all three are filled:
+the two coach headers held a `Color.clear` counterweight of precisely the ring's size, and the
+Streak solver already drew the ring and left it empty. Its own comment named the browser rule it
+was mirroring. Same footprint, so nothing moved.
+
+**The circles became squircles**, via one `--brand-radius: 24%` token — the login hero's own 30/124
+proportion, as a percentage because the rings run 30–40 px. A circle crops the wordmark off the
+bottom of the collage; that reasoning was already written down three times and is why the Home
+header changed last round.
+
+**The knight file stays.** `Images/app-icon.png` is byte-identical to
+`ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png` — it **is** the app icon, and a photo
+collage with a wordmark turns to mud at 60 px. `Diagnostics.swift`'s hard count of 6 PNGs is
+untouched; only what draws it changed. `login.js`'s `BRAND_FALLBACK` stays too: it fires only if
+`brand-logo.png` 404s, and a knight beats a broken-image box.
+
+**Gate.** `home_chrome_check.js` had been pinning the coach ring to the knight
+(*"the Play-with-Coach ring still draws the app icon (default asset)"*); that assertion is inverted,
+and two sections were added. §7 bans `app-icon` from every browser script, every stylesheet and
+every Swift view, with exactly two named exemptions — the iOS icon and the login 404 fallback — and
+requires an exempt file to mention it **once**, so an exemption cannot cover a second use. §8 pins
+all nine rings: built through the helper, with an `img` rule, and not a circle. 188 → 268
+invariants. Three mutants killed: the knight back on the paywall, a ring back to a bare `div`, and
+the knight back on the coach ring.
+
+`swift_layout_mutation_test.js`'s `greedy_one_axis_frame` mutant was anchored on the Streak ring's
+`Circle().strokeBorder(…)`, which this change replaced. **A mutant whose anchor is gone never
+applies and reads as a pass**, so it is re-pointed at `HomeLogo(size:)` — same `to:`, same bug
+reproduced. 10/10 still killed. `js_goldens` 33,967 → 34,151.
+
 ### 2026-08-18 (changed) — Home is the app root: the tab bar is gone, every screen has a back button
 
 Client: *"pwede ba paremove ako nito, hindi ko naman to need, kailangan ko lang mga back button para

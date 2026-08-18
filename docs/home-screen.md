@@ -157,8 +157,9 @@ Plus eight tap callbacks (avatar, six cards, the membership banner), all default
 `onSearch` and `onDonate` were removed with the controls that raised them.
 
 **The header mark is the brand logo, not the app icon.** `Images/brand-logo.png` is the "Byaherong COACH
-APP" collage; `Images/app-icon.png` is the gold knight, which stays on the Play-with-Coach ring and the
-iOS app icon. That choice forces the shape: the collage carries a wordmark across its bottom edge, so it
+APP" collage; `Images/app-icon.png` is the gold knight, which is now **only** the iOS app icon —
+the Play-with-Coach ring drew it until the client asked for the brand mark everywhere, and
+`HomeAppIcon` defaults to `.brandLogo` so a new call site cannot pick the knight up by omission. That choice forces the shape: the collage carries a wordmark across its bottom edge, so it
 is clipped to a **squircle**, at the login hero's own corner proportion
 (`LoginLayout.logoRadius / LoginLayout.logoSize`) rather than a second hand-picked radius — same mark,
 same curve, both screens. The radius is a *ratio* because `logoSize` spans 41–92 pt: a fixed one would

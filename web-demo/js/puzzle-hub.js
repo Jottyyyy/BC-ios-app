@@ -138,7 +138,7 @@ var BiyaPuzzleHub = (function () {
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzh-title', MET.STR.hubTitle));
-    header.appendChild(el('div', 'pzh-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzh-logo'));
     root.appendChild(header);
 
     var hero = el('div', 'pzh-hero');

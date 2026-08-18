@@ -112,7 +112,7 @@ var BiyaPuzzleDaily = (function () {
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzd-title', T.dailyTitle));
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var content = el('div', 'pzd-content');
@@ -188,7 +188,7 @@ var BiyaPuzzleDaily = (function () {
     // The original showed Chess.com's puzzle title here; offline, the primary theme stands in.
     centre.appendChild(el('div', 'pzds-sub', themeSummary(daily.puzzle)));
     header.appendChild(centre);
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var boardBand = el('div', 'pz-board');

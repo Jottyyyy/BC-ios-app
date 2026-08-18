@@ -107,7 +107,7 @@ var BiyaCoachSelect = (function () {
     centre.appendChild(el('div', 'cgs-title', STR.selectHeader));
     centre.appendChild(el('div', 'cgs-family', STR.selectFamily));
     header.appendChild(centre);
-    header.appendChild(el('div', 'cgs-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('cgs-logo'));
     root.appendChild(header);
 
     root.appendChild(el('div', 'cgs-blurb', STR.selectBlurb));

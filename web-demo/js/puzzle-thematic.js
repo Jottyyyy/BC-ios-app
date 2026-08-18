@@ -126,7 +126,7 @@ var BiyaPuzzleThematic = (function () {
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzt-title', T.thematicTitle));
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var badgeRow = el('div', 'pzt-badge-row');
@@ -192,7 +192,7 @@ var BiyaPuzzleThematic = (function () {
     ui.solved = el('div', 'pzts-sub', T.thematicSolved(solved));
     centre.appendChild(ui.solved);
     header.appendChild(centre);
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var boardBand = el('div', 'pz-board');

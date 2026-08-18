@@ -60,6 +60,12 @@
   --home-premium-border: rgba(253, 176, 34, .35);
   --home-premium-fill: rgba(253, 176, 34, .06);
 
+  /* The brand mark's corner radius, wherever it is drawn. The login hero's proportion
+     (30/124 = 24.19%) as a PERCENTAGE, because the rings that hold it run 30-40px and a fixed
+     radius would read as a circle at one end and a square at the other. A circle crops the
+     wordmark off the bottom of the mark — see docs/login.md. */
+  --brand-radius: 24%;
+
   /* board — Classic Brown, the pair the real RN board draws
      (tools/metrics/puzzle_styles.json -> shared.board.lightSquare/darkSquare).
      Read ONLY by <chess-board>; js/analysis.js sets its own per-theme values on the

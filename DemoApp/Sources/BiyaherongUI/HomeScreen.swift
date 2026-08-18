@@ -247,7 +247,10 @@ struct HomeCardView: View {
     private var coachRing: some View {
         let ring = iconBox * metrics.circleRatio
         let shape = RoundedRectangle(cornerRadius: metrics.coachRingRadius, style: .continuous)
-        return HomeAppIcon(size: ring, shape: shape)
+        // `.brandLogo`, not the defaulted `.appIcon`. The gold knight is the APP icon — it stays
+        // on the iOS home screen and in `ios/AppIcon.svg` — and this was the last place inside the
+        // app that still drew it.
+        return HomeAppIcon(size: ring, shape: shape, asset: .brandLogo)
             .overlay(shape.strokeBorder(Theme.gold, lineWidth: HomeLayout.coachRingBorderWidth))
             .shadow(color: Theme.gold.opacity(HomeLayout.coachGlowOpacity),
                     radius: HomeLayout.coachGlowRadius)

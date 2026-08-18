@@ -103,6 +103,13 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 
 All scripts are classic `<script>` (no ES modules), so it works from `file://` with no build step.
 
+**Every header's logo ring holds the brand mark**, through one helper: `BiyaIcons.brandLogoEl(cls)`
+in `js/icons.js`, which owns the asset path. `components/AppLogo.tsx` — captured in the extraction
+as `puzzle_styles.json` → `shared.logo` — is a gold ring with `overflow: hidden` **around an
+image**; the browser ported the ring to nine headers and never the image, so all nine drew an empty
+gold circle beside the title. `tools/qa/home_chrome_check.js` §8 pins all nine, and §7 bans the gold
+knight from anywhere inside the app.
+
 ### Two shell rules, both of which shipped broken before they were gated
 
 **Every stylesheet in `css/` must be linked.** `coach.css` was not, from the commit that introduced

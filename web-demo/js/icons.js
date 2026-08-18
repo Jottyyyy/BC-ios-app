@@ -62,7 +62,26 @@ var BiyaIcons = (function () {
     return svg(size || GEO.box, out);
   }
 
-  var API = { GEO: GEO, back: back, menu: menu };
+  /**
+   * The brand mark, in the gold ring every screen header carries.
+   *
+   * `tools/metrics/puzzle_styles.json` -> `shared.logo._source` is `components/AppLogo.tsx`: a View
+   * with a 2px gold border, a radius of half its size, and `overflow: hidden` — a ring **around an
+   * image**. The browser ported the ring to nine headers and never the image, so every one of them
+   * has been drawing an empty gold circle. This is the image.
+   *
+   * One function rather than nine `<img>` strings, so the asset path exists once. The wrapper keeps
+   * whichever `*-logo` class its screen already styles; only the `img` inside is new.
+   */
+  var BRAND_SRC = 'assets/images/brand-logo.png';
+  function brandLogoEl(cls) {
+    var d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = '<img src="' + BRAND_SRC + '" alt="">';
+    return d;
+  }
+
+  var API = { GEO: GEO, back: back, menu: menu, BRAND_SRC: BRAND_SRC, brandLogoEl: brandLogoEl };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   return API;
 })();
