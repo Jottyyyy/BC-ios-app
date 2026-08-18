@@ -366,7 +366,7 @@ enum HomeCard: Int, CaseIterable, Identifiable {
         case .puzzles: return "Play Puzzles"
         case .analysis: return "Analysis Board"
         case .videos: return "Tutorial Videos"
-        case .openingTrainer: return "Opening Trainer"
+        case .openingTrainer: return "Opening Tree"
         case .playCoach: return "Play with\nCoach"
         case .pairing: return "Pairing\nManager"
         }
@@ -378,7 +378,7 @@ enum HomeCard: Int, CaseIterable, Identifiable {
         case .puzzles: return "Train Your Tactics"
         case .analysis: return "Analyze Games"
         case .videos: return "Learn From FM Deniel"
-        case .openingTrainer: return "Master Your Repertoire"
+        case .openingTrainer: return "Explore Your Openings"
         case .playCoach: return nil
         case .pairing: return "Tournaments"
         }

@@ -151,6 +151,13 @@
   <script src="js/pairing-list.js"></script>
   <script src="js/pairing-create.js"></script>
   <script src="js/pairing-detail.js"></script>
+
+  <!-- Opening Tree. Order is load-bearing: opening-tree.js resolves engine.js and pgn.js lazily,
+       but opening-store.js and openings.js read their siblings at IIFE time. -->
+  <script src="js/opening-tree.js"></script>
+  <script src="js/opening-metrics.js"></script>
+  <script src="js/opening-store.js"></script>
+  <script src="js/openings.js"></script>
   <!-- Play vs Coach. Order is load-bearing: coach-game reads BiyaCoachGame's engine at load time,
        coach-strings is read by every screen, and coach-play reads coach-turn.
        These are LOADED but not yet ROUTED — app.js still shows the old sample Play tab. Loading

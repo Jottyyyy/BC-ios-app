@@ -108,7 +108,8 @@ const APP_CODE = code(APP);
   const home = PHONE_CODE.slice(PHONE_CODE.indexOf('HomeScreen(userName: loginStore.displayName'));
   const wired = [...home.matchAll(/^\s+(on[A-Z]\w*): ?(gated )?/gm)]
     .reduce((acc, m) => { acc[m[1]] = !!m[2]; return acc; }, {});
-  for (const name of ['onPuzzles', 'onAnalysis', 'onPlayCoach', 'onPairing']) {
+  for (const name of ['onPuzzles', 'onAnalysis', 'onPlayCoach', 'onPairing',
+                      'onOpeningTrainer']) {
     expect(wired[name] === true, `${name} is not wrapped in gated`);
   }
   // The two deliberate exemptions, and exactly those two.
@@ -119,7 +120,8 @@ const APP_CODE = code(APP);
     `${ungated.length} ungated Home callbacks (${ungated.join(', ')}), expected 2`);
 
   // Pushed routes are reachable ONLY from those tiles, which is what makes wrapping them enough.
-  for (const flag of ['showAnalysis = true', 'showCoach = true', 'showPairing = true']) {
+  for (const flag of ['showAnalysis = true', 'showCoach = true', 'showPairing = true',
+                      'showOpenings = true']) {
     const hits = (PHONE_CODE.match(new RegExp(flag.replace(/ /g, '\\s*'), 'g')) || []).length;
     expect(hits <= 2, `${flag} is set ${hits} times — a second entry point would bypass the gate`);
   }

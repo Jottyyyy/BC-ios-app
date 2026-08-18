@@ -1817,6 +1817,94 @@ free tier carried the app; now it is the only door in, and a CTA reading "Start 
 Trial" against a product with no introductory offer promises something the store will not honour.
 Listed in `docs/subscription.md` § *Before this can ship*.
 
+## Opening Tree — the openingtree.com port (2026-08-18, fourth round)
+
+Client: *"yung opening trainer pag cliniclick ko ayaw mabuksan … gusto ko mangyari dyan katulad dito
+mismo https://www.openingtree.com/."*
+
+The tile was a designed placeholder, not a bug: `HomeScreen.onOpeningTrainer` defaulted to `{}` and
+no host ever passed it, in either language. What follows is what the screen behind it had to decide.
+
+### Two features share one tile's name in the source app
+
+The RN "Openings" hub is a **tab switch** between two unrelated things: a Chessable-style SM-2
+**Trainer** over 22 curated repertoires (server-driven, `OpeningTrainerController` + `applySm2`), and
+**My Tree**, the 1,457-line openingtree.com clone. `specs/BIYAHERONG-PORT-SPEC.md` §4 specs the
+first in full — 440 lines including the SM-2 algorithm in Swift and all 22 repertoires — and never
+specs the second, mentioning it only as *"hands off to the legacy opening-tree screen"*.
+
+The client named openingtree.com, so **the tree is what was built**. The SM-2 trainer stays unbuilt
+and §4 stands as its design. The tile's copy moved to "Opening Tree / Explore Your Openings" because
+"Master Your Repertoire" describes the other one.
+
+### SAN keys, not FEN keys — a deliberate divergence from `OpeningBook`
+
+`OpeningTree.Node` is keyed by the SAN of the move that reaches it, so `1.e4 c5 2.Nf3` and
+`1.Nf3 c5 2.e4` stay separate branches. That is the RN original's `Record<string, TreeNode>` and
+openingtree.com's model, and it is the **opposite** of what `OpeningBook` does one file away, where
+`positionKey` deliberately collapses transpositions — a fix `build_eco.php` had to make before the
+book shipped. Both are correct: a book answers "is this theory", a tree answers "what do I play".
+Written down because the two sitting side by side otherwise reads as an oversight.
+
+### Stats are the mover's, and the inversion is the feature
+
+`wins`/`draws`/`losses` describe how the side that PLAYED the move fared, so the sign flips on the
+opponent's plies:
+
+```swift
+let moverScore = moverIsOwner ? ownerScore : -ownerScore
+```
+
+Reversed, every second row of the list is exactly wrong and entirely plausible-looking. Asserted by
+name in `replay_opening_tree.js` §3 and in the `opening_tree` parity group, and mutation-checked.
+
+### The sort tie-break is load-bearing
+
+Count descending, ties by SAN ascending. `Dictionary` iteration order is unspecified in Swift and
+`sort` is not stable (the rule `CLAUDE.md` states for every ported sort), so a comparator on `count`
+alone gives a different order on every run and a different order from the JS twin — which would make
+the replay itself meaningless.
+
+### INVENTED constant: `defaultMaxPlies = 40`
+
+The RN screen has **no** depth cap and walks every ply of every game. At its own 2,000-game download
+ceiling that is a memory hazard — a 120-ply game contributes 120 nested dictionaries — and it is not
+what an opening tree is for: past move 20 every count is 1 and the branch is a game record. 40 plies
+is 20 full moves. `maxGamesLimit = 2000` is the RN form's own number, kept so the two agree.
+
+### No golden file, and why that is not a gap
+
+Every other Core module is pinned to a PHP oracle. This one cannot be: `openingtree.tsx` is
+TypeScript in the RN app, not a Laravel controller, and the backend's `/api/openings` only **stores**
+a `tree_data` blob the client built. The differential partner is `web-demo/js/opening-tree.js`
+instead, compared source-to-source by `replay_opening_tree.js` and run by `js_goldens.js` — the same
+standing-in the notation core uses, and the reason the `opening_tree` floor is a plain assertion
+count rather than a golden-case count.
+
+### Fixed on the way through
+
+- **`mainlineTokens` is a tokenizer, not a validator.** `"not a game"` returns three move tokens, so
+  the obvious `games.isEmpty` check passes and builds an empty tree. Both languages now validate on
+  **positions**, after the replay.
+- **A missing `Result` tag is read off the movetext, not off the tokens.** `mainlineTokens` drops
+  result tokens by design, so the first draft's `tokens.last` fallback could never have matched —
+  dead code that looked like a feature. Both halves now scan the raw movetext's last token.
+- **`--op-*` collided with itself.** `buildBorder`, `inputBorder` and `infoBorder` each name a width
+  in `LAYOUT` and a colour in `PALETTE`; one prefix let the colour overwrite the width, and three
+  borders rendered with a hex string as their thickness. Split into `--op-*` (geometry) and
+  `--opc-*` (colour), asserted by the replay.
+- **The extractor could not run from a worktree.** A worktree sits three levels deep, so
+  `ROOT/../BYAHERONG-COACH-FRONTEND` resolves inside `.claude/worktrees/`. This extractor takes a
+  `FRONTEND_ROOT` override, as `tools/oracle` takes `LARAVEL_ROOT`; the other four still do not.
+
+### The one networked path, declared but not wired
+
+`OpeningSource` has four cases and `isOnline` is the single source of truth for which two need the
+radio. The form draws all four — hiding them would lie about what the feature is — and the online
+pair refuses with a named message. The download belongs in `ContentClient` (spec §0.1: the only
+`URLSession` sites in the app), and putting a second one in a SwiftUI button is exactly the leak that
+rule exists to prevent. `replay_opening_tree.js` §7 asserts the two languages agree on the set.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had
