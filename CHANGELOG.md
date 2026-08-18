@@ -9,6 +9,69 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — Nothing opens without the trial: one gate per language, at the router
+
+Fourth round of client feedback: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi
+sila naka 7-days free trial … kada click lagi mong dalhin doon na go for free trial."*
+`web-demo/` updated to match.
+
+**This reverses the policy the subscription was designed around.** `docs/subscription.md` opened
+with *"a genuinely playable free tier … the paywall is reached on demand … never as a wall in front
+of a new install"*, and `Entitlement.Access.free` was commented *"Never a dead app — this is what
+makes the offline design safe."* Both now say the opposite, and say so explicitly rather than
+quietly: the free tier's caps are still real, still parity-tested, and still describe exactly what
+a **lapsed** subscriber returns to — they are simply unreachable by someone who never subscribed.
+
+**Nothing in Core changed.** `Entitlement`, `DailyLimits`, `PremiumStore` and every per-feature
+gate in `PuzzleHubScreen` / `CoachScreens` are untouched: they sit behind `requireMinCounts` floors
+that `CLAUDE.md` forbids lowering, `Entitlement.resolve` already fails closed to `.free` with no
+subscription, and re-deriving a policy the shell can express in one guard would have been the wrong
+layer. What was added is that guard, once per language, at the router.
+
+| | Swift (`PhoneView.swift`) | Browser (`app.js`) |
+|---|---|---|
+| Predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `locked()`, the same two calls |
+| Open set | `openTabs = [0, 3]` — Home, Profile | `OPEN_ROUTES`, plus `login`/`paywall` |
+| Tab bar | `PhoneTabBar(tab: gatedTab)` — a `Binding` whose setter raises the paywall and leaves `tab` alone | the tab `onclick`, after `leaveCurrentPuzzle()` |
+| Tiles | `gated { … }` on every wired destination | one check in `renderHome`'s handler |
+| Lapse mid-session | `visibleTab`, re-resolved every render | `render()`'s backstop, before the dispatch |
+
+**Home still draws.** The client asked for *"kada click"*, not for a blank wall, and an offer needs
+something to sell against — the six cards, the quote and the membership banner are what the trial
+buys. **Profile stays open too**, because it owns Sign out: walling it strands a user who signed in
+with the wrong Apple Account, and Restore Purchases is on the paywall they would then be unable to
+leave. Those are the only two exemptions, and the gate asserts there are exactly two.
+
+**Gating the tiles is enough for the pushed routes.** Analysis, Play vs Coach and Pairing are
+reachable *only* from a Home tile — the gate asserts each `show* = true` has at most one other
+setter — so three screens are closed by four wrapped closures and no flag of their own.
+
+**The lapse case is why both halves re-resolve rather than remember.** `Transaction.updates` can
+revoke an entitlement while the user is standing on the Puzzles tab; a tap-time-only gate would let
+them keep playing until they next tapped something. Swift resolves `visibleTab` on every render and
+the browser re-checks before its dispatch chain, forcing `paywallReturn` to Home — returning to the
+screen that was just walled would bounce straight back.
+
+**It closed a real divergence on the way.** `app.js` gated only the four puzzle modes: Play vs
+Coach, the Analysis Board and the Swiss round ceiling had **no premium reference at all** in the
+browser (`coach-select.js`, `analysis.js`, `pairing-create.js` contain none), while Swift gated all
+three. `replay_premium.js` asserts the JS *puzzle* gates and the *Swift* coach/review gates
+separately, so the drift passed every suite — and the client, who tests on Windows, was looking at
+an app with no locks on it. One router guard closes all of it.
+
+**Gate.** New `tools/qa/trial_gate_check.js`, 39 invariants. The cross-language ones are the point:
+the Swift tab **indices** are mapped through the browser's own tab table, so `[0, 3]` is *verified*
+to still mean Home and Profile rather than assumed to, and each side's open set is checked against
+the other's. Four mutants killed — an ungated tile, the raw `$tab` binding, walling Profile in one
+language only, and deleting the browser backstop. `swift_layout_mutation_test.js`'s
+`tab_bar_shown_on_pushed_routes` anchor moved to `gatedTab` (it had gone vacuous — "anchor not
+found" is a pass in the suite's own eyes only until you read it). `js_goldens` 32,971 → 33,010.
+
+**Still outstanding, unchanged by this:** the 7-day introductory offer does not exist in App Store
+Connect yet (`docs/subscription.md` § *Before this can ship*). Until it does, `trialEligible` is
+false and the CTA promises something the store will not honour — which matters a great deal more
+now that it is the only door in.
+
 ### 2026-08-18 (changed) — Book strip deleted, engine lines numbered, and one real vector back/☰ icon everywhere
 
 Third round of client feedback, three asks. `web-demo/` updated to match.
