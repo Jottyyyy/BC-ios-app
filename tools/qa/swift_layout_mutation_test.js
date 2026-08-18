@@ -86,11 +86,13 @@ const MUTANTS = [
       + 'move strip above',
   },
   {
-    id: 'book_strip_drawn_unconditionally',
+    id: 'book_band_reintroduced',
     file: 'AnalysisBoardScreen.swift',
-    from: 'if !vm.bookRows.isEmpty {',
-    to: 'if true {',
-    why: 'the empty opening-book box back again — the whole point of the change',
+    from: '                    AnalysisMoveStrip(tokens: vm.stripTokens,',
+    to: '                    AnalysisBookStrip(rows: vm.bookRows)\n'
+      + '                    AnalysisMoveStrip(tokens: vm.stripTokens,',
+    why: 'an opening-book band added back to the Analysis root, which is how the box the client '
+      + 'asked twice to be rid of would return',
   },
   {
     id: 'tab_bar_shown_on_pushed_routes',

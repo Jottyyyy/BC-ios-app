@@ -323,7 +323,9 @@ var BiyaPairingMetrics = (function () {
 
   var STR = {
     // 1.2 List
-    back: '←',
+    // `back` used to be here, as the character `←`. It is a VECTOR now (js/icons.js /
+    // NavIcons.swift), so it is no longer a string and no longer generated into
+    // PairingStrings.swift. nav_icons_check.js asserts it does not come back.
     tournaments: 'Tournaments',
     listSub: 'Swiss & Round Robin Manager',
     emptyGlyph: '\u265E',

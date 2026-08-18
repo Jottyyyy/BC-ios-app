@@ -62,13 +62,11 @@ struct PairingDetailScreen: View {
     private func header(_ t: PairingDocument.Tournament) -> some View {
         let accent = PairingPalette.type(t.type == .swiss)
         return HStack(spacing: 0) {
-            Button(action: onExit) {
-                Text(PairingStrings.back)
-                    .font(Theme.nunito(PairingDetail.backArrowFontSize, .semiBold))
-                    .foregroundStyle(PairingDetail.backArrowColor)
-                    .frame(width: PairingDetail.backBtnWidth, height: PairingDetail.backBtnHeight)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            // A vector, not the `←` character the generated strings table used to carry.
+            // The frame is untouched: `backBtnWidth` is an extracted StyleSheet value.
+            NavIconButton(.back, size: PairingDetail.backArrowFontSize,
+                          tint: PairingDetail.backArrowColor, action: onExit)
+                .frame(width: PairingDetail.backBtnWidth, height: PairingDetail.backBtnHeight)
             VStack(spacing: PairingDetail.headerMetaMarginTop) {
                 Text(t.name)
                     .font(Theme.nunito(PairingDetail.headerTitleFontSize, .extraBold))
@@ -140,9 +138,10 @@ struct PairingDetailScreen: View {
                 .font(Theme.nunito(PairingList.emptySubFontSize))
                 .foregroundStyle(PairingList.emptySubColor)
             Button(action: onExit) {
-                Text(PairingStrings.back)
-                    .font(Theme.nunito(PairingDetail.actionBtnTextFontSize, .extraBold))
-                    .foregroundStyle(PairingDetail.actionBtnTextColor)
+                // The "tournament deleted" escape hatch. It is a filled pill rather than a header
+                // button, so it takes the GLYPH and keeps its own Button and padding.
+                NavIconGlyph(kind: .back, size: PairingDetail.actionBtnTextFontSize,
+                             tint: PairingDetail.actionBtnTextColor)
                     .padding(.horizontal, PairingDetail.tabsPaddingHorizontal)
                     .padding(.vertical, PairingDetail.actionBtnPaddingVertical)
                     .background(PairingDetail.actionBtnBackgroundColor,

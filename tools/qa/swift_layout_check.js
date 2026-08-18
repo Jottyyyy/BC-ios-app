@@ -199,9 +199,11 @@ function lineOf(file, re) {
       .test(s),
     'the engine panel must claim the leftover height AFTER its `.background`, bottom-aligned, so '
       + 'it hugs its content and paints only behind it');
-    // And the book strip must be conditional, or the empty box comes back.
-    expect(/if !vm\.bookRows\.isEmpty \{[\s\S]{0,200}?AnalysisBookStrip\(/.test(s),
-      'the book strip must only be built when there IS a book — an empty box was the complaint');
+    // And there is no book band at all any more. Inverted rather than deleted: the strip replaced a
+    // 230pt panel and was itself removed one round later, and the way that comes back is by someone
+    // re-adding a band nobody asked for.
+    expect(!/AnalysisBookStrip/.test(s) && !/vm\.bookRows/.test(s),
+      'the Analysis root builds no opening-book band — band 6 is edit mode only now');
   }
 }
 

@@ -19,6 +19,9 @@ Feature- and subsystem-level documentation for this repo.
 - **[`../web-demo/README.md`](../web-demo/README.md)** — end-user run steps for the Windows browser demo.
 
 ## Feature docs
+- [`navigation-chrome.md`](navigation-chrome.md) — the back and ☰ icons: one hand-drawn vector per
+  language from one 24×24 geometry, replacing the `←`/`☰` characters that fell back to whatever face
+  the platform had, and closing the gap where Swift drew a chevron while the browser drew an arrow.
 - [`chessboard.md`](chessboard.md) — the one board renderer per language, the sizing rule every screen
   obeys (a fixed square from the WIDTH — never `min(w, h)`), coordinates, and the gate that fails when
   either is reinvented. **Read this before touching any screen that shows a board.**

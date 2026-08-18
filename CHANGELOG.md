@@ -9,6 +9,72 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (changed) — Book strip deleted, engine lines numbered, and one real vector back/☰ icon everywhere
+
+Third round of client feedback, three asks. `web-demo/` updated to match.
+
+**1 · The opening-book strip is gone.** *"Pwede ba remove mo na ito, siguro hindi na ito kailangan."*
+One round after the 230 pt "out of book" panel became a 44 pt row of `san · eco` chips, the strip
+itself goes: `AnalysisBookStrip` / `paintBookStrip`, `AnalysisVM.bookRows`, `playBookMove`, the JS
+`bookContinuations` view helper and `playSanMove`, and the `.an-bookstrip` / `.an-bchip` CSS —
+plus the already-dead `.an-brow` / `.an-bname` / `.an-panel-head` leftovers of the vertical panel.
+The opening **name** survives, in the engine panel's info row. `AnalysisSession.bookContinuations`
+survives too: it is pure, parity-tested, and Opening Trainer will want it.
+
+`bands()`, `fixedWithoutEngine` and `engineAvailable` lost their `inBook` parameter in both
+languages — **no band varies with the book any more**, and the engine panel keeps the 44 pt on every
+in-book position. §10c is now the inverse assertion (autoplay is the only conditional band left) and
+the §10d row budgets rose with it: a 375×667 SE now fits 4 single-line or 2 wrapped rows, up from
+3 and 1.
+
+Deleting the CSS orphaned `--an-row-spacing`, `--an-chip-pad-h` and `--an-chip-pad-v`, which only
+the book chips read. **Re-homed, not deleted**, onto `.an-erow`'s `gap` and `.an-depth`'s `padding`,
+which had been carrying hardcoded copies — and the depth chip's copy was `3px 5px` against the
+metrics' 4/8, so the browser chip had been two pixels tighter than the app's *and* than
+`engineChromeHeight()`'s own budget.
+
+**2 · Every engine line carries its rank, in its arrow's colour.** *"Lagyan mo ng numbering para
+alam kung anong number."* A one-digit badge tinted `AnalysisArrow.color(rank:)` — green, blue,
+orange — so the number says which line **and** which of the three board arrows. `EngineRow.rankLabel`
+does the `+ 1` in Core (a view body may not contain arithmetic, and both languages must print the
+same thing). The badge takes the depth chip's 11 pt, not the row's 13: every other engine cell is
+asserted equal to the move strip's size, and a badge that large would out-shout the moves.
+
+Width, not height, was the cost — the reclaimed 44 pt pays vertically, but the row was already
+tight. New §10e pins what is left for the moves: at 375 the continuation still gets 239 pt, 30
+characters a line and 60 across two, against the ~50 a 12-ply continuation needs.
+
+**3 · Back and ☰ are hand-drawn vectors now, on every page.** New `NavIcons.swift` and
+`web-demo/js/icons.js`, both from one 24×24 geometry that the new gate asserts equal number for
+number. Adopted at all 19 Swift and 23 browser back sites, plus the one hamburger per language.
+
+This was as much a convergence job as a beautification. `←` and `☰` were characters drawn in Nunito,
+which has neither, so both fell back to whatever face the platform picked — and `☰` is the I Ching
+trigram for heaven, thin and unevenly spaced, not a hamburger. Worse, **Swift already drew
+`Image(systemName: "chevron.left")` on four screens where the browser drew `←`**, and nothing
+anywhere asserted a glyph, an icon or a button class. Each screen keeps its own extracted frame and
+its own colour (`stroke="currentColor"` on the browser side); what the component adds is the icon, a
+44 pt-wide hit target and a pressed state — none of which the hand-rolled buttons had.
+
+`CoachGlyph.back` and `PairingStrings.back` were retired with inverted assertions; the latter is
+generated, so it went at the source and was regenerated. The 44 pt minimum is applied to **width
+only** — a 44 pt-tall button in the 36 pt Analysis header spilled 4 pt over the board's top rank and
+would have stolen taps from a8–h8.
+
+Four latent bugs fixed on the way through, all inside the diff already: `.pzd-back` hardcoded
+40/40/24 across five screens; `.pzp-back` read `--pzh-back-*` its own screen never published;
+`PuzzleHubScreen` sized its back button from the **list-row** chevron's line height; and
+`coach-select.js` read an undefined `STR.backArrow`.
+
+**Gates.** New `tools/qa/nav_icons_check.js` (~1000 invariants, wired into `js_goldens.js`) closes
+the hole entirely: no bare `←`/`☰` in either language, every button through the shared component, no
+second drawing path, and the two geometries equal. It also caught the one real bug of the change —
+`el()`'s third argument is `textContent` in every screen file but `analysis.js`, so an SVG string
+passed there drew nothing. `board_layout_check.js` 812→with the book classes asserted **absent**;
+`swift_layout_check.js` 265→268; the `book_strip_drawn_unconditionally` mutant replaced by
+`book_band_reintroduced` (10/10 killed); `replay_coach` now asserts **four** transport glyphs, not
+five.
+
 ### 2026-08-18 (changed) — Analysis Board: readable engine lines, no dead book box, longer variations, tap-to-play
 
 Client feedback on a TestFlight build, four asks, all delivered. `web-demo/` updated to match.

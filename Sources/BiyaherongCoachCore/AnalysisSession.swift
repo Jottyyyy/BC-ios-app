@@ -44,6 +44,14 @@ public struct EngineRow: Equatable, Sendable {
     public let from: Int
     public let to: Int
     public let depth: Int
+
+    /// What the panel's rank badge prints — 1-based, because "line 0" means nothing to a player.
+    ///
+    /// Here rather than in the view because `AnalysisBoardScreen` forbids arithmetic in a view body
+    /// (and `swift_layout_check` greps for it), and because the browser twin has to print the same
+    /// thing. One `+ 1`, in the one place both languages can be diffed.
+    public var rankLabel: String { String(rank + 1) }
+
     public init(rank: Int, evalText: String, san: String, continuation: String,
                 uci: String, from: Int, to: Int, depth: Int, pvUCI: [String] = []) {
         self.rank = rank; self.evalText = evalText; self.san = san

@@ -108,7 +108,7 @@ const first = (root, cls) => byClass(root, cls)[0];
 function loadSandbox() {
   const html = fs.readFileSync(path.join(ROOT, 'web-demo', 'index.html'), 'utf8');
   const order = [...html.matchAll(/<script src="js\/([^"]+)"><\/script>/g)].map(m => m[1]);
-  const need = ['pairing-engine.js', 'pairing-metrics.js', 'pairing-store.js',
+  const need = ['icons.js', 'pairing-engine.js', 'pairing-metrics.js', 'pairing-store.js',
                 'pairing-list.js', 'pairing-create.js', 'pairing-detail.js'];
   // Load in the PAGE's order, not this list's — the point is to prove the page order works.
   // pairing-store reads BiyaPairing at load time, so an engine tag placed after it would throw

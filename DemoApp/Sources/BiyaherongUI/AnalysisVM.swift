@@ -32,7 +32,6 @@ final class AnalysisVM: ObservableObject {
     @Published private(set) var engineRows: [EngineRow] = []
     @Published private(set) var boardArrows: [BoardArrow] = []
     @Published private(set) var openingText: String?
-    @Published private(set) var bookRows: [OpeningBook.Continuation] = []
     @Published private(set) var evalFraction: CGFloat = 0.5
     @Published private(set) var evalSymbol: String?
     @Published private(set) var depth = 0
@@ -159,7 +158,6 @@ final class AnalysisVM: ObservableObject {
             ? session.arrows.map { BoardArrow(from: $0.from, to: $0.to, rank: $0.rank) }
             : []
         openingText = session.openingText
-        bookRows = session.bookContinuations
         lastMove = session.lastMove
         checkSquare = session.checkSquare
         depth = session.snapshot?.depth ?? 0
@@ -433,10 +431,6 @@ final class AnalysisVM: ObservableObject {
         afterNavigation()
     }
 
-    func playBookMove(_ san: String) {
-        guard let m = session.position.move(forSAN: san) else { return }
-        perform(m)
-    }
 
     // MARK: - Toggles
 

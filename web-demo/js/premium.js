@@ -777,7 +777,7 @@ var BiyaPremium = (function () {
     applyMetrics(root);
 
     var head = el('div', 'pw-head');
-    head.innerHTML = '<button class="pw-back" type="button">←</button>'
+    head.innerHTML = '<button class="pw-back nav-icon" type="button">' + BiyaIcons.back() + '</button>'
       + '<div class="pw-head-title">'
       + (store.isPremium() ? STRINGS.premium : STRINGS.goPremium) + '</div>'
       + (store.isPremium()

@@ -443,7 +443,10 @@ var BiyaPairingDetail = (function () {
     var t = ST.tournament(doc, id);
 
     var header = el('div', 'pgd-header');
-    var back = el('button', 'pgd-back', T.back);
+    var back = el('button', 'pgd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
 

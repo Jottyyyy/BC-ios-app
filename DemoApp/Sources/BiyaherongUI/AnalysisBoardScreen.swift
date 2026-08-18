@@ -10,8 +10,13 @@ import BiyaherongCoachCore
 
 //   4  autoplay bar      only while autoplaying
 //   5  move strip        main line as tokens, branches inline as chips
-//   6  panels            the ECO explorer (where the Lichess masters panel used to be)
-//   7  engine lines      micro eval bar · ≤3 rows · depth + opening
+//   6  panels            edit mode only — Setup Position renders into it
+//   7  engine lines      micro eval bar · ranked rows · depth + opening
+//
+// Band 6 used to be the ECO explorer, then a strip of book chips. Both are gone: the client asked
+// for the strip's removal one round after it replaced the panel, and neither was earning its
+// height. The opening NAME survives, in the engine panel's info row, which is where the RN source
+// put it in the first place.
 //
 // NO NUMERIC LITERAL AND NO ARITHMETIC IN ANY VIEW BODY. Every number is a stored property or a
 // pure function from AnalysisMetrics, which is what lets `AnalysisMetricsCheck` assert the layout
@@ -55,11 +60,6 @@ struct AnalysisBoardScreen: View {
                     AnalysisMoveStrip(tokens: vm.stripTokens,
                                       onTap: { vm.goTo(id: $0) },
                                       onLongPress: { vm.annotateOrManage(id: $0) })
-                    // Only when there IS a book. There is no empty state any more: a 230pt box
-                    // saying "out of book" was the whole complaint.
-                    if !vm.bookRows.isEmpty {
-                        AnalysisBookStrip(rows: vm.bookRows, onPlay: { vm.playBookMove($0) })
-                    }
                     // The engine panel is THE flexible child now, and there must be exactly one:
                     // delete it and the root `.frame(width:height:)` centres the whole column,
                     // opening a navy gap above the header. It used to be the book panel, which
@@ -108,7 +108,6 @@ struct AnalysisBoardScreen: View {
         let edge = AnalysisBoard.size(screenWidth: size.width, pixelRatio: displayScale)
         let available = AnalysisLayout.engineAvailable(viewportHeight: size.height,
                                                        edge: edge,
-                                                       inBook: !vm.bookRows.isEmpty,
                                                        autoplaying: vm.autoplaying)
         return AnalysisLayout.enginePlan(available: available, wanted: vm.engineRows.count)
     }
@@ -117,12 +116,12 @@ struct AnalysisBoardScreen: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            headerButton("←", action: onClose)
+            headerButton(.back, action: onClose)
             Text("Analysis Board")
                 .font(Theme.nunito(AnalysisType.headerTitle, .extraBold))
                 .foregroundStyle(AnalysisPalette.textPrimary)
                 .frame(maxWidth: .infinity)
-            headerButton("☰", action: { vm.openMenu() })
+            headerButton(.menu, action: { vm.openMenu() })
         }
         .padding(.horizontal, AnalysisLayout.headerPaddingH)
         .padding(.vertical, AnalysisLayout.headerPaddingV)
@@ -133,14 +132,14 @@ struct AnalysisBoardScreen: View {
         }
     }
 
-    private func headerButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(Theme.nunito(AnalysisType.headerBtn))
-                .foregroundStyle(AnalysisPalette.textPrimary)
-                .frame(width: AnalysisLayout.headerBtnWidth)
-        }
-        .buttonStyle(.plain)
+    /// Vectors, not the `←` and `☰` characters this used to draw. Nunito has neither, so both fell
+    /// back to whatever face the platform picked, and `☰` is the I Ching trigram for heaven rather
+    /// than a hamburger. `headerBtn` still sets the size; see NavIcons.swift.
+    private func headerButton(_ kind: NavIconGlyph.Kind,
+                              action: @escaping () -> Void) -> some View {
+        NavIconButton(kind, size: AnalysisType.headerBtn,
+                      tint: AnalysisPalette.textPrimary, action: action)
+            .frame(width: AnalysisLayout.headerBtnWidth)
     }
 
     // MARK: - 2. Board + the main eval bar
@@ -613,54 +612,6 @@ struct AnalysisMoveStrip: View {
     }
 }
 
-// MARK: - 6. The opening book strip
-
-/// The ECO explorer, reduced to one row of chips.
-///
-/// It used to be `AnalysisOpeningPanel`: a vertical list under `.frame(maxHeight: 230)` and
-/// `.frame(maxHeight: .infinity)`. A `ScrollView` is greedy along its scroll axis, so it drew the
-/// full 230pt to hold one line of "Out of book — no ECO continuations here." — a quarter of the
-/// screen of nothing, above engine rows squeezed to 9pt. That is what the client photographed.
-///
-/// Two changes, both of them the ask: the list became a strip, and **the empty state is gone
-/// entirely** — the caller does not build this view when `bookRows` is empty. Between them they
-/// hand the engine panel back the height it needed.
-struct AnalysisBookStrip: View {
-    let rows: [OpeningBook.Continuation]
-    let onPlay: (String) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AnalysisLayout.rowSpacing) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    Button { onPlay(row.san) } label: { chip(row) }
-                        .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, AnalysisLayout.panelsPaddingH)
-        }
-        .frame(height: AnalysisLayout.bookStripHeight)
-        .background(AnalysisPalette.screenBg)
-    }
-
-    /// `Nf6 · B30`. The opening NAME is dropped: it is the one thing here that cannot be made to
-    /// fit on one line, and the engine panel's info row already names the opening.
-    private func chip(_ row: OpeningBook.Continuation) -> some View {
-        HStack(spacing: AnalysisLayout.bookChipGap) {
-            Text(row.san)
-                .font(AnalysisType.mono(AnalysisType.stripMove, .bold))
-                .foregroundStyle(AnalysisPalette.textPrimary)
-            Text(row.entry.eco)
-                .font(AnalysisType.mono(AnalysisType.engineOpening, .bold))
-                .foregroundStyle(AnalysisPalette.gold)
-        }
-        .padding(.horizontal, AnalysisLayout.chipPaddingH)
-        .padding(.vertical, AnalysisLayout.chipPaddingV)
-        .background(AnalysisPalette.surfaceAlt2,
-                    in: RoundedRectangle(cornerRadius: AnalysisLayout.toolBtnRadius))
-    }
-}
-
 // MARK: - 7. The engine panel
 
 /// Micro eval bar, up to three rows of `eval · SAN · continuation`, then depth and opening
@@ -716,6 +667,22 @@ struct AnalysisEnginePanel: View {
             ForEach(Array(rows.prefix(plan.rows).enumerated()), id: \.offset) { _, row in
                 Button { onPlay(row) } label: {
                     HStack(alignment: .firstTextBaseline, spacing: AnalysisLayout.rowSpacing) {
+                        // The rank badge. It takes THIS line's arrow colour, so the number on
+                        // screen and the arrow on the board are visibly the same line — the board
+                        // draws up to three arrows and nothing else said which row each belonged to.
+                        //
+                        // `engineDepth`, not `engineEval`: every other engine cell is asserted
+                        // equal to the move strip's size, and a badge as large as the moves would
+                        // out-shout them. The depth chip is the existing "chip" size and already a
+                        // declared deviation, so this needs no new one.
+                        Text(row.rankLabel)
+                            .font(AnalysisType.mono(AnalysisType.engineDepth, .heavy))
+                            .foregroundStyle(AnalysisPalette.onGold)
+                            .padding(.vertical, AnalysisLayout.engineRankPaddingV)
+                            .frame(width: AnalysisLayout.engineRankWidth)
+                            .background(AnalysisArrow.color(rank: row.rank),
+                                        in: RoundedRectangle(
+                                            cornerRadius: AnalysisLayout.engineRankRadius))
                         Text(row.evalText)
                             .font(AnalysisType.mono(AnalysisType.engineEval, .bold))
                             .foregroundStyle(AnalysisPalette.textPrimary)

@@ -544,7 +544,12 @@ function run() {
              `${layout.length} INVENTED layout constants — the list is growing`);
       expect(decls.length > layout.length,
              'and some of CoachLayout is derived from the extraction rather than chosen');
-      eq(glyphs.length, 5, 'five nav/back glyphs, no more');
+      // FOUR, not five. `back` was retired: it is a vector now (NavIcons.swift / js/icons.js), and
+      // "an icon that happens to be a character" was exactly the thing that rendered in a fallback
+      // face on a real phone. The four transport arrows stay glyphs.
+      eq(glyphs.length, 4, 'four transport glyphs, no more — back is a vector now');
+      expect(glyphs.indexOf('back') < 0,
+             'and `back` is not among them; nav_icons_check.js asserts it does not come back');
       // Three of the twelve are DERIVED from extracted values rather than chosen, which is why
       // they are allowed at all. If one is ever replaced by a bare number the count still passes,
       // so the derivation itself is what is pinned.

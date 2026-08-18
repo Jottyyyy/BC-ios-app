@@ -10,7 +10,6 @@
 import Foundation
 
 public enum PairingStrings {
-    public static let back = "\u{2190}"
     public static let tournaments = "Tournaments"
     public static let listSub = "Swiss & Round Robin Manager"
     public static let emptyGlyph = "\u{265E}"

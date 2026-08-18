@@ -97,7 +97,7 @@ if (panels) {
 // differently — flex leaves the gap at the bottom, SwiftUI centres the whole column — so neither
 // check stands in for the other.
 const VIEW_BANDS = ['.an-header', '.an-board', '.an-statusline', '.an-pvbar', '.an-status',
-                    '.an-autoplay', '.an-strip', '.an-bookstrip'];
+                    '.an-autoplay', '.an-strip'];
 for (const sel of VIEW_BANDS) {
   const band = rule(sel);
   expect(band !== null, sel + ' exists as a band of .an-view');
@@ -119,9 +119,21 @@ if (engine) {
     'and `justify-content: flex-end`, so the rows stay pinned to the bottom rather than floating '
     + 'in the middle of the slack');
 }
-// The book strip is drawn only when there IS a book — the whole point of the change.
-expect(/an-hidden/.test(JS) && /bookstrip[\s\S]{0,200}an-hidden/.test(JS),
-  'paintBookStrip hides the strip rather than filling it with an empty state');
+// The opening book has NO band at all any more. Inverted rather than deleted: the strip replaced a
+// 230px panel and was itself removed one round later, and the way that comes back is by someone
+// re-adding a band nobody asked for.
+for (const gone of ['.an-bookstrip', '.an-bchip', '.an-bsan', '.an-beco', '.an-brow', '.an-bname',
+                    '.an-panel-head', '.an-panel-empty']) {
+  expect(rule(gone) === null, gone + ' is gone from the stylesheet — band 6 is edit mode only now');
+}
+for (const gone of ['bookstrip', 'paintBookStrip', 'bookContinuations', 'an-bchip']) {
+  expect(!JS.includes(gone), 'analysis.js no longer mentions ' + gone);
+}
+// But `.an-hidden` lived inside that block and is NOT part of it — the preview bar, the status line
+// and `.an-panels` all toggle with it.
+expect(rule('.an-hidden') !== null,
+  '.an-hidden survives the book strip it was nested under — the preview bar needs it');
+expect(/an-hidden/.test(JS), 'and the JS still uses it');
 
 // ---- 3c. a short screen DROPS engine rows, it does not squash them -----------
 //

@@ -174,7 +174,6 @@ var BiyaAnalysisBoard = (function () {
   }
 
   /** Book continuations from the cursor — the ECO panel's rows, replacing the masters explorer. */
-  function bookContinuations(s) { return BOOK.continuations(position(s)); }
 
   /** One arrow per engine line, rank 0 = best. Drawn straight from the PV's first move. */
   function arrows(s) {
@@ -203,6 +202,8 @@ var BiyaAnalysisBoard = (function () {
       var pv = ln.pv && ln.pv.length ? ln.pv[0] : null;
       return {
         rank: i,
+        // 1-based, because "line 0" means nothing to a player. Mirrors EngineRow.rankLabel.
+        rankLabel: String(i + 1),
         evalText: AN.formatScore(ln.score),
         san: ln.pvSAN && ln.pvSAN.length ? ln.pvSAN[0] : '',
         continuation: (ln.pvSAN || []).slice(1, 1 + PV_PREVIEW).join(' '),
@@ -792,11 +793,6 @@ var BiyaAnalysisBoard = (function () {
     eq(BOOK.contains(deep.tree.current.key), false, 'ply 16 is out of book');
     eq(openingText(deep), 'B90: Sicilian Defense: Najdorf Variation, English Attack',
        'leaving the book keeps the last named line rather than going blank');
-    eq(bookContinuations(deep).length, 0, 'and offers no continuations from out of book');
-    var cont = bookContinuations(createSession());
-    expect(cont.length > 10, 'the start position has many book continuations, got ' + cont.length);
-    expect(cont.every(function (c, i, a) { return i === 0 || a[i - 1].san <= c.san; }),
-           'continuations are sorted by SAN');
 
     // 12. arrows and engine rows come straight from a snapshot
     var fake = createSession();
@@ -1366,13 +1362,17 @@ var BiyaAnalysisBoard = (function () {
     set('--an-engine-pad-h', B.enginePaddingH + 'px');
     set('--an-engine-pad-t', B.enginePaddingTop + 'px');
     set('--an-engine-pad-b', B.enginePaddingBottom + 'px');
-    set('--an-bookstrip-h', B.bookStripHeight + 'px');
+    // `--an-row-spacing` and `--an-chip-pad-*` used to be read only by the book chips. They now
+    // feed `.an-erow`'s gap and `.an-depth`'s padding, which had been carrying hardcoded copies of
+    // the same numbers — the drift `--an-eeval-w` / `--an-esan-w` was fixed for last round.
     set('--an-row-spacing', B.rowSpacing + 'px');
     set('--an-chip-pad-h', B.chipPaddingH + 'px');
     set('--an-chip-pad-v', B.chipPaddingV + 'px');
-    set('--an-book-chip-gap', B.bookChipGap + 'px');
     set('--an-eeval-w', B.engineEvalWidth + 'px');
     set('--an-esan-w', B.engineSanWidth + 'px');
+    set('--an-erank-w', B.engineRankWidth + 'px');
+    set('--an-erank-r', B.engineRankRadius + 'px');
+    set('--an-erank-pv', B.engineRankPaddingV + 'px');
     set('--an-pv-gap', B.previewGap + 'px');
     set('--an-pv-btn-ph', B.previewBtnPaddingH + 'px');
     set('--an-pv-btn-pv', B.previewBtnPaddingV + 'px');
@@ -1725,11 +1725,15 @@ var BiyaAnalysisBoard = (function () {
       planEngine(rows.length);
       rows.slice(0, enginePlanRows || MET.BANDS.engineMaxRows).forEach(function (r) {
         var row = el('button', 'an-erow');
+        // The rank badge takes THIS line's arrow colour, so the number on screen and the arrow on
+        // the board are visibly the same line.
+        var rank = el('span', 'an-erank', esc(r.rankLabel));
+        rank.style.background = MET.arrowColor(r.rank);
         var ev = el('span', 'an-eeval', esc(r.evalText));
         var san = el('span', 'an-esan', esc(r.san));
         san.style.color = MET.arrowColor(r.rank);
         var pv = el('span', 'an-epv', esc(r.continuation));
-        row.appendChild(ev); row.appendChild(san); row.appendChild(pv);
+        row.appendChild(rank); row.appendChild(ev); row.appendChild(san); row.appendChild(pv);
         row.onclick = function () { previewLine(r); };
         ui.rows.appendChild(row);
       });
@@ -1788,29 +1792,6 @@ var BiyaAnalysisBoard = (function () {
     return '';
   }
 
-  /**
-   * The opening book, as one row of chips.
-   *
-   * There is no empty state any more, by request: out of book the strip is HIDDEN, not filled with
-   * a line of text inside a quarter-screen box. The opening NAME is dropped too — it is the one
-   * thing here that cannot be made to fit on a line, and the engine panel's info row already
-   * names the opening.
-   */
-  function paintBookStrip() {
-    var conts = bookContinuations(session);
-    ui.bookstrip.innerHTML = '';
-    ui.bookstrip.classList.toggle('an-hidden', !conts.length);
-    if (!conts.length) return;
-    conts.forEach(function (c) {
-      var chip = el('button', 'an-bchip');
-      chip.appendChild(el('span', 'an-bsan', esc(c.san)));
-      chip.appendChild(el('span', 'an-beco', esc(c.eco || '')));
-      chip.title = c.name || '';
-      chip.onclick = function () { playSanMove(c.san); };
-      ui.bookstrip.appendChild(chip);
-    });
-  }
-
   function paintAll(animate) {
     root.classList.toggle('editing', editing);
     paintBoard(animate); paintEval(); paintStatus(); paintStrip(); paintEngine();
@@ -1818,8 +1799,7 @@ var BiyaAnalysisBoard = (function () {
     // The panels container is the edit panel's now; out of edit mode it stays empty and the book
     // strip takes over. Hiding it rather than removing it keeps board_layout_check's contract.
     ui.panels.classList.toggle('an-hidden', !editing);
-    if (editing) { renderEditPanel(ui.panels); ui.bookstrip.classList.add('an-hidden'); }
-    else { ui.panels.innerHTML = ''; paintBookStrip(); }
+    if (editing) renderEditPanel(ui.panels); else ui.panels.innerHTML = '';
   }
 
   // ---- the engine loop --------------------------------------------------------
@@ -1952,7 +1932,6 @@ var BiyaAnalysisBoard = (function () {
     if (SND) SND.playForMove({ status: E.status(position(session)), capture: capture, castle: castle });
     afterMove(true);
   }
-  function playSanMove(san) { if (san && playSan(session, san)) afterMove(true); }
 
   function gotoId(id) {
     var found = null;
@@ -2039,9 +2018,15 @@ var BiyaAnalysisBoard = (function () {
 
     // 1 — header
     var header = el('div', 'an-header');
-    var back = el('button', 'an-hbtn', '←');
+    var back = el('button', 'an-hbtn nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { engineToken += 1; if (onExit) onExit(); };
-    var menu = el('button', 'an-hbtn', '☰');
+    var menu = el('button', 'an-hbtn nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    menu.innerHTML = BiyaIcons.menu();
     menu.onclick = showMenu;
     menu.title = 'Menu';
     header.appendChild(back);
@@ -2126,13 +2111,7 @@ var BiyaAnalysisBoard = (function () {
     var strip = el('div', 'an-strip');
     root.appendChild(strip);
 
-    // 6a — the opening book, as ONE row of chips. It used to be a 230px scrolling panel that drew
-    // its full height to hold a single line of "out of book" text; now it is hidden outright when
-    // there is nothing in it, and the engine panel claims the height back.
-    var bookstrip = el('div', 'an-bookstrip');
-    root.appendChild(bookstrip);
-
-    // 6b — panels. EDIT MODE ONLY now; board_layout_check.js still asserts this element and its
+    // 6 — panels. EDIT MODE ONLY now; board_layout_check.js still asserts this element and its
     // `flex: 1 1 auto` / `--an-panels-h` contract, and Setup Position is what needs them.
     var panels = el('div', 'an-panels');
     root.appendChild(panels);
@@ -2156,7 +2135,7 @@ var BiyaAnalysisBoard = (function () {
       microFill: micro.querySelector('.fill'),
       status: statusText_, statusLine: statusLine, spinner: spinner, autoplayBar: autoplayBar,
       previewbar: previewBar, engine: engine,
-      strip: strip, panels: panels, bookstrip: bookstrip,
+      strip: strip, panels: panels,
       rows: rows, depth: depth, opening: opening, symbol: symbol,
       badge: badge,
       tools: { engine: tEngine, flip: tFlip, autoplay: tAuto, annotate: tAnnotate },
@@ -3391,7 +3370,7 @@ var BiyaAnalysisBoard = (function () {
     // pure
     createSession: createSession, position: position, historyKeys: historyKeys, outcome: outcome,
     statusText: statusText, openingEntry: openingEntry, openingText: openingText,
-    bookContinuations: bookContinuations, arrows: arrows, engineRows: engineRows,
+    arrows: arrows, engineRows: engineRows,
     evalParts: evalParts, evalFraction: evalFraction, evalSymbol: evalSymbol,
     isStale: isStale, wantsAnalysis: wantsAnalysis,
     stripTokens: stripTokens, nagText: nagText, PV_PREVIEW: PV_PREVIEW,

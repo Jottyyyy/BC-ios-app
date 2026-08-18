@@ -554,27 +554,36 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .an-move.onpath, .an-alt.onpath { color: var(--an-gold); }
 .an-move.active, .an-alt.active { background: var(--an-gold); color: var(--an-on-gold); }
 
-/* 6a — the opening book, as ONE row of chips.
-   It used to be a 230px scrolling panel. A scrolling box is greedy along its axis, so it drew all
-   230px to hold one line of "out of book" text while the engine rows were squeezed to 9px beneath
-   it — a quarter of the screen of nothing. Now it is a strip, and out of book it is not drawn at
-   all: `.an-hidden` is set by paintBookStrip. */
-.an-bookstrip {
-  flex: none; height: var(--an-bookstrip-h); display: flex; align-items: center;
-  gap: var(--an-row-spacing); overflow-x: auto; overflow-y: hidden; white-space: nowrap;
-  padding: 0 var(--an-panels-pad-h); background: var(--an-bg); scrollbar-width: none;
-}
-.an-bookstrip::-webkit-scrollbar { height: 0; }
-.an-bchip {
-  flex: none; display: flex; align-items: baseline; gap: var(--an-book-chip-gap);
-  background: var(--an-surface-alt2); border: 0; border-radius: var(--an-tool-radius);
-  color: var(--an-text); cursor: pointer;
-  padding: var(--an-chip-pad-v) var(--an-chip-pad-h);
-}
-.an-bchip:active { opacity: .75; }
+/* Band 6 was the ECO explorer, then a 44px strip of book chips. Both are gone — the client asked
+   for the strip's removal one round after it replaced the panel, and neither was earning its
+   height. The opening NAME survives in the engine panel's info row, which is where the RN source
+   put it. What is left of band 6 is the edit-mode container below.
+
+   `.an-hidden` used to live inside that block and is NOT part of it: the preview bar, the status
+   line and `.an-panels` all toggle with it. */
 .an-hidden { display: none !important; }
 
-/* 6b — panels: EDIT MODE ONLY now. Kept, with its `flex: 1 1 auto` / `--an-panels-h` contract
+/* ---- Navigation icons -------------------------------------------------------------------
+   Back and menu are vectors now, from `js/icons.js`, not the `←` and `☰` characters they used to
+   be. The svg inherits the button's own `color`, so every screen keeps its own tint — pairing gold,
+   coach white, analysis off-white — and this rule only has to say how big it is and that it is
+   centred. `tools/qa/nav_icons_check.js` asserts no glyph comes back. */
+.nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Apple's 44px minimum, applied to WIDTH only. Height comes from the button's own frame, which is
+     36-44 on every screen: the Analysis header is 36 tall, and a 44-tall button inside it spilled
+     4px over the board's top rank and would have stolen taps from a8-h8. Width is the axis that was
+     actually cramped — several of these buttons are 40. */
+  min-width: 44px;
+}
+/* The svg is sized in `em`, so a button that publishes its own `font-size` keeps controlling the
+   icon and one that does not falls back to the design box. `.pzp-back` relied on `--pzh-back-*`,
+   which its own screen never published — the fallback is what makes that harmless. */
+.nav-icon { font-size: var(--nav-icon-size, 24px); }
+.nav-icon > svg { width: 1em; height: 1em; display: block; }
+.nav-icon:active > svg { opacity: .55; }
+
+/* 6 — panels: EDIT MODE ONLY now. Kept, with its `flex: 1 1 auto` / `--an-panels-h` contract
    intact, because Setup Position renders into it and board_layout_check.js asserts both. */
 /* The band that gives way. It absorbs every bit of slack — a short screen, a taller engine panel,
    a wrapped status line — so none of that can reach the board. `--an-panels-h` is what bandLayout
@@ -585,25 +594,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   padding: 0 var(--an-panels-pad-h) 6px; background: var(--an-bg); scrollbar-width: none;
 }
 .an-panels::-webkit-scrollbar { width: 0; }
-.an-panel-head {
-  position: sticky; top: 0; background: var(--an-bg); padding: 6px 0 4px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
-  color: var(--an-text-muted);
-}
-.an-panel-empty { font-size: var(--an-fs-status); color: var(--an-text-muted); padding: 4px 0 8px; }
-.an-brow {
-  display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
-  background: var(--an-surface-alt2); border: 0; border-radius: var(--an-tool-radius);
-  color: var(--an-text); cursor: pointer; padding: 5px 8px; margin-bottom: 3px;
-}
-.an-brow:active { opacity: .75; }
-.an-bsan { font: 700 var(--an-fs-move)/1 var(--mono); flex: none; min-width: 46px; }
-.an-beco { font-size: var(--an-fs-opening); font-weight: 700; color: var(--an-gold); flex: none; }
-.an-bname {
-  font-size: var(--an-fs-alt); color: var(--an-text-2); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
-}
-
 /* 7 — engine lines, pinned to the bottom */
 /* THE flexible band now, and there must be exactly one. It used to be `.an-panels`, which hoarded
    the slack whether or not it had anything to show. `justify-content: flex-end` keeps the content
@@ -633,7 +623,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 .an-erow {
   flex: none;
-  display: flex; align-items: flex-start; gap: 6px; width: 100%; text-align: left;
+  /* `gap` is `rowSpacing`, not a literal 6. It read 6px until the book chips — the only other
+     reader of `--an-row-spacing` — were deleted and the variable had to find its real home. */
+  display: flex; align-items: flex-start; gap: var(--an-row-spacing); width: 100%; text-align: left;
   background: none; border: 0; color: var(--an-text); cursor: pointer; padding: 2px 3px;
   border-radius: var(--an-tool-radius);
 }
@@ -641,6 +633,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .an-erow-empty { font-size: var(--an-fs-etext); color: var(--an-text-muted); padding: 3px; }
 /* Widths from the metrics layer, not literals: they grew with the type (36→44, 38→46) and two
    hardcoded copies of 40/38 is exactly the drift `--an-*` exists to prevent. */
+/* The rank badge. `--an-fs-depth`, not `--an-fs-eeval`: every other engine cell is the move strip's
+   size, and a badge that large would out-shout the moves. Its background is set inline, per row, to
+   that line's arrow colour. */
+.an-erank {
+  flex: none; width: var(--an-erank-w); text-align: center;
+  font: 800 var(--an-fs-depth)/1.3 var(--mono); color: var(--an-on-gold);
+  padding: var(--an-erank-pv) 0; border-radius: var(--an-erank-r);
+}
 .an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: var(--an-eeval-w); flex: none; }
 .an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: var(--an-esan-w); flex: none; }
 /* Two lines, not one. At the move strip's 13px a single line holds FEWER moves than the old 9px
@@ -651,9 +651,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   -webkit-line-clamp: var(--an-engine-lines); line-clamp: var(--an-engine-lines);
 }
 .an-info { display: flex; align-items: center; gap: 6px; padding: 3px 3px 0; }
+/* The depth chip. Its padding is `chipPadding*`, which is what the Swift `infoRow` uses — it read
+   a hardcoded `3px 5px` against the metrics' 4/8, so the browser chip was two pixels tighter than
+   the app's AND than `engineChromeHeight()`'s own budget. Found when the book chips, the only
+   other reader of these variables, were deleted. */
 .an-depth {
   font: 700 var(--an-fs-depth)/1 var(--mono); color: var(--an-text-2); background: var(--an-surface-alt);
-  padding: 3px 5px; border-radius: var(--an-tool-radius); flex: none;
+  padding: var(--an-chip-pad-v) var(--an-chip-pad-h); border-radius: var(--an-tool-radius);
+  flex: none;
 }
 .an-symbol { font-size: var(--an-fs-esan); font-weight: 800; color: var(--an-text); flex: none; }
 .an-opening {
@@ -942,7 +947,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
    because the editor is taller than the ECO list and wants the room the hidden bands free up. */
 .an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; }
 .an-view.editing .an-engine { display: none; }
-.an-view.editing .an-bookstrip { display: none; }
 .an-view.editing .an-strip { display: none; }
 /* board.tsx:4616 hides the whole status+toolbar row in edit mode, in its own words "to maximise
    board space". Neither the status line nor the nav buttons mean anything mid-edit. */
@@ -1427,9 +1431,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzd-header { display: flex; align-items: center; justify-content: space-between; flex: none;
               padding: var(--pzd-pad-t) var(--pzd-pad-h) var(--pzd-pad-b); }
 .pzd-title { font-size: var(--pzd-title-fs); font-weight: 700; }
-.pzd-back { background: none; border: 0; color: var(--pz-text); cursor: pointer; padding: 0;
-            width: 40px; height: 40px; font-size: 24px;
-            display: flex; align-items: center; justify-content: center; }
+/* Colour only. The box, the centring and the icon size come from `.nav-icon` — this rule used to
+   hardcode 40/40/24 with no CSS variables at all, across five screens. */
+.pzd-back { background: none; border: 0; color: var(--pz-text); cursor: pointer; padding: 0; }
 .pzd-logo { width: 30px; height: 30px; border-radius: 50%; flex: none;
             border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6); }
 .pzd-content { flex: 1 1 auto; min-height: 0; overflow-y: auto;

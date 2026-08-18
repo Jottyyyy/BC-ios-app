@@ -225,14 +225,10 @@ struct PuzzleStreakSolverScreen: View {
 
     private var header: some View {
         HStack {
-            Button { engine.leave(); onExit() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: PuzzleStreakSolver.backSize, weight: .bold))
-                    .foregroundStyle(PuzzlePalette.textPrimary)
-                    .frame(width: PuzzleStreakSolver.backBtnW,
-                           height: PuzzleStreakSolver.backBtnH)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            NavIconButton(.back, size: PuzzleStreakSolver.backSize,
+                          tint: PuzzlePalette.textPrimary,
+                          action: { engine.leave(); onExit() })
+                .frame(width: PuzzleStreakSolver.backBtnW, height: PuzzleStreakSolver.backBtnH)
             Spacer()
             Text(PuzzleStrings.streakRunScore(store.state.streak.currentStreak))
                 .font(Theme.nunito(PuzzleStreakSolver.counterSize, .bold))

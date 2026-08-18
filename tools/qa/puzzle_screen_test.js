@@ -111,7 +111,7 @@ function loadSandbox() {
   // and `BiyaAnalysisEval` AT LOAD TIME — the same trap that made the analysis worker throw on
   // startup. Leaving one out is not a smaller test, it is a test of a load order the page does not
   // use.
-  const need = ['engine.js', 'ai.js', 'rating.js', 'sound.js',
+  const need = ['icons.js', 'engine.js', 'ai.js', 'rating.js', 'sound.js',
                 'puzzle-data.js', 'puzzle-serving.js', 'puzzle-session.js', 'puzzle-store.js',
                 'streak-engine.js', 'puzzle-progress.js', 'eco-data.js', 'movetree.js', 'pgn.js',
                 'analysis-eval.js', 'analysis-engine.js',

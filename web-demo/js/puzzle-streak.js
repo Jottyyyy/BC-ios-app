@@ -162,7 +162,10 @@ var BiyaPuzzleStreak = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pzk-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzk-title', T.streakTitle));
@@ -278,7 +281,10 @@ var BiyaPuzzleStreak = (function () {
     ui = { root: root };
 
     var header = el('div', 'pzks-header');
-    var back = el('button', 'pzks-back', '←');
+    var back = el('button', 'pzks-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { leave(); if (onExit) onExit(); };
     header.appendChild(back);
     ui.counter = el('div', 'pzks-counter', '🔥 ' + st.streak.currentStreak);

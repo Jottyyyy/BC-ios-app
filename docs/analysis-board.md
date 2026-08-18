@@ -140,13 +140,17 @@ may not have — the same reasoning that commits `eco.tsv`.
 | 3b | Toolbar — 📂 · ✏️ · 💡 · 🔄 · ▶ · `⏮ ◀ ▶ ⏭` | fixed |
 | 4 | Autoplay speed bar — only while autoplaying | fixed |
 | 5 | Move strip — main line as tokens, branches inline as chips | fixed |
-| 6 | Opening book — one **strip of `san · eco` chips**, and nothing at all out of book | fixed 44, or **0** |
-| 7 | Engine lines — **3pt** micro bar · ≤5 rows at the move strip's size · depth + eval symbol + opening | **flexible — the only one** |
+| 6 | Panels — **edit mode only**; Setup Position renders into it | flexible ≤230, in edit mode |
+| 7 | Engine lines — **3pt** micro bar · ≤5 ranked rows at the move strip's size · depth + eval symbol + opening | **flexible — the only one** |
 
-Bands 3a and 6 both have a second face. While an engine line is being *previewed* the status line is
-replaced by the **preview bar** (`◀ Qxd5 O-O Nf6 d4 ▶ ✕ ＋`), built from the same paddings so the row
-never changes height. Band 6 is `.an-panels` in edit mode — Setup Position renders into the container
-the book panel used to own — and the book strip is hidden.
+Band 6 was the ECO explorer, then a 44 pt strip of `san · eco` book chips, and is now neither: the
+client asked for the strip's removal one round after it replaced the panel, and neither was earning
+its height. **The opening NAME survives**, in the engine panel's info row, which is where the RN
+source put it. What is left of band 6 is the edit-mode container.
+
+Band 3a has a second face: while an engine line is being *previewed* the status line is replaced by
+the **preview bar** (`◀ Qxd5 O-O Nf6 d4 ▶ ✕ ＋`), built from the same paddings so the row never
+changes height.
 
 Two things reading the source corrected:
 
@@ -213,6 +217,20 @@ There must be **exactly one** flexible child, and that is now checked in both la
 Neither check stands in for the other: the two renderers degrade *differently* when the flexible
 child goes missing (flex leaves the gap at the bottom, SwiftUI centres), which is exactly why both
 need pinning.
+
+#### Then the book band went entirely
+
+One round after the 230 pt panel became a 44 pt strip, the client asked for the strip too:
+*"remove mo na ito, siguro hindi na ito kailangan."* So `bands()`, `fixedWithoutEngine` and
+`engineAvailable` lost their `inBook` parameter in both languages — **no band varies with the
+opening book any more**, and the engine panel keeps the 44 pt on every in-book position. §10c is now
+the inverse assertion: autoplay is the only band left that appears and disappears.
+
+Deleting the CSS orphaned three custom properties — `--an-row-spacing`, `--an-chip-pad-h` and
+`--an-chip-pad-v` were read only by the book chips. They were **re-homed, not deleted**, onto
+`.an-erow`'s `gap` and `.an-depth`'s `padding`, which had been carrying hardcoded copies of the same
+numbers. The depth chip's copy was `3px 5px` against the metrics' 4/8, so the browser chip had been
+two pixels tighter than the app's *and* than `engineChromeHeight()`'s own budget.
 
 #### On a short screen the rows are DROPPED, not squashed — and rows beat wrapping
 
@@ -698,6 +716,26 @@ the screen uses:
   annotation, eval-symbol and autoplay-speed tables.
 - `AnalysisTiming` — debounce 300 ms, autosave 800 ms, animation 400 ms, double-tap 350 ms. (`400` appears
   six more times in the source as `delayLongPress`; a bare grep would conflate the two.)
+
+### Every engine line carries its rank, in its arrow's colour
+
+The board draws up to three engine arrows, coloured by rank — green, blue, orange — and nothing on
+screen said which row belonged to which arrow, or even which line was first. Each row now opens with
+a one-digit badge tinted `AnalysisArrow.color(rank:)`, so the number answers "which line" and "which
+arrow" at once.
+
+- `EngineRow.rankLabel` does the `+ 1` in **Core**, mirrored in the JS `engineRows`. A view body may
+  not contain arithmetic (`AnalysisBoardScreen.swift:16-18`, and `swift_layout_check` greps for it),
+  and both languages have to print the same thing.
+- The badge takes `AnalysisType.engineDepth` (11), not the row's 13. Every other engine cell is
+  asserted equal to the move strip's size, so a new size would need its own `deviates(…)`;
+  `engineDepth` is the existing chip size and already a declared deviation. A badge as large as the
+  moves would also out-shout them.
+- **Width is the cost, not height.** The 44 pt reclaimed from the book band pays for the badge
+  vertically; horizontally it is a new column on a row that was already tight. `engineRankWidth` is
+  16 — one digit, and `engineMaxRows` is 5, so a second can never be needed — and §10e pins what is
+  left for the moves: at 375 the continuation still gets 239 pt, 30 characters a line, 60 across two
+  lines, against the ~50 a 12-ply continuation needs.
 
 ### The engine panel is drawn larger than the source — declared, not smuggled
 

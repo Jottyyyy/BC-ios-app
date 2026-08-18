@@ -69,13 +69,13 @@ struct PuzzleHubScreen: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            Button(action: onExit) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: PuzzleHub.chevronLineHeight, weight: .semibold))
-                    .foregroundStyle(PuzzlePalette.textPrimary)
-                    .frame(width: PuzzleHub.backBtnW, height: PuzzleHub.backBtnH)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            // `hubBackIcon`, not `chevronLineHeight`: the latter is the LIST ROW chevron's line
+            // height (`hub('chevron','lineHeight')`), which this button had been borrowing. Both
+            // are 24, so nothing moves — it just stops being a coincidence, and the browser twin
+            // already fed `--pzh-back-fs` from `hubBackIcon`.
+            NavIconButton(.back, size: PuzzleType.hubBackIcon,
+                          tint: PuzzlePalette.textPrimary, action: onExit)
+                .frame(width: PuzzleHub.backBtnW, height: PuzzleHub.backBtnH)
             Text(PuzzleStrings.hubTitle)
                 .font(Theme.nunito(PuzzleType.hubTitle, .bold))
                 .foregroundStyle(PuzzlePalette.textPrimary)

@@ -119,7 +119,10 @@ var BiyaCoachPlay = (function () {
 
   function header(game, coach, cb) {
     var h = el('div', 'cgp-header');
-    var back = el('button', 'cgp-back', '←');
+    var back = el('button', 'cgp-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     h.appendChild(back);
     var centre = el('div', 'cgp-header-center');

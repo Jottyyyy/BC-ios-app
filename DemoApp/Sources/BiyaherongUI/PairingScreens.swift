@@ -80,13 +80,11 @@ struct PairingListScreen: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            Button(action: onExit) {
-                Text(PairingStrings.back)
-                    .font(Theme.nunito(PairingList.backArrowFontSize, .semiBold))
-                    .foregroundStyle(PairingList.backArrowColor)
-                    .frame(width: PairingList.backBtnWidth, height: PairingList.backBtnHeight)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            // A vector, not the `←` character the generated strings table used to carry.
+            // The frame is untouched: `backBtnWidth` is an extracted StyleSheet value.
+            NavIconButton(.back, size: PairingList.backArrowFontSize,
+                          tint: PairingList.backArrowColor, action: onExit)
+                .frame(width: PairingList.backBtnWidth, height: PairingList.backBtnHeight)
             VStack(spacing: PairingList.headerSubMarginTop) {
                 Text(PairingStrings.tournaments)
                     .font(Theme.nunito(PairingList.headerTitleFontSize, .extraBold))
@@ -319,13 +317,11 @@ struct PairingCreateScreen: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            Button(action: onExit) {
-                Text(PairingStrings.back)
-                    .font(Theme.nunito(PairingCreate.backArrowFontSize, .semiBold))
-                    .foregroundStyle(PairingCreate.backArrowColor)
-                    .frame(width: PairingCreate.backBtnWidth, height: PairingCreate.backBtnHeight)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            // A vector, not the `←` character the generated strings table used to carry.
+            // The frame is untouched: `backBtnWidth` is an extracted StyleSheet value.
+            NavIconButton(.back, size: PairingCreate.backArrowFontSize,
+                          tint: PairingCreate.backArrowColor, action: onExit)
+                .frame(width: PairingCreate.backBtnWidth, height: PairingCreate.backBtnHeight)
             Text(PairingStrings.newTournament)
                 .font(Theme.nunito(PairingCreate.headerTitleFontSize, .extraBold))
                 .foregroundStyle(PairingCreate.headerTitleColor)

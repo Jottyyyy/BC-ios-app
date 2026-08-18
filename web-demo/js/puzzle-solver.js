@@ -471,7 +471,10 @@ var BiyaPuzzleSolver = (function () {
 
     // 1 — header
     var header = el('div', 'pz-header');
-    var back = el('button', 'pz-back', '←');
+    var back = el('button', 'pz-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () {
       // Leaving with an unsolved puzzle keeps a draft; the 24h TTL decides whether it restores.
       if (session && session.phase !== 'solved' && puzzle) {

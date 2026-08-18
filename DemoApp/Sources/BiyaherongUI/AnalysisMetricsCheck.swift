@@ -221,26 +221,27 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(se.panels < AnalysisLayout.panelsMaxHeight,
            "and the PANELS band is what gave way, not the board")
 
-    // ── 10c. The book strip costs height only when there IS a book ──
+    // ── 10c. NO band varies with the opening book any more ──
     //
-    // The client's complaint, as an assertion. The old panel drew a 230pt box to hold one line of
-    // "out of book" text; now that case costs exactly nothing, and the difference is the strip.
+    // The inverse of the assertion that used to live here. Band 6 was the ECO panel, then a 44pt
+    // strip of chips; the client asked for the strip's removal one round after it replaced the
+    // panel. What has to stay true is that nothing about the layout depends on whether the position
+    // is in book — one screen shape, always, and the engine panel keeps the height either way.
     for (w, h) in [(CGFloat(375), CGFloat(667)), (390, 844), (430, 932)] {
         let edge = AnalysisBoard.size(screenWidth: w, pixelRatio: 3)
-        let withBook = AnalysisLayout.bands(viewportHeight: h, boardEdge: edge, inBook: true)
-        let without = AnalysisLayout.bands(viewportHeight: h, boardEdge: edge, inBook: false)
-        expect(without.fixed < withBook.fixed,
-               "out of book costs less fixed height at \(Int(w))x\(Int(h))")
-        expectNear(withBook.fixed - without.fixed, AnalysisLayout.bookStripHeight,
-                   "and the difference is exactly the strip at \(Int(w))x\(Int(h))")
-        expect(without.board == withBook.board,
-               "the board does NOT grow when the book goes — it is a function of width alone")
-        expect(without.fits(h) && withBook.fits(h), "both fit at \(Int(w))x\(Int(h))")
+        let bands = AnalysisLayout.bands(viewportHeight: h, boardEdge: edge)
+        expect(bands.fits(h), "the one band layout fits at \(Int(w))x\(Int(h))")
+        // `fixedWithoutEngine` is the honest total the engine budget uses; the ONLY thing that may
+        // still move it is the autoplay bar, which is genuinely conditional.
+        let quiet = AnalysisLayout.fixedWithoutEngine(edge: edge, autoplaying: false)
+        let playing = AnalysisLayout.fixedWithoutEngine(edge: edge, autoplaying: true)
+        expectNear(playing - quiet, AnalysisLayout.autoplayBandHeight,
+                   "autoplay is the only band left that appears and disappears "
+                   + "at \(Int(w))x\(Int(h))")
+        expect(AnalysisLayout.engineAvailable(viewportHeight: h, edge: edge, autoplaying: false)
+               > AnalysisLayout.engineAvailable(viewportHeight: h, edge: edge, autoplaying: true),
+               "and it costs the engine panel exactly that much at \(Int(w))x\(Int(h))")
     }
-    // The strip is a strip, not the panel it replaced.
-    expect(AnalysisLayout.bookStripHeight < AnalysisLayout.panelsMaxHeight / 4,
-           "the book strip is a fraction of the 230pt panel it replaced "
-           + "(\(AnalysisLayout.bookStripHeight))")
 
     // ── 10d. How much engine panel actually fits, per phone ──
     //
@@ -248,47 +249,77 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     // do not fit are simply not drawn (`rowsBox`, and `.an-rows` in the browser). These pin how many
     // survive. Mirrored assertion-for-assertion in analysis-metrics.js §10d.
     //
-    // `engineRowsThatFit` is the honest number, and it differs by device: a 375×667 SE spends 56%
-    // of its height on the board alone, so it gets fewer rows than a Pro Max. That is a fact about
-    // the screen, not something to assert away.
-    func engineRowsThatFit(_ available: CGFloat, lines: Int) -> Int {
-        let lineH = AnalysisType.enginePv * HomeType.nunitoLineHeightRatio
-        let chrome = AnalysisEval.microHeight + AnalysisEval.microMarginBottom
-            + AnalysisType.engineDepth * HomeType.nunitoLineHeightRatio
-            + AnalysisLayout.chipPaddingV * 2
-            + AnalysisLayout.enginePaddingTop + AnalysisLayout.enginePaddingBottom
-        let perRow = CGFloat(lines) * lineH + AnalysisLayout.rowGap
-        guard perRow > 0 else { return 0 }
-        return max(0, Int((available - chrome) / perRow))
-    }
-    for (w, h, wantSingle, wantWrapped) in [(CGFloat(375), CGFloat(667), 3, 1),
-                                            (390, 844, 5, 3),
+    // It differs by device: a 375×667 SE spends 56% of its height on the board alone, so it gets
+    // fewer rows than a Pro Max. That is a fact about the screen, not something to assert away.
+    //
+    // Driven through the SHIPPED functions — `fixedWithoutEngine` and `engineRowsThatFit` — not a
+    // local copy of the arithmetic. The copy that used to live here omitted the status LINE and the
+    // board band's own chrome while adding the book strip, and the two errors nearly cancelled; it
+    // reported budgets that were never real.
+    for (w, h, wantSingle, wantWrapped) in [(CGFloat(375), CGFloat(667), 4, 2),
+                                            (390, 844, 5, 5),
                                             (430, 932, 5, 5)] {
         let edge = AnalysisBoard.size(screenWidth: w, pixelRatio: 3)
-        let fixedNoEngine = AnalysisLayout.headerBtnHeight + AnalysisLayout.statusMinHeight
-            + AnalysisLayout.stripMaxHeight + AnalysisLayout.bookStripHeight
-        let available = h - fixedNoEngine - edge
+        let available = AnalysisLayout.engineAvailable(viewportHeight: h, edge: edge,
+                                                       autoplaying: false)
         expect(available > 0, "there is room for an engine panel at \(Int(w))x\(Int(h))")
-        expect(engineRowsThatFit(available, lines: 1) >= wantSingle,
-               "at \(Int(w))x\(Int(h)), in book, at least \(wantSingle) single-line engine rows fit "
-               + "(got \(engineRowsThatFit(available, lines: 1)))")
-        expect(engineRowsThatFit(available, lines: AnalysisLayout.engineLineLimit) >= wantWrapped,
-               "and at least \(wantWrapped) WRAPPED rows "
-               + "(got \(engineRowsThatFit(available, lines: AnalysisLayout.engineLineLimit)))")
+        expect(AnalysisLayout.engineRowsThatFit(available: available, lines: 1) >= wantSingle,
+               "at \(Int(w))x\(Int(h)) at least \(wantSingle) single-line engine rows fit "
+               + "(got \(AnalysisLayout.engineRowsThatFit(available: available, lines: 1)))")
+        expect(AnalysisLayout.engineRowsThatFit(available: available,
+                                                lines: AnalysisLayout.engineLineLimit)
+               >= wantWrapped,
+               "and at least \(wantWrapped) WRAPPED rows (got "
+               + "\(AnalysisLayout.engineRowsThatFit(available: available, lines: AnalysisLayout.engineLineLimit)))")
     }
     // The default preset asks for three lines, and every supported phone must show all three.
-    let seFixedNoEngine = AnalysisLayout.headerBtnHeight + AnalysisLayout.statusMinHeight
-        + AnalysisLayout.stripMaxHeight + AnalysisLayout.bookStripHeight
-    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge, lines: 1)
+    let seAvailable = AnalysisLayout.engineAvailable(viewportHeight: 667, edge: seEdge,
+                                                     autoplaying: false)
+    expect(AnalysisLayout.engineRowsThatFit(available: seAvailable, lines: 1)
            >= AnalysisEngineLimits.multiPV,
            "even a 375x667 SE shows every line the DEFAULT preset produces")
-    // Out of book buys back a whole strip's worth of rows on the smallest screen.
-    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge + AnalysisLayout.bookStripHeight,
-                             lines: 1)
-           > engineRowsThatFit(667 - seFixedNoEngine - seEdge, lines: 1),
-           "dropping the book strip buys the SE at least one more engine row")
     expect(AnalysisLayout.engineMaxRows >= AnalysisEngineLimits.multiPV,
            "and the row cap never hides a line the default preset produced")
+    // What deleting the book band actually bought, stated as a number rather than a claim: 44pt was
+    // the strip's height, and on the smallest screen it was the difference between one wrapped row
+    // and two. Written as a comparison against the old budget so it cannot become a tautology the
+    // way `rowsThatFit(x + strip) > rowsThatFit(x)` did once the strip was gone.
+    let retiredBookStrip: CGFloat = 44
+    expect(AnalysisLayout.engineRowsThatFit(available: seAvailable,
+                                            lines: AnalysisLayout.engineLineLimit)
+           > AnalysisLayout.engineRowsThatFit(available: seAvailable - retiredBookStrip,
+                                              lines: AnalysisLayout.engineLineLimit),
+           "deleting the 44pt book strip bought the SE at least one more WRAPPED engine row")
+    // And the plan agrees with the budget it is derived from.
+    let sePlan = AnalysisLayout.enginePlan(available: seAvailable,
+                                           wanted: AnalysisEngineLimits.multiPV)
+    expect(sePlan.rows == AnalysisEngineLimits.multiPV,
+           "the SE plan draws every default line (got \(sePlan.rows))")
+    expect(sePlan.lines >= 1 && sePlan.lines <= AnalysisLayout.engineLineLimit,
+           "and wraps to a legal number of lines (got \(sePlan.lines))")
+
+    // ── 10e. The rank badge must not cost the client a move ──
+    //
+    // Height was paid for by deleting the book band. WIDTH was not: the badge is a new column on a
+    // row that was already tight at 13pt, and every point it takes comes off the continuation —
+    // which is exactly what the round before this one was about. These pin the trade.
+    for w in [CGFloat(375), 393, 430] {
+        let chars = AnalysisLayout.engineContinuationChars(screenWidth: w)
+        // ~4.2 characters per ply once the separating space is counted ("Nf3 ", "Bxc6+ "), so a
+        // 12-ply continuation needs about 50. Two lines of 30 clear it on the smallest phone.
+        expect(chars * AnalysisLayout.engineLineLimit >= 50,
+               "a full continuation still fits at \(Int(w)) "
+               + "(\(chars) chars x \(AnalysisLayout.engineLineLimit) lines)")
+    }
+    expect(AnalysisLayout.engineRankWidth < AnalysisLayout.engineEvalWidth
+           && AnalysisLayout.engineRankWidth < AnalysisLayout.engineSanWidth,
+           "the badge is the narrowest column in the row")
+    expect(AnalysisLayout.engineContinuationWidth(screenWidth: 375)
+           > AnalysisLayout.engineRankWidth + AnalysisLayout.engineEvalWidth
+             + AnalysisLayout.engineSanWidth,
+           "and the moves still get more of the row than all three fixed columns together")
+    // One digit is all a badge can ever need.
+    expect(AnalysisLayout.engineMaxRows < 10, "a rank badge never needs a second digit")
 
     // ── 11. Timings ──
     expect(AnalysisTiming.analysisDebounceMs == 300, "analysis debounce is 300ms")

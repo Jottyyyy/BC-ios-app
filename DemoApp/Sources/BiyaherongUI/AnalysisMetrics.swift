@@ -410,11 +410,9 @@ enum AnalysisLayout {
     /// + 9 (three 3pt VStack gaps).
     static let engineStripEstimate: CGFloat = 102
 
-    /// The opening book, when there IS one — a single row of chips, not the 230pt panel it used to
-    /// be. Zero when out of book: the strip is simply not built, which is the point.
-    static let bookStripHeight: CGFloat = 44
-    /// Rows the engine panel will draw, however many the engine produces. Five is what fits once
-    /// the book box stops eating the screen; `EngineSettings` never asks for more than five.
+    /// Rows the engine panel will draw, however many the engine produces. Five is what fits now
+    /// that neither the book panel nor the book strip is eating the screen; `EngineSettings` never
+    /// asks for more than five.
     static let engineMaxRows = 5
     /// The continuation may take a second line. At 13pt a single line fits fewer moves than the old
     /// 9pt one did, so without this "bigger text" and "more moves" cancel out.
@@ -448,12 +446,18 @@ enum AnalysisLayout {
     static let rowSpacing: CGFloat = 6
     static let rowPaddingH: CGFloat = 8
     static let rowPaddingV: CGFloat = 5
-    static let bookSanWidth: CGFloat = 46
-    /// Between a book chip's SAN and its ECO code. The chips size to their content — a horizontal
-    /// strip has no columns to align.
-    static let bookChipGap: CGFloat = 5
     /// Grown with the type, like `engineEvalWidth` — `O-O-O` and `Qxd5+` are five glyphs.
     static let engineSanWidth: CGFloat = 46
+    /// The engine row's rank badge: `1` `2` `3`, tinted with that line's board-arrow colour so the
+    /// row and the arrow are visibly the same line.
+    ///
+    /// One digit wide on purpose. The row is already tight at 13pt — eval 44 + SAN 46 + gaps leaves
+    /// the continuation about 250pt on a 393pt phone — and every point this column takes comes off
+    /// the moves, which is the thing the client asked for last round. `EngineSettings` never asks
+    /// for more than five lines, so a second digit can never be needed.
+    static let engineRankWidth: CGFloat = 16
+    static let engineRankRadius: CGFloat = 4
+    static let engineRankPaddingV: CGFloat = 1
     /// The line-preview bar, which takes the STATUS LINE's row while an engine line is being walked
     /// — so it borrows that row's paddings and minimum height and the band never jumps as it appears
     /// and disappears. Only the gap and the two action buttons are its own.
@@ -473,18 +477,16 @@ enum AnalysisLayout {
 
     /// Every band above the engine panel, at their real heights — including the status LINE, which
     /// `bands()`' `fixed` omits because that constant predates the second status row.
-    static func fixedWithoutEngine(edge: CGFloat, inBook: Bool, autoplaying: Bool) -> CGFloat {
+    static func fixedWithoutEngine(edge: CGFloat, autoplaying: Bool) -> CGFloat {
         headerBtnHeight + boardBandHeight(edge: edge)
             + statusLineMinHeight + statusMinHeight + stripMaxHeight
             + (autoplaying ? autoplayBandHeight : 0)
-            + (inBook ? bookStripHeight : 0)
     }
 
     /// What is left for the engine panel — the band that gives way.
     static func engineAvailable(viewportHeight: CGFloat, edge: CGFloat,
-                                inBook: Bool, autoplaying: Bool) -> CGFloat {
-        max(0, viewportHeight - fixedWithoutEngine(edge: edge, inBook: inBook,
-                                                   autoplaying: autoplaying))
+                                autoplaying: Bool) -> CGFloat {
+        max(0, viewportHeight - fixedWithoutEngine(edge: edge, autoplaying: autoplaying))
     }
 
     /// The line-height the engine rows are laid out with. Nunito's, because that is what the rest of
@@ -529,6 +531,27 @@ enum AnalysisLayout {
         return (max(1, min(single, want)), 1)
     }
 
+    /// A monospace advance as a fraction of point size. Menlo and SF Mono are both exactly 0.6em,
+    /// which is what makes a character budget possible at all.
+    static let monoAdvanceRatio: CGFloat = 0.6
+
+    /// What is left for the continuation after the rank badge, the eval and the SAN.
+    ///
+    /// The engine row is width-tight, and every column added to it comes off the moves — which is
+    /// the thing the client asked for the round before the badge. This is the number that has to be
+    /// watched, and §10e watches it.
+    static func engineContinuationWidth(screenWidth: CGFloat) -> CGFloat {
+        max(0, screenWidth - enginePaddingH * 2
+            - engineRankWidth - engineEvalWidth - engineSanWidth - rowSpacing * 3)
+    }
+
+    /// How many monospace characters of continuation fit on ONE line at that width.
+    static func engineContinuationChars(screenWidth: CGFloat) -> Int {
+        let advance = AnalysisType.enginePv * monoAdvanceRatio
+        guard advance > 0 else { return 0 }
+        return Int(engineContinuationWidth(screenWidth: screenWidth) / advance)
+    }
+
     struct Bands: Equatable {
         var fixed: CGFloat
         var board: CGFloat
@@ -540,16 +563,14 @@ enum AnalysisLayout {
     /// DEVIATION: the spec lists seven literal band heights, which overflow a 375×667 screen. The
     /// fixed bands keep their source values; the panels band gives way first, then the board.
     ///
-    /// The book strip counts as fixed now. It used to be the flexible band — a 230pt ceiling on a
-    /// greedy `ScrollView`, so it drew a 230pt box to hold one line of "out of book" text while the
-    /// engine rows were squeezed to 9pt beneath it. It is 44pt when there is a book and **nothing at
-    /// all** when there is not; the slack it used to hoard now belongs to a `Spacer` above the
-    /// engine panel, which lets that panel grow into whatever it needs.
+    /// There is no book band at all any more, and so no `inBook` axis. It was the flexible band
+    /// once — a 230pt ceiling on a greedy `ScrollView`, so it drew a 230pt box to hold one line of
+    /// "out of book" text while the engine rows were squeezed to 9pt beneath it — then a 44pt strip
+    /// of chips, and now nothing. The engine panel is the flexible child and keeps the height.
     ///
     /// `panels` is the EDIT-mode panel's budget now — the only thing still using that container.
-    static func bands(viewportHeight: CGFloat, boardEdge: CGFloat, inBook: Bool = true) -> Bands {
-        let book = inBook ? bookStripHeight : 0
-        let fixed = headerBtnHeight + statusMinHeight + stripMaxHeight + engineStripEstimate + book
+    static func bands(viewportHeight: CGFloat, boardEdge: CGFloat) -> Bands {
+        let fixed = headerBtnHeight + statusMinHeight + stripMaxHeight + engineStripEstimate
         let board = min(boardEdge, max(0, viewportHeight - fixed))
         let panels = max(0, min(panelsMaxHeight, viewportHeight - fixed - board))
         return Bands(fixed: fixed, board: board, panels: panels)

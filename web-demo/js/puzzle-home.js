@@ -193,7 +193,10 @@ var BiyaPuzzleHome = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pzp-header');
-    var back = el('button', 'pzp-back', '←');
+    var back = el('button', 'pzp-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzp-title', T.homeTitle));

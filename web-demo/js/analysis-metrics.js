@@ -188,9 +188,6 @@ var BiyaAnalysisMetrics = (function () {
     // content-sized and claims the leftover itself. Was 60, for three single-line rows of 9-10pt
     // type; at 13pt with the continuation allowed to wrap it is ~102.
     engineStripEstimate: 102,
-    // The opening book when there IS one — a single row of chips, not the 230pt panel it used to
-    // be. Zero when out of book: the strip is simply not built.
-    bookStripHeight: 44, bookChipGap: 5,
     engineMaxRows: 5, engineLineLimit: 2,
     // Move-strip tokens and branch chips — real values (movesStripMove, altChip).
     tokenPaddingH: 5, tokenPaddingV: 2, tokenRadius: 3, chipPaddingH: 8, chipPaddingV: 4,
@@ -203,7 +200,11 @@ var BiyaAnalysisMetrics = (function () {
     toolGap: 2, statusLineLimit: 2, singleLine: 1,
     rowGap: 3, rowSpacing: 6, rowPaddingH: 8, rowPaddingV: 5,
     // engineSanWidth grown with the type too — O-O-O and Qxd5+ are five glyphs.
-    bookSanWidth: 46, engineSanWidth: 46,
+    engineSanWidth: 46,
+    // The engine row's rank badge: 1/2/3, tinted with that line's board-arrow colour so the row and
+    // the arrow are visibly the same line. ONE digit wide — the row is already tight at 13px and
+    // every point this column takes comes off the moves.
+    engineRankWidth: 16, engineRankRadius: 4, engineRankPaddingV: 1,
     // The line-preview bar, which takes the STATUS LINE's row while an engine line is being walked
     // — so it borrows that row's paddings and minimum height and the band never jumps. Only the gap
     // and the two action buttons are its own.
@@ -214,25 +215,72 @@ var BiyaAnalysisMetrics = (function () {
   /**
    * Bands are (fixed, flexible) pairs: the panels band gives way first, then the board.
    *
-   * The book strip counts as fixed now. It used to be the flexible band — a 230px ceiling on a
-   * scrolling box, so it drew 230px to hold one line of "out of book" text while the engine rows
-   * were squeezed to 9px beneath it. It is 44px with a book and NOTHING without one; the engine
-   * panel claims the slack it used to hoard.
+   * There is no book band at all any more, and so no `inBook` axis. It was the flexible band once
+   * — a 230px ceiling on a scrolling box, so it drew 230px to hold one line of "out of book" text
+   * while the engine rows were squeezed to 9px beneath it — then a 44px strip of chips, and now
+   * nothing. The engine panel is the flexible child and keeps the height.
    *
    * `panels` is the EDIT-mode panel's budget now — the only thing still using that container.
    */
-  function bandLayout(viewportHeight, boardEdge, inBook) {
-    var book = (inBook === false) ? 0 : BANDS.bookStripHeight;
+  function bandLayout(viewportHeight, boardEdge) {
     var fixed = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
-      + BANDS.engineStripEstimate + book;
+      + BANDS.engineStripEstimate;
     var board = Math.min(boardEdge, Math.max(0, viewportHeight - fixed));
     var panels = Math.max(0, Math.min(BANDS.panelsMaxHeight, viewportHeight - fixed - board));
     return { fixed: fixed, board: board, panels: panels,
              total: fixed + board + panels, fits: fixed + board + panels <= viewportHeight };
   }
 
+  /**
+   * A monospace advance as a fraction of font size. Menlo and SF Mono are both exactly 0.6em, which
+   * is what makes a character budget possible at all.
+   */
+  var MONO_ADVANCE_RATIO = 0.6;
+
+  /**
+   * What is left for the continuation after the rank badge, the eval and the SAN.
+   *
+   * The engine row is width-tight, and every column added to it comes off the moves — which is the
+   * thing the client asked for the round before the badge. §10e watches this number.
+   */
+  function engineContinuationWidth(screenWidth) {
+    return Math.max(0, screenWidth - BANDS.enginePaddingH * 2
+      - BANDS.engineRankWidth - BANDS.engineEvalWidth - BANDS.engineSanWidth - BANDS.rowSpacing * 3);
+  }
+  /** How many monospace characters of continuation fit on ONE line at that width. */
+  function engineContinuationChars(screenWidth) {
+    var advance = TYPE.enginePv * MONO_ADVANCE_RATIO;
+    if (advance <= 0) return 0;
+    return Math.floor(engineContinuationWidth(screenWidth) / advance);
+  }
+
   /** Nunito's line height — what the rest of the app measures with; the mono face is close enough. */
   var ENGINE_LINE_RATIO = 1.364;
+
+  /** The board band's whole height: the top padding, the board, the gap, and the 8px eval bar. */
+  function boardBandHeight(edge) {
+    return BANDS.boardPaddingTop + edge + BANDS.boardPaddingTop + EVAL_BAR.mainHeight;
+  }
+  /**
+   * Every band above the engine panel, at their real heights — including the status LINE, which
+   * `bandLayout`'s `fixed` omits because that constant predates the second status row.
+   *
+   * The browser does not USE this in production: `planEngine()` measures the sibling bands, which
+   * is exact. It exists so the self-test can assert the same budget the Swift twin computes, and
+   * so the two cannot drift. Mirrors AnalysisLayout.fixedWithoutEngine.
+   */
+  function fixedWithoutEngine(edge, autoplaying) {
+    return BANDS.headerBtnH + boardBandHeight(edge)
+      + BANDS.statusLineMinHeight + BANDS.statusMinHeight + BANDS.stripMaxHeight
+      + (autoplaying ? autoplayBandHeight() : 0);
+  }
+  function autoplayBandHeight() {
+    return TYPE.autoplayBar * ENGINE_LINE_RATIO + BANDS.autoplayPaddingV * 2;
+  }
+  /** What is left for the engine panel — the band that gives way. */
+  function engineAvailable(viewportHeight, edge, autoplaying) {
+    return Math.max(0, viewportHeight - fixedWithoutEngine(edge, autoplaying));
+  }
 
   /** Everything in the engine panel that is NOT a row: micro bar + margin, info row, padding. */
   function engineChromeHeight() {
@@ -799,55 +847,83 @@ var BiyaAnalysisMetrics = (function () {
       expect(w - boardSize(w, 3) < 8 / 3 + 1e-9, 'the board is edge-to-edge at ' + w + ' (snap only)');
     });
 
-    // 10c. The book strip costs height only when there IS a book.
-    var inBook = bandLayout(667, boardSize(375, 3), true);
-    var outOfBook = bandLayout(667, boardSize(375, 3), false);
-    expect(outOfBook.fixed === inBook.fixed - BANDS.bookStripHeight,
-      'out of book the strip costs nothing at all — it is not built, not emptied');
-    expect(outOfBook.board >= inBook.board,
-      'and the height it gives back goes to the board first on a short screen');
-    expect(BANDS.bookStripHeight * 4 < BANDS.panelsMaxHeight,
-      'the strip is a fraction of the 230pt panel it replaced (' + BANDS.bookStripHeight + ')');
+    // 10c. NO band varies with the opening book any more.
+    //
+    // The inverse of the assertion that used to live here. Band 6 was the ECO panel, then a 44px
+    // strip of chips; the client asked for the strip's removal one round after it replaced the
+    // panel. What has to stay true is that nothing about the layout depends on whether the position
+    // is in book — one screen shape, always. Mirrors AnalysisMetricsCheck.swift §10c.
+    [[375, 667], [390, 844], [430, 932]].forEach(function (d) {
+      var edge = boardSize(d[0], 3);
+      expect(bandLayout(d[1], edge).fits, 'the one band layout fits at ' + d[0] + 'x' + d[1]);
+      var quiet = fixedWithoutEngine(edge, false);
+      var playing = fixedWithoutEngine(edge, true);
+      expectNear(playing - quiet, autoplayBandHeight(),
+        'autoplay is the only band left that appears and disappears at ' + d[0] + 'x' + d[1], 1e-9);
+      expect(engineAvailable(d[1], edge, false) > engineAvailable(d[1], edge, true),
+        'and it costs the engine panel exactly that much at ' + d[0] + 'x' + d[1]);
+    });
 
     // 10d. How much engine panel actually fits, per phone.
     //
     // The panel is the flexible band, so it can never overflow — the rows box CLIPS, and rows that
     // do not fit are simply not drawn (`.an-rows`, and `rowsBox` in the Swift). These pin how many
     // survive, which differs by device: a 375x667 SE spends 56% of its height on the board alone,
-    // so it gets fewer rows than a Pro Max. That is a fact about the screen, not something to
-    // assert away. Mirrors AnalysisMetricsCheck.swift §10d.
-    function engineRowsThatFit(available, lines) {
-      var lineH = TYPE.enginePv * 1.35;
-      var chrome = EVAL_BAR.microHeight + EVAL_BAR.microMarginBottom
-        + TYPE.engineDepth * 1.35 + BANDS.chipPaddingV * 2
-        + BANDS.enginePaddingTop + BANDS.enginePaddingBottom;
-      var perRow = lines * lineH + BANDS.rowGap;
-      if (perRow <= 0) return 0;
-      return Math.max(0, Math.floor((available - chrome) / perRow));
-    }
-    [[375, 667, 3, 1], [390, 844, 5, 3], [430, 932, 5, 5]].forEach(function (d) {
+    // so it gets fewer rows than a Pro Max. Mirrors AnalysisMetricsCheck.swift §10d.
+    //
+    // Driven through the SHIPPED functions, not a local copy of the arithmetic. The copy that used
+    // to live here omitted the status LINE and the board band's own chrome while adding the book
+    // strip, and the two errors nearly cancelled; it reported budgets that were never real.
+    [[375, 667, 4, 2], [390, 844, 5, 5], [430, 932, 5, 5]].forEach(function (d) {
       var edge = boardSize(d[0], 3);
-      var fixedNoEngine = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
-        + BANDS.bookStripHeight;
-      var available = d[1] - fixedNoEngine - edge;
+      var available = engineAvailable(d[1], edge, false);
       expect(available > 0, 'there is room for an engine panel at ' + d[0] + 'x' + d[1]);
       expect(engineRowsThatFit(available, 1) >= d[2],
-        'at ' + d[0] + 'x' + d[1] + ', in book, at least ' + d[2] + ' single-line engine rows fit '
-        + '(got ' + engineRowsThatFit(available, 1) + ')');
+        'at ' + d[0] + 'x' + d[1] + ' at least ' + d[2] + ' single-line engine rows fit (got '
+        + engineRowsThatFit(available, 1) + ')');
       expect(engineRowsThatFit(available, BANDS.engineLineLimit) >= d[3],
         'and at least ' + d[3] + ' WRAPPED rows (got '
         + engineRowsThatFit(available, BANDS.engineLineLimit) + ')');
     });
-    var seEdge = boardSize(375, 3);
-    var seFixedNoEngine = BANDS.headerBtnH + BANDS.statusMinHeight + BANDS.stripMaxHeight
-      + BANDS.bookStripHeight;
-    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge, 1) >= ENGINE_LIMITS.multiPV,
+    var seAvailable = engineAvailable(667, boardSize(375, 3), false);
+    expect(engineRowsThatFit(seAvailable, 1) >= ENGINE_LIMITS.multiPV,
       'even a 375x667 SE shows every line the DEFAULT preset produces');
-    expect(engineRowsThatFit(667 - seFixedNoEngine - seEdge + BANDS.bookStripHeight, 1)
-      > engineRowsThatFit(667 - seFixedNoEngine - seEdge, 1),
-      'dropping the book strip buys the SE at least one more engine row');
     expect(BANDS.engineMaxRows >= ENGINE_LIMITS.multiPV,
       'and the row cap never hides a line the default preset produced');
+    // What deleting the book band actually bought, stated as a number rather than a claim: 44px was
+    // the strip's height, and on the smallest screen it was the difference between one wrapped row
+    // and two. Written as a comparison against the OLD budget so it cannot become a tautology the
+    // way `rowsThatFit(x + strip) > rowsThatFit(x)` did once the strip was gone.
+    var RETIRED_BOOK_STRIP = 44;
+    expect(engineRowsThatFit(seAvailable, BANDS.engineLineLimit)
+      > engineRowsThatFit(seAvailable - RETIRED_BOOK_STRIP, BANDS.engineLineLimit),
+      'deleting the 44px book strip bought the SE at least one more WRAPPED engine row');
+    var sePlan = enginePlan(seAvailable, ENGINE_LIMITS.multiPV);
+    expect(sePlan.rows === ENGINE_LIMITS.multiPV,
+      'the SE plan draws every default line (got ' + sePlan.rows + ')');
+    expect(sePlan.lines >= 1 && sePlan.lines <= BANDS.engineLineLimit,
+      'and wraps to a legal number of lines (got ' + sePlan.lines + ')');
+
+    // 10e. The rank badge must not cost the client a move.
+    //
+    // Height was paid for by deleting the book band. WIDTH was not: the badge is a new column on a
+    // row already tight at 13px, and every pixel it takes comes off the continuation — which is
+    // exactly what the round before this one was about. Mirrors AnalysisMetricsCheck.swift §10e.
+    [375, 393, 430].forEach(function (w) {
+      var chars = engineContinuationChars(w);
+      // ~4.2 characters per ply once the separating space is counted ("Nf3 ", "Bxc6+ "), so a
+      // 12-ply continuation needs about 50. Two lines of 30 clear it on the smallest phone.
+      expect(chars * BANDS.engineLineLimit >= 50,
+        'a full continuation still fits at ' + w + ' (' + chars + ' chars x '
+        + BANDS.engineLineLimit + ' lines)');
+    });
+    expect(BANDS.engineRankWidth < BANDS.engineEvalWidth
+      && BANDS.engineRankWidth < BANDS.engineSanWidth,
+      'the badge is the narrowest column in the row');
+    expect(engineContinuationWidth(375)
+      > BANDS.engineRankWidth + BANDS.engineEvalWidth + BANDS.engineSanWidth,
+      'and the moves still get more of the row than all three fixed columns together');
+    expect(BANDS.engineMaxRows < 10, 'a rank badge never needs a second digit');
 
     // 11. Timings.
     expect(TIMINGS.analysisDebounce === 300, 'analysis debounce is 300ms');
@@ -1487,6 +1563,10 @@ var BiyaAnalysisMetrics = (function () {
     BANDS: BANDS, bandLayout: bandLayout,
     engineRowsThatFit: engineRowsThatFit, enginePlan: enginePlan,
     engineRowHeight: engineRowHeight, engineChromeHeight: engineChromeHeight,
+    engineContinuationWidth: engineContinuationWidth,
+    engineContinuationChars: engineContinuationChars,
+    boardBandHeight: boardBandHeight, fixedWithoutEngine: fixedWithoutEngine,
+    autoplayBandHeight: autoplayBandHeight, engineAvailable: engineAvailable,
     EVAL_BAR: EVAL_BAR, EVAL_CLAMP: EVAL_CLAMP, evalBarFraction: evalBarFraction,
     GRAPH: GRAPH, graphPoint: graphPoint,
     CLASSIFICATIONS: CLASSIFICATIONS, CLASSIFICATION_ORDER: CLASSIFICATION_ORDER,

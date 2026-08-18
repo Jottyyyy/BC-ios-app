@@ -97,7 +97,10 @@ var BiyaCoachSelect = (function () {
     applyMetrics(root);
 
     var header = el('div', 'cgs-header');
-    var back = el('button', 'cgs-back', STR.backArrow || '←');
+    var back = el('button', 'cgs-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
     var centre = el('div', 'cgs-header-center');

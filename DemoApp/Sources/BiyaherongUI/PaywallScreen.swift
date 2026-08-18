@@ -35,12 +35,10 @@ struct PaywallScreen: View {
 
     private var header: some View {
         HStack(spacing: PaywallLayout.rowGap) {
-            Button(action: onClose) {
-                Image(systemName: "chevron.left")
-                    .font(Theme.nunito(PaywallType.headerTitleSize, .semiBold))
-                    .foregroundStyle(PaywallPalette.heading)
-            }
-            .buttonStyle(DimButtonStyle(pressedOpacity: PaywallLayout.pressed))
+            // The only back button in the app that had no fixed frame at all; `NavIconButton`
+            // gives it the same 44pt hit area as every other one.
+            NavIconButton(.back, size: PaywallType.headerTitleSize,
+                          tint: PaywallPalette.heading, action: onClose)
             Text(store.isPremium ? PaywallStrings.premium : PaywallStrings.goPremium)
                 .font(Theme.nunito(PaywallType.headerTitleSize, .bold))
                 .foregroundStyle(PaywallPalette.heading)

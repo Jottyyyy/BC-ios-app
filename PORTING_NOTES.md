@@ -1747,3 +1747,114 @@ Swift-only behaviour the JS twin did not have.
 
 **Removed:** `AnalysisVM.playEngineRow` and the browser's `playUciMove`. Nothing plays just a line's
 first move now, and dead code that looks live is worse than none.
+
+---
+
+## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
+
+Three asks, one round after the previous entry. The first of them removes something that entry had
+just added, which is worth stating plainly rather than quietly reversing.
+
+### 1. The opening-book band is gone entirely
+
+*"Pwede ba remove mo na ito, siguro hindi na ito kailangan."*
+
+Band 6 was the ECO explorer, then — one round ago — a 44 pt strip of `san · eco` chips. Now it is
+nothing. What went, and what deliberately did not:
+
+| Removed | Kept, and why |
+|---|---|
+| `AnalysisBookStrip`, `paintBookStrip`, `.an-bookstrip` / `.an-bchip` | `AnalysisSession.bookContinuations` — pure, parity-tested (`analysis_session` asserts it), and Opening Trainer is a future consumer. Only the UI went |
+| `AnalysisVM.bookRows`, `playBookMove`, JS `bookContinuations` view helper + `playSanMove` | `openingEntry` / `openingText` — a **separate** code path through `book.nameFor`, and the opening name still shows in the engine info row |
+| `bookStripHeight`, `bookChipGap`, `bookSanWidth` (the last already dead) | `OpeningBook` itself, also needed for Game Review's `book` tier via `bookPlies` |
+| the dead `.an-brow` / `.an-bname` / `.an-panel-head` / `.an-panel-empty` leftovers | `.an-hidden`, which sat physically inside the deleted CSS block and is used by the preview bar, the status line and `.an-panels` |
+
+**The band model lost its `inBook` axis.** `bands()`, `fixedWithoutEngine` and `engineAvailable`
+dropped the parameter in both languages. Nothing about the layout depends on the book any more, and
+the engine panel keeps the 44 pt on every in-book position.
+
+**Assertions inverted, not deleted** — the same rule the typography deviation follows:
+
+- §10c said *"the strip costs height only when there IS a book"*. It now says **no band varies with
+  the book**, and that autoplay is the only conditional band left.
+- `rowsThatFit(x + bookStripHeight) > rowsThatFit(x)` would have become `x > x` — a silent
+  tautology. Replaced by a comparison against the OLD budget: `rowsThatFit(seAvailable) >
+  rowsThatFit(seAvailable − 44)`, which states what the deletion actually bought and cannot decay.
+- `swift_layout_check` rule 4b flipped from "the strip must be conditional" to "there is no book
+  band at all", and the `book_strip_drawn_unconditionally` mutant became `book_band_reintroduced`.
+- `board_layout_check` now asserts the eight book class names are **absent** from the stylesheet and
+  that `analysis.js` no longer mentions them — while separately asserting `.an-hidden` survived.
+
+**§10d was wrong before this, and is fixed by it.** Its local budget omitted the status LINE and the
+board band's own chrome while adding the book strip; the two errors nearly cancelled, so it reported
+believable numbers that were never real, and claimed three wrapped rows fit an SE when two do. It
+now drives the SHIPPED `fixedWithoutEngine` / `engineRowsThatFit` / `enginePlan`, and the honest
+figures are 4 single-line / 2 wrapped at 375×667.
+
+**Three CSS variables were re-homed rather than deleted.** `--an-row-spacing`, `--an-chip-pad-h` and
+`--an-chip-pad-v` were read only by the book chips; removing the rules would have orphaned them and
+tripped the `--an-*` audit. Their natural readers were `.an-erow`'s `gap` and `.an-depth`'s
+`padding`, both of which had been carrying hardcoded copies. The depth chip's copy was `3px 5px`
+against the metrics' 4/8 — the browser chip was two pixels tighter than the app's *and* than
+`engineChromeHeight()`'s own budget. Deleting a feature is how you find that.
+
+### 2. Engine lines carry a rank badge in their arrow's colour
+
+*"Lagyan mo ng numbering para alam kung anong number."*
+
+The board draws up to three engine arrows coloured by rank; nothing said which row owned which
+arrow. Each row now opens with a one-digit badge tinted `AnalysisArrow.color(rank:)`.
+
+- **`EngineRow.rankLabel` does the `+ 1` in Core.** A view body may not contain arithmetic
+  (`AnalysisBoardScreen.swift:16-18`, and `swift_layout_check` greps for it), and both languages
+  must print the same thing. One `+ 1`, in the one place the two can be diffed.
+- **The badge takes `engineDepth` (11), not the row's 13.** Every other engine cell is asserted equal
+  to `stripMove`, so a new size would need its own `deviates(…)`; `engineDepth` is the existing chip
+  size and already a declared deviation. A badge as large as the moves would also out-shout them.
+- **`engineRankWidth = 16`, one digit.** `engineMaxRows` is 5, so a second digit can never be needed
+  — and that is asserted, so the constant cannot be widened without someone noticing.
+- **Width was the cost, and it is now pinned.** The 44 pt reclaimed in §1 pays for the badge
+  vertically; horizontally it is a new column on a row that was already tight at 13 pt, and the
+  previous round was specifically about fitting MORE moves. New §10e:
+  `engineContinuationWidth(375)` = 239 pt = 30 characters a line = 60 across two, against the ~50 a
+  12-ply continuation needs at ~4.2 characters a ply. Also asserted: the badge is the narrowest
+  column, and the moves still get more of the row than all three fixed columns together.
+
+### 3. Back and ☰ are hand-drawn vectors — and the two languages finally agree
+
+Full write-up in `docs/navigation-chrome.md`. The deviations and decisions that belong here:
+
+- **The glyphs were never icons.** `←` (U+2190) and `☰` (U+2630) drawn at 22 pt in Nunito, which has
+  neither, so both fell back to whatever face the platform picked. `CoachLayout.swift` had said so
+  in its own comment for as long as it existed.
+- **This was a convergence bug, not only a beauty one.** Swift drew `Image(systemName:
+  "chevron.left")` on the shared puzzle header, Puzzle Hub, Streak and the Paywall while the browser
+  drew `←` on the same screens. **No assertion anywhere named a glyph, an icon or a button class** —
+  the whole category was unguarded. `tools/qa/nav_icons_check.js` now covers it.
+- **`Shape`, not an SVG asset.** `SVGVector.swift` deliberately rejects `currentColor`, and these
+  icons must take each screen's own tint. Hand-built paths also let both languages compute from one
+  geometry, which an asset could not guarantee. `BoardArrows.swift` is the precedent.
+- **The 44 pt minimum is WIDTH only.** Apple's guideline is 44×44, but the Analysis header is 36 pt
+  and a 44 pt-tall button spilled 4 pt over the board's top rank — it would have stolen taps from
+  a8–h8. Measured in the browser twin; every screen's own frame is already 36–44 tall.
+- **Extracted frames are untouched.** `CoachSelect.backBtnWidth` (44), `PairingList.backBtnWidth`
+  (40) and the rest sit next to `backBtnJustifyContent` — extracted StyleSheet values. The component
+  replaces the glyph *inside* the button, never the button's box.
+- **Two glyph tables retired with inverted assertions.** `CoachGlyph.back` — `CoachMetricsCheck` and
+  `replay_coach` now assert **four** transport glyphs and that `back` is not among them.
+  `PairingStrings.back` — that file is generated by `tools/metrics/gen_pairing_metrics.js`, so it
+  was removed from `pairing-metrics.js`'s `STR` and regenerated.
+- ⚠ **`el()`'s third argument is `textContent` in every browser screen file except `analysis.js`.**
+  An SVG string passed there is inserted as literal text and draws nothing. The first pass did
+  exactly that on eighteen sites and every gate stayed green; only opening the browser caught it.
+  Every site now assigns `innerHTML` explicitly, and `nav_icons_check.js` asserts the shape.
+
+**Four latent bugs fixed on the way through**, all pre-existing and all inside the diff:
+`.pzd-back` hardcoded `40px/40px/24px` with no variables across five screens; `.pzp-back` read
+`--pzh-back-*` that its own screen never published; `PuzzleHubScreen` sized its back button from
+`PuzzleHub.chevronLineHeight`, the **list-row** chevron's line height, while the browser fed
+`--pzh-back-fs` from `PuzzleType.hubBackIcon` (both 24, so nothing moved — it just stopped being a
+coincidence); and `coach-select.js` read an `STR.backArrow` that is undefined everywhere.
+
+**Deliberately out of scope**, at the user's choice: the nine Analysis toolbar emoji, the four
+transport arrows, the ☰ menu's own `✕`, and Home's `🔍`.

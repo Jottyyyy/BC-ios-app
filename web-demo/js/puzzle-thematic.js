@@ -119,7 +119,10 @@ var BiyaPuzzleThematic = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pzt-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzt-title', T.thematicTitle));
@@ -178,7 +181,10 @@ var BiyaPuzzleThematic = (function () {
 
     var meta = MET.THEMES.find(function (t) { return t.id === theme; });
     var header = el('div', 'pzts-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { leave(); if (onExit) onExit(); };
     header.appendChild(back);
     var centre = el('div', 'pzts-centre');
