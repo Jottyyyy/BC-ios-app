@@ -61,6 +61,39 @@ var BiyaAnalysis = (function () {
   /** Entry cap. Reached, the table is cleared wholesale — bounded memory, and still deterministic. */
   var TT_MAX = 1 << 20;
 
+  /**
+   * How far `extendPV` will follow the table past the search horizon.
+   *
+   * Two above `PV_PREVIEW` in analysis.js on purpose: the DISPLAY cap should be the thing that
+   * truncates a line, not the engine, so the panel never stops a line for a reason the user cannot
+   * see. Not imported from there — the engine does not know a panel exists; the two are pinned to
+   * each other by assertion instead.
+   */
+  var PV_EXTEND_LIMIT = 14;
+
+  /**
+   * How deep one tail probe searches.
+   *
+   * TWO, measured rather than guessed. Depths 2, 3 and 4 all reach the 14-ply limit on every line;
+   * they differ only in what they cost. Over three positions at depth 6, total search time was
+   * +21%/+6%/+5% at depth 2, +66%/+21%/+9% at depth 3 and +99%/+31%/+13% at depth 4 — the deeper
+   * probe buys nothing visible, because the scratch table carries the ordering between probes.
+   */
+  var EXTEND_PROBE_DEPTH = 2;
+
+  /**
+   * A hard node budget for ONE line's extension. Reset per line by `extendOneLine`.
+   *
+   * Nodes, not milliseconds, because the engine's contract is that the same request twice returns
+   * byte-identical lines AND an identical node count; a clock would break both. This exists because
+   * `engine_budget_check.js` measures the longest uninterrupted block on the in-thread (`file://`)
+   * path: unbounded depth-4 probes from a two-ply PV in a sharp position measured 2.9 SECONDS of
+   * frozen UI. At 4k nodes a line, the worst block over the six gate positions is ~95 ms.
+   *
+   * Running out is not an error. The line is simply as long as the budget reached.
+   */
+  var EXTEND_PROBE_NODES = 4000;
+
   // Null-move pruning: give the opponent a free move; if the position is still good enough to fail
   // high, it was never worth searching properly. Forbidden in check, in a PV node, and — the
   // zugzwang guard — when the side to move has nothing but pawns, where passing is not a concession.
@@ -184,6 +217,129 @@ var BiyaAnalysis = (function () {
     if (!e && this.tt.size >= TT_MAX) this.tt.clear();      // bounded memory, deterministically
     this.tt.set(lo, { hi: hi, depth: depth, score: toTT(score, ply), flag: flag, move: move });
   };
+
+  /**
+   * Walks the transposition table forward from the end of a principal variation.
+   *
+   * A PV can never be longer than the search was deep: the recursion stops writing to `line` at
+   * depth 0 and quiescence never writes to it at all. At the default preset that is about six
+   * plies — exactly what the analysis panel was showing, and what the client asked to see more of.
+   * The table already holds a best move for far more positions than the PV passes through, so
+   * following it costs a handful of Map lookups and NO search at all.
+   *
+   * On its own it is also nearly useless, which is worth stating plainly rather than discovering
+   * later: the PV's LAST position was reached at depth 0 and handed to quiescence, which stores no
+   * move, so the walk usually breaks on its very first probe. Measured over four positions at depth
+   * 6, it lengthened one line in twelve. `extendTail` below is what actually delivers the moves;
+   * this stays because a transposition sometimes does hand back a free ply, and because it is the
+   * cheap half of the pair.
+   *
+   * Three guards, each load-bearing: the `hi` verifier and a legality test, because the table is
+   * keyed on 32 bits and a collision hands back a move from a different position entirely; a
+   * repetition set, because a table of exact scores will happily walk a cycle forever; and the
+   * limit, because there is only so much room on screen.
+   */
+  Search.prototype.extendPV = function (position, pv, limit) {
+    var out = pv.slice(), p = E.clone(position), i;
+    for (i = 0; i < pv.length; i++) p = E.makeMove(p, pv[i]);
+    var seen = {};
+    this.hash(p);
+    seen[this.keyScratch[0] + ':' + this.keyScratch[1]] = true;
+    while (out.length < limit) {
+      this.hash(p);
+      var e = this.tt.get(this.keyScratch[0]);
+      if (!e || e.hi !== this.keyScratch[1] || !e.move) break;
+      var legal = E.legalMoves(p), ok = false;
+      for (i = 0; i < legal.length; i++) {
+        if (legal[i].from === e.move.from && legal[i].to === e.move.to
+            && (legal[i].promotion || null) === (e.move.promotion || null)) { ok = true; break; }
+      }
+      if (!ok) break;
+      var next = E.makeMove(p, e.move);
+      this.hash(next);
+      var k = this.keyScratch[0] + ':' + this.keyScratch[1];
+      if (seen[k]) break;
+      seen[k] = true;
+      out.push(e.move);
+      p = next;
+    }
+    return out;
+  };
+
+  /**
+   * Lengthens a PV by SEARCHING from where it ends, on a scratch table.
+   *
+   * This is the half that actually delivers "damihan mo pa moves". One shallow search from the PV's
+   * leaf produces a real continuation, and its own PV is appended; repeat until the limit.
+   *
+   * Bounded four ways, which is what keeps "think time unchanged" true:
+   *   - it runs on the FINAL snapshot only, never once per iteration;
+   *   - only for the two or three lines that will actually be drawn;
+   *   - `EXTEND_PROBE_DEPTH` plies per probe;
+   *   - `EXTEND_PROBE_NODES` for the whole extension, and `PV_EXTEND_LIMIT` plies total.
+   *
+   * `this` must be a SCRATCH Search — its own table, killers and history — so nothing here can
+   * reach the real search's state and change a score. `extendFinal` is the only caller and it
+   * builds one.
+   *
+   * Every appended move is legality-checked and de-duplicated against the positions already in the
+   * line, exactly as `extendPV` does: a probe that finds a repetition would otherwise draw a line
+   * that shuffles back and forth forever.
+   */
+  Search.prototype.extendTail = function (position, pv, limit) {
+    var out = pv.slice(), p = E.clone(position), i;
+    for (i = 0; i < pv.length; i++) p = E.makeMove(p, pv[i]);
+    var seen = {}, k;
+    this.hash(p);
+    seen[this.keyScratch[0] + ':' + this.keyScratch[1]] = true;
+    while (out.length < limit) {
+      // A finished line has no continuation, and searching one returns an empty PV forever.
+      if (E.terminalOutcome(p, []).kind !== 'ongoing') break;
+      var line = [];
+      this.negamax(p, EXTEND_PROBE_DEPTH, -WIN, WIN, 0, line);
+      // A cancelled probe leaves a partially-written line behind; that is not a variation.
+      if (this.cancelled || !line.length) break;
+      var added = 0;
+      for (i = 0; i < line.length && out.length < limit; i++) {
+        var legal = E.legalMoves(p), ok = false;
+        for (var j = 0; j < legal.length; j++) {
+          if (legal[j].from === line[i].from && legal[j].to === line[i].to
+              && (legal[j].promotion || null) === (line[i].promotion || null)) { ok = true; break; }
+        }
+        if (!ok) break;
+        var next = E.makeMove(p, line[i]);
+        this.hash(next);
+        k = this.keyScratch[0] + ':' + this.keyScratch[1];
+        if (seen[k]) { added = 0; break; }
+        seen[k] = true;
+        out.push(line[i]);
+        p = next;
+        added++;
+      }
+      if (!added) break;                 // no progress: stop rather than probe the same leaf again
+    }
+    return out;
+  };
+
+  /**
+   * Extend ONE line of a finished snapshot, and hand back a replacement if it grew.
+   *
+   * One line per call, deliberately. The extension runs on the in-thread (`file://`) path inside
+   * the stepper, and `engine_budget_check.js` measures the longest uninterrupted block there: doing
+   * all three lines in one go measured 324 ms of frozen UI, and shrinking the budget until that fit
+   * simply starved lines two and three — the first line ate it. A line per chunk gives every line
+   * the same full budget and keeps each block inside the slice.
+   *
+   * The probe's node counter is reset per line for exactly that reason. Its TABLE is not: ordering
+   * learned from one line's tail makes the next one cheaper, and it stays deterministic.
+   */
+  function extendOneLine(pos, probe, ln) {
+    probe.nodes = 0;
+    probe.cancelled = false;
+    var full = probe.extendTail(pos, ln.pv, PV_EXTEND_LIMIT);
+    if (full.length === ln.pv.length) return null;
+    return { rank: ln.rank, score: ln.score, pv: full, pvSAN: pvToSan(pos, full), depth: ln.depth };
+  }
 
   /** The opponent gets a free move. Only ever reached where zugzwang has been ruled out. */
   function makeNullMove(pos) {
@@ -488,11 +644,14 @@ var BiyaAnalysis = (function () {
 
       var lines = [];
       for (var k = 0; k < Math.min(limits.multiPV, scored.length); k++) {
+        // Only the lines that will actually be shown, and only here: extending every candidate
+        // inside the root loop would pay for moves nobody ever sees.
+        var full = s.extendPV(pos, scored[k].pv, PV_EXTEND_LIMIT);
         lines.push({
           rank: k + 1,
           score: toEngineScore(scored[k].score, pos.sideToMove),
-          pv: scored[k].pv,
-          pvSAN: pvToSan(pos, scored[k].pv),
+          pv: full,
+          pvSAN: pvToSan(pos, full),
           depth: d
         });
       }
@@ -504,33 +663,72 @@ var BiyaAnalysis = (function () {
       };
     }
 
+    /**
+     * Every exit from the stepper goes through here, so the tail extension runs EXACTLY ONCE per
+     * search — on the snapshot that will actually be read — and never once per depth.
+     *
+     * It does not run HERE, though: it is handed to `pending`, and `next()` works through it one
+     * line per call. That keeps each synchronous block inside the slice; see `extendOneLine`.
+     */
+    var extended = false;
+    var pending = null;
+    function finish(d) {
+      finished = true;
+      if (!extended && best && best.lines && best.lines.length) {
+        extended = true;
+        pending = {
+          i: 0, out: best.lines.slice(), changed: false, nodes: 0,
+          probe: new Search({ maxDepth: EXTEND_PROBE_DEPTH, multiPV: 1,
+                              maxNodes: EXTEND_PROBE_NODES }, function () { return false; })
+        };
+        return { done: false, snapshot: best, depth: d };
+      }
+      return { done: true, snapshot: best, depth: d };
+    }
+
     return {
       next: function () {
+        // The extension, a line per call. Before the `finished` guard, because `finish` has already
+        // set it — this IS the tail of the search, not something after it.
+        if (pending) {
+          var grown = extendOneLine(pos, pending.probe, pending.out[pending.i]);
+          if (grown) { pending.out[pending.i] = grown; pending.changed = true; }
+          pending.nodes += pending.probe.nodes;
+          pending.i += 1;
+          if (pending.i < pending.out.length) {
+            return { done: false, snapshot: best, depth: depth };
+          }
+          if (pending.changed) {
+            // Rebuilt, not mutated: `analyzeProgressive` and `inline` compare snapshots by identity
+            // to decide whether to repaint, and this is the paint that shows the longer lines.
+            best = {
+              fen: best.fen, depth: best.depth, nodes: best.nodes + pending.nodes,
+              lines: pending.out, isFinal: best.isFinal, terminal: best.terminal, score: best.score
+            };
+          }
+          pending = null;
+          return { done: true, snapshot: best, depth: depth };
+        }
         if (finished) return { done: true, snapshot: best, depth: depth };
         if (outcome.kind !== 'ongoing') {
-          finished = true;
           best = {
             fen: E.toFEN(pos), depth: 0, nodes: 0, lines: [],
             isFinal: true, terminal: outcome, score: terminalScore(outcome)
           };
-          return { done: true, snapshot: best, depth: 0 };
+          return finish(0);              // no lines, so the probe is a no-op — but one exit, not two
         }
-        if (depth >= limits.maxDepth || shouldCancel()) {
-          finished = true;
-          return { done: true, snapshot: best, depth: depth };
-        }
+        if (depth >= limits.maxDepth || shouldCancel()) return finish(depth);
         if (rootMoves === null) rootMoves = AI.ordered(E.legalMoves(pos), pos);
         depth += 1;
         var snap = iterate(depth);
         // A cut-short iteration is not a result: keep the last COMPLETE one.
-        if (snap === null) {
-          finished = true;
-          return { done: true, snapshot: best, depth: depth };
-        }
+        if (snap === null) return finish(depth);
         best = snap;
         // A forced mate is the end of the story; deeper search cannot improve on it.
-        if ((snap.score && snap.score.kind === 'mate') || depth >= limits.maxDepth) finished = true;
-        return { done: finished, snapshot: best, depth: depth };
+        if ((snap.score && snap.score.kind === 'mate') || depth >= limits.maxDepth) {
+          return finish(depth);
+        }
+        return { done: false, snapshot: best, depth: depth };
       }
     };
   }
@@ -673,7 +871,10 @@ var BiyaAnalysis = (function () {
     // 8. Progress callbacks arrive once per completed depth.
     var seen = [];
     analyze(mid, { maxDepth: 3, onProgress: function (s) { seen.push(s.depth); } });
-    expect(seen.join(',') === '1,2,3', 'onProgress fires per depth, got ' + seen.join(','));
+    // 1,2,3 and then 3 again: the tail extension rebuilds the final snapshot, and `analyze` reports
+    // every snapshot it has not reported before. The repeat is the one carrying the LONGER lines.
+    expect(seen.join(',') === '1,2,3,3',
+      'onProgress fires per depth, plus the extension, got ' + seen.join(','));
 
     // 9. Score formatting matches the spec's engine-line column.
     expect(formatScore({ kind: 'cp', cp: 130 }) === '+1.3', 'formatScore +1.3');
@@ -692,7 +893,12 @@ var BiyaAnalysis = (function () {
       if (r.snapshot) last = r.snapshot;
       if (r.done || ++guard > 20) break;
     }
-    expect(depths.join(',') === '1,2,3', 'one step per depth, got ' + depths.join(','));
+    // Written against the RUNS rather than the raw list: the depth repeats at the end are the tail
+    // extension stepping one line at a time, and how many there are depends on multiPV.
+    var runs = depths.filter(function (d, i) { return i === 0 || depths[i - 1] !== d; });
+    expect(runs.join(',') === '1,2,3',
+      'one step per depth (trailing repeats are the extension), got ' + depths.join(','));
+    expect(depths.length > runs.length, 'and the extension really did take its own steps');
     expect(last !== null && last.depth === 3, 'the last snapshot is the deepest completed one');
     expect(last.lines.length === 2, 'multiPV carries through the steps');
     // Same answer as a single-shot search of the same depth — the split must not change the result.
@@ -714,9 +920,16 @@ var BiyaAnalysis = (function () {
     var first = cst.next();
     expect(first.depth === 1 && first.snapshot !== null, 'the first step completes');
     cancelNow = true;
-    var after = cst.next();
+    // Cancelling ends the SEARCH. The tail extension still runs over the last completed snapshot,
+    // a line per step, so `done` arrives a couple of calls later with the same lines made longer.
+    var after = cst.next(), safety = 0;
+    while (!after.done && ++safety < 10) after = cst.next();
     expect(after.done === true, 'cancelling ends the walk');
-    expect(after.snapshot === first.snapshot, 'and keeps the last completed snapshot');
+    expect(after.snapshot.depth === first.snapshot.depth, 'and keeps the last completed depth');
+    expect(after.snapshot.lines[0].pvSAN[0] === first.snapshot.lines[0].pvSAN[0],
+      'and its best move');
+    expect(after.snapshot.lines[0].pv.length >= first.snapshot.lines[0].pv.length,
+      'and the line is no shorter for having been cancelled');
 
     // A terminal position resolves in one step, with no lines.
     var tst = analyzeSteps(P('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1'), { maxDepth: 4 });
@@ -724,6 +937,45 @@ var BiyaAnalysis = (function () {
     expect(tr.done === true, 'a terminal position finishes in one step');
     expect(tr.snapshot.terminal !== null && tr.snapshot.lines.length === 0,
       'and reports the outcome with no lines');
+
+    // 11. The TT-extended PV. The search writes at most `depth` plies into a line; walking the
+    //     transposition table forward from the end adds more for free. Asserted through the PUBLIC
+    //     result rather than by reaching into `Search`, so it is the shipped behaviour under test.
+    //
+    //     Three things must hold whatever the table hands back: every move is LEGAL in the position
+    //     it is played from (the table is keyed on 32 bits, and a collision returns a move from a
+    //     different position entirely), the line never revisits a position (a table of exact scores
+    //     will happily walk a cycle forever), and it stops at PV_EXTEND_LIMIT.
+    var ext = analyze(mid, { maxDepth: 5, multiPV: 2 });
+    var extendedAny = false;
+    ext.lines.forEach(function (ln, li) {
+      var tag = 'extended line ' + li;
+      expect(ln.pv.length === ln.pvSAN.length, tag + ': pv and pvSAN stay parallel');
+      expect(ln.pv.length <= PV_EXTEND_LIMIT, tag + ': stops at PV_EXTEND_LIMIT');
+      if (ln.pv.length > ln.depth) extendedAny = true;
+      var p = E.clone(mid), seenPos = {}, allLegal = true, noRepeat = true;
+      // Position identity WITHOUT the halfmove/fullmove clocks — the same rule threefold uses, and
+      // the same thing the engine's own Zobrist key stands for.
+      function key(q) { return E.toFEN(q).split(' ').slice(0, 4).join(' '); }
+      seenPos[key(p)] = true;
+      for (var i = 0; i < ln.pv.length; i++) {
+        var legal = E.legalMoves(p), found = false;
+        for (var j = 0; j < legal.length; j++) {
+          if (legal[j].from === ln.pv[i].from && legal[j].to === ln.pv[i].to
+              && (legal[j].promotion || null) === (ln.pv[i].promotion || null)) { found = true; break; }
+        }
+        if (!found) { allLegal = false; break; }
+        p = E.makeMove(p, ln.pv[i]);
+        var k = key(p);
+        if (seenPos[k]) { noRepeat = false; break; }
+        seenPos[k] = true;
+      }
+      expect(allLegal, tag + ': every ply is legal in the position it is played from');
+      expect(noRepeat, tag + ': the line never revisits a position');
+    });
+    expect(extendedAny, 'the table walk actually lengthens a line past the searched depth');
+    // The display cap must be the thing that truncates, not the engine — see PV_EXTEND_LIMIT.
+    expect(PV_EXTEND_LIMIT > 12, 'PV_EXTEND_LIMIT stays above analysis.js PV_PREVIEW (12)');
 
     return {
       passed: passed,

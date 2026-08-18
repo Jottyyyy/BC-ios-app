@@ -178,6 +178,70 @@ function lineOf(file, re) {
   }
 }
 
+// ---- 4b. the Analysis Board's root has exactly ONE flexible child ---------------
+// Same failure, one screen along, and rule 4's regex could never see it: the analysis root is
+// `.frame(width: geo.size.width, height: geo.size.height)`, which also defaults to `.center`. Its
+// column is a fixed stack, so if nothing inside claims the leftover height SwiftUI centres the lot
+// and a navy gap opens ABOVE the header. That is what nearly shipped when the opening-book panel —
+// which had been the flexible child by accident, because it hoarded slack it had nothing to fill —
+// was replaced by a 44pt strip.
+{
+  const s = code.get('AnalysisBoardScreen.swift');
+  expect(s !== undefined, 'AnalysisBoardScreen.swift is missing');
+  if (s) {
+    const flexible = (s.match(/\.frame\([^)]*maxHeight: \.infinity/g) || []).length;
+    expect(flexible >= 1,
+      'AnalysisBoardScreen has no `maxHeight: .infinity` at all — with nothing flexible, the root '
+      + 'frame centres the whole column and a gap opens above the header');
+    // The engine panel is the one that claims it, and its frame must come AFTER the background or
+    // the band floods with surface colour — the exact mistake the book panel used to make.
+    expect(/\.background\(AnalysisPalette\.surface\)[\s\S]{0,400}?\.frame\(maxHeight: \.infinity, alignment: \.bottom\)/
+      .test(s),
+    'the engine panel must claim the leftover height AFTER its `.background`, bottom-aligned, so '
+      + 'it hugs its content and paints only behind it');
+    // And there is no book band at all any more. Inverted rather than deleted: the strip replaced a
+    // 230pt panel and was itself removed one round later, and the way that comes back is by someone
+    // re-adding a band nobody asked for.
+    expect(!/AnalysisBookStrip/.test(s) && !/vm\.bookRows/.test(s),
+      'the Analysis root builds no opening-book band — band 6 is edit mode only now');
+  }
+}
+
+// ---- 4c. a short screen DROPS engine rows, it does not overdraw ------------------
+// The engine panel is the band that gives way, so on a 375x667 SE the rows do not all fit. They must
+// live in their OWN clipped box: without it the VStack draws them anyway and they land on top of the
+// move strip above. Clipping from the bottom loses the last line before the first, which is the
+// right way round. The browser twin does the same with `.an-rows`; board_layout_check §3c pins it.
+{
+  const s = code.get('AnalysisBoardScreen.swift');
+  if (s) {
+    const i = s.indexOf('private var rowsBox');
+    expect(i >= 0,
+      'AnalysisEnginePanel must put its rows in a `rowsBox` of their own — a bare ForEach in the '
+      + 'panel VStack overdraws the move strip when the band is short');
+    if (i >= 0) {
+      // To the next member, not a fixed window: the ForEach body is long, and a window that stops
+      // short of `.clipped()` fails a correct file — which is exactly what a 1400-char guess did.
+      const rest = s.slice(i + 1);
+      const end = rest.search(/\n {4}(private )?(var|func) /);
+      const box = end < 0 ? rest : rest.slice(0, end);
+      expect(/\.clipped\(\)/.test(box),
+        'rowsBox must be `.clipped()`, or the rows that do not fit paint over the band above');
+      expect(/rows\.prefix\(plan\.rows\)/.test(box),
+        'and capped at `plan.rows`, so a short screen drops rows instead of clipping them');
+    }
+    // The info row is NOT inside the clipped box: depth and the opening name must survive a short
+    // screen, because they are one line and they are what tells you the engine is still working.
+    expect(/rowsBox[\s\S]{0,80}?infoRow/.test(s),
+      'infoRow must sit outside rowsBox — the depth chip has to survive a short screen');
+    // The budget itself is a pure metrics function, not arithmetic in the view.
+    expect(/AnalysisLayout\.enginePlan\(available:/.test(s),
+      'the row/line budget must come from AnalysisLayout.enginePlan — the same function the JS twin '
+      + 'and both metrics suites assert; a second copy in the view body would drift');
+    expect(!/plan\.rows\s*[-+*/]/.test(s), 'and no arithmetic on it in a view body');
+  }
+}
+
 // ---- 5. the five solver screens keep the shape the browser has ----------------
 // Board rigid, bottom band flexible — `.pz-board { flex: none }` + a trailing Spacer.
 {
@@ -201,16 +265,30 @@ function lineOf(file, re) {
   }
 }
 
-// ---- 6. the tab bar hides on pushed puzzle routes ----------------------------
-// The browser does this with `an-mode` on every pushed route; the app must match, or the solver
-// screens draw a tab bar the web twin does not have.
+// ---- 6. there is no tab bar, and no machinery for hiding one ------------------
+//
+// This rule used to be its opposite: `if !puzzlePushed { PhoneTabBar(...) }`, plus the
+// `onPushedChange` plumbing the hub needed to report its depth so the host could hide the bar on a
+// pushed route. Home is the app root now — every destination covers the whole phone — so the bar,
+// the flag and the plumbing are all gone, and the assertion is inverted so none of them can come
+// back without someone reading this.
+//
+// `docs/home-screen.md` had named this as the fix for a grid ~74pt over-constrained by hosting
+// Home as tab 0, and named the one prerequisite: a way back from every destination. That is what
+// replaced it.
 {
   const phone = code.get('PhoneView.swift') || '';
   const hub = code.get('PuzzleHubScreen.swift') || '';
-  expect(/if !puzzlePushed \{ PhoneTabBar/.test(phone),
-    'PhoneView.swift — PhoneTabBar must be hidden while the Puzzles tab has a route pushed.');
-  expect(/onPushedChange/.test(hub) && /onPushedChange/.test(phone),
-    'PuzzleHubScreen must report its pushed depth and PhoneView must consume it.');
+  expect(!/PhoneTabBar/.test(phone), 'PhoneView.swift — no tab bar; Home is the app root.');
+  expect(!/puzzlePushed/.test(phone),
+    'PhoneView.swift — `puzzlePushed` existed only to hide the bar; it should be gone with it.');
+  expect(!/onPushedChange/.test(hub) && !/onPushedChange/.test(phone),
+    'PuzzleHubScreen no longer reports its pushed depth — nothing consumes it.');
+  // What replaced it: the hub is raised and closed like every other pushed route.
+  expect(/if showPuzzles \{/.test(phone),
+    'PhoneView.swift — the Puzzle Hub is a pushed route now, raised by the Home tile.');
+  expect(/onExit: \{ showPuzzles = false \}/.test(phone),
+    'PhoneView.swift — and its back button closes it to Home.');
 }
 
 const result = {

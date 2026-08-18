@@ -105,11 +105,14 @@ var BiyaPuzzleDaily = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pzd-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzd-title', T.dailyTitle));
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var content = el('div', 'pzd-content');
@@ -174,7 +177,10 @@ var BiyaPuzzleDaily = (function () {
     var alreadySolved = st.daily.lastSolvedDay === PROG.dayKey(Date.now());
 
     var header = el('div', 'pzds-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { leave(); if (onExit) onExit(); };
     header.appendChild(back);
     var centre = el('div', 'pzds-centre');
@@ -182,7 +188,7 @@ var BiyaPuzzleDaily = (function () {
     // The original showed Chess.com's puzzle title here; offline, the primary theme stands in.
     centre.appendChild(el('div', 'pzds-sub', themeSummary(daily.puzzle)));
     header.appendChild(centre);
-    header.appendChild(el('div', 'pzd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pzd-logo'));
     root.appendChild(header);
 
     var boardBand = el('div', 'pz-board');

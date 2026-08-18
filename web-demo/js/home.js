@@ -29,15 +29,25 @@ var BiyaHome = (function () {
     return Math.min(Math.max(Math.min(size.width / BASE_W, size.height / BASE_H), MIN_SCALE), MAX_SCALE);
   }
 
+  /* The header mark's corner radius, as a fraction of its size.
+     It is the LOGIN HERO's own proportion — js/login.js `LAYOUT.logoRadius / LAYOUT.logoSize`,
+     30/124 — because it is the same brand mark, and two different corner curves on one app is
+     what a second hand-picked constant buys you. A ratio rather than a size because `logoSize`
+     scales 41 -> 92 px: a fixed radius reads as a circle small and a square large.
+     tools/qa/home_chrome_check.js pins this to login.js AND to the Swift half. */
+  var LOGO_RADIUS_RATIO = 30 / 124;
+
   /** Every card-interior size. NOTE the chain: iconCircle rounds the ALREADY-ROUNDED iconSize. */
   function metricsFor(scale) {
     var iconSize = Math.round(72 * scale);
+    var logoSize = Math.round(54 * scale);
     return {
       scale: scale,
       iconSize: iconSize,
       iconCircle: Math.round(iconSize * 0.85),
       iconInCircle: iconSize * INNER_ICON_RATIO,   // deliberately NOT rounded
-      logoSize: Math.round(54 * scale),
+      logoSize: logoSize,
+      logoRadius: Math.round(logoSize * LOGO_RADIUS_RATIO),
       cardTitleSize: Math.round(15.5 * scale),
       cardSubSize: Math.round(11.5 * scale),
       cardGap: Math.round(10 * scale),
@@ -129,14 +139,13 @@ var BiyaHome = (function () {
     { id: 'puzzles', title: 'Play Puzzles', sub: 'Train Your Tactics', art: 'puzzle_knight.png', fill: '#4CAF50' },
     { id: 'analysis', title: 'Analysis Board', sub: 'Analyze Games', art: 'analysis.png', fill: '#FF9800' },
     { id: 'videos', title: 'Tutorial Videos', sub: 'Learn From FM Deniel', art: 'video_icon.png', fill: '#E91E63' },
-    { id: 'openingTrainer', title: 'Opening Trainer', sub: 'Master Your Repertoire', art: 'opening_book.svg', fill: '#00BFA5' },
-    { id: 'playCoach', title: 'Play with\nCoach', sub: null, art: 'app-icon.png', fill: '#1B1050' },
+    { id: 'openingTrainer', title: 'Opening Tree', sub: 'Explore Your Openings', art: 'opening_book.svg', fill: '#00BFA5' },
+    { id: 'playCoach', title: 'Play with\nCoach', sub: null, art: 'brand-logo.png', fill: '#1B1050' },
     { id: 'pairing', title: 'Pairing\nManager', sub: 'Tournaments', art: 'swiss.png', fill: '#0D2137' }
   ];
   /* Sky theme, Pairing only: the swiss art is too low-contrast on the translucent-blue backdrop. */
   var SWISS_ICON_BACKDROP = '#00BFA5';
 
-  var DONATE = { emoji: '♟️', title: 'Donate', sub: 'Help sponsor\na student · ₱99' };
 
   /* ============================== self-check ============================== */
 
@@ -157,15 +166,16 @@ var BiyaHome = (function () {
 
     // 2. derived metrics — the half-point cases are the ones that matter
     var table = [
-      [0.75, { icon: 54, circle: 46, logo: 41, title: 12, sub: 9, gap: 8, pad: 9 }],
-      [1.00, { icon: 72, circle: 61, logo: 54, title: 16, sub: 12, gap: 10, pad: 12 }],
-      [1.70, { icon: 122, circle: 104, logo: 92, title: 26, sub: 20, gap: 17, pad: 20 }]
+      [0.75, { icon: 54, circle: 46, logo: 41, logoR: 10, title: 12, sub: 9, gap: 8, pad: 9 }],
+      [1.00, { icon: 72, circle: 61, logo: 54, logoR: 13, title: 16, sub: 12, gap: 10, pad: 12 }],
+      [1.70, { icon: 122, circle: 104, logo: 92, logoR: 22, title: 26, sub: 20, gap: 17, pad: 20 }]
     ];
     table.forEach(function (row) {
       var m = metricsFor(row[0]), w = row[1], s = row[0];
       expectNear(m.iconSize, w.icon, 'iconSize at scale ' + s);
       expectNear(m.iconCircle, w.circle, 'iconCircle at scale ' + s);
       expectNear(m.logoSize, w.logo, 'logoSize at scale ' + s);
+      expectNear(m.logoRadius, w.logoR, 'logoRadius at scale ' + s);
       expectNear(m.cardTitleSize, w.title, 'cardTitleSize at scale ' + s);
       expectNear(m.cardSubSize, w.sub, 'cardSubSize at scale ' + s);
       expectNear(m.cardGap, w.gap, 'cardGap at scale ' + s);
@@ -174,6 +184,8 @@ var BiyaHome = (function () {
     expectNear(metricsFor(1.7).iconCircle, 104, 'iconCircle rounds the rounded iconSize');
     expectNear(metricsFor(0.75).iconInCircle, 36.18, 'iconInCircle is NOT rounded');
     expectNear(metricsFor(1.0).iconInCircle, 48.24, 'iconInCircle at scale 1');
+    // The mark is a squircle, not a circle: a circle would crop the logo's wordmark off.
+    expect(LOGO_RADIUS_RATIO > 0 && LOGO_RADIUS_RATIO < 0.5, 'the logo radius ratio is a squircle');
 
     // 3. tile identity — six equal cards
     [{ width: 400, height: 300 }, { width: 347, height: 511.5 }, { width: 996, height: 1180 }].forEach(function (c) {
@@ -282,6 +294,7 @@ var BiyaHome = (function () {
     root.style.setProperty('--h-circle-pct', (m.iconCircle / m.iconSize * 100).toFixed(3) + '%');
     root.style.setProperty('--h-inner-pct', (INNER_ICON_RATIO * 100) + '%');
     root.style.setProperty('--h-logo', m.logoSize + 'px');
+    root.style.setProperty('--h-logo-r', m.logoRadius + 'px');
     root.style.setProperty('--h-title', m.cardTitleSize + 'px');
     root.style.setProperty('--h-sub', m.cardSubSize + 'px');
     root.style.setProperty('--h-ring-radius', m.coachRingRadius + 'px');
@@ -342,7 +355,9 @@ var BiyaHome = (function () {
     var root = el('div', 'home-view' + (state.isColorful ? ' colorful' : ''));
     applyMetrics(root);
 
-    // Header — avatar | logo (centred) | search
+    // Header — avatar | logo (centred) | counterweight.
+    // The third slot is empty and 38px wide on purpose: the logo is centred by being flanked by
+    // two equal controls, so deleting the magnifier outright would shove it half an avatar right.
     var header = el('div', 'home-header');
     var avatar = el('button', 'home-avatar');
     var initial = state.userName ? state.userName.trim().charAt(0).toUpperCase() : '?';
@@ -350,10 +365,9 @@ var BiyaHome = (function () {
       (state.isPremium ? '<span class="ha-badge">✈️</span>' : '');
     avatar.onclick = function () { if (onTap) onTap('avatar'); };
     header.appendChild(avatar);
-    header.appendChild(el('div', 'home-logo-wrap', '<span class="home-logo"><img src="' + ART + 'app-icon.png" alt=""></span>'));
-    var search = el('button', 'home-search', '🔍');
-    search.onclick = function () { if (onTap) onTap('search'); };
-    header.appendChild(search);
+    header.appendChild(el('div', 'home-logo-wrap',
+      '<span class="home-logo"><img src="' + ART + 'brand-logo.png" alt=""></span>'));
+    header.appendChild(el('div', 'home-header-balance'));
     root.appendChild(header);
 
     // Grid — three equal rows of two equal tiles
@@ -369,13 +383,10 @@ var BiyaHome = (function () {
     root.appendChild(el('div', 'home-quote',
       '<div class="hq-text"></div><div class="hq-attrib">' + esc(ATTRIBUTION) + '</div>'));
 
-    // Bottom banners
+    // Bottom banner. It was a Donate/Membership pair; Apple does not permit an app to collect
+    // donations, so Membership is alone and `.home-banner`'s `flex: 1 1 0` widens it to the band.
+    // The band KEEPS its two-line height — see the note on metricsFor/bannerHeight.
     var banners = el('div', 'home-banners');
-    banners.appendChild(buildBanner({
-      emoji: DONATE.emoji, title: DONATE.title, sub: DONATE.sub,
-      skin: state.isColorful ? 'sponsor' : '',
-      onTap: function () { if (onTap) onTap('donate'); }
-    }));
     var style = membershipStyle(state.isPremium, state.isColorful);
     banners.appendChild(buildBanner({
       emoji: membershipEmoji(state.isPremium),

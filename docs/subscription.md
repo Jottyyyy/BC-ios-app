@@ -1,9 +1,20 @@
 # subscription — one monthly plan, a 7-day trial, and no server
 
 A single auto-renewing **monthly** subscription with a **7-day free trial**, verified entirely
-**on-device by StoreKit 2**. No backend, no accounts, no receipt POST. Below it sits a genuinely
-playable **free tier**, and the paywall is reached **on demand** — the "⭐ Go Premium" banner, or a
-cap the user just hit — never as a wall in front of a new install.
+**on-device by StoreKit 2**. No backend, no accounts, no receipt POST.
+
+**Nothing in the app is usable until that trial is started.** Home draws — the six cards, the
+quote, the offer banner — so the user can see what they are buying, and every tile, every content
+tile and every route beyond it lands on the paywall instead. Profile stays open, because it owns
+Sign out. This is the round-4 client decision: *"kada click lagi mong dalhin doon na go for free
+trial."*
+
+> **This reverses what the rest of this document was written around.** Until round 4 there was a
+> genuinely playable free tier and the paywall was reached on demand. The caps below are all still
+> real code, still parity-tested, and still describe exactly what a **lapsed** subscriber returns
+> to — they are simply no longer reachable by someone who has never subscribed. Nothing in
+> `Entitlement`, `DailyLimits` or the per-feature gates changed; one guard was added at each
+> language's router. See **The trial gate** below.
 
 - **Run it (Windows):** open `web-demo/index.html`. The **Subscription** picker above the phone
   (Free · Trial · Active · Grace · Expired) drives a *simulated* store, so the whole lifecycle is
@@ -44,7 +55,48 @@ Neither is fixable without a server, and both are recorded in [`../PORTING_NOTES
 On-device enforcement is a speed bump, not a lock — the question is only whether that costs real
 money, and for a consumer chess app it does not.
 
+## The trial gate
+
+One guard per language, at the only place every route transition passes through.
+
+| | Swift | Browser |
+|---|---|---|
+| The predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `app.js` `locked()` — the same two calls |
+| Left open | Home (the root everything is raised over) and Profile, raised from the avatar without `gated` | `OPEN_ROUTES` — plus `login` and `paywall`, which are the routes it sends people *to* |
+| Every destination | a `show*` flag raised in exactly one place, inside `gated` | the Home tile handler |
+| Home tiles | `gated { … }` around every wired destination | one check in `renderHome`'s handler |
+| Mid-session lapse | `visibleTab` re-resolves on every render | `render()` re-checks before the dispatch chain |
+
+Four things about it are deliberate:
+
+- **It is at the router, not in the screens.** The pushed routes (Analysis, Play vs Coach, Pairing)
+  are reachable *only* from Home tiles, so wrapping the tiles closes all three without a flag of
+  their own — and a new screen is gated the moment it is routed to.
+- **`onAvatar` and `onMembership` are exempt, and nothing else is.** One leads to Sign out; the
+  other *is* the offer. Walling Profile would strand a user who signed in with the wrong Apple
+  Account, and Restore Purchases lives on the paywall they would then be unable to leave.
+- **The paywall stays dismissible.** Back returns to Home. A locked user can look at the app; they
+  just cannot open any of it.
+- **The lapse case is handled by re-resolving, not by remembering.** `Transaction.updates` can
+  revoke an entitlement while the user is standing inside the Puzzle Hub, so both languages re-check
+  on every paint rather than only at tap time.
+
+`tools/qa/trial_gate_check.js` pins all of it. It used to map the Swift tab *indices* through the
+browser's own tab table, because the two languages named the open set differently — `[0, 3]` against
+`{ home, profile }`. With Home as the app root there are no indices: the gate now asserts that
+neither language has a tab bar left, that every `show*` flag is raised in exactly one gated place,
+and that Profile is the single ungated destination.
+
+**It also closed a real hole.** Before this, `app.js` gated only the four puzzle modes — Play vs
+Coach, the Analysis Board and the Swiss round ceiling had **no premium reference at all** in the
+browser, while Swift gated all three. `replay_premium.js` asserts the JS *puzzle* gates and the
+*Swift* coach/review gates separately, so the divergence passed every suite, and the client (who
+tests on Windows) saw an app with no locks on it.
+
 ## Free vs premium
+
+*What a lapsed subscriber returns to. Not reachable without ever having subscribed — see the gate
+above.*
 
 | | Free | Premium | Mode key |
 |---|---|---|---|
@@ -121,6 +173,14 @@ cases.
 | `tools/qa/replay_premium.js` | Swift vs JS, plus the offline / script-order / CSS-variable guards. |
 | `ios/Biyaherong.storekit` | The local StoreKit configuration the Debug scheme runs against. |
 
+### The gate's own files
+
+| File | Role |
+|---|---|
+| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | `locked`, `openTabs`, `visibleTab`, `gatedTab`, `gated(_:)` — the whole Swift half |
+| `web-demo/js/app.js` | `locked()`, `OPEN_ROUTES`, `isOpenRoute()`, the Home tile check, the `render()` backstop |
+| `tools/qa/trial_gate_check.js` | The cross-language gate on both of the above |
+
 ## How to test
 
 ```bash
@@ -154,6 +214,17 @@ real trial, renewal, expiry and billing-retry paths.
   Unavailable" card permanently. `ios-testflight` is the only real store test path.
 - **`--pw-` is this screen's CSS namespace.** `replay_premium.js` audits every one in both
   directions and rejects any that strays into another screen's prefix.
+
+## Testing the gate
+
+In `web-demo/index.html`, set the **Subscription** picker to **Free**:
+
+- every Home tile lands on **"Start Your 7-Day Free Trial"**;
+- Back from the paywall returns to Home;
+- Profile still opens, and **Sign out** still works;
+- switching the picker to **Trial**, **Active** or **Grace** opens everything normally;
+- switching it back to **Free** *while standing inside the Puzzle Hub* bounces to the paywall on the
+  next paint — that is the `render()` backstop, and it is the case a tap-time-only gate misses.
 
 ## Before this can ship
 

@@ -9,6 +9,767 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-18 (fixed) — The three things that would have failed App Review, and a licence that was not true
+
+Client: *"make sure lang pag pinasa natin to sa [store] 100 percent papasa ah?"* Two audits over the
+code found three blockers, and **all three were already written down in this repo's own notes.**
+
+**1 · "Continue with Apple" performed no authentication.** `LoginStore.swift` said so in its own doc
+comment — *"The Apple sign-in is SIMULATED… there is no `AuthenticationServices` call"* — and
+`PORTING_NOTES.md` had already recorded the consequence: *"a 'Continue with Apple' button that
+performs no Apple authentication is an App Store rejection, so this is a development state, not a
+shippable one."* It is a real `ASAuthorizationController` now, in a new `LoginAppleAuth.swift`, with
+`requestedScopes = []` — a name or an email would be data the app has no use for and would make the
+new privacy manifest's empty `NSPrivacyCollectedDataTypes` untrue. `LoginStore` did not change at
+all; the store, the persistence and the fail-closed read were already the right shape.
+
+**2 · A real Sign in with Apple obliges in-app account deletion** (Guideline 5.1.1(v)), and there was
+none. It ships in the same build, on Profile's Account card, behind a confirmation. There is no
+server, so it erases the four local keys and the four JSON documents — and **deliberately keeps two**:
+the StoreKit entitlement snapshot, because Apple requires that deleting an account not forfeit a paid
+subscription, and the daily free-tier counters, because clearing those would make "delete, sign in
+again" a free reset of every cap. `store.reset()` runs first, or the live hub would persist the
+deleted progress straight back.
+
+**3 · No `PrivacyInfo.xcprivacy`**, while `UserDefaults` — a required-reason API — is read in six
+files. Required since May 2024; the binary scan flags the upload without it. Exactly one of Apple's
+five categories applies, checked rather than assumed (`Diagnostics.swift`'s `.fileSizeKey` is the size
+of a known file, not free space, and is on no list). Reason `CA92.1`.
+
+**4 · And the app told users it was GPL.** The bundled Terms sheet said *"the app itself is GPL"* with
+**no LICENSE file anywhere** — a licence claim with nothing behind it. The GPL plan belongs to
+Stockfish, which is not in this repo and has been deferred, so the sentence described a build that
+does not exist. Fixed by making the text true rather than the app GPL: a `LICENSE`, a
+`THIRD-PARTY-NOTICES.md` carrying the obligations actually owed today (CC BY-SA art, OFL font, CC0
+data), and the sheet naming those instead. Adding the GPL now would have been the wrong reflex —
+GPLv3 and the App Store's terms conflict, which is why VLC was pulled; that is a problem to solve
+when Stockfish lands.
+
+**The privacy sheet's "100% offline" also stopped being true**, and was reworded rather than left.
+The app still makes no network call of its own — the gates fail the build on a `URLSession` or any
+URL, in the new file too — but Apple's servers answer the sign-in, so the first launch needs a
+connection. The export-compliance `NO` is unaffected: `AuthenticationServices` is a second Apple
+framework over OS-provided TLS, the same reasoning already written there for StoreKit.
+
+**Gate.** `replay_login.js:318` **banned `ASAuthorization` outright** — it was written to catch
+exactly this change, and it did. It became an **allowlist of one** rather than a deletion:
+`LoginAppleAuth.swift` must make the call, an exhaustive directory scan proves no other file imports
+the framework, and the networking bans stay in force everywhere **including** the new file. The
+browser cannot have an `ASAuthorizationController`, so the twin shares the *decision* half instead —
+the 12-entry transition table, compared in full, whose load-bearing branch is that **a cancelled
+sign-in is not an error** — and carries a `SIMULATED_AUTH` flag the Swift must not. 386 → 457
+assertions. The deletion lists are compared on both sides, and each erased key is checked against the
+declaration it copies.
+
+`js_goldens` 34,151 → 34,260 across 78 suites. Mutation 159/159.
+
+**Not verified here, and it needs a Mac:** `swift build`. `LoginAppleAuth.swift` and
+`AccountDeletion.swift` were written blind against Swift 6 strict concurrency, and neither Codemagic
+workflow runs on push — both are manual. `ios-free-unsigned` will at least *compile* it.
+Whether `.xcprivacy` lands in Copy Bundle Resources is XcodeGen inference and must be confirmed in the
+archive.
+
+### 2026-08-18 (changed) — Five coaches, five clocks: the top of the ladder was two names on one opponent
+
+Client asked whether the engine is actually strong. It is more than the docs claimed — the coach runs
+`LocalEngine` (transposition table, quiescence, null-move, LMR, PVS, tapered eval), not the legacy
+`ChessAI`, which is reachable only from the macOS demo harness. Measured: 60.8k nodes/sec, 115/120
+real Lichess tactics at a 120k-node budget.
+
+But all five levels shared one `movetimeCapMs = 1000`. **Depth is only a ceiling**, so the clock is
+what actually sets strength — and the engine's own benchmark reaches a mean depth of 6.33 at 1200 ms
+while levels 4 and 5 ask for 10 and 15. They got neither and played identically: "Coach Pogi" and
+"Mommy Julie" were the same opponent in different art.
+
+Each level has its own clock now — **0.3 / 0.6 / 1 / 2 / 4 s**. **Level 3 keeps exactly 1000 ms**, so
+the middle of the ladder plays precisely as before and the new table is anchored to the old behaviour
+at one point. A sanctioned deviation from the Python service's flat cap, recorded in
+`PORTING_NOTES.md`.
+
+`thinkMs` was deliberately left alone. It is a **floor** on the reply, awaited in parallel with the
+search, so the reply lands at `max(search, floor)` and levels 4 and 5 simply stop being paced.
+Raising the floors to match would make *fast* positions — a book move, a forced recapture —
+artificially slow, which is the opposite of what a floor is for. Endgames are bounded by `depth`, not
+by this clock: a sparse board hits level 5's depth-15 ceiling long before 4 s, which is what
+`maxDepth` exists for. Both interactions are now written down beside the table rather than left to be
+discovered on a phone.
+
+**Two mutants went vacuous** and were re-pointed, not deleted: `movetimeCapMs = 1000` no longer
+exists, and `3: Config(depth: 7, numMoves: 2),` gained a third field. The replacement for the first is
+strictly better than what it replaced — it starves level 5 back to level 3's clock, which is the exact
+defect this change fixes. 159/159 killed. `replay_coach.js` gained a per-level comparison plus a
+monotonicity check; "both languages agree it is 1000" was precisely what the old single assertion
+could not catch, and is how this lived so long.
+
+### 2026-08-18 (changed) — The Biyaherong Coach mark in every logo slot, and no gold knight left inside the app
+
+Client: *"yang ganyang image palitan mo lahat ng Biyaherong Coach logo please, lahat."* The
+screenshot is a ~30 px gold knight in a circle. `web-demo/` updated to match.
+
+**Three places still drew the knight**, and the screenshot is the third:
+
+- `HomeScreen.coachRing` — the Play-with-Coach tile, which omitted `asset:` and so took
+  `HomeAppIcon`'s `.appIcon` default.
+- `home.js`'s `playCoach` card art.
+- **`premium.js`'s `.pw-logo`** — the paywall header, at 30 px in a `border-radius: 50%` circle.
+  The only true circular crop of the knight in either language, and a **live divergence**: the
+  Swift paywall has been drawing the collage in a squircle all along.
+
+All three take the mark now, and `HomeAppIcon`'s default flipped to `.brandLogo` so a new call site
+cannot pick the knight up by omission — which is exactly how the coach ring kept it after the Home
+header had moved on.
+
+**And nine more logo slots were drawing nothing at all.**
+`tools/metrics/puzzle_styles.json` → `shared.logo._source` is `components/AppLogo.tsx`: a View with
+a 2 px gold border, a radius of half its size and `overflow: hidden` — **a ring around an image**.
+The browser ported the ring to nine headers (`.pzh-logo`, `.pz-logo`, `.pzd-logo`, `.cgs-logo`,
+`.cgc-logo`, `.cgp-logo`, `.pgl-logo`, `.pgc-logo`, `.pgd-logo`) and never the image, so an empty
+gold circle has been sitting beside the title on every puzzle, coach and pairing screen. Thirteen
+element sites now go through one helper — `BiyaIcons.brandLogoEl(cls)` — so the asset path exists
+once instead of thirteen times.
+
+Swift had the same gap in three places with an exact drop-in available, and all three are filled:
+the two coach headers held a `Color.clear` counterweight of precisely the ring's size, and the
+Streak solver already drew the ring and left it empty. Its own comment named the browser rule it
+was mirroring. Same footprint, so nothing moved.
+
+**The circles became squircles**, via one `--brand-radius: 24%` token — the login hero's own 30/124
+proportion, as a percentage because the rings run 30–40 px. A circle crops the wordmark off the
+bottom of the collage; that reasoning was already written down three times and is why the Home
+header changed last round.
+
+**The knight file stays.** `Images/app-icon.png` is byte-identical to
+`ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png` — it **is** the app icon, and a photo
+collage with a wordmark turns to mud at 60 px. `Diagnostics.swift`'s hard count of 6 PNGs is
+untouched; only what draws it changed. `login.js`'s `BRAND_FALLBACK` stays too: it fires only if
+`brand-logo.png` 404s, and a knight beats a broken-image box.
+
+**Gate.** `home_chrome_check.js` had been pinning the coach ring to the knight
+(*"the Play-with-Coach ring still draws the app icon (default asset)"*); that assertion is inverted,
+and two sections were added. §7 bans `app-icon` from every browser script, every stylesheet and
+every Swift view, with exactly two named exemptions — the iOS icon and the login 404 fallback — and
+requires an exempt file to mention it **once**, so an exemption cannot cover a second use. §8 pins
+all nine rings: built through the helper, with an `img` rule, and not a circle. 188 → 268
+invariants. Three mutants killed: the knight back on the paywall, a ring back to a bare `div`, and
+the knight back on the coach ring.
+
+`swift_layout_mutation_test.js`'s `greedy_one_axis_frame` mutant was anchored on the Streak ring's
+`Circle().strokeBorder(…)`, which this change replaced. **A mutant whose anchor is gone never
+applies and reads as a pass**, so it is re-pointed at `HomeLogo(size:)` — same `to:`, same bug
+reproduced. 10/10 still killed. `js_goldens` 33,967 → 34,151.
+
+### 2026-08-18 (changed) — Home is the app root: the tab bar is gone, every screen has a back button
+
+Client: *"pwede ba paremove ako nito, hindi ko naman to need, kailangan ko lang mga back button para
+makapag-back yung mga user sa home page."* `web-demo/` updated to match.
+
+**The repo had already written this change down, and named the one thing missing.**
+`docs/home-screen.md` has carried this paragraph since the screen was ported:
+
+> If full-size icons matter more than the tab bar, the fix is structural rather than a tweak: make
+> the home screen the app root without a tab bar, as the original does. **That would need a way back
+> from the six destinations, which this screen deliberately does not have.**
+
+Both halves are done. The original RN home screen is a full-height Stack screen with no tab bar;
+hosting it as tab 0 cost **~74 pt straight out of the grid**, which is why the card artwork has been
+rendering at 50–75 % of its design size on every device. That height is back.
+
+**Swift.** `PhoneApp` stops being a four-index `switch` and becomes what it already was for
+Analysis, Pairing, Play vs Coach and Opening Tree: a Home root with pushed-route siblings. Out go
+`tab`, `visibleTab`, `gatedTab`, `openTabs`, `puzzlePushed` and `PhoneTabBar`; in come `showPuzzles`
+and `showProfile`, raised by the Puzzles tile and the header avatar. `PuzzleHubScreen` already had
+`onExit:` and the shared back button, so it needed only rewiring — and it loses `onPushedChange`,
+which existed solely to tell the host to hide a bar that no longer exists.
+
+**`ProfilePhone` gains a back button, and it is the point of the change.** It was the one screen in
+either language with **no way out at all** — the tab bar was its only exit, in both. Swift gets a new
+`PhoneHeader` (`PhoneTitle` with a `NavIconButton`, which `docs/navigation-chrome.md` makes the only
+permitted back control); the browser gets the matching `.screen-back` on `renderProfile`'s head.
+
+**Three screens went with the bar**, all of them reachable only through it:
+
+- **`PlayPhone`** and its `phoneBoard` / `PlayPhoneBoard` chrome — the pre-port sample play screen.
+  Its browser twin was deleted a round ago, and `docs/play-vs-coach.md` recorded the single reason
+  this one survived: *"`BoardView` lives inside `PlayView.swift`, so retiring the pair means
+  extracting it first."* That extraction happened; the bar was its last door.
+  **`LegacyCoachSelect` stays** — the macOS demo's `Panel.play` renders it through `PlayView`, which
+  is the board harness, not a phone screen.
+- **`LearnPhone`** — unreachable *before* this change. No tab hosted it and nothing referenced it.
+
+**`an-mode` and `op-mode` are gone too, and that is 21 call sites.** Both classes had exactly one
+CSS rule each — `.tabbar { display: none }` — so with no bar they were 21 `classList` calls and two
+rules doing nothing at all. The browser also loses `TABS`, `renderTabbar()` and its 19 call sites,
+and `<nav id="tabbar">`.
+
+`OPEN_ROUTES` needed **no change**: it was already keyed by route name rather than tab index.
+
+**Gates.** Four moved with the change, and none of them lost an invariant:
+
+- `trial_gate_check.js` — §2 used to map the Swift tab **indices** through the browser's `TABS`
+  table, because `[0, 3]` and `{ home, profile }` were two spellings of one set. There are no
+  indices now, so it asserts instead that neither language has a bar left, that every `show*` flag
+  is raised in **exactly one** gated place, and that Profile is the single ungated destination. §4
+  gained the back-button assertions — the client's actual requirement, now pinned. 39 → 50.
+  `showAnalysis` is allowed a second raise, and the gate checks it really is the documented coach
+  hand-off rather than a new door.
+- `swift_layout_check.js` §6 — inverted. It asserted the bar was hidden on pushed routes; it now
+  asserts no bar, no `puzzlePushed` and no `onPushedChange` exist, and that the hub is raised and
+  closed like every other route. 277 → 282.
+- `swift_layout_mutation_test.js` — the `tab_bar_shown_on_pushed_routes` mutant's anchor string no
+  longer exists. **A mutant that never applies reads as a pass and proves nothing**, so it is
+  replaced (by one that draws the hub unconditionally over Home, i.e. as a tab again) rather than
+  deleted. 10/10 still killed.
+- `replay_login.js` — asserted `renderLogin` adds `an-mode`. Now asserts the gate owns the whole box
+  and that `an-mode` is gone entirely — comment-stripped, so the note explaining the removal does
+  not read as the removal failing.
+
+**One number could not be verified here.** `HomeMetricsCheck` §4 hardcoded five container heights
+described as *"device minus safe areas minus the ~74pt tab bar"*, and §5 asserted with a strict `<`
+that the icon clamp **engages** on a 4.7" phone. Both are rewritten around one named
+`reclaimedFromTabBar = 74`, and §5 became two assertions instead of one: the clamp still engages
+when the grid really is that tight, **and** the same phone without the bar gets measurably more
+artwork. The second is the change stated as arithmetic. `HomeMetricsCheck` is a macOS executable and
+no JS gate carries those numbers, so **`swift run HomeMetricsCheck` on a Mac is the only thing that
+confirms it** — it has not run here.
+
+`js_goldens` 33,952 → 33,967 across 78 suites. In the browser the Home grid is visibly larger: the
+card artwork now renders at 70 px against a nominal 72, where the tab bar had it near 50.
+
+### 2026-08-18 (fixed) — Play vs Coach rendered unstyled: `coach.css` was never linked
+
+Client screenshot: the coach select screen with no styling at all — raw text edge to edge, the five
+coaches as plain light-grey UA buttons with white text on them, a bare `0` where the take-back
+toggle should be. `web-demo/` only; the Swift app is unaffected.
+
+**`web-demo/index.html` linked `theme.css`, `app.css` and `pairing.css`, and never `coach.css`.**
+All 507 lines and all 21 `.cgs-*` rules are correct and have always been on disk; the page simply
+did not load them. It has been that way since `bbb11ba`, the commit that introduced Play vs Coach,
+and it was **invisible** for as long as the Play tab still showed the old sample screen. The moment
+`app.js`'s `renderPlay` started calling `BiyaCoachSelect.render`, a whole feature shipped unstyled.
+
+Exactly two classes on the screen resolved, and they are precisely what the screenshot shows
+working: `nav-icon` from `app.css` (why the back button is a grey square with a correct chevron in
+it) and `.view.flush` (why the text runs edge to edge with no gutter). Everything else fell through
+to the UA stylesheet, and `theme.css`'s `button { color: inherit }` is what made the labels white on
+a light button face.
+
+**The comment in `index.html` had been describing the fix for two rounds.** It read: *"These are
+LOADED but not yet ROUTED … the route is repointed once the stylesheet exists, so the screens never
+appear unstyled."* The route was repointed; the link was never added; the sentence written to
+prevent this outcome is what documented it. Rewritten to say what is true.
+
+**The screen was wrong in a second way the CSS could not fix.** With the stylesheet loaded, the
+five coach cards still showed a **bare digit** in each ring: `coach-select.js` built the avatar as
+`el('div', 'cgs-avatar', String(c.level))`, while `CoachScreens.avatar` in Swift has always drawn
+`CoachArt.image(level:)` — the coach's actual face. The five `.webp` portraits have been in
+`web-demo/assets/characters/` the whole time; nothing pointed at them. Nothing compared the two
+either, because art is a file reference rather than a value, and the divergence was invisible for
+as long as the whole screen looked wrong anyway. The browser draws the portrait now, at the same
+`avatarRegular` inside `ringRegular` the Swift frames it at, with `object-fit: cover` standing in
+for `scaledToFill` + `clipShape(Circle())` — and an `onerror` that falls back to the digit rather
+than a broken-image box, mirroring how `CoachArt` degrades to the ring alone.
+`replay_coach.js` pins all of it: 271 → 286.
+
+**Two green gates could not have caught it**, and one of them was written for this exact bug.
+`CHANGELOG.md:590` records it being noticed a round ago — *"after noticing that `css/coach.css` has
+been shipping unlinked"* — and the guard added then, `replay_login.js:332-333`, asserts only that
+`app.css` is linked, so it passed throughout. `coach_screen_test.js` reads `coach.css` **off disk**
+at line 25, which validates a file in complete isolation from whether the page loads it. Reading
+source cannot answer "what does the browser load".
+
+### 2026-08-18 (fixed) — Every scrollbar hidden, every resize grip removed
+
+Client: *"remove mo nga ito, pangit tignan itong scroll na ito … dapat walang ganyan."* The
+screenshot is two OS scrollbars side by side with a drag-resize grip between them. `web-demo/`
+updated, and the Swift half brought into line.
+
+**`app.css:9` has stated the rule since the first commit** — *"Hide scrollbars everywhere for an
+app-like look (scrolling still works)"* — and applies it to `html, body`. But **`scrollbar-width`
+does not inherit** and `::-webkit-scrollbar` matched on `html, body` does not cascade to
+descendants, so the rule was documentation rather than enforcement: thirteen scroll containers were
+showing the bare Windows scrollbar inside a frame pretending to be a phone. The `.an-*` bands all do
+it correctly and were the pattern; the other three screen families never picked it up.
+
+Fixed on all thirteen — `.op-list` / `.op-form` / `.op-moves` (Opening Tree), `.pzp-body` /
+`.pz-bottom` / `.pzd-content` / `.pzk-list` / `.pzr-list` (puzzles), `.lg-sheet-body` (the login
+legal sheet), `.pw-view` (**the paywall**, which since the trial gate is the first screen a locked
+user sees), `.an-view.editing .an-panels`, `pairing.css`'s `.pgc-body` and `coach.css`'s
+`.cgp-review-card`.
+
+**The resize grip goes everywhere, not just where it was seen.** `resize` is a drag handle that
+**does not exist on iOS**, so every `resize: vertical` in the browser mirror was a control the Swift
+app cannot have — a cross-language divergence, not merely an eyesore. Four textareas set it; the
+fifth, `pairing.css`'s `.pgd-modal-area`, already had `resize: none` and was the pattern the Opening
+Tree's box had been copied from with that one line changed. All five are `none` now.
+
+**One hardcoded number went with it.** `.op-textarea` carried `min-height: 160px` — the only
+numeric literal in the whole `--op-*` block, contradicting both the block's own header comment and
+`openings.js`'s. It is `OpeningLayout.pgnMinHeight` now, published as `--op-pgnMinHeight`, so
+`replay_opening_tree.js` compares it across languages automatically (344 → 346). Swift gained the
+matching minimum: `TextField(axis: .vertical)` grows from a **single line**, so the browser had been
+showing a 160 pt paste target while the app showed a one-line text input.
+
+**Gate.** New `tools/qa/web_shell_check.js` — 186 invariants over what `index.html` actually wires
+and how the scroll chrome behaves: every stylesheet on disk is linked and every link resolves;
+every script is loaded or is a verified Worker (`analysis-worker.js` is the one exemption, and the
+exemption is checked by finding the `new Worker` that loads it, so an orphan cannot hide behind the
+allow-list); every scroll container sets `scrollbar-width: none` **and** has a matching
+`::-webkit-scrollbar` rule; and no element sets `resize` to anything but `none`. Four mutants
+killed — unlinking `coach.css`, restoring the grip, stripping one band's `scrollbar-width`, and
+dropping an orphan stylesheet into `css/`. `js_goldens` 33,747 → 33,935 across 78 suites.
+
+This is the move `board_layout_check.js` exists for: **assert the CSS itself.** Every JS suite,
+every Swift check and every replay was green while two screens were visibly wrong, because all of
+them read source and none of them asked what the page loads.
+
+### 2026-08-18 (changed) — Home chrome: the brand mark in, Donate and the search button out
+
+Fourth round of client feedback, three asks that all land on the Home screen. `web-demo/` updated
+to match.
+
+**1 · Donate is gone.** *"Paremove din sana ako ng donate, bawal donate sa Apple eh."* Correct —
+App Review does not permit an app to collect donations through anything but an approved non-profit
+flow, and this one was a `₱99` banner with no flow at all: `onDonate` defaulted to `{}` and neither
+`PhoneView` nor `app.js` ever passed it. Out go `enum HomeDonate`, `HomePalette.sponsor`, the
+`.home-banner.sponsor` skin, the `--home-sponsor` token, the JS `DONATE` table and the callback in
+both languages. The Membership banner keeps `flex: 1 1 0` and simply widens to the band.
+
+**What did NOT change is the point.** `bannerHeight` budgets a **second subtitle line** that
+nothing draws any more, because Donate's `"Help sponsor / a student"` was the two-line one and the
+pair was pinned to it. That height is not decoration: it feeds `fixedBandsHeight` → `gridHeight` →
+`tile(inGridContent:)`, so "tidying" it to one line after the deletion would have silently resized
+all six cards on every device. The band keeps its measurement; only its contents changed, and the
+new gate fails if anyone trims it.
+
+**2 · The header logo is the brand mark now.** *"Yung logo pala na kabayo palitan mo … dapat logo
+ng Biyaherong Coach ang nakalagay dyan."* The knight is `Images/app-icon.png` — the *app icon* —
+and it had been standing in for a brand mark the bundle has always contained: `brand-logo.png`, the
+"Byaherong COACH APP" collage the login hero has drawn since `docs/login.md` was written. Nothing
+new ships; `HomeLogo` points at the asset that was already there, so `Diagnostics.swift`'s hard
+count of 6 PNGs stays satisfied. The knight keeps the Play-with-Coach ring and the iOS app icon.
+
+That swap forces a shape change. The collage carries a wordmark across its bottom edge and the
+header clipped to a `Circle()`, which crops the "APP" badge clean off. So: a **squircle**, at the
+**login hero's own corner proportion** (`LoginLayout.logoRadius / LoginLayout.logoSize`) rather
+than a second hand-picked radius — it is the same mark on both screens and two different curves is
+what a second constant buys you. Swift takes that ratio by reference and cannot drift; `home.js`
+has to restate `30 / 124` because `login.js` is a separate IIFE with no load-order guarantee, which
+is exactly the assertion the new gate exists to make. A **ratio**, not a size, because `logoSize`
+spans 41–92 pt across the device range: a fixed radius reads as a circle at the small end and a
+square at the large one.
+
+**3 · The 🔍 button is gone.** *"Remove mo na din yung ito, hindi na need yan."* It was an emoji in
+a 38 pt circle whose tap went nowhere — `onSearch` defaulted to `{}` and no host ever passed it —
+so `HomeSearchButton`, `HomeLayout.searchSize`/`searchEmojiSize`, `HomePalette.searchFill`,
+`.home-search` and `--home-search-fill` all go with it.
+
+**But it is replaced, not deleted.** The logo lands at true screen centre only because it is
+flanked by two equal-width controls and expands into everything between them. Remove one side and
+it drifts half an avatar to the right — which reads as a rendering bug, not as a missing button. So
+the third slot becomes an explicit empty box, `Color.clear` at `HomeLayout.avatarSize` in Swift and
+`.home-header-balance` in CSS, and the gate asserts the two widths are the same number.
+
+`docs/navigation-chrome.md` listed Home's 🔍 as a deliberate emoji exception; that entry is now
+moot and says so.
+
+**Gate.** New `tools/qa/home_chrome_check.js` — 82 invariants across `HomeParts.swift`,
+`HomeScreen.swift`, `HomeMetrics.swift`, `home.js`, `app.css` and `theme.css`. It pins the brand
+asset in both languages, the squircle and its proportion against the login hero, the counterweight
+against `avatarSize`, the callback count on `HomeScreen` (8, was 10), exactly one banner per
+language, and the two-line band height. Comments are blanked before the negative checks so a note
+*explaining* a removal does not read as the removal failing. Three mutants killed: reverting the
+logo asset, deleting the counterweight, and trimming `bannerHeight`. `HomeMetricsCheck` gains §12
+(the radius at all three reference scales, and `.brandLogo` added to the artwork-resolves list);
+`home.js`'s own `selfTest` gains `logoRadius` in its metrics table. `js_goldens` 32,971 → 33,058
+across 70 suites.
+### 2026-08-18 (fixed) — Every board was drawing a colour the source app never had
+
+Fourth round of client feedback, first ask: *"doon sa lahat ng board sa puzzle natin dapat ganto
+kulay ng chess board para mas maliwanag at mas maaliwalas."* The attached screenshot is **this
+app's own Analysis Board** on its default `classic` theme — so the question was not "what colour
+should the puzzles be", it was "why is one screen already right and the other seven wrong".
+`web-demo/` updated to match.
+
+**They were wrong because a working extraction was read by nobody.**
+`tools/metrics/extract_puzzle_styles.js` has walked the real `DragDropChessBoard.tsx` into
+`puzzle_styles.json` → `shared.board` since the puzzle screens landed, carrying the source app's
+palette — `#F0D9B5` / `#B58863` and the two highlight fills. `grep -r 'shared.board'` across every
+`.js` and `.swift` returns **zero hits**. Both languages hardcoded an invented `#5BA3F5` /
+`#2C4A73` blue instead, in three places: `BoardStyle`'s defaults, `theme.css`'s `--board-light` /
+`--board-dark`, and a third copy as the `var()` fallbacks inside `chess-board.js`'s `:host` block.
+The five puzzle solvers, Play vs Coach and both macOS panels have therefore drawn a colour the RN
+app never had for the whole life of the port. The Analysis Board escaped only by accident:
+`BoardTheme.default == .classic` is the extracted pair reached by a different route.
+
+**Nothing could see it.** No suite anywhere asserted a square colour literal. The two Swift
+assertions were *relative* — `plain.light == Theme.boardLight` — so they tracked the wrong value
+happily, and the JS twin compared against `BOARD_THEMES.classic`, a different constant entirely.
+The two languages agreed with **each other**, which is precisely the trap `CLAUDE.md` names:
+*two hand-typed copies agreeing is not verification.* It is the annotation badge's `+`-for-`-` one
+layer down, and it took a client screenshot to surface it.
+
+**Fixed by deleting the copies, not by repainting.** `BoardStyle.light`/`.dark` now default to
+`BoardTheme.classic.light`/`.dark`; `theme.css` and the `chess-board.js` fallbacks take the same
+hexes. One pair, one source, four writers pointing at it. Because every non-Analysis board inherits
+`BoardStyle()` by passing no `style:` at all, and `--board-light` is read *only* by `<chess-board>`,
+this is one line per language — `PuzzleSolverParts`' `PuzzleBoardBand` alone carries Play Puzzles,
+Daily, Thematic, Streak and Turbo.
+
+**The indicators deliberately stay gold.** `lastMove` / `selected` remain `Theme.accent` at
+0.32 / 0.55 laid *over* the square (`replacesFill == false`), not the RN board's solid `#F6F669` /
+`#CDD26A`. Gold-on-brown is what the approved screenshot shows, and the solid pair would collide
+with the Puzzle Streak's `--hl-sol-from` / `--hl-sol-to` solution highlights.
+
+`Theme.boardLight` / `Theme.boardDark` keep their values — they are still the `PlayView` level
+capsule and the `PuzzleView` rating chip — and gain a comment saying they must never go back on a
+board. The Analysis Board's three-theme picker is untouched: `analysis.js` sets the two properties
+on its own root, so `classic` / `green` / `blue` still work.
+
+**Gate.** New `board_layout_check.js` §8 pins all five writers to `shared.board` — including the
+Swift ones, read as text, since there is no compiler on this checkout — and bans `#5BA3F5` /
+`#2C4A73` from any of them outright. 812 → 829 invariants, `js_goldens` 32,971 → 32,988. Both
+directions were mutation-checked: reverting `theme.css` and reverting `BoardStyle` each break two
+assertions by name. `AnalysisMetricsCheck`'s relative assertion was re-pointed at
+`BoardTheme.classic` and gained its inverse, so `Theme.boardLight` can never quietly become a
+square again.
+### 2026-08-18 (added) — Opening Tree: the tile that did nothing now opens openingtree.com
+
+Fourth round of client feedback: *"yung opening trainer pag cliniclick ko ayaw mabuksan … simple
+lang ang logic at gusto ko mangyari dyan katulad dito mismo https://www.openingtree.com/ … ito repo
+nyan … naimplement ko na yan, tignan mo na lang dito."* `web-demo/` updated to match.
+
+**The tile was not broken — its screen was never built.** `HomeScreen.onOpeningTrainer` is declared
+and **defaulted to `{}`**, `PhoneView.home(basis:)` simply omits the argument, and `app.js`'s Home
+handler has no branch for the `'openingTrainer'` action `home.js` has emitted since the tile was
+drawn. The button pressed, dimmed, and called an empty closure. `onVideos` still does; `onSearch`
+and `onDonate` did too until the entry above this one removed the controls that raised them.
+
+**What was built** is the RN app's own openingtree.com rebuild —
+`analysis-board/openingtree.tsx`, 1,457 lines, three screens behind one `view` state — as a pure
+Core module, a JS twin, and three screens per language.
+
+**Two rules carry the whole feature, and both are asserted by name.**
+
+*A node's statistics belong to the MOVER.* `wins`/`draws`/`losses` describe how the side that
+**played** that move fared, so the score inverts on the opponent's plies — which is what makes a
+two-colour tree legible, and is openingtree.com's own convention. Backwards, every second row of the
+move list is exactly wrong in a way that looks entirely plausible: Black's replies would read as
+*your* results, and only a hand-checked game would show it.
+
+*The candidate sort ties by SAN.* Count descending, equal counts by SAN ascending. `Dictionary`
+order is unspecified in Swift and `sort` is not stable, so without the tie-break one tree renders in
+a different order on every run **and** in a different order from the browser — at which point no
+replay can compare the two.
+
+**Keyed by SAN, not by FEN, on purpose.** A SAN path is the line you *played*, so `1.e4 c5 2.Nf3`
+and `1.Nf3 c5 2.e4` stay separate branches. Merging transpositions is right for an opening **book**
+— `OpeningBook` keys by `positionKey` and does exactly that — and wrong for "how do I actually
+play". Two behaviours that look like bugs are kept because they are not: an unreadable move
+**truncates** the game rather than dropping it (everything before it is real data, and real PGN
+carries null moves and exporter quirks), while a game whose *first* move will not parse is counted
+separately in `rejectedCount` rather than silently vanishing. And legality is judged by the
+position, with SAN re-generated from the parsed move, so `Qxf7` / `Qxf7#` / an over-disambiguated
+spelling all collapse onto one branch.
+
+**Games come from a pasted PGN, with no network.** Both Lichess and Chess.com let you download all
+your games as a PGN, so the offline path is the real one, and it reuses `PGN.splitGames` /
+`mainlineTokens` — already pinned to the PHP `PgnImportService` by the `pgn_split` and `pgn_tokens`
+goldens, so multi-game splitting, RAV skipping and NAG stripping are the backend's behaviour rather
+than a second implementation of it. **My Coach games**, **Lichess** and **Chess.com** are declared,
+drawn and labelled "Needs internet"; they refuse with a named message instead of failing silently,
+because the download belongs beside `ContentClient` — spec §0.1 makes that the only place in the app
+allowed to open a `URLSession`, and a second `fetch` in a click handler is the exact leak that rule
+exists to prevent.
+
+**One validation bug found by its own test.** `PGN.mainlineTokens` is a tokenizer, not a validator:
+`"not a game"` comes back as three move tokens, so a `games.isEmpty` check passes and builds an
+empty tree. Both languages now check **positions**, after the replay, which is the only thing that
+knows whether the PGN held any chess.
+
+**Extract, don't transcribe.** New `tools/metrics/extract_opening_styles.js` walks `openingtree.tsx`
+into a committed `opening_styles.json` — 87 style keys, 328 properties, 12 functions, 23 colours,
+zero unresolved values — and `opening-metrics.js`'s `selfTestSource` asserts all 131 constants
+against it, including the three W/D/L colours, which live in `renderWdlBar`'s inline styles and are
+the reason the extractor names that function explicitly. It is also the **first extractor that works
+from a worktree**: it takes a `FRONTEND_ROOT` override, for the same reason `tools/oracle` takes
+`LARAVEL_ROOT`. The other four still hardcode the relative path and fail there.
+
+**Two CSS namespaces, and the bug that forced them.** `buildBorder`, `inputBorder` and `infoBorder`
+each name a **width** in `LAYOUT` and a **colour** in `PALETTE`. Under one `--op-*` prefix the colour
+pass silently overwrote the width and three borders rendered with `#243654` as their thickness, i.e.
+not at all. Geometry is `--op-*`, colour is `--opc-*`, and the replay asserts the build button takes
+one of each.
+
+**The tile's copy changed with it:** "Opening Tree / Explore Your Openings". "Master Your
+Repertoire" describes the Chessable-style SM-2 trainer specced in
+`specs/BIYAHERONG-PORT-SPEC.md` §4, which is a different feature and remains unbuilt.
+
+**Gates.** New `tools/qa/replay_opening_tree.js` — 344 assertions comparing the Swift source text
+with the JS that runs, covering both algorithmic rules, every metric, every string, the online
+source set, the `--op-*`/`--opc-*` contract, the index.html load order and the router branches in
+both languages. Four mutants killed, including inverting the inversion and dropping the SAN
+tie-break. New `opening_tree` ParityRunner group (66 assertions, floor 60) — **no golden file**,
+because the source is TypeScript rather than a Laravel controller and there is no PHP oracle to
+generate one; the JS twin is the differential partner instead. New `docs/opening-tree.md`.
+`js_goldens` 33,010 → 33,643 across 76 suites; `nav_icons_check` 1,047 → 1,048 after the new back
+button was made to go through the shared component, which it caught.
+
+**Still not built:** the SM-2 trainer, and the two online downloads. Both are described where they
+would land rather than left as silence.
+
+### 2026-08-18 (changed) — Nothing opens without the trial: one gate per language, at the router
+
+Fourth round of client feedback: *"make sure hindi sila makakapaglaro ng kahit ano … kapag hindi
+sila naka 7-days free trial … kada click lagi mong dalhin doon na go for free trial."*
+`web-demo/` updated to match.
+
+**This reverses the policy the subscription was designed around.** `docs/subscription.md` opened
+with *"a genuinely playable free tier … the paywall is reached on demand … never as a wall in front
+of a new install"*, and `Entitlement.Access.free` was commented *"Never a dead app — this is what
+makes the offline design safe."* Both now say the opposite, and say so explicitly rather than
+quietly: the free tier's caps are still real, still parity-tested, and still describe exactly what
+a **lapsed** subscriber returns to — they are simply unreachable by someone who never subscribed.
+
+**Nothing in Core changed.** `Entitlement`, `DailyLimits`, `PremiumStore` and every per-feature
+gate in `PuzzleHubScreen` / `CoachScreens` are untouched: they sit behind `requireMinCounts` floors
+that `CLAUDE.md` forbids lowering, `Entitlement.resolve` already fails closed to `.free` with no
+subscription, and re-deriving a policy the shell can express in one guard would have been the wrong
+layer. What was added is that guard, once per language, at the router.
+
+| | Swift (`PhoneView.swift`) | Browser (`app.js`) |
+|---|---|---|
+| Predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `locked()`, the same two calls |
+| Open set | `openTabs = [0, 3]` — Home, Profile | `OPEN_ROUTES`, plus `login`/`paywall` |
+| Tab bar | `PhoneTabBar(tab: gatedTab)` — a `Binding` whose setter raises the paywall and leaves `tab` alone | the tab `onclick`, after `leaveCurrentPuzzle()` |
+| Tiles | `gated { … }` on every wired destination | one check in `renderHome`'s handler |
+| Lapse mid-session | `visibleTab`, re-resolved every render | `render()`'s backstop, before the dispatch |
+
+**Home still draws.** The client asked for *"kada click"*, not for a blank wall, and an offer needs
+something to sell against — the six cards, the quote and the membership banner are what the trial
+buys. **Profile stays open too**, because it owns Sign out: walling it strands a user who signed in
+with the wrong Apple Account, and Restore Purchases is on the paywall they would then be unable to
+leave. Those are the only two exemptions, and the gate asserts there are exactly two.
+
+**Gating the tiles is enough for the pushed routes.** Analysis, Play vs Coach and Pairing are
+reachable *only* from a Home tile — the gate asserts each `show* = true` has at most one other
+setter — so three screens are closed by four wrapped closures and no flag of their own.
+
+**The lapse case is why both halves re-resolve rather than remember.** `Transaction.updates` can
+revoke an entitlement while the user is standing on the Puzzles tab; a tap-time-only gate would let
+them keep playing until they next tapped something. Swift resolves `visibleTab` on every render and
+the browser re-checks before its dispatch chain, forcing `paywallReturn` to Home — returning to the
+screen that was just walled would bounce straight back.
+
+**It closed a real divergence on the way.** `app.js` gated only the four puzzle modes: Play vs
+Coach, the Analysis Board and the Swiss round ceiling had **no premium reference at all** in the
+browser (`coach-select.js`, `analysis.js`, `pairing-create.js` contain none), while Swift gated all
+three. `replay_premium.js` asserts the JS *puzzle* gates and the *Swift* coach/review gates
+separately, so the drift passed every suite — and the client, who tests on Windows, was looking at
+an app with no locks on it. One router guard closes all of it.
+
+**Gate.** New `tools/qa/trial_gate_check.js`, 39 invariants. The cross-language ones are the point:
+the Swift tab **indices** are mapped through the browser's own tab table, so `[0, 3]` is *verified*
+to still mean Home and Profile rather than assumed to, and each side's open set is checked against
+the other's. Four mutants killed — an ungated tile, the raw `$tab` binding, walling Profile in one
+language only, and deleting the browser backstop. `swift_layout_mutation_test.js`'s
+`tab_bar_shown_on_pushed_routes` anchor moved to `gatedTab` (it had gone vacuous — "anchor not
+found" is a pass in the suite's own eyes only until you read it). `js_goldens` 32,971 → 33,010.
+
+**Still outstanding, unchanged by this:** the 7-day introductory offer does not exist in App Store
+Connect yet (`docs/subscription.md` § *Before this can ship*). Until it does, `trialEligible` is
+false and the CTA promises something the store will not honour — which matters a great deal more
+now that it is the only door in.
+
+### 2026-08-18 (changed) — Book strip deleted, engine lines numbered, and one real vector back/☰ icon everywhere
+
+Third round of client feedback, three asks. `web-demo/` updated to match.
+
+**1 · The opening-book strip is gone.** *"Pwede ba remove mo na ito, siguro hindi na ito kailangan."*
+One round after the 230 pt "out of book" panel became a 44 pt row of `san · eco` chips, the strip
+itself goes: `AnalysisBookStrip` / `paintBookStrip`, `AnalysisVM.bookRows`, `playBookMove`, the JS
+`bookContinuations` view helper and `playSanMove`, and the `.an-bookstrip` / `.an-bchip` CSS —
+plus the already-dead `.an-brow` / `.an-bname` / `.an-panel-head` leftovers of the vertical panel.
+The opening **name** survives, in the engine panel's info row. `AnalysisSession.bookContinuations`
+survives too: it is pure, parity-tested, and Opening Trainer will want it.
+
+`bands()`, `fixedWithoutEngine` and `engineAvailable` lost their `inBook` parameter in both
+languages — **no band varies with the book any more**, and the engine panel keeps the 44 pt on every
+in-book position. §10c is now the inverse assertion (autoplay is the only conditional band left) and
+the §10d row budgets rose with it: a 375×667 SE now fits 4 single-line or 2 wrapped rows, up from
+3 and 1.
+
+Deleting the CSS orphaned `--an-row-spacing`, `--an-chip-pad-h` and `--an-chip-pad-v`, which only
+the book chips read. **Re-homed, not deleted**, onto `.an-erow`'s `gap` and `.an-depth`'s `padding`,
+which had been carrying hardcoded copies — and the depth chip's copy was `3px 5px` against the
+metrics' 4/8, so the browser chip had been two pixels tighter than the app's *and* than
+`engineChromeHeight()`'s own budget.
+
+**2 · Every engine line carries its rank, in its arrow's colour.** *"Lagyan mo ng numbering para
+alam kung anong number."* A one-digit badge tinted `AnalysisArrow.color(rank:)` — green, blue,
+orange — so the number says which line **and** which of the three board arrows. `EngineRow.rankLabel`
+does the `+ 1` in Core (a view body may not contain arithmetic, and both languages must print the
+same thing). The badge takes the depth chip's 11 pt, not the row's 13: every other engine cell is
+asserted equal to the move strip's size, and a badge that large would out-shout the moves.
+
+Width, not height, was the cost — the reclaimed 44 pt pays vertically, but the row was already
+tight. New §10e pins what is left for the moves: at 375 the continuation still gets 239 pt, 30
+characters a line and 60 across two, against the ~50 a 12-ply continuation needs.
+
+**3 · Back and ☰ are hand-drawn vectors now, on every page.** New `NavIcons.swift` and
+`web-demo/js/icons.js`, both from one 24×24 geometry that the new gate asserts equal number for
+number. Adopted at all 19 Swift and 23 browser back sites, plus the one hamburger per language.
+
+This was as much a convergence job as a beautification. `←` and `☰` were characters drawn in Nunito,
+which has neither, so both fell back to whatever face the platform picked — and `☰` is the I Ching
+trigram for heaven, thin and unevenly spaced, not a hamburger. Worse, **Swift already drew
+`Image(systemName: "chevron.left")` on four screens where the browser drew `←`**, and nothing
+anywhere asserted a glyph, an icon or a button class. Each screen keeps its own extracted frame and
+its own colour (`stroke="currentColor"` on the browser side); what the component adds is the icon, a
+44 pt-wide hit target and a pressed state — none of which the hand-rolled buttons had.
+
+`CoachGlyph.back` and `PairingStrings.back` were retired with inverted assertions; the latter is
+generated, so it went at the source and was regenerated. The 44 pt minimum is applied to **width
+only** — a 44 pt-tall button in the 36 pt Analysis header spilled 4 pt over the board's top rank and
+would have stolen taps from a8–h8.
+
+Four latent bugs fixed on the way through, all inside the diff already: `.pzd-back` hardcoded
+40/40/24 across five screens; `.pzp-back` read `--pzh-back-*` its own screen never published;
+`PuzzleHubScreen` sized its back button from the **list-row** chevron's line height; and
+`coach-select.js` read an undefined `STR.backArrow`.
+
+**Gates.** New `tools/qa/nav_icons_check.js` (~1000 invariants, wired into `js_goldens.js`) closes
+the hole entirely: no bare `←`/`☰` in either language, every button through the shared component, no
+second drawing path, and the two geometries equal. It also caught the one real bug of the change —
+`el()`'s third argument is `textContent` in every screen file but `analysis.js`, so an SVG string
+passed there drew nothing. `board_layout_check.js` 812→with the book classes asserted **absent**;
+`swift_layout_check.js` 265→268; the `book_strip_drawn_unconditionally` mutant replaced by
+`book_band_reintroduced` (10/10 killed); `replay_coach` now asserts **four** transport glyphs, not
+five.
+
+### 2026-08-18 (fixed) — A fresh checkout failed the QA gate on Windows: text files are now pinned to LF
+
+Found by dogfooding the worktree rule added in the entry below this one — the first `git worktree add`
+produced a checkout that failed `node tools/qa/js_goldens.js` with **8 assertion failures across
+ReplayLogin and ReplayPremium**, on a branch whose diff touched nothing but Markdown.
+
+**The cause.** The repo stores LF, but `core.autocrlf=true` (the Git-for-Windows default) materialises
+CRLF on checkout, and there was no `.gitattributes` to say otherwise. `tools/qa/replay_login.js` and
+`replay_premium.js` read multi-line Swift string literals — the ones written with a trailing `\`
+continuation — straight out of `LoginMetrics.swift` and the paywall strings, and they do not strip the
+`\r`. Every such string came back with literal `\r\n` and unjoined continuations, so all 8 compared
+unequal against the JS twin. **This was invisible for the whole project so far** because the Swift in the
+existing checkout was written locally with LF and never round-tripped through a checkout; anyone cloning
+this repo on Windows would have hit it on day one.
+
+Proof rather than inference: converting the single file `LoginMetrics.swift` to LF and re-running took
+`ReplayLogin` from *383 passed, 2 failed* to **385 passed, 0 failed**, with `git diff` reporting no
+content change.
+
+**The fix.** A new `.gitattributes` — `* text=auto eol=lf` plus explicit `binary` for `.png`, `.webp`,
+`.mp3`, `.ttf`, `.sqlite` and `.pdf`. Every checkout on every platform now lands the same bytes the
+tooling expects. **Nothing committed changes** — the blobs were already LF; this only governs what is
+written into the working tree. As a bonus it also stops `php tools/eco/build_eco.php` from dirtying
+`DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` and `web-demo/js/eco-data.js` with line-ending-only diffs.
+
+`web-demo/` unaffected.
+
+### 2026-08-18 (docs) — A worktree per task, changelog-first, and landing via PR
+
+Process, not code. `web-demo/` unaffected — nothing user-facing changed.
+
+**Why.** `CLAUDE.md` is the only assistant guide in this repo and it said nothing about git, so all 19
+commits went straight to `main` — eight of them messaged `push` — and four `Merge origin/main` commits
+exist purely because two machines (Windows for editing and the JS gate, macOS for `swift build` and Xcode)
+both pushed `main` and collided. Nothing was ever read as a diff before it shipped, and there was no branch
+to abandon when a change went wrong.
+
+**The rule.** `main` is not a workbench. Every bug fix and every feature is done on a branch in its own git
+worktree and lands through a pull request the user merges; committing to `main` takes an explicit
+instruction. Read-only work — questions, reviews, explaining code — needs no worktree.
+
+**`CLAUDE.md` — the `## Workflow` section went from 5 rules to 10** (163 → 186 lines, still inside its own
+200-line cap). New: read the **top** of this file before starting anything, open a worktree, run the gate
+before landing, write commit messages that say what and why, land via PR, clean the worktree up afterwards.
+The four existing rules are kept — and the "read first" one now points here *first* and says to read the
+top, not the file, because at 2500+ lines "read `CHANGELOG.md`" would otherwise be the wrong instruction.
+The entry shape is pinned to `### YYYY-MM-DD (added|changed|fixed|docs) — Title`, since the tag has drifted
+across the 38 entries below this one (`(fix)`, `(feature)`, `(phase 8)`, `(latest)`, and several with none).
+
+**`docs/git-workflow.md` — new**, linked from `docs/README.md` under the runbooks. It carries the commands
+so the ten rules stay short, and it records two things found by dogfooding this very change: `EnterWorktree`
+rewrites `fix/foo` into the branch `worktree-fix+foo` (rename it with `git branch -m`), and a worktree
+session refuses any shell command it cannot prove stays inside the worktree — no `cd`, no `/tmp`, no long
+`&&` chains. It also spells out the trap that a fresh worktree has **no `Goldens/`**, because they are
+gitignored: `swift run ParityRunner` there is vacuous rather than green until
+`php tools/oracle/generate_goldens.php` has been run.
+
+**`.gitignore`** — added `.claude/worktrees/` and `.claude/settings.local.json`. `EnterWorktree` puts
+worktrees *inside* the repo and nothing was ignoring them, so the first one would have shown up as
+untracked and been swallowed by a `git add -A`. `.claude/settings.json` stays committable on purpose.
+
+### 2026-08-18 (changed) — Analysis Board: readable engine lines, no dead book box, longer variations, tap-to-play
+
+Client feedback on a TestFlight build, four asks, all delivered. `web-demo/` updated to match.
+
+**1 · The engine panel is drawn at the move strip's size.** The source draws it at 9/10/8 pt; on a
+real phone the client could not read it (*"lakihan mo kasing laki ng chess notation"*). It is now
+`stripMove` (13) for the eval, best move, continuation and text, `altChip` (12) for the opening name
+and 11 for the depth chip — **derived** from those constants rather than re-typed, so "the same size
+as the notation" is true by construction. `engineEvalWidth` 36→44 and `engineSanWidth` 38→46 grew with
+the type, because `M-3` and `O-O-O` clip at 13 pt.
+
+The source assertions are **inverted, not deleted** — the ⩲/⩱ precedent. A new `deviates(…)` helper in
+both `AnalysisMetricsCheck.swift` and `analysis-metrics.js` pins that the RN source still holds its
+value *and* that ours differs in the intended direction.
+
+**2 · The opening book is a strip, and 3 · out of book it is gone.** `AnalysisOpeningPanel` →
+`AnalysisBookStrip`: one 44 pt horizontal row of `san · eco` chips, built only when there are
+continuations. No empty state, because a quarter-screen box saying "out of book" was the whole
+complaint.
+
+That box was the **layout**, not the styling: a `ScrollView` capped at 230 is greedy along its axis, so
+it drew all 230 pt whatever it held — and, being the root `VStack`'s only flexible child, it also
+claimed every spare pixel. **The engine panel is the flexible band now**
+(`.frame(maxHeight: .infinity, alignment: .bottom)` *after* `.background`; `flex: 1 1 auto;
+min-height: 0; justify-content: flex-end` in CSS), and the continuation may wrap to two lines. Bands
+re-modelled: `engineStripEstimate` 60→102, new `bookStripHeight` 44, `engineMaxRows` 5,
+`engineLineLimit` 2, and `bands(…)` takes `inBook`.
+
+**4 · Longer lines.** A PV can never exceed the search depth, so `pvPreview` 6→12 alone was a no-op at
+the default preset. `Search.extendPV` (transposition-table walk) is free but lengthened only **one line
+in twelve** — the PV's leaf was seen by quiescence, which stores no move. The new
+`Search.extendTail` searches shallowly from the leaf on a **scratch** `Search` and appends its PV:
+lines now reach **10–14 plies** where they stopped at 6. Bounded to the final snapshot, `depth 2` per
+probe, **4,000 nodes per line** and 14 plies total; measured cost +5–18% of search time. Every
+appended move is legality-checked and de-duplicated against the line's own positions.
+
+**Tap an engine line to play it out.** New `LinePreview` in Core — pure, value-typed, ParityRunner-
+asserted. Tapping a row walks the whole variation on the board (`◀ ▶`, tap a chip to jump), `✕`
+returns exactly where you were, `＋` commits it as a real variation. The move tree is untouched until
+then; only the board shows the previewed position, the arrows clear, and drags are refused. A stale
+snapshot's line refuses both to start and to walk.
+
+**And the bug that exposed.** With the panel flexible, flex shrank each row while its text kept its
+own height: on a 375-wide phone three wrapped rows (113 pt) were squeezed into a 61 pt band and the
+overflow painted over the move strip. Rows now keep their natural height in their own **clipped** box
+(`.an-rows` / `rowsBox`), and `AnalysisLayout.enginePlan(available:wanted:)` decides how many rows and
+how many lines each — **rows beat wrapping**, because three single-line rows fit an SE where three
+wrapped ones do not. The browser measures the other bands; SwiftUI computes the same budget from
+`engineAvailable(…)`; both go through the one shared pure function.
+
+**Gates.** `swift_layout_check.js` gains rule 4b (the Analysis root must have exactly one flexible
+child, ordered after `.background`, with a conditional book strip) and 4c (the rows box is clipped and
+capped by the plan) — 255→265, with three new mutants (10/10 killed). `board_layout_check.js`
+widens its bidirectional custom-property audit from `--an-eng-*` to all `--an-*` (24 pre-existing dead
+vars pinned in a shrink-only allowlist) and adds §3b/§3c, the CSS half of rules 4b and 4c — 64→799.
+It also caught two hardcoded column widths (`min-width: 40px/38px`) that step 1 had left behind.
+`engine_budget_check.js` is what caught the first unbounded extension freezing the UI for **2.9 s**;
+the worst block is now ~107 ms against a 320 ms ceiling. Parity floors raised: `search` 55→66,
+`analysis_session` 200→235.
+
+**Removed.** `AnalysisVM.playEngineRow` / `playUciMove` — nothing plays just a line's first move any
+more.
+
 ### 2026-08-17 (changed) — TestFlight build 1.0.5 (42): the subscription/login work shipped to App Store Connect
 
 Pulled `origin/main` (`e85ee68`, `318efa5`, `cc8bc34` — the login screen, the paywall/`PremiumStore`

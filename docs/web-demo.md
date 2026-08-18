@@ -15,9 +15,10 @@ app, **mirror it here** so the user can see it.
   `js/analysis-engine.js`, `js/review.js`, `js/opening-book.js`, `js/analysis-metrics.js`,
   `js/analysis.js`, `js/analysis-store.js`, `js/position-editor.js`, `js/chess-board.js` or
   `js/home.js`.
-- **Screens:** four tabs (Home / Puzzles / Play / Profile) plus the **Analysis Board**, which is not a
-  tab — it is reached from the Home tile, renders into `#view` like every other screen, and adds
-  `an-mode` to `.app-card` to hide the tab bar (the original is a pushed route, and its seven bands
+- **Screens:** **Home is the root**, and every other screen — Puzzles, Play vs Coach, the Analysis
+  Board, Opening Tree, Pairing, Profile, the paywall — is reached from it and returns to it by its
+  own back button. There is no tab bar. The Analysis Board renders into `#view` like every other
+  screen (the original is a pushed route, and its seven bands
   cannot spare the height). `render()` clears both `.flush` and `an-mode`, and its trailing
   `else renderPuzzles()` means **a new screen must get its own branch** or it silently looks like
   Puzzles.
@@ -49,17 +50,17 @@ branding, outside the app), a **hero** area, the app shown inside a **realistic 
 (`.phone` bezel → `.statusbar` with a Dynamic-Island notch → `.app-card` screen → home indicator, correct
 ~390:844 proportions), and a **footer** with credits. Styled by the *Site chrome* section of `css/app.css`
 (`.site-banner` / `.hero` / `.phone` / `.app-card` / `.statusbar` / `.site-footer`); fully responsive.
-`app.js` still targets `#view`/`#tabbar`, so the app logic is independent of the surrounding page.
+`app.js` still targets `#view`, so the app logic is independent of the surrounding page.
 
 A **device picker** (`js/device.js`, dropdown in the hero) swaps the frame to any of several iPhones using
 their **real screen dimensions** — iPhone SE (home button, short), 11/14 (notch), 15/16 (Dynamic Island).
 It sets `--sar` (screen aspect) + `--pmm` (body width mm) on `.phone` and a style class; the choice persists
 in `localStorage`. To add/adjust models, edit the `MODELS` array in `js/device.js`.
 
-The **Puzzles tab is a fixed, non-scrolling** fill-height layout (`.puzzle-view` → compact rating card +
+The **Puzzle Hub is a fixed, non-scrolling** fill-height layout (`.puzzle-view` → compact rating card +
 `.puz-board`): the board flexes to fill the leftover space and is sized with container-query units
 (`min(100cqw, 100cqh)`) so it's the largest square that fits — edge-to-edge on tall phones, auto-shrunk &
-centered on short ones. Keep it scroll-free when editing that tab.
+centered on short ones. Keep it scroll-free when editing that screen.
 
 The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row` / `.board-solo` use
 `padding-inline: 0` and the board gets `--board-radius: 0` for square, flush corners.
@@ -85,19 +86,56 @@ The **chessboard renders edge-to-edge** (flush to the screen sides): `.board-row
 | `js/analysis.js` | ⭐ the Analysis Board: a pure session layer (status line, opening tracking, arrows, engine rows, move-strip tokens, the staleness rule) **plus** the seven-band screen | `AnalysisSession.swift`, `AnalysisVM.swift`, `AnalysisBoardScreen.swift` |
 | `js/chess-board.js` | ⭐ the reusable `<chess-board>` Web Component (render + interaction + animation, plus the SVG arrow overlay and pointer-drag) | — (view layer) |
 | `js/home.js` | the home dashboard; its top half is the pure metrics layer + `BiyaHome.selfTest()` | `HomeMetrics.swift`, `HomeScreen.swift` |
-| `js/app.js` | 4-tab shell (Home / Puzzles / Play / Profile); wires board ↔ engine ↔ AI; localStorage stats | mirrors `DemoApp` PhoneApp |
+| `js/app.js` | the router: Home as the root, every other screen a route raised from it; wires board ↔ engine ↔ AI; localStorage stats | mirrors `DemoApp` PhoneApp |
 | `js/sound.js` | event → mp3 mapping | `Sound.swift` |
-| `js/puzzles.js` | the OLD Puzzles tab's ten embedded samples (every one an engine-verified mate). **Different move convention from the Puzzle Hub** — here `solution[0]` is the solver's; in the corpus `moves[0]` is the opponent's. Not interchangeable | — |
+| `js/puzzles.js` | the OLD Puzzles screen's ten embedded samples (every one an engine-verified mate). **Different move convention from the Puzzle Hub** — here `solution[0]` is the solver's; in the corpus `moves[0]` is the opponent's. Not interchangeable | — |
 | `js/puzzle-data.js` | the Puzzle Hub's corpus slice: 1,912 real puzzles across every band and theme. **Generated** — `python tools/puzzlebank/build_puzzles.py`. A page cannot load the device's 33 MB SQLite, so the browser proves the LOGIC on real puzzles and is explicitly not the shipping corpus; it flags itself with `isSlice` and carries `corpusTotal`/`dailyPoolTotal` | `DemoApp/…/puzzles.sqlite` (92,976 rows) |
 | `js/puzzle-serving.js` | the three fallback ladders, pinned by the `serving` goldens. Side-effect free: takes `seen`, reports `didReset` | `PuzzleServing.swift` |
 | `js/puzzle-session.js` | ⭐ the one solver core all five modes configure: the `moves[0]` convention, the phase machine, the checkmate short-circuit, the five wrong-move policies, promotion, retry, Solution, the Save Puzzle PGN | `PuzzleSession.swift` |
 | `js/puzzle-store.js` | the four selectors: the ladders over a pool, the scoped Tier-3 wipe (spec fix #7), and the deterministic local-calendar daily index | `PuzzleSelection.swift`, `DemoApp/…/PuzzleStore.swift` |
 | `js/puzzle-progress.js` | everything the user does: the rated ledger, seen set, streak/rush state, drafts with a 24h TTL, the daily-goal counter | `PuzzleProgress.swift` |
 | `js/device.js` | iPhone model picker — sets the frame's real screen aspect ratio + bezel style | — (page chrome) |
-| `css/theme.css`, `css/app.css` | design tokens + shell styling | `Theme.swift` |
+| `css/theme.css` | design tokens. **Linked first** — every other sheet reads them | `Theme.swift` |
+| `css/app.css` | the shell, Home, the puzzle screens, the Analysis Board, the paywall, the Opening Tree | — |
+| `css/pairing.css` | the Pairing Manager (`--pgl-` list · `--pgc-` create · `--pgd-` detail) | — |
+| `css/coach.css` | Play vs Coach (`--cgs-` select · `--cgc-` colour · `--cgp-` game · `--cgx-` polish) | — |
 | `assets/` | pieces, sounds, coach avatars, fonts (copied from the app) | — |
 
 All scripts are classic `<script>` (no ES modules), so it works from `file://` with no build step.
+
+**Every header's logo ring holds the brand mark**, through one helper: `BiyaIcons.brandLogoEl(cls)`
+in `js/icons.js`, which owns the asset path. `components/AppLogo.tsx` — captured in the extraction
+as `puzzle_styles.json` → `shared.logo` — is a gold ring with `overflow: hidden` **around an
+image**; the browser ported the ring to nine headers and never the image, so all nine drew an empty
+gold circle beside the title. `tools/qa/home_chrome_check.js` §8 pins all nine, and §7 bans the gold
+knight from anywhere inside the app.
+
+### Two shell rules, both of which shipped broken before they were gated
+
+**Every stylesheet in `css/` must be linked.** `coach.css` was not, from the commit that introduced
+Play vs Coach until round 4 — 507 correct lines that the page never loaded. It was invisible while
+the Play route still showed the old sample screen, and the moment `app.js` routed Play to
+`BiyaCoachSelect.render` the whole feature rendered as raw UA buttons, white on white. A round
+earlier the problem had been *noticed* and a guard written, but that guard
+(`replay_login.js`) only asserts `app.css` is linked, so it never fired.
+
+**Every scroll container hides its own scrollbar**, with BOTH halves:
+
+```css
+.some-band { … overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.some-band::-webkit-scrollbar { width: 0; height: 0; }
+```
+
+`app.css:9` has stated the intent since the first commit — *"Hide scrollbars everywhere for an
+app-like look"* — but applies it to `html, body`, and **`scrollbar-width` does not inherit**, nor
+does `::-webkit-scrollbar` cascade. Ten bands were therefore showing the bare OS scrollbar, in a
+frame that is pretending to be a phone.
+
+**And no element sets `resize`.** iOS has no resize handle, so a drag-to-resize textarea is a
+control the Swift app cannot have — a cross-language divergence, not just an eyesore. `resize: none`
+on all five textareas.
+
+`tools/qa/web_shell_check.js` enforces all three, and is mutation-checked against each.
 
 **Where the engine runs is no longer "the main thread" flatly** — `js/engine-host.js` decides:
 
@@ -125,8 +163,9 @@ the app applies that move to the real engine, then calls `setPosition()` back (s
 outside the component).
 
 > Its SwiftUI counterpart is `BoardView` + `ChessBoardBand`, and the two are kept deliberately in step —
-> same square colours, same highlight precedence, same coordinate geometry, same **sizing rule** (a fixed
-> square from the width; the band below it is the flexible one). See [`chessboard.md`](chessboard.md) before
+> same square colours — now *pinned* to one extraction by `board_layout_check.js` §8, after both
+> languages spent the whole port drawing an invented blue — same highlight precedence, same coordinate
+> geometry, same **sizing rule** (a fixed square from the width; the band below it is the flexible one). See [`chessboard.md`](chessboard.md) before
 > changing either; a divergence here is what shipped a broken Puzzle Streak screen to TestFlight while the
 > browser looked correct.
 

@@ -63,11 +63,8 @@ struct CoachSelectScreen: View {
 
     private var header: some View {
         HStack {
-            Button(action: onExit) {
-                Text(CoachGlyph.back)
-                    .font(.system(size: CoachSelect.backIconFontSize))
-                    .foregroundStyle(CoachSelect.backIconColor)
-            }
+            NavIconButton(.back, size: CoachSelect.backIconFontSize,
+                          tint: CoachSelect.backIconColor, action: { onExit() })
             .frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
             Spacer()
             VStack(spacing: .zero) {
@@ -81,7 +78,10 @@ struct CoachSelectScreen: View {
                     .tracking(CoachSelect.titleSmallLetterSpacing)
             }
             Spacer()
-            Color.clear.frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
+            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. Swift had
+            // an invisible counterweight of the same size, so this is a drop-in: same footprint,
+            // no longer blank.
+            HomeLogo(size: CoachSelect.backBtnWidth)
         }
         .padding(.top, CoachSelect.backBtnMarginTop)
         .padding(.leading, CoachSelect.backBtnMarginLeft)
@@ -233,11 +233,8 @@ struct CoachColourScreen: View {
     var body: some View {
         VStack(spacing: CoachLayout.sectionGap) {
             HStack {
-                Button { store.backToSelect() } label: {
-                    Text(CoachGlyph.back)
-                        .font(.system(size: CoachSelect.backIconFontSize))
-                        .foregroundStyle(CoachSelect.backIconColor)
-                }
+                NavIconButton(.back, size: CoachSelect.backIconFontSize,
+                              tint: CoachSelect.backIconColor, action: { store.backToSelect() })
                 .frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
                 Spacer()
             }
@@ -357,11 +354,8 @@ struct CoachGameScreen: View {
 
     private var header: some View {
         HStack {
-            Button { store.exitGame() } label: {
-                Text(CoachGlyph.back)
-                    .font(.system(size: CoachSelect.backIconFontSize))
-                    .foregroundStyle(CoachSelect.backIconColor)
-            }
+            NavIconButton(.back, size: CoachSelect.backIconFontSize,
+                          tint: CoachSelect.backIconColor, action: { store.exitGame() })
             .frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
             Spacer()
             VStack(spacing: .zero) {
@@ -374,7 +368,10 @@ struct CoachGameScreen: View {
                     .padding(.top, CoachPlay.headerRoleMarginTop)
             }
             Spacer()
-            Color.clear.frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
+            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. Swift had
+            // an invisible counterweight of the same size, so this is a drop-in: same footprint,
+            // no longer blank.
+            HomeLogo(size: CoachSelect.backBtnWidth)
         }
         .padding(.horizontal, CoachPlay.playHeaderPaddingHorizontal)
         .padding(.top, CoachPlay.playHeaderPaddingTop)

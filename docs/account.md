@@ -1,0 +1,98 @@
+# Account — Sign in with Apple, and deleting it
+
+The login gate and the Account card in Profile. One feature, because Apple treats them as one: an
+app that offers account creation must offer account deletion, so the two ship together or neither
+does.
+
+## What it does
+
+**Sign in with Apple is real.** It used to be simulated — `LoginStore.signIn(_:)` wrote a string and
+published, with no `AuthenticationServices` call anywhere. The repo knew: `PORTING_NOTES.md` recorded
+it as *"an App Store rejection… a development state, not a shippable one."* It now raises Apple's own
+sheet through `ASAuthorizationController`, and only a genuine success opens the session.
+
+**It asks for no scopes.** `requestedScopes = []`, deliberately. The app shows
+`LoginStrings.defaultDisplayName` and persists nothing but the provider string, so a name or an email
+would be data it has no use for — and would make the empty `NSPrivacyCollectedDataTypes` in
+`ios/App/PrivacyInfo.xcprivacy` untrue.
+
+**Delete account** sits on the same card as Sign out, behind a confirmation. There is no server, so
+it erases what the account produced on this device — and deliberately keeps two things.
+
+| | Keys |
+|---|---|
+| **Erased** | `biya.auth.session.v1`, `biya.coach.takeback.v1`, `biya.analysis.engine.v1`, every `biya.coach.draft.v1.*` |
+| **Erased (files)** | `puzzle-progress.json`, `pairing.json`, `openings.json`, `analysis-library.json` in `Application Support/Biyaherong/` |
+| **KEPT** | `biya.store.subscription.v1`, `biya.store.usage.v1` |
+
+The keep list is the half that is easy to lose in a refactor, and both halves matter:
+
+- **The entitlement snapshot** is StoreKit's device state, not user data. Apple requires that
+  deleting an account does not forfeit a paid subscription — `KeychainStorage` already outlives a
+  delete-and-reinstall on purpose — and the confirmation copy says so, naming Settings ▸ Apple
+  Account ▸ Subscriptions. Apple checks for exactly that.
+- **The daily counters** stay because clearing them would make "delete account, sign in again" a free
+  reset of every free-tier cap — a paywall bypass wearing a privacy feature's clothes.
+
+`store.reset()` runs **before** the erase: the hub's progress is live in memory, and a store that
+persisted itself after its file had been removed would write the deleted progress straight back.
+
+## The thing that changed about "100% offline"
+
+The app is still offline — it makes no network call of its own, and `replay_login.js` /
+`replay_premium.js` both fail the build on a `URLSession` or an extra URL. But Apple's servers answer
+the sign-in, so **the first launch needs a connection**. The in-app privacy sheet was reworded from
+"works 100% offline" to say so, in both languages.
+
+The export-compliance `NO` in `ios/project.yml` is unaffected: `AuthenticationServices` is a second
+Apple framework over OS-provided TLS, the same reasoning already written there for StoreKit.
+
+## Key files
+
+| File | What it holds |
+|---|---|
+| `DemoApp/…/LoginAppleAuth.swift` | the real `ASAuthorizationController` call — **the only file in the package that imports `AuthenticationServices`** |
+| `DemoApp/…/AccountDeletion.swift` | the eraser. Deliberately does **not** import StoreKit |
+| `DemoApp/…/LoginMetrics.swift` | the pure layer: `LoginAuth` (the state machine), `LoginAccountData` (both lists), the copy |
+| `DemoApp/…/LoginStore.swift` | unchanged — the session, the persistence and the fail-closed read |
+| `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
+| `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
+| `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
+| `web-demo/js/login.js` | the twin: same state machine, same lists, `SIMULATED_AUTH = true` |
+| `web-demo/js/app.js` | `confirmDeleteAccount()` + `eraseAccountData()` |
+
+## How the browser mirror stays honest
+
+A browser cannot have an `ASAuthorizationController`, so the twin does **not** pretend to. What the
+two languages share is the *decision* half — which event moves the screen where — and that half is
+where the branch worth getting wrong lives: **a cancelled sign-in is not an error and must not show
+one.** `replay_login.js` compares the full 12-entry transition table, then asserts the asymmetry
+explicitly: the Swift file has the real call, no other Swift file imports the framework (an
+exhaustive directory scan), the browser has neither, and the browser carries a `SIMULATED_AUTH` flag
+that the Swift must not.
+
+That gate previously **banned** `ASAuthorization` outright — it was what kept the simulation honest.
+It is an allowlist of one now. The networking bans were not weakened: they still apply to every login
+file including the new one.
+
+The deletion confirm is a **modal**, not a route, because `trial_gate_check.js` asserts `OPEN_ROUTES`
+is exactly `home/login/paywall/profile` — and rightly: a destructive confirm is not somewhere you
+navigate to and then press Back out of.
+
+## How to test
+
+```bash
+node tools/qa/replay_login.js       # 457 assertions: the reducer, both lists, the allowlist of one
+node tools/qa/trial_gate_check.js   # the gate still opens only for the two open routes
+node tools/qa/replay_premium.js     # still exactly one StoreKit importer
+node tools/qa/js_goldens.js
+```
+
+In the browser (`web-demo/index.html`): sign in, open Profile from the Home avatar, press **Delete
+account** — the confirm must appear and **Huwag na** must leave everything alone. Confirm, and the
+app returns to the login gate.
+
+**On a Mac, and only there:** `swift build`, then archive and confirm
+`Biyaherong.app/PrivacyInfo.xcprivacy` exists in the product. Sign in with Apple itself needs a
+*signed* build — `codemagic.yaml`'s `ios-free-unsigned` archives with `CODE_SIGNING_ALLOWED=NO`, so
+entitlements are never applied there and the button cannot work in that `.ipa`. Use `ios-testflight`.

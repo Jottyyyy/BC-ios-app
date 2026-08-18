@@ -28,14 +28,12 @@ public struct HomeScreen: View {
     var scaleBasis: CGSize?
 
     var onAvatar: () -> Void
-    var onSearch: () -> Void
     var onPuzzles: () -> Void
     var onAnalysis: () -> Void
     var onVideos: () -> Void
     var onOpeningTrainer: () -> Void
     var onPlayCoach: () -> Void
     var onPairing: () -> Void
-    var onDonate: () -> Void
     var onMembership: () -> Void
 
     public init(userName: String = "",
@@ -45,14 +43,12 @@ public struct HomeScreen: View {
                 isColorful: Bool = false,
                 scaleBasis: CGSize? = nil,
                 onAvatar: @escaping () -> Void = {},
-                onSearch: @escaping () -> Void = {},
                 onPuzzles: @escaping () -> Void = {},
                 onAnalysis: @escaping () -> Void = {},
                 onVideos: @escaping () -> Void = {},
                 onOpeningTrainer: @escaping () -> Void = {},
                 onPlayCoach: @escaping () -> Void = {},
                 onPairing: @escaping () -> Void = {},
-                onDonate: @escaping () -> Void = {},
                 onMembership: @escaping () -> Void = {}) {
         self.userName = userName
         self.profileImage = profileImage
@@ -61,14 +57,12 @@ public struct HomeScreen: View {
         self.isColorful = isColorful
         self.scaleBasis = scaleBasis
         self.onAvatar = onAvatar
-        self.onSearch = onSearch
         self.onPuzzles = onPuzzles
         self.onAnalysis = onAnalysis
         self.onVideos = onVideos
         self.onOpeningTrainer = onOpeningTrainer
         self.onPlayCoach = onPlayCoach
         self.onPairing = onPairing
-        self.onDonate = onDonate
         self.onMembership = onMembership
     }
 
@@ -82,8 +76,7 @@ public struct HomeScreen: View {
                            userName: userName,
                            profileImage: profileImage,
                            isPremium: isPremium,
-                           onAvatar: onAvatar,
-                           onSearch: onSearch)
+                           onAvatar: onAvatar)
 
                 grid(metrics: metrics, tile: tile)
                     .frame(height: metrics.gridHeight(container: geo.size))
@@ -96,7 +89,6 @@ public struct HomeScreen: View {
                               isPremium: isPremium,
                               isColorful: isColorful,
                               subscriptionEndsAt: subscriptionEndsAt,
-                              onDonate: onDonate,
                               onMembership: onMembership)
                     .padding(.horizontal, HomeLayout.screenPaddingH)
                     .padding(.bottom, HomeLayout.bannerMarginBottom)
@@ -255,7 +247,10 @@ struct HomeCardView: View {
     private var coachRing: some View {
         let ring = iconBox * metrics.circleRatio
         let shape = RoundedRectangle(cornerRadius: metrics.coachRingRadius, style: .continuous)
-        return HomeAppIcon(size: ring, shape: shape)
+        // `.brandLogo`, not the defaulted `.appIcon`. The gold knight is the APP icon — it stays
+        // on the iOS home screen and in `ios/AppIcon.svg` — and this was the last place inside the
+        // app that still drew it.
+        return HomeAppIcon(size: ring, shape: shape, asset: .brandLogo)
             .overlay(shape.strokeBorder(Theme.gold, lineWidth: HomeLayout.coachRingBorderWidth))
             .shadow(color: Theme.gold.opacity(HomeLayout.coachGlowOpacity),
                     radius: HomeLayout.coachGlowRadius)

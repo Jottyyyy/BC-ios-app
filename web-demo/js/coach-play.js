@@ -119,14 +119,17 @@ var BiyaCoachPlay = (function () {
 
   function header(game, coach, cb) {
     var h = el('div', 'cgp-header');
-    var back = el('button', 'cgp-back', '←');
+    var back = el('button', 'cgp-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     h.appendChild(back);
     var centre = el('div', 'cgp-header-center');
     centre.appendChild(el('div', 'cgp-coach-name', coach && coach.name ? coach.name : ''));
     centre.appendChild(el('div', 'cgp-status', statusLine(game)));
     h.appendChild(centre);
-    h.appendChild(el('div', 'cgp-logo'));
+    h.appendChild(BiyaIcons.brandLogoEl('cgp-logo'));
     return h;
   }
 

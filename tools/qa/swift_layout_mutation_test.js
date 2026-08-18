@@ -28,9 +28,11 @@ const MUTANTS = [
   {
     id: 'greedy_one_axis_frame',
     file: 'PuzzleStreakScreens.swift',
-    from: `Circle()
-                .strokeBorder(PuzzlePalette.gold, lineWidth: PuzzleStreakSolver.logoBorder)
-                .frame(width: PuzzleStreakSolver.logoSize, height: PuzzleStreakSolver.logoSize)`,
+    // The anchor moved when the empty gold ring became `HomeLogo` — `AppLogo.tsx` is a ring around
+    // an image, and neither language had ever put the image in it. Same `to:`, same bug reproduced;
+    // only the line it replaces changed. (A mutant whose `from:` no longer matches never applies,
+    // which reads as a pass and proves nothing, so it is re-pointed rather than dropped.)
+    from: 'HomeLogo(size: PuzzleStreakSolver.logoSize)',
     to: 'Color.clear.frame(width: PuzzleStreakSolver.backBtnW)',
     why: 'the original Streak header bug, verbatim: a Color spacer with a width and no height',
   },
@@ -70,11 +72,40 @@ const MUTANTS = [
     why: 'the trailing Spacer removed, so the board competes for leftover height again',
   },
   {
-    id: 'tab_bar_shown_on_pushed_routes',
+    id: 'analysis_root_loses_its_flexible_child',
+    file: 'AnalysisBoardScreen.swift',
+    from: '.frame(maxHeight: .infinity, alignment: .bottom)',
+    to: '.frame(maxWidth: .infinity)',
+    why: 'the engine panel stops claiming the leftover height, so the root frame centres the '
+      + 'whole column and a navy gap opens above the header',
+  },
+  {
+    id: 'engine_rows_overdraw_the_strip',
+    file: 'AnalysisBoardScreen.swift',
+    from: '.clipped()',
+    to: '',
+    why: 'the rows box unclipped, so on a short screen the rows that do not fit paint over the '
+      + 'move strip above',
+  },
+  {
+    id: 'book_band_reintroduced',
+    file: 'AnalysisBoardScreen.swift',
+    from: '                    AnalysisMoveStrip(tokens: vm.stripTokens,',
+    to: '                    AnalysisBookStrip(rows: vm.bookRows)\n'
+      + '                    AnalysisMoveStrip(tokens: vm.stripTokens,',
+    why: 'an opening-book band added back to the Analysis root, which is how the box the client '
+      + 'asked twice to be rid of would return',
+  },
+  {
+    // Replaces `tab_bar_shown_on_pushed_routes`, whose anchor
+    // (`if !puzzlePushed { PhoneTabBar(tab: gatedTab) }`) no longer exists: Home became the app
+    // root and the bar went with it. A mutant whose `from:` string is gone never applies, which
+    // reads as a pass and proves nothing — so it is replaced rather than deleted.
+    id: 'puzzle_hub_left_as_a_bare_tab',
     file: 'PhoneView.swift',
-    from: 'if !puzzlePushed { PhoneTabBar(tab: $tab) }',
-    to: 'PhoneTabBar(tab: $tab)',
-    why: 'the tab bar left visible on pushed puzzle routes',
+    from: 'if showPuzzles {',
+    to: 'if true {',
+    why: 'the Puzzle Hub drawn unconditionally over Home, i.e. as a tab again',
   },
 ];
 

@@ -96,13 +96,24 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
     let zero = HomeScreenMetrics(scale: 1.0).tile(inGridContent: .zero)
     expect(zero.height == 0 && zero.width == 0, "tile is zero for a zero container")
 
+    /// What the bottom tab bar took out of every container before Home became the app root.
+    /// `docs/home-screen.md`'s figure, kept as one number so §4 and §5 cannot drift apart.
+    let reclaimedFromTabBar: CGFloat = 74
+    /// The five reference devices, as they measured *with* the bar.
+    let tallerWithoutTabBar = [CGSize(width: 375, height: 572.5),    // iPhone SE 3
+                               CGSize(width: 393, height: 684.5),    // iPhone 15
+                               CGSize(width: 430, height: 763),      // iPhone 15 Pro Max
+                               CGSize(width: 834, height: 1050),     // iPad 11"
+                               CGSize(width: 1024, height: 1247)]    // iPad 12.9"
+
     // ── 4. Band budget — the never-scroll invariant, as arithmetic ───────────
-    // Measured content boxes (device minus safe areas minus the ~74pt tab bar).
-    let containers = [CGSize(width: 375, height: 572.5),    // iPhone SE 3
-                      CGSize(width: 393, height: 684.5),    // iPhone 15
-                      CGSize(width: 430, height: 763),      // iPhone 15 Pro Max
-                      CGSize(width: 834, height: 1050),     // iPad 11"
-                      CGSize(width: 1024, height: 1247)]    // iPad 12.9"
+    //
+    // Measured content boxes: device minus safe areas. They used to be measured minus the tab
+    // bar as well; Home is the app root now, so every one of them grew by `reclaimedFromTabBar`.
+    // Written as a sum rather than as five new literals so the change is legible — and so the
+    // pair of assertions in §5 can compare the two shells directly.
+    let containers = tallerWithoutTabBar.map { CGSize(width: $0.width,
+                                                      height: $0.height + reclaimedFromTabBar) }
     for c in containers {
         let m = HomeScreenMetrics(basis: c)
         let grid = m.gridHeight(container: c)
@@ -115,14 +126,28 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
         }
     }
 
-    // ── 5. The icon clamp: engages only where the design does not fit ────────
-    // A 4.7" phone inside the tab-bar shell is genuinely over-constrained; the artwork gives way
-    // rather than the title being clipped.
-    let se = CGSize(width: 375, height: 572.5)
+    // ── 5. The icon clamp, and what removing the tab bar bought ──────────────
+    //
+    // Two assertions, and the second is the point of the whole change.
+    //
+    // The clamp still works: give the grid the box a 4.7" phone had *inside the tab bar* and the
+    // artwork still gives way rather than the title being clipped. That box no longer occurs on
+    // any device — it is kept here precisely because it is the tight case.
+    let tightBox = CGSize(width: 375, height: 572.5)
+    let tightM = HomeScreenMetrics(basis: tightBox)
+    let tightTile = tightM.tile(inGridContent: tightM.gridContent(container: tightBox))
+    let tightIcon = tightM.iconBox(rowHeight: tightTile.height, card: .puzzles)
+    expect(tightIcon < tightM.iconSize,
+           "the icon clamp still engages when the grid really is that tight")
+
+    // And the artwork got room back. `docs/home-screen.md` recorded the cost of hosting Home as
+    // tab 0 — "~74 pt, which comes straight out of the grid", leaving the icons at 50-75% of
+    // their design size. This is that sentence as arithmetic: same phone, no bar, bigger icon.
+    let se = CGSize(width: 375, height: 572.5 + reclaimedFromTabBar)
     let seM = HomeScreenMetrics(basis: se)
     let seTile = seM.tile(inGridContent: seM.gridContent(container: se))
-    expect(seM.iconBox(rowHeight: seTile.height, card: .puzzles) < seM.iconSize,
-           "icon clamp engages on a 4.7\" phone")
+    expect(seM.iconBox(rowHeight: seTile.height, card: .puzzles) > tightIcon,
+           "removing the tab bar gives the 4.7\" phone's artwork room back")
     // With generous height it must be a no-op — the design renders at full size.
     let roomy = HomeScreenMetrics(scale: 1.0)
     expectNear(roomy.iconBox(rowHeight: 400, card: .puzzles), roomy.iconSize, "icon clamp is a no-op when there is room")
@@ -236,7 +261,9 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
     }
 
     // ── 11. Bundled artwork resolves ─────────────────────────────────────────
-    for asset: HomeArt.Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon] {
+    // `.brandLogo` is on this list because the HEADER draws it now, not only the login hero — a
+    // missing file would leave the screen's most prominent element on the crown fallback.
+    for asset: HomeArt.Asset in [.puzzleKnight, .analysis, .video, .swiss, .appIcon, .brandLogo] {
         expect(HomeArt.raster(asset) != nil, "\(asset.rawValue).png loads from Images/")
     }
     expect(HomeArt.vector(.openingBook) != nil,
@@ -245,6 +272,33 @@ public func biyaherongHomeMetricsCheck() -> HomeMetricsCheckResult {
         expect(HomeArt.asset(for: card) != nil, "\(card) has card art")
     }
     expect(HomeArt.asset(for: .playCoach) == nil, "the coach card draws the app icon, not a card asset")
+
+    // ── 12. Header chrome, client round 4 ────────────────────────────────────
+    // The mark curves like the LOGIN HERO, by reference rather than by a second guess: it is the
+    // same brand collage, and a circle would crop its wordmark off.
+    expectNear(HomeLayout.logoRadiusRatio, LoginLayout.logoRadius / LoginLayout.logoSize,
+               "the header mark takes the login hero's corner proportion")
+    expect(HomeLayout.logoRadiusRatio > 0 && HomeLayout.logoRadiusRatio < 0.5,
+           "which is a squircle — neither a square nor a circle")
+    // A ratio, not a constant, because logoSize spans 41-92pt across the device range.
+    let radii: [(CGFloat, CGFloat)] = [(0.75, 10), (1.00, 13), (1.70, 22)]
+    for (s, want) in radii {
+        let m = HomeScreenMetrics(scale: s)
+        expectNear((m.logoSize * HomeLayout.logoRadiusRatio).rounded(), want,
+                   "header mark radius at scale \(s)")
+    }
+
+    // The banner band still budgets TWO subtitle lines although the one surviving banner has one.
+    // It feeds fixedBandsHeight -> gridHeight -> tile(inGridContent:), so trimming it here would
+    // resize all six cards — see the note on `HomeScreenMetrics.bannerHeight`.
+    let subLine = HomeType.naturalLineHeight(HomeLayout.bannerSubSize, .semiBold)
+    let oneLineBand = HomeLayout.bannerPaddingV * 2
+        + HomeType.naturalLineHeight(HomeLayout.bannerEmojiSize)
+        + HomeLayout.bannerStackSpacing * 2
+        + HomeType.naturalLineHeight(HomeLayout.bannerTitleSize, .extraBold)
+        + subLine
+    expectNear(HomeScreenMetrics(scale: 1.0).bannerHeight - oneLineBand, subLine,
+               "bannerHeight budgets a second subtitle line that nothing draws, on purpose")
 
     return HomeMetricsCheckResult(passed: passed, failures: failures)
 }

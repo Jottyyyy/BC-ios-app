@@ -233,7 +233,7 @@ so the overlay cannot drift from the board the way the RN pair does (#12).
 not an omission. An empty sparkline over 0.0% accuracy over seven flat bars reads as a broken
 dashboard rather than a new one.
 
-### The Puzzles tab
+### The Puzzle Hub
 
 It now opens the Hub. The ten hand-made samples in `web-demo/js/puzzles.js` are retired: they use
 the **opposite** move convention (`solution[0]` is the solver's; the corpus has `moves[0]` belonging

@@ -16,17 +16,23 @@ Feature- and subsystem-level documentation for this repo.
   algorithm's rules, the documented deviations from the real PHP backend, and invented constants.
   **Read this for any `Sources/` (engine) work.**
 - **[`../ios/BUILD-iOS.md`](../ios/BUILD-iOS.md)** — iOS build / signing / TestFlight / sideload runbook.
+- **[`git-workflow.md`](git-workflow.md)** — the git runbook: a worktree per task, setting a fresh one up,
+  the pre-land gate, landing via PR, and cleanup. **Read this before starting any fix or feature.**
 - **[`../web-demo/README.md`](../web-demo/README.md)** — end-user run steps for the Windows browser demo.
 
 ## Feature docs
+- [`navigation-chrome.md`](navigation-chrome.md) — the back and ☰ icons: one hand-drawn vector per
+  language from one 24×24 geometry, replacing the `←`/`☰` characters that fell back to whatever face
+  the platform had, and closing the gap where Swift drew a chevron while the browser drew an arrow.
 - [`chessboard.md`](chessboard.md) — the one board renderer per language, the sizing rule every screen
   obeys (a fixed square from the WIDTH — never `min(w, h)`), coordinates, and the gate that fails when
   either is reinvented. **Read this before touching any screen that shows a board.**
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
 - [`subscription.md`](subscription.md) — one monthly plan with a 7-day trial, verified **on-device by
-  StoreKit 2 with no server**: the trial/expiry/grace state machine, the free tier's daily caps, the
-  paywall, and the two holes (refunds, clock rollback) that are accepted rather than defended.
+  StoreKit 2 with no server**: the **trial gate** that makes every tap without an entitlement land on
+  the offer, the trial/expiry/grace state machine, the daily caps a *lapsed* subscriber returns to,
+  the paywall, and the two holes (refunds, clock rollback) that are accepted rather than defended.
 - [`login.md`](login.md) — the app's first screen: the brand hero, one **simulated** "Continue with Apple"
   button, a persisted fail-closed session, and the bundled Privacy · Terms sheet. **The sign-in performs no
   Apple authentication and no network call** — read this before wiring a real one.
@@ -44,6 +50,10 @@ Feature- and subsystem-level documentation for this repo.
   built, the shared solver core, the selection ladders over SQLite, and the local progress store.
   Plus the style extraction, the metrics layer and all eleven screens — Hub, Play Puzzles, Daily,
   Thematic, Streak and Turbo — in both languages. **Complete (phases A–G).**
+- [`opening-tree.md`](opening-tree.md) — the openingtree.com-style move tree over your own games:
+  SAN-keyed, with win/draw/loss per candidate **from the mover's point of view**, built from a pasted
+  PGN with no network. The destination the Opening Tree Home tile had been missing since the screen
+  was written.
 - [`pairing-engine.md`](pairing-engine.md) — Swiss pairing (FIDE Dutch), Berger round-robin schedules
   and the four tie-breaks, as one pure module: the priority ladder that replaces the server's silent
   repeat pairing, and the property tests over whole simulated tournaments that prove it.
@@ -57,6 +67,13 @@ Feature- and subsystem-level documentation for this repo.
   per-level draft, the three screens in both languages with the generation counter that makes four
   §7 concurrency defects one fix, and the offline game review over the Analysis Board's own
   classification maths. **Complete (spec §2.1–2.14, and every §7 fix from #24 to #40).**
+
+- [`account.md`](account.md) — Sign in with Apple (real now, not simulated) and the in-app account
+  deletion Apple requires alongside it: the shared state machine the browser twin mirrors, the
+  erase list, and the two keys that are deliberately KEPT. **Complete.**
+- [`app-store-readiness.md`](app-store-readiness.md) — what the submission needs that is not a
+  feature: the privacy manifest, the Sign in with Apple entitlement, and the licence correction —
+  plus the App Store Connect steps that cannot be done from this repo. **Read before submitting.**
 
 _More docs get added here as features are built._
 

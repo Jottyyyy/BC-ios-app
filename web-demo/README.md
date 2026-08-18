@@ -76,15 +76,20 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 
 ## 🗂️ Ano ang laman
 
-4-tab na phone app (tulad ng tunay):
+Home ang app root — lahat ng iba ay bubukas mula sa isang tile at may back button pabalik:
 
-- **Home** — ang landing dashboard: header, 3×2 grid ng anim na card, hourly na Taglish quote, at ang
-  Donate / Membership banners. May Sky / Colorful na tema (pumili sa itaas ng phone).
+- **Home** — ang landing dashboard: header (avatar · brand logo), 3×2 grid ng anim na card, hourly na
+  Taglish quote, at ang Membership banner. May Sky / Colorful na tema (pumili sa itaas ng phone).
+- **Opening Tree** — mula sa Home tile. Gumawa ng tree mula sa PGN ng mga laro mo, tapos i-explore
+  sa board: bawat move may bilang ng laro at win/draw/loss bar. Walang internet na kailangan.
 - **Puzzles** — ang **Puzzle Hub**: 5 mode cards + daily-goal ring. **Live na ang lahat ng lima** —
   Play Puzzles, Daily Puzzle, Thematic, Streak at Turbo.
 - **Play** ⭐ — 5 coach opponents (Jaden Pogi 650 → Coach Pogi 2250). Tap-tap na paggalaw, promotion
   picker, undo, flip, sounds, spring animations, eval bar, at "pass & play" para 2-player.
-- **Profile** — rating, tier, stats, at ang 5 coaches. Naka-save sa `localStorage`.
+- **Profile** — rating, tier, stats, at ang 5 coaches. Naka-save sa `localStorage`. May **Sign out**
+  at **Delete account** (may kumpirmasyon muna). Ang delete ay nagbubura ng session, settings at mga
+  naka-save na laro — pero HINDI nito binubura ang subscription at ang daily counters, kaya hindi ito
+  paraan para ma-reset ang free-tier limits.
 
 ---
 
@@ -99,7 +104,7 @@ ito pagkatapos ng **24 oras**. Naka-imbak lahat sa `localStorage` (`biya.analysi
 | **Mga puzzle** | `js/puzzles.js` (tingnan ang format sa baba) |
 | **Piece artwork** | palitan ang mga `.svg` sa `assets/pieces/`, o gamitin ang `piece-path` attribute |
 | **Chess rules** (move gen, SAN, atbp.) | `js/engine.js` — tapos patakbuhin ang `?selftest` |
-| **App layout / mga tab** | `js/app.js` + `css/app.css` |
+| **App layout / routing** | `js/app.js` + `css/app.css` |
 
 ---
 

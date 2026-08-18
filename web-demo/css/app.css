@@ -6,9 +6,17 @@
 /* ---- Site chrome (website showcase) --------------------------------------- */
 body { min-height: 100dvh; }
 
-/* Hide scrollbars everywhere for an app-like look (scrolling still works). */
+/* Hide scrollbars everywhere for an app-like look (scrolling still works).
+   `scrollbar-width` does NOT inherit and `::-webkit-scrollbar` does not cascade, so this pair only
+   covers the page itself — every nested scroll band declares it again. tools/qa/web_shell_check.js
+   fails the build if one forgets. */
 html, body { scrollbar-width: none; -ms-overflow-style: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
+
+/* A <textarea> scrolls by UA default and never declares `overflow`, so no selector scan can find
+   it. One element rule covers all five, in this sheet and in pairing.css. */
+textarea { scrollbar-width: none; -ms-overflow-style: none; }
+textarea::-webkit-scrollbar { width: 0; height: 0; }
 
 .site-banner {
   position: sticky; top: 0; z-index: 50;
@@ -122,23 +130,16 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 
 .screen-title { font-weight: 800; font-size: 27px; letter-spacing: -.4px; margin: 6px 18px 12px; }
 .screen-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 18px 12px; }
+/* A screen-head with a back button in it. `.nav-icon` carries the shared icon size and
+   Apple's 44px minimum hit width — see docs/navigation-chrome.md. */
+.screen-head.with-back { justify-content: flex-start; gap: 4px; }
+.screen-back {
+  width: 40px; height: 40px; flex: none; padding: 0; border: 0; background: none;
+  cursor: pointer; color: var(--fg); font-size: 24px; display: grid; place-items: center;
+}
+.screen-back:active { opacity: .6; }
 .screen-head .screen-title { margin: 0; }
 
-/* ---- Bottom tab bar ------------------------------------------------------- */
-.tabbar {
-  position: sticky; bottom: 0; z-index: 20; display: flex;
-  padding: 10px 8px calc(20px + env(safe-area-inset-bottom, 0px));
-  background: rgba(15, 26, 46, .82); backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3); border-top: 1px solid var(--hairline);
-}
-.tab {
-  flex: 1; background: none; border: 0; cursor: pointer; color: var(--muted-fg);
-  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0;
-  transition: color .15s ease;
-}
-.tab .ico { font-size: 19px; line-height: 1; }
-.tab .lbl { font-size: 10px; font-weight: 500; letter-spacing: .2px; }
-.tab.active { color: var(--gold); }
 
 /* ---- Cards ---------------------------------------------------------------- */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
@@ -305,10 +306,13 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-avatar .ha-initial { font-weight: 800; font-size: 18px; color: var(--on-gold); line-height: 1; }
 .home-avatar .ha-badge { position: absolute; bottom: -2px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; font-size: 10px; line-height: 1; }
 .home-logo-wrap { flex: 1; display: flex; justify-content: center; }
-.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: 50%; border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
+/* A squircle, not a circle: the mark is the "Byaherong COACH APP" collage and a circle crops its
+   wordmark off. --h-logo-r is set by home.js from the login hero's own radius proportion. */
+.home-logo { width: var(--h-logo); height: var(--h-logo); border-radius: var(--h-logo-r); border: 2px solid var(--gold); overflow: hidden; display: block; box-shadow: 0 0 6px rgba(253, 176, 34, .6); }
 .home-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.home-search { width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer; background: var(--home-search-fill); font-size: 17px; line-height: 1; flex: none; }
-.home-search:active { opacity: .7; }
+/* Empty, and exactly the avatar's width. It is what keeps the logo at true screen centre now that
+   the magnifier button is gone — see the comment in home.js's header build. */
+.home-header-balance { width: 38px; height: 38px; flex: none; }
 
 /* Grid — `min-height: 0` / `min-width: 0` are load-bearing: without them a flex child refuses to
    shrink below its content size, the rows stop being exact thirds, and the screen overflows. */
@@ -372,7 +376,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .home-banners { flex: none; display: flex; gap: 8px; margin: 0 14px 10px; align-items: stretch; }
 .home-banner { flex: 1 1 0; min-width: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 8px; border-radius: 12px; text-align: center; background: var(--home-banner-fill); border: 1px solid var(--home-banner-border); }
 .home-banner:active { opacity: .85; }
-.home-banner.sponsor { background: var(--home-sponsor); border-color: transparent; }
 .home-banner.membership { background: var(--home-membership); border-color: transparent; }
 /* Premium's gold wash ALWAYS outranks the colorful purple — the gold state is the reward. */
 .home-banner.premium { background: var(--home-premium-fill); border-color: var(--home-premium-border); }
@@ -396,10 +399,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 /* Seven bands, in the order the RN source renders them (board.tsx:4565-4712). Every number
    arrives as an --an-* custom property set by analysis.js from BiyaAnalysisMetrics, so no
    layout constant is written here — the same rule home.js follows with --h-*.
-   The screen owns the whole phone box: `.view.flush` kills the gutter and `.app-card.an-mode`
-   hides the tab bar, because the original is a pushed route with no tab bar and seven bands
-   cannot spare the ~60px. */
-.app-card.an-mode .tabbar { display: none; }
+   The screen owns the whole phone box: `.view.flush` kills the gutter. It used to also carry
+   `.app-card.an-mode` to hide the tab bar; there is no tab bar any more, so the class and its
+   twenty add/remove calls went with it. */
 
 .an-view {
   height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
@@ -451,6 +453,45 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   padding: var(--an-statusline-pad-v) var(--an-statusline-pad-h);
   background: var(--an-surface); border-top: 1px solid var(--an-divider);
 }
+/* 3b — the line-preview bar. Takes the STATUS LINE's row while an engine line is being walked, so
+   it borrows that row's paddings, min-height and top border and the band never jumps. Only the gap
+   and the two action buttons are its own. `.an-hidden` is toggled by paintPreviewBar. */
+.an-pvbar {
+  flex: none; min-height: var(--an-statusline-h);
+  display: flex; align-items: center; gap: var(--an-pv-gap);
+  padding: var(--an-statusline-pad-v) var(--an-statusline-pad-h);
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
+}
+.an-pvplies {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--an-pv-gap);
+  overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none;
+}
+.an-pvplies::-webkit-scrollbar { height: 0; }
+.an-pvnav {
+  flex: none; background: none; border: 0; cursor: pointer;
+  color: var(--an-text); font-size: var(--an-fs-pvbtn);
+}
+.an-pvnav:disabled { opacity: .35; cursor: default; }
+.an-pvply {
+  flex: none; border: 0; cursor: pointer; background: transparent;
+  color: var(--an-text-muted); font-family: var(--mono); font-weight: 700;
+  font-size: var(--an-fs-pvply);
+  padding: var(--an-token-pad-v) var(--an-token-pad-h);
+  border-radius: var(--an-token-r);
+}
+.an-pvply.played { color: var(--an-text); }
+/* The current ply's chip takes its LINE's arrow colour, set inline by paintPreviewBar, with dark
+   ink over it — the arrow colours are saturated, and `.an-move.active` makes the same swap. */
+.an-pvply.current { color: var(--an-on-gold); }
+.an-pvact {
+  flex: none; border: 0; cursor: pointer; color: var(--an-text-2);
+  background: var(--an-surface-alt); border-radius: var(--an-pv-btn-r);
+  font-size: var(--an-fs-pvbtn); font-weight: 700;
+  padding: var(--an-pv-btn-pv) var(--an-pv-btn-ph);
+}
+.an-pvact.gold { color: var(--an-gold); }
+.an-pvact:active { opacity: .75; }
+
 .an-status {
   flex: none; min-height: var(--an-status-h); display: flex; align-items: center; gap: 6px;
   justify-content: center;
@@ -515,7 +556,37 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .an-move.onpath, .an-alt.onpath { color: var(--an-gold); }
 .an-move.active, .an-alt.active { background: var(--an-gold); color: var(--an-on-gold); }
 
-/* 6 — panels: the ECO explorer, replacing the Lichess masters panel */
+/* Band 6 was the ECO explorer, then a 44px strip of book chips. Both are gone — the client asked
+   for the strip's removal one round after it replaced the panel, and neither was earning its
+   height. The opening NAME survives in the engine panel's info row, which is where the RN source
+   put it. What is left of band 6 is the edit-mode container below.
+
+   `.an-hidden` used to live inside that block and is NOT part of it: the preview bar, the status
+   line and `.an-panels` all toggle with it. */
+.an-hidden { display: none !important; }
+
+/* ---- Navigation icons -------------------------------------------------------------------
+   Back and menu are vectors now, from `js/icons.js`, not the `←` and `☰` characters they used to
+   be. The svg inherits the button's own `color`, so every screen keeps its own tint — pairing gold,
+   coach white, analysis off-white — and this rule only has to say how big it is and that it is
+   centred. `tools/qa/nav_icons_check.js` asserts no glyph comes back. */
+.nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Apple's 44px minimum, applied to WIDTH only. Height comes from the button's own frame, which is
+     36-44 on every screen: the Analysis header is 36 tall, and a 44-tall button inside it spilled
+     4px over the board's top rank and would have stolen taps from a8-h8. Width is the axis that was
+     actually cramped — several of these buttons are 40. */
+  min-width: 44px;
+}
+/* The svg is sized in `em`, so a button that publishes its own `font-size` keeps controlling the
+   icon and one that does not falls back to the design box. `.pzp-back` relied on `--pzh-back-*`,
+   which its own screen never published — the fallback is what makes that harmless. */
+.nav-icon { font-size: var(--nav-icon-size, 24px); }
+.nav-icon > svg { width: 1em; height: 1em; display: block; }
+.nav-icon:active > svg { opacity: .55; }
+
+/* 6 — panels: EDIT MODE ONLY now. Kept, with its `flex: 1 1 auto` / `--an-panels-h` contract
+   intact, because Setup Position renders into it and board_layout_check.js asserts both. */
 /* The band that gives way. It absorbs every bit of slack — a short screen, a taller engine panel,
    a wrapped status line — so none of that can reach the board. `--an-panels-h` is what bandLayout
    says it should get; `flex: 1 1 auto` lets it shrink below that when the engine panel grows. */
@@ -525,28 +596,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   padding: 0 var(--an-panels-pad-h) 6px; background: var(--an-bg); scrollbar-width: none;
 }
 .an-panels::-webkit-scrollbar { width: 0; }
-.an-panel-head {
-  position: sticky; top: 0; background: var(--an-bg); padding: 6px 0 4px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
-  color: var(--an-text-muted);
-}
-.an-panel-empty { font-size: var(--an-fs-status); color: var(--an-text-muted); padding: 4px 0 8px; }
-.an-brow {
-  display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
-  background: var(--an-surface-alt2); border: 0; border-radius: var(--an-tool-radius);
-  color: var(--an-text); cursor: pointer; padding: 5px 8px; margin-bottom: 3px;
-}
-.an-brow:active { opacity: .75; }
-.an-bsan { font: 700 var(--an-fs-move)/1 var(--mono); flex: none; min-width: 46px; }
-.an-beco { font-size: var(--an-fs-opening); font-weight: 700; color: var(--an-gold); flex: none; }
-.an-bname {
-  font-size: var(--an-fs-alt); color: var(--an-text-2); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
-}
-
 /* 7 — engine lines, pinned to the bottom */
+/* THE flexible band now, and there must be exactly one. It used to be `.an-panels`, which hoarded
+   the slack whether or not it had anything to show. `justify-content: flex-end` keeps the content
+   hugging the bottom exactly as it did when this band was `flex: none`, so a short panel does not
+   float up and leave a gap under the move strip. */
 .an-engine {
-  flex: none; background: var(--an-surface); border-top: 1px solid var(--an-divider);
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end;
+  background: var(--an-surface); border-top: 1px solid var(--an-divider);
   padding: var(--an-engine-pad-t) var(--an-engine-pad-h) var(--an-engine-pad-b);
 }
 .an-micro {
@@ -557,23 +614,53 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   height: 100%; width: 50%; background: var(--an-eval-fill);
   transition: width var(--an-eval-anim) ease;
 }
+/* The rows container. `.an-engine` is the band that gives way, and when it does the rows must be
+   DROPPED, not squashed: without `flex: none` below, a short screen shrinks each row while its text
+   keeps its own height, and the overflow paints straight over the move strip above. So the rows keep
+   their natural size and this box clips from the BOTTOM — you lose the third line before the first,
+   which is the right way round. Asserted by board_layout_check §3c. */
+.an-rows {
+  flex: 0 1 auto; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start;
+}
 .an-erow {
-  display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+  flex: none;
+  /* `gap` is `rowSpacing`, not a literal 6. It read 6px until the book chips — the only other
+     reader of `--an-row-spacing` — were deleted and the variable had to find its real home. */
+  display: flex; align-items: flex-start; gap: var(--an-row-spacing); width: 100%; text-align: left;
   background: none; border: 0; color: var(--an-text); cursor: pointer; padding: 2px 3px;
   border-radius: var(--an-tool-radius);
 }
 .an-erow:active { background: var(--an-surface-alt); }
 .an-erow-empty { font-size: var(--an-fs-etext); color: var(--an-text-muted); padding: 3px; }
-.an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: 40px; flex: none; }
-.an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: 38px; flex: none; }
+/* Widths from the metrics layer, not literals: they grew with the type (36→44, 38→46) and two
+   hardcoded copies of 40/38 is exactly the drift `--an-*` exists to prevent. */
+/* The rank badge. `--an-fs-depth`, not `--an-fs-eeval`: every other engine cell is the move strip's
+   size, and a badge that large would out-shout the moves. Its background is set inline, per row, to
+   that line's arrow colour. */
+.an-erank {
+  flex: none; width: var(--an-erank-w); text-align: center;
+  font: 800 var(--an-fs-depth)/1.3 var(--mono); color: var(--an-on-gold);
+  padding: var(--an-erank-pv) 0; border-radius: var(--an-erank-r);
+}
+.an-eeval { font: 700 var(--an-fs-eeval)/1.3 var(--mono); min-width: var(--an-eeval-w); flex: none; }
+.an-esan { font: 800 var(--an-fs-esan)/1.3 var(--mono); min-width: var(--an-esan-w); flex: none; }
+/* Two lines, not one. At the move strip's 13px a single line holds FEWER moves than the old 9px
+   one did, so "bigger text" and "more moves" cancel out unless the continuation can wrap. */
 .an-epv {
   font: 400 var(--an-fs-epv)/1.3 var(--mono); color: var(--an-text-2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--an-engine-lines); line-clamp: var(--an-engine-lines);
 }
 .an-info { display: flex; align-items: center; gap: 6px; padding: 3px 3px 0; }
+/* The depth chip. Its padding is `chipPadding*`, which is what the Swift `infoRow` uses — it read
+   a hardcoded `3px 5px` against the metrics' 4/8, so the browser chip was two pixels tighter than
+   the app's AND than `engineChromeHeight()`'s own budget. Found when the book chips, the only
+   other reader of these variables, were deleted. */
 .an-depth {
   font: 700 var(--an-fs-depth)/1 var(--mono); color: var(--an-text-2); background: var(--an-surface-alt);
-  padding: 3px 5px; border-radius: var(--an-tool-radius); flex: none;
+  padding: var(--an-chip-pad-v) var(--an-chip-pad-h); border-radius: var(--an-tool-radius);
+  flex: none;
 }
 .an-symbol { font-size: var(--an-fs-esan); font-weight: 800; color: var(--an-text); flex: none; }
 .an-opening {
@@ -734,7 +821,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 .an-bs-input.narrow { width: 80px; flex: none; }
 .an-bs-input::placeholder { color: var(--an-text-muted); }
-.an-bs-notes { min-height: 56px; resize: vertical; }
+.an-bs-notes { min-height: 56px; resize: none; }
 .an-bs-results {
   display: flex; gap: var(--an-bs-res-gap);
   margin: 2px 0 var(--an-bs-res-mb);
@@ -860,7 +947,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 /* The board needs no edit-mode override any more: it is already the fixed `BOARD_SIZE` square the
    source's `editBoard` style specifies, in edit mode and out of it. Only the panel band changes,
    because the editor is taller than the ECO list and wants the room the hidden bands free up. */
-.an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; }
+.an-view.editing .an-panels { flex: 1 1 auto; height: auto; max-height: none; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.an-view.editing .an-panels::-webkit-scrollbar { width: 0; height: 0; }
 .an-view.editing .an-engine { display: none; }
 .an-view.editing .an-strip { display: none; }
 /* board.tsx:4616 hides the whole status+toolbar row in edit mode, in its own words "to maximise
@@ -940,7 +1028,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 
 /* PGN import/export, the annotation picker and the variation card — all in the bottom sheet */
 .an-md-pgn-input {
-  width: 100%; box-sizing: border-box; border: 0; outline: none; resize: vertical;
+  width: 100%; box-sizing: border-box; border: 0; outline: none; resize: none;
   font-family: var(--mono); background: var(--an-md-pgn-in-bg);
   border-radius: var(--an-md-pgn-in-r); padding: var(--an-md-pgn-in-pad);
   color: var(--an-md-pgn-in-color); font-size: var(--an-md-pgn-in-fs);
@@ -1095,10 +1183,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzh-title { font-size: var(--pzh-title-fs); font-weight: 700; }
 .pzp-title { font-size: var(--pzp-title-fs); font-weight: 700; }
 .pzh-logo {
-  width: var(--pzh-back-w); height: var(--pzh-back-w); border-radius: 50%;
-  border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6);
+  width: var(--pzh-back-w); height: var(--pzh-back-w); border-radius: var(--brand-radius);
+  border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6); overflow: hidden;
 }
-.pz-logo { width: var(--pz-logo); height: var(--pz-logo); border-radius: 50%;
+.pz-logo { width: var(--pz-logo); height: var(--pz-logo); border-radius: var(--brand-radius); overflow: hidden;
            border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6); }
 .pz-spacer { width: var(--pz-back-w); }
 
@@ -1204,7 +1292,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
                   font-weight: 600; margin-top: var(--pzp-stat-mt); }
 .pzp-divider { width: var(--pzp-div-w); height: var(--pzp-div-h); background: var(--pzp-div-c); }
 .pzp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-            padding: var(--pzp-top-gap) var(--pzp-top-ph) 0; }
+            padding: var(--pzp-top-gap) var(--pzp-top-ph) 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pzp-body::-webkit-scrollbar { width: 0; height: 0; }
 .pzp-bottom { flex: none; display: flex; flex-direction: column; gap: var(--pzp-bot-gap);
               padding: var(--pzp-bot-pt) var(--pzp-bot-ph) var(--pzp-bot-pb); }
 .pzp-info {
@@ -1280,7 +1371,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pz-delta { font-size: var(--pz-delta-fs); font-weight: 700; margin-top: var(--pz-delta-mt);
             min-height: 1em; }
 .pz-bottom { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-             padding: var(--pz-bottom-pad-t) var(--pz-bottom-pad-h) 0; }
+             padding: var(--pz-bottom-pad-t) var(--pz-bottom-pad-h) 0;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pz-bottom::-webkit-scrollbar { width: 0; height: 0; }
 .pz-wrong-row { display: flex; gap: var(--pz-row-gap); }
 .pz-wrong-row .pz-btn { flex: 1 1 0; }
 .pz-btn { border: 0; cursor: pointer; font-size: var(--pz-btn-fs); font-weight: 700;
@@ -1328,7 +1422,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
                   padding: var(--pz-sheet-input-pad-v) var(--pz-sheet-input-pad-h);
                   margin-bottom: var(--pz-sheet-input-mb);
                   border: 1px solid var(--pz-sheet-input-border); font-family: inherit; }
-.pz-sheet-notes { min-height: var(--pz-sheet-notes-h); resize: vertical; }
+.pz-sheet-notes { min-height: var(--pz-sheet-notes-h); resize: none; }
 .pz-sheet-row { display: flex; gap: var(--pz-sheet-row-gap); margin-top: var(--pz-sheet-row-mt); }
 .pz-sheet-row .pz-btn { flex: 1 1 0; font-size: var(--pz-sheet-btn-fs); }
 
@@ -1346,13 +1440,21 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzd-header { display: flex; align-items: center; justify-content: space-between; flex: none;
               padding: var(--pzd-pad-t) var(--pzd-pad-h) var(--pzd-pad-b); }
 .pzd-title { font-size: var(--pzd-title-fs); font-weight: 700; }
-.pzd-back { background: none; border: 0; color: var(--pz-text); cursor: pointer; padding: 0;
-            width: 40px; height: 40px; font-size: 24px;
-            display: flex; align-items: center; justify-content: center; }
-.pzd-logo { width: 30px; height: 30px; border-radius: 50%; flex: none;
+/* Colour only. The box, the centring and the icon size come from `.nav-icon` — this rule used to
+   hardcode 40/40/24 with no CSS variables at all, across five screens. */
+.pzd-back { background: none; border: 0; color: var(--pz-text); cursor: pointer; padding: 0; }
+.pzd-logo { width: 30px; height: 30px; border-radius: var(--brand-radius); flex: none; overflow: hidden;
             border: 2px solid var(--pz-gold); box-shadow: 0 0 6px rgba(253,176,34,.6); }
+/* The mark inside every one of these rings. `AppLogo.tsx` is a ring AROUND an image; the browser
+   ported the ring to nine headers and never the image, so all nine drew an empty gold circle. */
+.pzh-logo img, .pz-logo img, .pzd-logo img {
+  width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;
+}
 .pzd-content { flex: 1 1 auto; min-height: 0; overflow-y: auto;
-               padding: 0 var(--pzd-content-ph) var(--pzd-content-pb); }
+               padding: 0 var(--pzd-content-ph) var(--pzd-content-pb);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.pzd-content::-webkit-scrollbar { width: 0; height: 0; }
 .pzd-hero { background: var(--pz-card); border-radius: var(--pzd-hero-r);
             padding: var(--pzd-hero-pad); margin-bottom: var(--pzd-hero-mb);
             border: 1px solid var(--pzd-hero-border);
@@ -1537,7 +1639,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzk-list-title { flex: none; font-size: var(--pzk-list-title); font-weight: 700;
                   color: var(--pz-text);
                   padding: var(--pzk-list-pt) var(--pzk-list-ph) var(--pzk-list-pb); }
-.pzk-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzk-list-ph); }
+.pzk-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzk-list-ph); scrollbar-width: none; -ms-overflow-style: none; }
+.pzk-list::-webkit-scrollbar { width: 0; height: 0; }
 .pzk-row { display: flex; align-items: center; gap: var(--pzk-row-gap);
            background: var(--pz-card); border-radius: var(--pzk-row-r);
            padding: var(--pzk-row-pv) var(--pzk-row-ph);
@@ -1685,7 +1788,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 .pzr-list-title { flex: none; font-size: var(--pzr-list-title); font-weight: 700;
                   color: var(--pz-text);
                   padding: var(--pzr-list-pt) var(--pzr-list-ph) var(--pzr-list-pb); }
-.pzr-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzr-list-ph); }
+.pzr-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--pzr-list-ph); scrollbar-width: none; -ms-overflow-style: none; }
+.pzr-list::-webkit-scrollbar { width: 0; height: 0; }
 .pzr-row { display: flex; align-items: center; gap: var(--pzr-row-gap);
            background: var(--pz-card); border-radius: var(--pzr-row-r);
            padding: var(--pzr-row-pv) var(--pzr-row-ph); margin-bottom: var(--pzr-row-mb); }
@@ -2195,7 +2299,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   font-size: var(--lg-sheet-body-size);
   color: var(--lg-sheet-body-color);
   line-height: calc(var(--lg-sheet-body-size) + var(--lg-sheet-line) + 4px);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.lg-sheet-body::-webkit-scrollbar { width: 0; height: 0; }
 
 .lg-sheet-body p { margin: 0 0 10px; }
 .lg-sheet-body p:last-child { margin-bottom: 0; }
@@ -2244,6 +2350,85 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 
 .lg-signout:active { opacity: .82; }
 
+/* Delete account. Quieter than Sign out on purpose — rarer and far more destructive — but on the
+   same card and one tap from the Home avatar, which is what Guideline 5.1.1(v) asks for. */
+.lg-delete {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.lg-delete:active { opacity: .82; }
+
+/* The confirm. A modal inside .app-card rather than a route: OPEN_ROUTES is asserted to be exactly
+   home/login/paywall/profile, and a destructive confirm is not somewhere you navigate to. */
+.lg-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, .55);
+}
+
+.lg-confirm-box {
+  width: 100%;
+  max-width: 300px;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+
+.lg-confirm-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+
+.lg-confirm-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted-fg);
+  max-height: 40vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lg-confirm-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+.lg-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lg-confirm-no, .lg-confirm-yes {
+  flex: 1;
+  padding: 10px 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lg-confirm-no { background: rgba(255, 255, 255, .10); color: var(--fg); }
+.lg-confirm-yes { background: var(--red); color: #fff; }
+
 /* ---- entrances ---- */
 
 @keyframes lg-pop {
@@ -2287,7 +2472,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   height: 100%;
   overflow-y: auto;
   background: var(--pw-c-screen-bg);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.pw-view::-webkit-scrollbar { width: 0; height: 0; }
 
 /* ---- header ---- */
 
@@ -2576,8 +2763,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
   color: var(--pw-c-body);
 }
 
-/* The Home header's logo, repeated in the paywall header on the offer state. */
-.pw-logo { width: var(--pw-logo-size); height: var(--pw-logo-size); border-radius: 50%; }
+/* The brand mark, in the paywall header on the offer state. It used to be `app-icon.png` in a
+   `border-radius: 50%` circle — the last gold knight left in the app, and the only true circular
+   crop of it. The Swift paywall had already been drawing the collage in a squircle, so this was a
+   live divergence as well as the thing the client screenshotted. */
+.pw-logo {
+  width: var(--pw-logo-size); height: var(--pw-logo-size);
+  border-radius: var(--brand-radius); object-fit: cover;
+}
 
 @keyframes pw-fade {
   from { opacity: 0; }
@@ -2606,3 +2799,226 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 .pw-profile-cta:active { opacity: .82; }
+
+/* ---- Opening Tree ---------------------------------------------------------- */
+/* Three screens behind one class family, mirroring OpeningTreeScreens.swift. Every number arrives
+   as an --op-* custom property set by js/openings.js from BiyaOpeningMetrics, which is itself
+   asserted against tools/metrics/opening_styles.json — so no layout constant is written here, the
+   same rule the Home and Analysis screens follow.
+
+   TWO namespaces on purpose: --op-* is geometry, --opc-* is colour. They collided otherwise —
+   `buildBorder`, `inputBorder` and `infoBorder` each name a WIDTH in LAYOUT and a COLOUR in
+   PALETTE, and a single prefix let the colour silently overwrite the width. */
+
+.op-view {
+  height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: var(--opc-screenBg); color: var(--opc-text); font-family: var(--font);
+}
+
+/* header */
+.op-header {
+  flex: none; display: flex; align-items: center;
+  padding: var(--op-headerPadTop) var(--op-screenPadH) var(--op-headerPadBottom);
+}
+.op-back {
+  /* Height and colour only. `.nav-icon` owns the icon size, the 44px minimum WIDTH and the
+     pressed state — see the note beside it. */
+  height: var(--op-backSize); flex: none;
+  background: none; border: 0; cursor: pointer; padding: 0;
+  color: var(--opc-text); font-size: var(--op-backIconSize);
+}
+.op-title { flex: 1; text-align: center; font-weight: 800; font-size: var(--op-titleSize); }
+.op-balance { width: var(--op-backSize); height: var(--op-backSize); flex: none; }
+
+/* list */
+.op-list {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--op-listGap);
+  padding: 0 var(--op-screenPadH) var(--op-screenPadH);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.op-list::-webkit-scrollbar { width: 0; height: 0; }
+.op-card {
+  display: flex; align-items: center; gap: var(--op-cardGap);
+  background: var(--opc-card); border-radius: var(--op-cardRadius); padding: var(--op-cardPad);
+}
+.op-card-main { flex: 1; min-width: 0; }
+.op-tree-name {
+  font-size: var(--op-treeNameSize); font-weight: 700; color: var(--opc-text);
+  margin-bottom: var(--op-treeNameGap);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-tree-meta {
+  font-size: var(--op-treeMetaSize); color: var(--opc-muted); line-height: var(--op-treeMetaLine);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-card-actions {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: var(--op-actionGap); flex: none;
+}
+.op-load {
+  background: var(--opc-loadFill); color: var(--opc-gold); border: 0; cursor: pointer;
+  border-radius: var(--op-loadRadius); padding: var(--op-loadPadV) var(--op-loadPadH);
+  font: 700 var(--op-loadTextSize)/1 inherit;
+}
+.op-delete {
+  background: none; color: var(--opc-danger); border: 0; cursor: pointer;
+  padding: var(--op-loadPadV) var(--op-loadPadH); font: 600 var(--op-loadTextSize)/1 inherit;
+}
+.op-load:active, .op-delete:active { opacity: .7; }
+
+/* empty */
+.op-empty {
+  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 0 var(--op-emptyPadH) var(--op-emptyPadBottom);
+}
+.op-empty-icon {
+  font-size: var(--op-emptyIconSize); margin-bottom: var(--op-emptyIconGap); line-height: 1;
+}
+.op-empty-title {
+  font-size: var(--op-emptyTitleSize); font-weight: 700; margin-bottom: var(--op-emptyTitleGap);
+}
+.op-empty-sub {
+  font-size: var(--op-emptySubSize); color: var(--opc-muted); line-height: var(--op-emptySubLine);
+}
+
+/* footer */
+.op-footer {
+  flex: none; padding: var(--op-footerPadV) var(--op-screenPadH);
+  border-top: var(--op-footerBorder) solid var(--opc-card);
+}
+.op-build {
+  width: 100%; background: var(--opc-buildBg); color: var(--opc-text); cursor: pointer;
+  border: var(--op-buildBorder) solid var(--opc-buildBorder);
+  border-radius: var(--op-buildRadius); padding: var(--op-buildPadV) 0;
+  font: 700 var(--op-buildTextSize)/1 inherit;
+}
+.op-build:active { opacity: .85; }
+
+/* form */
+.op-form {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 0 var(--op-screenPadH) var(--op-formPadBottom);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.op-form::-webkit-scrollbar { width: 0; height: 0; }
+.op-label {
+  font-size: var(--op-labelSize); font-weight: 600; color: var(--opc-muted);
+  letter-spacing: var(--op-labelTracking);
+  margin: var(--op-labelTop) 0 var(--op-labelBottom);
+}
+.op-input {
+  width: 100%; box-sizing: border-box; background: var(--opc-card); color: var(--opc-text);
+  border: var(--op-inputBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-inputRadius);
+  padding: var(--op-inputPadV) var(--op-inputPadH);
+  font: 400 var(--op-inputTextSize)/1.4 inherit;
+}
+.op-textarea {
+  min-height: var(--op-pgnMinHeight);
+  /* `resize` has no counterpart on iOS, so a drag handle here is a control the Swift app cannot
+     have. It also put a second scrollbar hard against `.op-form`'s, which is what the client
+     screenshotted. `web_shell_check.js` bans any value but `none`. */
+  resize: none;
+  font-family: ui-monospace, monospace;
+}
+.op-toggles { display: flex; gap: var(--op-toggleGap); }
+.op-toggle {
+  flex: 1 1 0; min-width: 0; background: var(--opc-card); color: var(--opc-muted); cursor: pointer;
+  border: var(--op-toggleBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-toggleRadius); padding: var(--op-togglePadV) 0;
+  font: 600 var(--op-toggleTextSize)/1 inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-toggle.active {
+  background: var(--opc-gold); border-color: var(--opc-gold); color: var(--opc-onGold);
+}
+.op-note {
+  background: var(--opc-infoBg);
+  border: var(--op-infoBorder) solid var(--opc-infoBorder);
+  border-radius: var(--op-infoRadius); padding: var(--op-infoPad);
+  margin: var(--op-infoTop) 0 var(--op-infoBottom);
+}
+.op-note-title {
+  color: var(--opc-gold); font-size: var(--op-infoTitleSize); font-weight: 600;
+  margin-bottom: var(--op-infoTitleGap);
+}
+.op-note-sub {
+  color: var(--opc-infoText); font-size: var(--op-infoSubSize); line-height: var(--op-infoSubLine);
+}
+.op-error {
+  background: var(--opc-errorBg); border: var(--op-infoBorder) solid var(--opc-errorBorder);
+  border-radius: var(--op-infoRadius); padding: var(--op-infoPad);
+  margin-top: var(--op-infoBottom);
+  color: var(--opc-errorText); font-size: var(--op-infoSubSize); font-weight: 600;
+}
+.op-submit {
+  width: 100%; background: var(--opc-gold); color: var(--opc-onGold); border: 0; cursor: pointer;
+  border-radius: var(--op-submitRadius); padding: var(--op-submitPadV) 0;
+  margin-top: var(--op-submitTop); font: 700 var(--op-submitTextSize)/1 inherit;
+}
+.op-submit:active { opacity: .85; }
+
+/* explorer */
+.op-board { flex: none; margin-bottom: var(--op-boardGap); }
+.op-board chess-board { width: 100%; --board-radius: 0; }
+.op-history {
+  flex: none; background: var(--opc-cardDeep); color: var(--opc-gold);
+  border-radius: var(--op-historyRadius);
+  padding: var(--op-historyPadV) var(--op-historyPadH);
+  margin: 0 var(--op-screenPadH) var(--op-historyBottom);
+  font: 600 var(--op-historySize)/1.4 inherit;
+}
+.op-nav {
+  flex: none; display: flex; justify-content: center; gap: var(--op-navGap);
+  padding: 0 var(--op-screenPadH); margin-bottom: var(--op-navBottom);
+}
+.op-navbtn {
+  background: var(--opc-card); color: var(--opc-text); cursor: pointer;
+  border: var(--op-navBorder) solid var(--opc-inputBorder);
+  border-radius: var(--op-navRadius);
+  padding: var(--op-navPadV) var(--op-navPadH);
+  font: 600 var(--op-navTextSize)/1 inherit;
+}
+.op-navbtn.disabled { opacity: var(--op-navDisabledOpacity); cursor: default; }
+.op-navbtn:not(.disabled):active { opacity: .7; }
+.op-moves {
+  flex: 1 1 0; min-height: 0; overflow-y: auto;
+  padding: 0 var(--op-screenPadH) var(--op-movesPadBottom);
+  display: flex; flex-direction: column; gap: var(--op-rowBottom);
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.op-moves::-webkit-scrollbar { width: 0; height: 0; }
+.op-move {
+  display: flex; align-items: center; gap: var(--op-rowGap); width: 100%; text-align: left;
+  background: var(--opc-card); border: 0; cursor: pointer; color: inherit; font-family: inherit;
+  border-radius: var(--op-rowRadius); padding: var(--op-rowPad);
+}
+.op-move:active { opacity: .85; }
+.op-san {
+  width: var(--op-sanWidth); flex: none;
+  font: 700 var(--op-sanSize)/1 inherit; color: var(--opc-text);
+}
+.op-stats { flex: 1; min-width: 0; }
+.op-statline {
+  display: flex; justify-content: space-between; margin-bottom: var(--op-statGap);
+  font-size: var(--op-statSize); color: var(--opc-muted);
+}
+.op-bar {
+  display: flex; height: var(--op-barHeight); border-radius: var(--op-barRadius);
+  overflow: hidden; background: var(--opc-cardDeep);
+}
+.op-seg { height: 100%; }
+.op-seg-win { background: var(--opc-win); }
+.op-seg-draw { background: var(--opc-draw); }
+.op-seg-loss { background: var(--opc-loss); }
+.op-chevron {
+  flex: none; font-size: var(--op-chevronSize); font-weight: bold;
+  color: var(--opc-chevron); line-height: 1;
+}
+.op-nomoves {
+  margin: 0 var(--op-screenPadH); background: var(--opc-card);
+  border-radius: var(--op-noMovesRadius); padding: var(--op-noMovesPad);
+  text-align: center; color: var(--opc-muted); font-size: var(--op-noMovesSize);
+}

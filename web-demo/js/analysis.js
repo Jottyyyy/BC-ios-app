@@ -174,7 +174,6 @@ var BiyaAnalysisBoard = (function () {
   }
 
   /** Book continuations from the cursor — the ECO panel's rows, replacing the masters explorer. */
-  function bookContinuations(s) { return BOOK.continuations(position(s)); }
 
   /** One arrow per engine line, rank 0 = best. Drawn straight from the PV's first move. */
   function arrows(s) {
@@ -188,8 +187,13 @@ var BiyaAnalysisBoard = (function () {
     return out;
   }
 
-  /** How many PV plies the engine row shows after the move itself (board.tsx:2827). */
-  var PV_PREVIEW = 6;
+  /**
+   * How many PV plies the engine row shows after the move itself.
+   *
+   * DEVIATION — the source shows 6. Twelve, because 6 clipped the stronger presets' real output;
+   * the default preset's ~6-ply search is topped up by the engine's TT-extended PV instead.
+   */
+  var PV_PREVIEW = 12;
 
   /** One row per engine line: eval · SAN · continuation (board.tsx:2807-2831). */
   function engineRows(s) {
@@ -198,15 +202,102 @@ var BiyaAnalysisBoard = (function () {
       var pv = ln.pv && ln.pv.length ? ln.pv[0] : null;
       return {
         rank: i,
+        // 1-based, because "line 0" means nothing to a player. Mirrors EngineRow.rankLabel.
+        rankLabel: String(i + 1),
         evalText: AN.formatScore(ln.score),
         san: ln.pvSAN && ln.pvSAN.length ? ln.pvSAN[0] : '',
         continuation: (ln.pvSAN || []).slice(1, 1 + PV_PREVIEW).join(' '),
         uci: pv ? E.moveUci(pv) : '',
+        // The WHOLE line, so the panel can walk it on the board and not just play its first move.
+        pvUCI: (ln.pv || []).map(function (m) { return E.moveUci(m); }),
         from: pv ? pv.from : -1,
         to: pv ? pv.to : -1,
         depth: ln.depth
       };
     });
+  }
+
+  // ---- the line preview (pure) -------------------------------------------------
+  //
+  // Tapping an engine line used to play its FIRST move into the tree and nothing else — you could
+  // not see the variation the engine was actually recommending. This walks the whole line, and the
+  // move tree is not touched until the user asks for it with +.
+  //
+  // Pure and value-shaped on purpose: every transition is a function of the previous value, so the
+  // whole interaction is assertable with no DOM. Mirrors BiyaherongCoachCore.LinePreview exactly;
+  // `previewPositionOf` below is the one part that needs a board.
+  //
+  // A preview is `{ sans, uci, ply, rank }`. `uci` rather than move objects because that is what
+  // `engineRows` carries, and re-resolving each one against the position it is played from is also
+  // the legality check: a line left over from a previous position simply refuses to start.
+
+  /** Enter on the line's first move. null when the row has nothing to walk. */
+  function previewStart(row) {
+    var tail = row.continuation ? row.continuation.split(' ') : [];
+    var sans = [row.san].concat(tail).filter(function (x) { return !!x; });
+    // Trimmed to a common length so `sans.length === uci.length` holds for the whole preview: the
+    // continuation is capped at PV_PREVIEW SANs while pvUCI carries the engine's full line, and a
+    // ply you cannot label is a ply you should not be able to step to.
+    var pv = row.pvUCI || [];
+    var n = Math.min(sans.length, pv.length);
+    if (!n) return null;
+    return { sans: sans.slice(0, n), uci: pv.slice(0, n), ply: 1, rank: row.rank };
+  }
+
+  function previewCanStepForward(p) { return !!p && p.ply < p.uci.length; }
+  /** What + commits: everything currently on the board, and nothing beyond it. */
+  function previewMovesToCommit(p) { return p ? p.uci.slice(0, p.ply) : []; }
+
+  /**
+   * Step inside the line. **null means LEAVE the preview** — which is what the back arrow at ply 1
+   * does. Stepping past the end is a no-op rather than an exit: the two ends are not symmetrical,
+   * because there is somewhere to go back to and nowhere to go forward to.
+   */
+  function previewStepped(p, delta) {
+    var next = p.ply + delta;
+    if (next <= 0) return null;
+    if (next > p.uci.length) return p;
+    return { sans: p.sans, uci: p.uci, ply: next, rank: p.rank };
+  }
+
+  /** Jump straight to a ply by tapping its chip. Out of range is a no-op, never an exit. */
+  function previewJumped(p, ply) {
+    if (ply <= 0 || ply > p.uci.length) return p;
+    return { sans: p.sans, uci: p.uci, ply: ply, rank: p.rank };
+  }
+
+  /** One cell of the preview bar. `ply` is 1-based, so it hands straight back to previewJumped. */
+  function previewTokensOf(p) {
+    if (!p) return [];
+    return p.sans.map(function (san, i) {
+      var n = i + 1;
+      return { ply: n, san: san, played: n <= p.ply, isCurrent: n === p.ply };
+    });
+  }
+
+  /**
+   * Whether a row's line can start from the cursor at all. A snapshot can outlive the position it
+   * was computed for, and a line that will not play is not a line worth entering.
+   */
+  function canPreview(s, row) {
+    if (!row.pvUCI || !row.pvUCI.length) return false;
+    return !!E.parseUci(position(s), row.pvUCI[0]);
+  }
+
+  /**
+   * The position a preview is showing and the move that got there, or null when any ply fails to
+   * resolve — the same staleness guard as canPreview, applied to the whole walked prefix.
+   */
+  function previewPositionOf(s, p) {
+    var pos = position(s), last = null;
+    for (var i = 0; i < p.ply; i++) {
+      var m = E.parseUci(pos, p.uci[i]);
+      if (!m) return null;
+      last = m;
+      pos = E.makeMove(pos, m);
+    }
+    if (!last) return null;
+    return { position: pos, last: last };
   }
 
   /**
@@ -345,8 +436,9 @@ var BiyaAnalysisBoard = (function () {
   }
 
   /** The king square to flash, or null. */
-  function checkSquare(s) {
-    var pos = position(s);
+  function checkSquare(s) { return checkSquareOf(position(s)); }
+  /** The same rule for a bare position — the line preview shows one that is not in the tree. */
+  function checkSquareOf(pos) {
     var st = E.status(pos);
     return (st === 'check' || st === 'checkmate') ? E.kingSquare(pos, pos.sideToMove) : null;
   }
@@ -701,11 +793,6 @@ var BiyaAnalysisBoard = (function () {
     eq(BOOK.contains(deep.tree.current.key), false, 'ply 16 is out of book');
     eq(openingText(deep), 'B90: Sicilian Defense: Najdorf Variation, English Attack',
        'leaving the book keeps the last named line rather than going blank');
-    eq(bookContinuations(deep).length, 0, 'and offers no continuations from out of book');
-    var cont = bookContinuations(createSession());
-    expect(cont.length > 10, 'the start position has many book continuations, got ' + cont.length);
-    expect(cont.every(function (c, i, a) { return i === 0 || a[i - 1].san <= c.san; }),
-           'continuations are sorted by SAN');
 
     // 12. arrows and engine rows come straight from a snapshot
     var fake = createSession();
@@ -727,8 +814,9 @@ var BiyaAnalysisBoard = (function () {
     var rows = engineRows(fake);
     eq(rows[0].san, 'e4', 'the row names its move');
     eq(rows[0].evalText, '+0.3', 'the row formats its score');
-    eq(rows[0].continuation, 'e5 Nf3 Nc6 Bb5 a6 Ba4',
-       'the continuation shows six plies after the move');
+    eq(rows[0].continuation, 'e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6',
+       'the continuation shows every ply it has, up to PV_PREVIEW');
+    expect(PV_PREVIEW > 6, "and PV_PREVIEW is past the source's 6, so a deep search is not clipped");
     eq(rows[1].continuation, 'd5', 'a short PV shows what it has');
     eq(isStale(fake), false, 'a snapshot matching the cursor is fresh');
     eq(evalParts(fake).cp, 30, 'evalParts carries the centipawns');
@@ -736,6 +824,68 @@ var BiyaAnalysisBoard = (function () {
     eq(evalParts(fake).winner, null, 'and no terminal winner');
     near(evalFraction(fake), 0.53, 'a +30cp eval nudges the bar');
     eq(evalSymbol(fake), '=', '+30cp is still equal');
+
+    // 12b. The line preview — the state machine behind "tap a line to play it out". Mirrors
+    //      BiyaherongCoachCore.LinePreview; ParityRunner asserts the same cases on the Swift side.
+    var lp = createSession();
+    var lpSans = ['e4', 'e5', 'Nf3', 'Nc6'], lpMoves = [], lpWalk = position(lp);
+    lpSans.forEach(function (sn) {
+      var m = E.parseSan(lpWalk, sn);
+      lpMoves.push(m);
+      lpWalk = E.makeMove(lpWalk, m);
+    });
+    lp.snapshot = {
+      fen: E.START_FEN, depth: 4, nodes: 1, isFinal: true, terminal: null,
+      score: { kind: 'cp', cp: 30 },
+      lines: [{ rank: 1, score: { kind: 'cp', cp: 30 }, pv: lpMoves, pvSAN: lpSans, depth: 4 }]
+    };
+    var prow = engineRows(lp)[0];
+    eq(prow.pvUCI.length, 4, 'the row carries the WHOLE line, not just its first move');
+    expect(canPreview(lp, prow), 'a line computed for this position can be walked');
+    var pv1 = previewStart(prow);
+    eq(pv1.ply, 1, 'a preview enters on the first move');
+    eq(pv1.sans.join(' '), 'e4 e5 Nf3 Nc6', 'and labels every ply');
+    eq(pv1.uci.length, pv1.sans.length, 'sans and uci are the same length');
+    eq(pv1.rank, 0, 'and it remembers which line it came from');
+    // `rows[0]` above has eight SANs behind a one-move pv — exactly the shape the trim exists for.
+    eq(previewStart(rows[0]).sans.length, 1,
+       'a line with more SANs than moves is trimmed to what can actually be played');
+    eq(previewStart({ rank: 0, san: '', continuation: '', pvUCI: [] }), null,
+       'a row with no line has nothing to preview');
+
+    var toks = previewTokensOf(pv1);
+    eq(toks.length, 4, 'one token per ply');
+    expect(toks[0].played && toks[0].isCurrent, 'the first token is played and current');
+    expect(!toks[1].played && !toks[1].isCurrent, 'the ones ahead of the cursor are neither');
+    eq(toks[3].ply, 4, 'tokens are 1-based, so they hand straight back to previewJumped');
+    eq(previewTokensOf(null).length, 0, 'no preview, no tokens');
+
+    eq(previewStepped(pv1, -1), null, 'stepping off the FRONT leaves the preview');
+    eq(previewStepped(pv1, 1).ply, 2, 'stepping forward advances one ply');
+    var pvEnd = previewJumped(pv1, 4);
+    eq(pvEnd.ply, 4, 'a jump lands on the ply that was tapped');
+    eq(previewStepped(pvEnd, 1), pvEnd, 'stepping past the END is a no-op, NOT an exit');
+    eq(previewJumped(pv1, 9), pv1, 'a jump out of range is a no-op');
+    eq(previewJumped(pv1, 0), pv1, 'and so is a jump to ply 0');
+    expect(previewCanStepForward(pv1), 'ply 1 of 4 can step forward');
+    expect(!previewCanStepForward(pvEnd), 'the last ply cannot');
+    eq(previewMovesToCommit(pv1).length, 1, '+ commits only what is on the board');
+    eq(previewMovesToCommit(pvEnd).length, 4, 'and all of it once the line has been walked');
+
+    var pvSt1 = previewPositionOf(lp, pv1);
+    eq(E.moveUci(pvSt1.last), 'e2e4', 'the preview reports the move that got there');
+    eq(pvSt1.position.sideToMove, E.BLACK, 'and the position after it');
+    eq(E.toFEN(previewPositionOf(lp, pvEnd).position), E.toFEN(lpWalk),
+       'walking the whole line reaches the line’s end position');
+    eq(E.toFEN(position(lp)), E.START_FEN, 'and the SESSION never moved — nothing was committed');
+
+    // A snapshot can outlive the position it was computed for. Such a line refuses to start, and
+    // refuses to walk: this is the guard that keeps a stale tap from playing a nonsense move.
+    var pvStale = createSession();
+    playSan(pvStale, 'd4');
+    pvStale.snapshot = lp.snapshot;
+    expect(!canPreview(pvStale, prow), 'a line that no longer plays from here refuses to start');
+    eq(previewPositionOf(pvStale, pv1), null, 'and refuses to walk');
 
     // 13. mate and terminal scores in the bar
     var mate = createSession();
@@ -1081,6 +1231,14 @@ var BiyaAnalysisBoard = (function () {
   var editorPiece = null;             // the palette selection, or PE.ERASER, or null
   var lastTapSquare = null;           // the double-tap-to-remove gesture (350ms)
   var lastTapAt = 0;
+  // How many engine rows the last `planEngine()` said would fit. Recomputed on every engine paint
+  // rather than cached against a row count: an early paint can measure a half-laid-out screen, and
+  // a cache keyed on "did the row count change" then never re-plans. A few `offsetHeight` reads a
+  // few times per search is not worth a staleness bug.
+  var enginePlanRows = 0;
+  // The engine line being walked on the board, or null. `{ sans, uci, ply, rank }`, mirroring
+  // AnalysisVM.LinePreview — see the block comment above `previewLine` below.
+  var preview = null;
 
   /** `<kind>-<w|b>.svg`, the naming the piece set and SVGVector.swift both use. */
   var PIECE_FILE = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
@@ -1136,6 +1294,32 @@ var BiyaAnalysisBoard = (function () {
     var bands = MET.bandLayout(box.height, edge);
     root.style.setProperty('--an-board-edge', bands.board + 'px');
     root.style.setProperty('--an-panels-h', bands.panels + 'px');
+    planEngine(ui && ui.rows ? ui.rows.children.length : MET.BANDS.engineMaxRows);
+  }
+
+  /**
+   * How many engine rows to draw, and whether they may wrap.
+   *
+   * MEASURED, not estimated: the other bands are all `flex: none`, so summing their real heights
+   * gives the engine band's budget exactly, and nothing here feeds back into their sizes. The Swift
+   * twin has to compute the same number from `AnalysisLayout.engineAvailable` because it has no DOM
+   * — the two agree on the DECISION, which is `MET.enginePlan`, not on how the input was obtained.
+   *
+   * A wrong answer is survivable either way: `.an-rows` clips, so it costs a hidden row and never an
+   * overdrawn move strip.
+   */
+  function planEngine(wanted) {
+    if (!root || !ui) return;
+    // A screen that is not laid out yet measures as nothing; keep the last plan rather than
+    // computing a plan for a zero-height band and caching it forever.
+    if (!root.clientHeight) return;
+    var avail = root.clientHeight;
+    Array.prototype.forEach.call(root.children, function (c) {
+      if (c !== ui.engine) avail -= c.offsetHeight;
+    });
+    var plan = MET.enginePlan(avail, wanted);
+    enginePlanRows = plan.rows;
+    root.style.setProperty('--an-engine-lines', String(plan.lines));
   }
 
   /**
@@ -1178,6 +1362,29 @@ var BiyaAnalysisBoard = (function () {
     set('--an-engine-pad-h', B.enginePaddingH + 'px');
     set('--an-engine-pad-t', B.enginePaddingTop + 'px');
     set('--an-engine-pad-b', B.enginePaddingBottom + 'px');
+    // `--an-row-spacing` and `--an-chip-pad-*` used to be read only by the book chips. They now
+    // feed `.an-erow`'s gap and `.an-depth`'s padding, which had been carrying hardcoded copies of
+    // the same numbers — the drift `--an-eeval-w` / `--an-esan-w` was fixed for last round.
+    set('--an-row-spacing', B.rowSpacing + 'px');
+    set('--an-chip-pad-h', B.chipPaddingH + 'px');
+    set('--an-chip-pad-v', B.chipPaddingV + 'px');
+    set('--an-eeval-w', B.engineEvalWidth + 'px');
+    set('--an-esan-w', B.engineSanWidth + 'px');
+    set('--an-erank-w', B.engineRankWidth + 'px');
+    set('--an-erank-r', B.engineRankRadius + 'px');
+    set('--an-erank-pv', B.engineRankPaddingV + 'px');
+    set('--an-pv-gap', B.previewGap + 'px');
+    set('--an-pv-btn-ph', B.previewBtnPaddingH + 'px');
+    set('--an-pv-btn-pv', B.previewBtnPaddingV + 'px');
+    set('--an-pv-btn-r', B.previewBtnRadius + 'px');
+    // The preview chips are move-strip tokens, so they take the token metrics by name rather than
+    // re-typing them. (`.an-move` predates these vars and still carries its own literals.)
+    set('--an-token-pad-h', B.tokenPaddingH + 'px');
+    set('--an-token-pad-v', B.tokenPaddingV + 'px');
+    set('--an-token-r', B.tokenRadius + 'px');
+    // `-webkit-line-clamp` needs the count as a bare number, so this one carries no unit. Seeded
+    // here at the maximum and narrowed by `planEngine()` once the bands have been measured.
+    set('--an-engine-lines', String(B.engineLineLimit));
     set('--an-eval-h', MET.EVAL_BAR.mainHeight + 'px');
     set('--an-eval-r', MET.EVAL_BAR.mainRadius + 'px');
     set('--an-micro-h', MET.EVAL_BAR.microHeight + 'px');
@@ -1195,6 +1402,7 @@ var BiyaAnalysisBoard = (function () {
     set('--an-fs-eeval', T2.engineEval + 'px'); set('--an-fs-esan', T2.engineSan + 'px');
     set('--an-fs-epv', T2.enginePv + 'px'); set('--an-fs-etext', T2.engineText + 'px');
     set('--an-fs-depth', T2.engineDepth + 'px'); set('--an-fs-opening', T2.engineOpening + 'px');
+    set('--an-fs-pvply', T2.previewPly + 'px'); set('--an-fs-pvbtn', T2.previewBtn + 'px');
     set('--board-light', MET.BOARD_THEMES[boardTheme].light);
     set('--board-dark', MET.BOARD_THEMES[boardTheme].dark);
     // Review modal — every value from accModalStyles, via the metrics layer.
@@ -1385,19 +1593,24 @@ var BiyaAnalysisBoard = (function () {
   function paintBoard(animate) {
     ui.board.flipped = session.flipped;
     if (editing) { paintEditor(); return; }   // the editor owns the board while it is open
-    var pos = position(session);
+    // While a line is being previewed the BOARD shows that line's position. Everything else — the
+    // strip, the engine rows, the book, the eval — still describes the real cursor, because nothing
+    // has actually been played.
+    var pv = previewState();
+    var pos = pv ? pv.position : position(session);
     ui.board.setPosition(E.toFEN(pos), {
       animate: animate !== false,
-      lastMove: lastMove(session),
-      check: checkSquare(session)
+      lastMove: pv ? pv.last : lastMove(session),
+      check: pv ? checkSquareOf(pos) : checkSquare(session)
     });
-    ui.board.interactive = !session.autoplaying;
+    // No dragging a piece out of a position that does not exist yet — tap ＋ first.
+    ui.board.interactive = !session.autoplaying && !pv;
     paintArrows();
     paintBadge();
   }
   /** Engine arrows are hidden while editing and behind the ☰ Settings toggle (board.tsx:2592). */
   function paintArrows() {
-    ui.board.arrows = (showArrows && !editing) ? arrows(session) : [];
+    ui.board.arrows = (showArrows && !editing && !preview) ? arrows(session) : [];
   }
 
   /**
@@ -1506,14 +1719,22 @@ var BiyaAnalysisBoard = (function () {
         : (outcome(session).kind !== 'ongoing' ? terminalText() : 'Engine off');
       ui.rows.appendChild(el('div', 'an-erow-empty', esc(msg)));
     } else {
-      rows.forEach(function (r) {
+      // Capped the same way the Swift is: `planEngine()` decides how many rows this screen can
+      // actually hold, and whether they may wrap. Re-planned when the engine's line count changes,
+      // because the budget depends on how many rows were asked for.
+      planEngine(rows.length);
+      rows.slice(0, enginePlanRows || MET.BANDS.engineMaxRows).forEach(function (r) {
         var row = el('button', 'an-erow');
+        // The rank badge takes THIS line's arrow colour, so the number on screen and the arrow on
+        // the board are visibly the same line.
+        var rank = el('span', 'an-erank', esc(r.rankLabel));
+        rank.style.background = MET.arrowColor(r.rank);
         var ev = el('span', 'an-eeval', esc(r.evalText));
         var san = el('span', 'an-esan', esc(r.san));
         san.style.color = MET.arrowColor(r.rank);
         var pv = el('span', 'an-epv', esc(r.continuation));
-        row.appendChild(ev); row.appendChild(san); row.appendChild(pv);
-        row.onclick = function () { playUciMove(r.uci); };
+        row.appendChild(rank); row.appendChild(ev); row.appendChild(san); row.appendChild(pv);
+        row.onclick = function () { previewLine(r); };
         ui.rows.appendChild(row);
       });
     }
@@ -1525,6 +1746,45 @@ var BiyaAnalysisBoard = (function () {
     var sym = evalSymbol(session);
     ui.symbol.textContent = sym || '';
   }
+  /**
+   * The line-preview bar, which takes the STATUS LINE's row while an engine line is being walked.
+   *
+   * Same paddings, same minimum height, same divider — so the band does not jump as it appears —
+   * but a different job: the status text describes the real cursor, and the real cursor is not what
+   * you are looking at. ✕ leaves exactly where you were; ＋ commits what is on screen.
+   */
+  function paintPreviewBar() {
+    ui.previewbar.classList.toggle('an-hidden', !preview);
+    ui.statusLine.classList.toggle('an-hidden', !!preview);
+    if (!preview) { ui.previewbar.innerHTML = ''; return; }
+    ui.previewbar.innerHTML = '';
+    var back = el('button', 'an-pvnav', '◀');
+    back.onclick = function () { previewStep(-1); };
+    ui.previewbar.appendChild(back);
+    var plies = el('div', 'an-pvplies');
+    previewTokensOf(preview).forEach(function (t) {
+      var b = el('button', 'an-pvply' + (t.played ? ' played' : '') + (t.isCurrent ? ' current' : ''),
+        esc(t.san));
+      if (t.isCurrent) b.style.background = MET.arrowColor(previewRank());
+      b.onclick = function () { previewGo(t.ply); };
+      plies.appendChild(b);
+      if (t.isCurrent && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' });
+    });
+    ui.previewbar.appendChild(plies);
+    var fwd = el('button', 'an-pvnav', '▶');
+    fwd.disabled = !previewCanStepForward(preview);
+    fwd.onclick = function () { previewStep(1); };
+    ui.previewbar.appendChild(fwd);
+    var exit = el('button', 'an-pvact', '✕');
+    exit.title = 'Back to the game';
+    exit.onclick = previewExit;
+    ui.previewbar.appendChild(exit);
+    var add = el('button', 'an-pvact gold', '＋');
+    add.title = 'Add as a variation';
+    add.onclick = previewCommit;
+    ui.previewbar.appendChild(add);
+  }
+
   function terminalText() {
     var o = outcome(session);
     if (o.kind === 'checkmate') return '# Checkmate';
@@ -1532,29 +1792,14 @@ var BiyaAnalysisBoard = (function () {
     return '';
   }
 
-  function paintPanels() {
-    var conts = bookContinuations(session);
-    ui.panels.innerHTML = '';
-    var head = el('div', 'an-panel-head', 'Opening book');
-    ui.panels.appendChild(head);
-    if (!conts.length) {
-      ui.panels.appendChild(el('div', 'an-panel-empty', 'Out of book — no ECO continuations here.'));
-      return;
-    }
-    conts.forEach(function (c) {
-      var row = el('button', 'an-brow');
-      row.appendChild(el('span', 'an-bsan', esc(c.san)));
-      row.appendChild(el('span', 'an-beco', esc(c.eco || '')));
-      row.appendChild(el('span', 'an-bname', esc(c.name || '')));
-      row.onclick = function () { playSanMove(c.san); };
-      ui.panels.appendChild(row);
-    });
-  }
-
   function paintAll(animate) {
     root.classList.toggle('editing', editing);
     paintBoard(animate); paintEval(); paintStatus(); paintStrip(); paintEngine();
-    if (editing) renderEditPanel(ui.panels); else paintPanels();
+    paintPreviewBar();
+    // The panels container is the edit panel's now; out of edit mode it stays empty and the book
+    // strip takes over. Hiding it rather than removing it keeps board_layout_check's contract.
+    ui.panels.classList.toggle('an-hidden', !editing);
+    if (editing) renderEditPanel(ui.panels); else ui.panels.innerHTML = '';
   }
 
   // ---- the engine loop --------------------------------------------------------
@@ -1616,7 +1861,64 @@ var BiyaAnalysisBoard = (function () {
 
   // ---- interaction -------------------------------------------------------------
 
-  function afterMove(animate) { paintAll(animate); scheduleAnalysis(); scheduleDraft(); }
+  function afterMove(animate) {
+    // Anything that moves the real cursor ends the preview: the line belonged to where we were.
+    preview = null;
+    paintAll(animate); scheduleAnalysis(); scheduleDraft();
+  }
+
+  // ---- the line preview (the view half) ---------------------------------------
+  //
+  // The state machine is the pure layer above (previewStart / previewStepped / previewJumped),
+  // which mirrors BiyaherongCoachCore.LinePreview and is what the self-test asserts. What is left
+  // here is what genuinely needs a screen: the variable, and the repaint.
+
+  function previewState() { return preview ? previewPositionOf(session, preview) : null; }
+  /** Which engine line is being walked, so the bar can borrow that line's arrow colour. */
+  function previewRank() { return preview ? preview.rank : 0; }
+
+  function previewLine(row) {
+    if (!canPreview(session, row)) return;
+    var p = previewStart(row);
+    if (!p) return;
+    preview = p;
+    paintAll(true);
+  }
+
+  /** Stepping off the FRONT exits — which is what the back arrow at ply 1 is for. */
+  function previewStep(delta) {
+    if (!preview) return;
+    var next = previewStepped(preview, delta);
+    if (!next) { previewExit(); return; }
+    if (next === preview) return;
+    preview = next;
+    paintAll(true);
+  }
+  function previewGo(ply) {
+    if (!preview) return;
+    var next = previewJumped(preview, ply);
+    if (next === preview) return;
+    preview = next;
+    paintAll(true);
+  }
+  /** Back to the game, exactly where it was. Nothing to undo — nothing was ever done. */
+  function previewExit() {
+    if (!preview) return;
+    preview = null;
+    paintAll(true);
+  }
+  /**
+   * Commit what is on screen into the move tree, as a real variation. `play` already branches when
+   * the move differs from the one on the main line and the strip already draws branch chips, so
+   * there is nothing new downstream.
+   */
+  function previewCommit() {
+    if (!preview) return;
+    var moves = previewMovesToCommit(preview);
+    preview = null;
+    for (var i = 0; i < moves.length; i++) { if (!playUci(session, moves[i])) break; }
+    afterMove(true);
+  }
 
   function onBoardMove(e) {
     if (editing) return;                        // edit-mode taps arrive via square-select
@@ -1630,8 +1932,6 @@ var BiyaAnalysisBoard = (function () {
     if (SND) SND.playForMove({ status: E.status(position(session)), capture: capture, castle: castle });
     afterMove(true);
   }
-  function playUciMove(uci) { if (uci && playUci(session, uci)) afterMove(true); }
-  function playSanMove(san) { if (san && playSan(session, san)) afterMove(true); }
 
   function gotoId(id) {
     var found = null;
@@ -1711,15 +2011,22 @@ var BiyaAnalysisBoard = (function () {
     session.autoplaying = false;
     session.reviewProgress = null;
     editing = false; editor = null; editorPiece = null;   // never resume mid-edit on re-entry
+    preview = null;
 
     root = el('div', 'an-view');
     applyMetrics(root);
 
     // 1 — header
     var header = el('div', 'an-header');
-    var back = el('button', 'an-hbtn', '←');
+    var back = el('button', 'an-hbtn nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { engineToken += 1; if (onExit) onExit(); };
-    var menu = el('button', 'an-hbtn', '☰');
+    var menu = el('button', 'an-hbtn nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    menu.innerHTML = BiyaIcons.menu();
     menu.onclick = showMenu;
     menu.title = 'Menu';
     header.appendChild(back);
@@ -1758,6 +2065,12 @@ var BiyaAnalysisBoard = (function () {
     var spinner = el('span', 'an-spin');
     statusLine.appendChild(statusText_); statusLine.appendChild(spinner);
     root.appendChild(statusLine);
+
+    // 3b — the line-preview bar, which takes the status line's row while a line is being walked.
+    // Built here and hidden, not created on demand: `ui` is captured once and repaints never
+    // rebuild the DOM, which is the contract the rest of this screen holds to.
+    var previewBar = el('div', 'an-pvbar an-hidden');
+    root.appendChild(previewBar);
 
     var statusBand = el('div', 'an-status');
     var tools = el('div', 'an-tools');
@@ -1798,7 +2111,8 @@ var BiyaAnalysisBoard = (function () {
     var strip = el('div', 'an-strip');
     root.appendChild(strip);
 
-    // 6 — panels (the ECO explorer, where the Lichess masters panel used to be)
+    // 6 — panels. EDIT MODE ONLY now; board_layout_check.js still asserts this element and its
+    // `flex: 1 1 auto` / `--an-panels-h` contract, and Setup Position is what needs them.
     var panels = el('div', 'an-panels');
     root.appendChild(panels);
 
@@ -1820,7 +2134,9 @@ var BiyaAnalysisBoard = (function () {
       board: board, evalFill: evalBar.querySelector('.fill'),
       microFill: micro.querySelector('.fill'),
       status: statusText_, statusLine: statusLine, spinner: spinner, autoplayBar: autoplayBar,
-      strip: strip, panels: panels, rows: rows, depth: depth, opening: opening, symbol: symbol,
+      previewbar: previewBar, engine: engine,
+      strip: strip, panels: panels,
+      rows: rows, depth: depth, opening: opening, symbol: symbol,
       badge: badge,
       tools: { engine: tEngine, flip: tFlip, autoplay: tAuto, annotate: tAnnotate },
       reviewSheet: null, reviewFill: null, reviewCount: null,
@@ -3054,10 +3370,14 @@ var BiyaAnalysisBoard = (function () {
     // pure
     createSession: createSession, position: position, historyKeys: historyKeys, outcome: outcome,
     statusText: statusText, openingEntry: openingEntry, openingText: openingText,
-    bookContinuations: bookContinuations, arrows: arrows, engineRows: engineRows,
+    arrows: arrows, engineRows: engineRows,
     evalParts: evalParts, evalFraction: evalFraction, evalSymbol: evalSymbol,
     isStale: isStale, wantsAnalysis: wantsAnalysis,
     stripTokens: stripTokens, nagText: nagText, PV_PREVIEW: PV_PREVIEW,
+    previewStart: previewStart, previewStepped: previewStepped, previewJumped: previewJumped,
+    previewTokensOf: previewTokensOf, previewCanStepForward: previewCanStepForward,
+    previewMovesToCommit: previewMovesToCommit,
+    canPreview: canPreview, previewPositionOf: previewPositionOf,
     applyReview: applyReview, classificationFor: classificationFor, reviewSummary: reviewSummary,
     play: play, playUci: playUci, playSan: playSan,
     goToNode: goToNode, goToStart: goToStart, goBack: goBack, goForward: goForward, goToEnd: goToEnd,

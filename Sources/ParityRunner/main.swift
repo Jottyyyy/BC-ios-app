@@ -722,6 +722,35 @@ if let sharp = ChessPosition(fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP
         h.check(legal, "line \(l.rank)'s PV survives the accelerators intact")
         h.check(!l.pv.isEmpty, "line \(l.rank) has a principal variation at all")
     }
+
+    // The tail extension. A PV can never be longer than the search was deep — the recursion stops
+    // writing to `line` at depth 0 — so at depth 6 every line used to be exactly six plies, which
+    // is what the client asked to see more of. `extendTail` searches on past that.
+    //
+    // Asserted through the PUBLIC result rather than by reaching into `Search`, so it is the
+    // shipped behaviour under test. Mirrored assertion-for-assertion in analysis-engine.js §11.
+    var extendedAny = false
+    for l in a.lines {
+        h.check(l.pvSAN.count == l.pv.count, "extended line \(l.rank): pv and pvSAN stay parallel")
+        h.check(l.pv.count <= LocalEngine.pvExtendLimit,
+                "extended line \(l.rank): stops at pvExtendLimit, got \(l.pv.count)")
+        if l.pv.count > l.depth { extendedAny = true }
+        // Position identity WITHOUT the clocks — the same rule threefold uses, and the same thing
+        // the engine's own Zobrist key stands for.
+        var p = sharp
+        var seen: Set<String> = [p.fen.split(separator: " ").prefix(4).joined(separator: " ")]
+        var noRepeat = true
+        for m in l.pv {
+            p = p.makeMove(m)
+            let key = p.fen.split(separator: " ").prefix(4).joined(separator: " ")
+            if !seen.insert(key).inserted { noRepeat = false; break }
+        }
+        h.check(noRepeat, "extended line \(l.rank): the line never revisits a position")
+    }
+    h.check(extendedAny, "the tail probe actually lengthens a line past the searched depth")
+    // The display cap must be the thing that truncates a line, not the engine.
+    h.check(LocalEngine.pvExtendLimit > AnalysisSession.pvPreview,
+            "pvExtendLimit stays above AnalysisSession.pvPreview")
 }
 
 // The Engine Settings the Analysis Board drives the search with (☰ > Engine). Mirrors
@@ -1227,14 +1256,94 @@ do {
         let rows = fake.engineRows
         h.check(rows[0].san == "e4", "the row names its move")
         h.check(rows[0].evalText == "+0.3", "the row formats its score, got \(rows[0].evalText)")
-        h.check(rows[0].continuation == "e5 Nf3 Nc6 Bb5 a6 Ba4",
-                "the continuation shows six plies after the move, got \(rows[0].continuation)")
+        h.check(rows[0].continuation == "e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6",
+                "the continuation shows every ply it has, up to pvPreview, "
+                + "got \(rows[0].continuation)")
+        h.check(AnalysisSession.pvPreview > 6,
+                "and pvPreview is past the source's 6, so a deep search is not clipped")
         h.check(rows[1].continuation == "d5", "a short PV shows what it has")
         h.check(!fake.isStale, "a snapshot matching the cursor is fresh")
         h.check(fake.evalParts.cp == 30, "evalParts carries the centipawns")
         h.check(fake.evalParts.mate == nil, "and no mate")
         h.check(fake.evalParts.winner == nil, "and no terminal winner")
+
+        // 12b. The line preview — the state machine behind "tap a line to play it out".
+        // `rows[0]` has eight SANs behind a one-move pv, which is exactly the shape the trim in
+        // `LinePreview.start` exists for. Mirrored assertion-for-assertion in analysis.js §12b.
+        if let trimmed = LinePreview.start(rows[0]) {
+            h.check(trimmed.sans.count == 1,
+                    "a line with more SANs than moves is trimmed to what can actually be played, "
+                    + "got \(trimmed.sans.count)")
+            h.check(trimmed.uci.count == trimmed.sans.count, "sans and uci are the same length")
+        } else { h.check(false, "a one-move line still previews") }
+        h.check(LinePreview.start(EngineRow(rank: 0, evalText: "", san: "", continuation: "",
+                                            uci: "", from: -1, to: -1, depth: 0)) == nil,
+                "a row with no line has nothing to preview")
     } else { h.check(false, "snapshot session") }
+
+    // 12c. The preview walked over a real four-ply line.
+    if let lp = newSession() {
+        var walk = lp.position
+        var moves: [Move] = []
+        for san in ["e4", "e5", "Nf3", "Nc6"] {
+            guard let m = walk.move(forSAN: san) else { break }
+            moves.append(m)
+            walk = walk.makeMove(m)
+        }
+        lp.snapshot = AnalysisSnapshot(
+            fen: ChessPosition.startFEN, depth: 4, nodes: 1,
+            lines: [EngineLine(rank: 1, score: .cp(30), pv: moves,
+                               pvSAN: ["e4", "e5", "Nf3", "Nc6"], depth: 4)],
+            isFinal: true, terminal: nil)
+        let row = lp.engineRows[0]
+        h.check(row.pvUCI.count == 4, "the row carries the WHOLE line, not just its first move")
+        h.check(lp.canPreview(row), "a line computed for this position can be walked")
+        if let p1 = LinePreview.start(row) {
+            h.check(p1.ply == 1, "a preview enters on the first move")
+            h.check(p1.sans.joined(separator: " ") == "e4 e5 Nf3 Nc6", "and labels every ply")
+            h.check(p1.rank == 0, "and it remembers which line it came from")
+
+            let toks = p1.tokens
+            h.check(toks.count == 4, "one token per ply")
+            h.check(toks[0].played && toks[0].isCurrent, "the first token is played and current")
+            h.check(!toks[1].played && !toks[1].isCurrent,
+                    "the ones ahead of the cursor are neither")
+            h.check(toks[3].ply == 4, "tokens are 1-based, so they hand back to jumped(to:)")
+
+            h.check(p1.stepped(-1) == nil, "stepping off the FRONT leaves the preview")
+            h.check(p1.stepped(1)?.ply == 2, "stepping forward advances one ply")
+            let pEnd = p1.jumped(to: 4)
+            h.check(pEnd.ply == 4, "a jump lands on the ply that was tapped")
+            h.check(pEnd.stepped(1) == pEnd, "stepping past the END is a no-op, NOT an exit")
+            h.check(p1.jumped(to: 9) == p1, "a jump out of range is a no-op")
+            h.check(p1.jumped(to: 0) == p1, "and so is a jump to ply 0")
+            h.check(p1.canStepForward, "ply 1 of 4 can step forward")
+            h.check(!pEnd.canStepForward, "the last ply cannot")
+            h.check(p1.movesToCommit.count == 1, "＋ commits only what is on the board")
+            h.check(pEnd.movesToCommit.count == 4, "and all of it once the line has been walked")
+
+            if let st1 = lp.previewPosition(p1) {
+                h.check(st1.last.uci == "e2e4", "the preview reports the move that got there")
+                h.check(st1.position.sideToMove == .black, "and the position after it")
+            } else { h.check(false, "the first ply resolves") }
+            if let stEnd = lp.previewPosition(pEnd) {
+                h.check(stEnd.position.fen == walk.fen,
+                        "walking the whole line reaches the line's end position")
+            } else { h.check(false, "the last ply resolves") }
+            h.check(lp.position.fen == ChessPosition.startFEN,
+                    "and the SESSION never moved — nothing was committed")
+
+            // A snapshot can outlive the position it was computed for. Such a line refuses to
+            // start AND refuses to walk — the guard that keeps a stale tap from playing nonsense.
+            if let stale = newSession(), let d4 = stale.position.move(forSAN: "d4") {
+                _ = stale.play(d4)
+                stale.snapshot = lp.snapshot
+                h.check(!stale.canPreview(row),
+                        "a line that no longer plays from here refuses to start")
+                h.check(stale.previewPosition(p1) == nil, "and refuses to walk")
+            } else { h.check(false, "stale session") }
+        } else { h.check(false, "the four-ply line previews") }
+    } else { h.check(false, "preview session") }
 
     // 13. mate and terminal scores
     if let mate = newSession() {
@@ -2925,6 +3034,181 @@ do {
     }
 }
 
+
+// MARK: - Opening Tree (client round 4)
+//
+// No golden file: `openingtree.tsx` is TypeScript, not a Laravel controller, so there is no PHP
+// oracle to generate one. The differential partner is `web-demo/js/opening-tree.js`, and
+// `tools/qa/replay_opening_tree.js` compares the two source texts. What follows is the half a
+// replay cannot do — running the algorithm.
+
+h.begin("opening_tree")
+do {
+    typealias OT = OpeningTree
+
+    // ---- outcomes ------------------------------------------------------------
+    h.check(OT.Outcome.parse("1-0") == .whiteWin, "1-0 parses")
+    h.check(OT.Outcome.parse("0-1") == .blackWin, "0-1 parses")
+    h.check(OT.Outcome.parse("1/2-1/2") == .draw, "1/2-1/2 parses")
+    h.check(OT.Outcome.parse("½-½") == .draw, "and so does the half glyph real exporters emit")
+    h.check(OT.Outcome.parse("*") == nil, "an unfinished game has no outcome")
+    h.check(OT.Outcome.parse("") == nil, "nor does a missing Result tag")
+    h.check(OT.Outcome.whiteWin.score(forWhite: true) == 1, "white winning is +1 for white")
+    h.check(OT.Outcome.whiteWin.score(forWhite: false) == -1, "and -1 for black")
+    h.check(OT.Outcome.draw.score(forWhite: true) == 0, "a draw is 0 either way")
+    h.check(OT.Outcome.draw.score(forWhite: false) == 0, "both ways round")
+    h.check(OT.Outcome.allCases.count == 3, "three outcomes, and `*` is not one of them")
+
+    // ---- the mover inversion -------------------------------------------------
+    //
+    // The rule the whole feature turns on: a node's W/D/L is the MOVER's, so it flips on the
+    // opponent's plies. Backwards, every second row of the move list is exactly wrong in a way
+    // that looks plausible.
+    var t = OT()
+    t.add(OT.Game(sanMoves: ["e4", "c5", "Nf3"], userIsWhite: true, outcome: .whiteWin))
+    h.check(t.gameCount == 1, "one game counted")
+    h.check(t.nodeCount == 3, "three nodes for three plies")
+    h.check(t.depth == 3, "and a depth of three")
+    h.check(t.node(at: ["e4"])?.wins == 1, "the owner played e4 and won, so e4 is a win")
+    h.check(t.node(at: ["e4", "c5"])?.losses == 1,
+            "the OPPONENT played c5 and lost, so c5 is a loss — the inversion")
+    h.check(t.node(at: ["e4", "c5"])?.wins == 0, "and not a win")
+    h.check(t.node(at: ["e4", "c5", "Nf3"])?.wins == 1, "Nf3 is the owner again")
+
+    var flipped = OT()
+    flipped.add(OT.Game(sanMoves: ["e4", "c5"], userIsWhite: false, outcome: .whiteWin))
+    h.check(flipped.node(at: ["e4"])?.wins == 1,
+            "seen from Black, e4 is STILL a win for whoever played it")
+    h.check(flipped.node(at: ["e4", "c5"])?.losses == 1, "and c5 still a loss")
+
+    // ---- unfinished games ----------------------------------------------------
+    var unfinished = OT()
+    unfinished.add(OT.Game(sanMoves: ["d4"], userIsWhite: true, outcome: nil))
+    h.check(unfinished.node(at: ["d4"])?.count == 1, "an unfinished game still counts")
+    h.check(unfinished.node(at: ["d4"])?.scored == 0, "but scores nothing")
+
+    // ---- truncation vs rejection ---------------------------------------------
+    var truncated = OT()
+    let plies = truncated.add(OT.Game(sanMoves: ["e4", "e5", "Qz9", "Nf3"],
+                                      userIsWhite: true, outcome: .draw))
+    h.check(plies == 2, "the walk stops at the unreadable token")
+    h.check(truncated.nodeCount == 2, "and keeps everything before it")
+    h.check(truncated.rejectedCount == 0, "a truncated game is not a rejected one")
+    h.check(truncated.add(OT.Game(sanMoves: ["Zz9"], userIsWhite: true, outcome: nil)) == 0,
+            "a game whose first move is unreadable inserts nothing")
+    h.check(truncated.rejectedCount == 1, "and IS counted as rejected")
+
+    // ---- canonical SAN collapses spellings -----------------------------------
+    var canonical = OT()
+    let scholars = ["e4", "e5", "Qh5", "Nc6", "Qxf7"]
+    canonical.add(OT.Game(sanMoves: scholars, userIsWhite: true, outcome: .whiteWin))
+    canonical.add(OT.Game(sanMoves: ["e4", "e5", "Qh5", "Nc6", "Qxf7#"],
+                          userIsWhite: true, outcome: .whiteWin))
+    let mate = canonical.sortedMoves(at: ["e4", "e5", "Qh5", "Nc6"])
+    h.check(mate.count == 1, "Qxf7 and Qxf7# are one move, not two branches")
+    h.check(mate.first?.count == 2, "and both games land on it")
+
+    // ---- the sort, and its tie-break -----------------------------------------
+    //
+    // `Dictionary` order is unspecified and `sort` is not stable, so without the SAN tie-break
+    // this order differs between runs AND from the JS twin.
+    var sorted = OT()
+    for first in ["e4", "e4", "d4", "c4", "Nf3"] {
+        sorted.add(OT.Game(sanMoves: [first], userIsWhite: true, outcome: .draw))
+    }
+    let moves = sorted.sortedMoves(at: [])
+    h.check(moves.map(\.san) == ["e4", "Nf3", "c4", "d4"],
+            "count descending, then SAN ascending — capital N sorts before lowercase c and d")
+    h.check(moves.first?.count == 2, "the most played was played twice")
+    h.check(sorted.mostPlayed(at: []) == "e4", "forward plays the top of that list")
+    h.check(sorted.mostPlayed(at: ["e4"]) == nil, "and stops at a leaf")
+    h.check(moves.first?.hasContinuations == false, "a one-ply game leaves no continuations")
+
+    // ---- shares --------------------------------------------------------------
+    let c = OT.Candidate(san: "e4", count: 4, wins: 2, draws: 1, losses: 1,
+                         hasContinuations: true)
+    h.check(abs(c.winShare - 0.5) < 1e-9, "half the scored games were wins")
+    h.check(abs(c.drawShare - 0.25) < 1e-9, "a quarter drawn")
+    h.check(abs(c.lossShare - 0.25) < 1e-9, "a quarter lost")
+    h.check(c.scored == 4, "four scored")
+    let empty = OT.Candidate(san: "e4", count: 1, wins: 0, draws: 0, losses: 0,
+                             hasContinuations: false)
+    h.check(empty.winShare == 0, "nothing scored is zero, not a division by zero")
+
+    // ---- the ply cap ---------------------------------------------------------
+    var capped = OT()
+    var shuffle: [String] = []
+    for _ in 0 ..< 30 { shuffle.append(contentsOf: ["Nf3", "Nf6", "Ng1", "Ng8"]) }
+    h.check(capped.add(OT.Game(sanMoves: shuffle, userIsWhite: true, outcome: nil),
+                       maxPlies: 6) == 6, "the cap truncates the walk")
+    h.check(capped.depth == 6, "and the tree is exactly that deep")
+    h.check(OT.defaultMaxPlies == 40, "the default cap is 20 full moves")
+    h.check(OT.maxGamesLimit == 2000, "and the download ceiling matches the RN form's")
+
+    // ---- paths off the tree --------------------------------------------------
+    h.check(sorted.node(at: ["Zz9"]) == nil, "an unknown path has no node")
+    h.check(sorted.children(at: ["Zz9"]).isEmpty, "and no children")
+    h.check(sorted.sortedMoves(at: ["Zz9", "e4"]).isEmpty, "walking past it stays empty")
+    h.check(OT().isEmpty, "a fresh tree is empty")
+
+    // ---- PGN -> games --------------------------------------------------------
+    let pgn = """
+    [White "Alice"]
+    [Black "Bob"]
+    [Result "0-1"]
+
+    1. e4 e5 2. Nf3 0-1
+
+    [White "Bob"]
+    [Black "Alice"]
+    [Result "1-0"]
+
+    1. d4 d5 1-0
+    """
+    let games = OT.games(fromPGN: pgn, userName: "alice")
+    h.check(games.count == 2, "two games split apart")
+    h.check(games.first?.userIsWhite == true, "Alice was White in the first")
+    h.check(games.first?.outcome == .blackWin, "and lost it")
+    h.check(games.last?.userIsWhite == false, "she was Black in the second")
+    h.check(games.last?.outcome == .whiteWin, "which she also lost")
+    h.check(OT.games(fromPGN: pgn, userName: "alice", colour: .white).count == 1,
+            "the colour filter keeps only her White games")
+    h.check(OT.games(fromPGN: pgn, userName: "alice", colour: .black).count == 1,
+            "and only her Black ones")
+    h.check(OT.games(fromPGN: pgn, userName: "carol", fallbackIsWhite: false).count == 2,
+            "an unmatched name falls back rather than dropping the game")
+    h.check(OT.games(fromPGN: pgn, userName: "carol", fallbackIsWhite: false).first?.userIsWhite
+            == false, "…to the side the form picked")
+    // The terminator stands in for a missing Result tag — and it is read off the MOVETEXT, because
+    // `PGN.mainlineTokens` drops result tokens by design.
+    let bare = OT.games(fromPGN: "[Event \"x\"]\n\n1. e4 e5 1/2-1/2\n", userName: nil)
+    h.check(bare.count == 1 && bare.first?.outcome == .draw,
+            "a movetext terminator stands in for a missing Result tag")
+
+    // ---- colour --------------------------------------------------------------
+    h.check(OT.Colour.white.accepts(isWhite: true), "the white filter takes white games")
+    h.check(!OT.Colour.white.accepts(isWhite: false), "and refuses black ones")
+    h.check(OT.Colour.both.accepts(isWhite: true) && OT.Colour.both.accepts(isWhite: false),
+            "both takes either")
+    h.check(OT.Colour.allCases.count == 3, "three colour filters")
+
+    // ---- persistence ---------------------------------------------------------
+    var round = OT()
+    round.add(games)
+    let data = round.encodedJSON()
+    h.check(data != nil, "a tree encodes")
+    if let data, let back = OT.decodedJSON(data) {
+        h.check(back == round, "and decodes back to itself")
+        h.check(back.sortedMoves(at: []).map(\.san) == round.sortedMoves(at: []).map(\.san),
+                "with the same candidate order")
+        h.check(back.gameCount == round.gameCount, "and the same game count")
+    } else {
+        h.check(false, "the encoded tree decodes")
+    }
+    // Deterministic bytes, so "did this change?" is answerable in the store and in a diff.
+    h.check(round.encodedJSON() == round.encodedJSON(), "encoding is byte-stable")
+}
+
 // MARK: - Done
 
 // Every mandatory group must contribute at least its expected floor of assertions
@@ -2934,10 +3218,14 @@ h.requireMinCounts([
     "rating": 390, "compare_moves": 6, "streak_target": 36, "streak_increment": 4, "streak_reset": 2,
     "daily_limits": 168, "daily_goal": 18, "game_review": 47, "classify": 88, "rating_tier": 14, "rush": 12,
     "perft": 17, "chess_ai": 2, "san_parse": 9000, "notation_extra": 30, "draw_rules": 30,
-    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 55,
+    "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 66,
     "engine_settings": 70,
-    "eco": 1200, "review_book": 1500, "analysis_session": 200, "analysis_store": 80,
+    "eco": 1200, "review_book": 1500, "analysis_session": 235, "analysis_store": 80,
     "position_editor": 80,
+    // No golden file: the source is TypeScript, not a Laravel controller, so there is no PHP
+    // oracle. The differential partner is web-demo/js/opening-tree.js, compared source-to-source
+    // by tools/qa/replay_opening_tree.js.
+    "opening_tree": 60,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,

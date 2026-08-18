@@ -97,14 +97,17 @@ var BiyaCoachSelect = (function () {
     applyMetrics(root);
 
     var header = el('div', 'cgs-header');
-    var back = el('button', 'cgs-back', STR.backArrow || '←');
+    var back = el('button', 'cgs-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
     var centre = el('div', 'cgs-header-center');
     centre.appendChild(el('div', 'cgs-title', STR.selectHeader));
     centre.appendChild(el('div', 'cgs-family', STR.selectFamily));
     header.appendChild(centre);
-    header.appendChild(el('div', 'cgs-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('cgs-logo'));
     root.appendChild(header);
 
     root.appendChild(el('div', 'cgs-blurb', STR.selectBlurb));
@@ -119,9 +122,21 @@ var BiyaCoachSelect = (function () {
     view.appendChild(root);
   }
 
+  /** Where the five coach portraits live. Same five files the Swift bundle ships. */
+  var COACH_ART = 'assets/characters/';
+
   function card(c, cb) {
     var b = el('button', 'cgs-card');
-    var avatar = el('div', 'cgs-avatar', String(c.level));
+    // The coach's face, the same asset `CoachArt.image(level:)` loads in Swift
+    // (`CoachScreens.avatar`). This used to be `String(c.level)` — a bare digit in an empty ring,
+    // while the app showed a photo. `onerror` falls back to that digit rather than to a broken
+    // image box, which mirrors the Swift's "a missing asset degrades to the ring alone".
+    var avatar = el('div', 'cgs-avatar');
+    var face = el('img');
+    face.src = COACH_ART + 'level-' + c.level + '.webp';
+    face.alt = '';
+    face.onerror = function () { avatar.removeChild(face); avatar.textContent = String(c.level); };
+    avatar.appendChild(face);
     b.appendChild(avatar);
 
     var info = el('div', 'cgs-info');

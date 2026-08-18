@@ -23,3 +23,7 @@ Goldens/*.tmp
 # no diff. (The line that used to sit here named DemoApp/Sources/DemoApp/puzzles.sqlite, a path
 # that has not existed for several phases.)
 Goldens/
+
+# Claude Code: per-task worktrees live here (see the Workflow section of CLAUDE.md). Never committed.
+.claude/worktrees/
+.claude/settings.local.json

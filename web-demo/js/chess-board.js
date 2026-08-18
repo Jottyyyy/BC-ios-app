@@ -78,7 +78,7 @@
   function samePiece(a, b) { return !!a && !!b && a.color === b.color && a.kind === b.kind; }
 
   var STYLE = [
-    ':host{display:block;--_max:var(--board-max,640px);--_light:var(--board-light,#5BA3F5);--_dark:var(--board-dark,#2C4A73);',
+    ':host{display:block;--_max:var(--board-max,640px);--_light:var(--board-light,#F0D9B5);--_dark:var(--board-dark,#B58863);',
     '--_last:var(--hl-last,rgba(253,176,34,.32));--_sel:var(--hl-select,rgba(253,176,34,.55));--_check:var(--hl-check,rgba(255,107,107,.5));',
     '--_dot:var(--dot-color,rgba(255,255,255,.22));--_ring:var(--ring-color,rgba(255,255,255,.30));--_coord:var(--coord-color,#8BA3C7);',
     // Two tones, not one. Puzzle Streak's solution strip shows the correct move with a lighter

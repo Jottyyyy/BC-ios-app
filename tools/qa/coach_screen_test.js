@@ -123,7 +123,7 @@ const first = (root, cls) => byClass(root, cls)[0];
 function loadSandbox() {
   const html = fs.readFileSync(path.join(ROOT, 'web-demo', 'index.html'), 'utf8');
   const order = [...html.matchAll(/<script src="js\/([^"]+)"><\/script>/g)].map(m => m[1]);
-  const need = ['engine.js', 'ai.js', 'rating.js', 'movetree.js',
+  const need = ['icons.js', 'engine.js', 'ai.js', 'rating.js', 'movetree.js',
                 'analysis-eval.js', 'analysis-engine.js',
                 'review.js', 'analysis-metrics.js',
                 'coach-engine.js', 'coach-book.js', 'coach-game.js',

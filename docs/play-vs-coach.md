@@ -17,7 +17,18 @@ Status: **complete in both languages, including the offline game review (§2.10)
 
 | File | What it owns |
 |---|---|
-| `web-demo/js/coach-engine.js` | Strength: `LEVEL_CONFIG` (depth + MultiPV per level), `pickMove` with an injected RNG, and the think-time pacer. |
+| `web-demo/js/coach-engine.js` | Strength: `LEVEL_CONFIG` (depth + MultiPV + **movetime** per level), `pickMove` with an injected RNG, and the think-time pacer. |
+
+**The five levels now have five clocks — 0.3/0.6/1/2/4 s.** They used to share one flat 1 s cap
+carried over from the Python service. Because depth is only a ceiling and the engine reaches a mean
+depth of ~6 in a second, levels 4 and 5 never came near their 10 and 15 and played identically:
+"Coach Pogi" and "Mommy Julie" were the same opponent in different art. Level 3 keeps exactly 1000 ms,
+so the middle of the ladder is unchanged. Recorded as a deviation in `PORTING_NOTES.md`.
+
+`thinkMs` is a different knob and was deliberately left alone: it is a **floor** on the reply, awaited
+in parallel with the search, so the reply lands at `max(search, floor)`. Levels 4 and 5 simply stop
+being paced. Raising the floors to match would make fast positions — a book move, a forced recapture —
+artificially slow, which is the opposite of what a floor is for.
 | `web-demo/js/coach-book.js` | The per-persona opening book. Declarative `[history, move]` rows; an illegal book move falls through to the engine **silently**. |
 | `web-demo/js/coach-game.js` | The record, threefold, the result, the per-level 7-day draft. |
 | `web-demo/js/coach-turn.js` | Whose turn it is, the premove, the nav rules, and the **generation counter**. |
@@ -170,9 +181,13 @@ a mutant pins the difference.
 `CoachMetrics.swift` generates `public enum CoachSelect`; the pre-port sample screen declared
 `struct CoachSelect: View`. That is a redeclaration error, and it sat in the repo unnoticed because
 nothing here compiles Swift. The view is now `LegacyCoachSelect`, and `swift_symbol_check.js`
-reports duplicate top-level types. It is also why the **Swift** sample Play tab is still reachable
-while the browser one was deleted: `BoardView` lives inside `PlayView.swift`, so retiring the pair
-means extracting it first.
+reports duplicate top-level types.
+
+It was also why the **Swift** sample Play tab outlived the browser one: `BoardView` lived inside
+`PlayView.swift`, so retiring the pair meant extracting it first. That extraction happened
+(`BoardView.swift`), and removing the tab bar took the screen's last door — `PlayPhone` and its
+board chrome are deleted. `LegacyCoachSelect` stays: the macOS demo's `Panel.play` still renders it
+through `PlayView`, which is the board harness, not a phone screen.
 
 ## How to test
 
@@ -189,9 +204,17 @@ In the browser: open `web-demo/index.html` and pick **Play**, or the **Play vs C
 Choose a coach → choose a colour → play. Leaving mid-game and returning offers **Continue**; the
 draft is per level and kept 7 days.
 
-> The wiring has not been exercised in a real browser from this checkout — the automation extension
-> could not reach a local server, so `auditAppWiring()` in `coach_screen_test.js` reads `app.js` as
-> source instead: it asserts the routes exist, that every callback the game screen offers is
-> supplied, that both generation guards are present, and that the retired sample screen is gone.
-> That catches a control wired to nothing; it cannot catch a layout problem. First run in a browser
-> is worth a look.
+> **That caveat came true, exactly as written.** It used to read: *"the wiring has not been
+> exercised in a real browser … `auditAppWiring()` reads `app.js` as source instead … that catches a
+> control wired to nothing; it cannot catch a layout problem. First run in a browser is worth a
+> look."*
+>
+> The first run in a browser found one: **`css/coach.css` was never linked in `index.html`.** All
+> 507 lines and all 21 `.cgs-*` rules were correct and on disk; the page simply never loaded them,
+> so every screen here rendered as unstyled UA buttons — white text on the default light button
+> face. Only two classes resolved, and both came from `app.css`: `nav-icon` (which is why the back
+> button was a grey square) and `.view.flush` (which is why the text ran edge to edge).
+>
+> `coach_screen_test.js` could not have caught it: it reads `coach.css` off disk at line 25, which
+> validates the file in complete isolation from whether the page loads it. `tools/qa/web_shell_check.js`
+> now asserts every stylesheet in `css/` is linked.

@@ -344,13 +344,12 @@ struct PuzzleScreenHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: PuzzleSolverStyle.backIconSize, weight: .semibold))
-                    .foregroundStyle(PuzzlePalette.textPrimary)
-                    .frame(width: PuzzleSolverStyle.backBtnW, height: PuzzleSolverStyle.backBtnH)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            // The app's own chevron, not SF Symbols'. Same shape, but the browser twin can draw
+            // it too — these screens used to show a chevron here and an `←` in the web demo, and
+            // no gate noticed. See NavIcons.swift.
+            NavIconButton(.back, size: PuzzleSolverStyle.backIconSize,
+                          tint: PuzzlePalette.textPrimary, action: onBack)
+                .frame(width: PuzzleSolverStyle.backBtnW, height: PuzzleSolverStyle.backBtnH)
             VStack(spacing: PuzzleDailySolver.headerSubMarginTop) {
                 Text(title)
                     .font(Theme.nunito(titleSize, .bold))

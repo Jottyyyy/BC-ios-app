@@ -5,11 +5,19 @@ glow, the app name and tagline, one **Continue with Apple** button, and a bundle
 Faint chess pieces drift behind it. It is the first thing the app shows, and after the first sign-in it is
 never shown again until the user signs out from Profile.
 
-**The Apple sign-in is SIMULATED.** There is no `AuthenticationServices` call, no `URLSession`, no network
-of any kind — tapping the button writes one string and publishes. That is deliberate twice over: it is what
-was asked for, and it keeps the "100% offline" claim in `ios/project.yml:69-71` (and the export-compliance
-`NO` that rests on it) true. Everything a real Sign in with Apple needs sits behind one method,
-`LoginStore.signIn(_:)`. See [`../PORTING_NOTES.md`](../PORTING_NOTES.md) for the App Store consequence.
+**The Apple sign-in is REAL.** This paragraph used to open *"The Apple sign-in is SIMULATED"* — no
+`AuthenticationServices` call, no network, one string written on tap — and both this doc and
+`PORTING_NOTES.md` recorded that a "Continue with Apple" button performing no Apple authentication is an
+App Store rejection. It now raises Apple's own sheet through `ASAuthorizationController` in
+`LoginAppleAuth.swift`, and only a genuine success opens the session; a cancel leaves the gate exactly
+where it was. `LoginStore` did not change at all — the store, the persistence and the fail-closed read were
+already the right shape.
+
+Two consequences. The app still makes **no network call of its own** (`replay_login.js` fails the build on
+a `URLSession` or any URL, in the new file too), so the export-compliance `NO` stands — but Apple's servers
+answer the sign-in, so **the first launch needs a connection**, and the in-app privacy sheet was reworded
+from "100% offline" to say so. And a real Sign in with Apple obliges in-app **account deletion** under
+Guideline 5.1.1(v), which ships with it. Both are covered in [`account.md`](account.md).
 
 This screen has **no counterpart in the React Native app** — the original's `(auth)/login.tsx` is a
 username/password form against a Laravel API. So most of its numbers are invented, not extracted, and
@@ -18,7 +26,10 @@ legal footer's `#3A5070`, the 24pt screen gutter, the hero copy verbatim, and th
 
 - **Run it (Windows):** open `web-demo/index.html`. The login screen is the first thing you see. Tap
   **Continue with Apple** → the dashboard. Reload → straight to the dashboard (the session persisted).
-  **Profile → Sign out** returns you here. Clear the key with
+  **Profile → Sign out** returns you here, and **Profile → Delete account** does the same after a
+  confirmation, having erased the local data first. The browser has no `ASAuthorizationController`, so its
+  sign-in is a declared stub of the shared state machine — it carries a `SIMULATED_AUTH` flag the Swift
+  must not, and `replay_login.js` asserts both halves. Clear the key with
   `localStorage.removeItem('biya.auth.session.v1')` in the console to see it fresh again.
 - **Run it (macOS):** `cd DemoApp && swift run DemoApp` → the **Phone UI** panel. The gate lives inside
   `PhoneApp`, so it shows in the desktop phone frame exactly as it does on device.
@@ -67,7 +78,7 @@ and `65` over a zero basis. Both self-checks assert the two shares add back up t
   The real `ASAuthorizationAppleIDButton` that will replace this renders in San Francisco, so matching it
   now means the control does not visibly change size when the simulation goes away.
 - **The gate is the LAST `ZStack` sibling in `PhoneApp`**, not a `.fullScreenCover` — that does not exist
-  on macOS, and this view renders inside the desktop phone frame. Last, so it covers the tab bar and all
+  on macOS, and this view renders inside the desktop phone frame. Last, so it covers all
   three pushed routes (Analysis, Pairing, Play vs Coach).
 
 ## The session
@@ -96,7 +107,7 @@ cannot read a key must still open.
 | `DemoApp/Sources/BiyaherongUI/LoginStore.swift` | The session, persisted behind an injected `CoachGame.Storage`. The one seam a real Apple sign-in replaces. |
 | `DemoApp/Sources/BiyaherongUI/LoginMetricsCheck.swift` | The runnable self-check (no XCTest in this toolchain). |
 | `DemoApp/Sources/LoginMetricsCheck/main.swift` | `swift run LoginMetricsCheck`. |
-| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | The gate (`PhoneApp`, last ZStack sibling) and the Profile tab's **Account** card. |
+| `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | The gate (`PhoneApp`, last ZStack sibling) and the Profile screen's **Account** card. |
 | `DemoApp/Sources/BiyaherongUI/HomeArt.swift` | `HomeArt.Asset.brandLogo` and the generalised `HomeAppIcon(size:shape:asset:)`. |
 | `DemoApp/Sources/BiyaherongUI/Images/brand-logo.png` | The brand mark, copied from the RN app's `assets/images/icon.png`. |
 | `web-demo/js/login.js` | The browser twin — the same pure layer, the same store, plus the DOM renderer. |

@@ -313,6 +313,93 @@ enum LoginSession {
     }
 }
 
+// MARK: - Account deletion
+
+/// What "delete my account" erases, and what it deliberately does not.
+///
+/// One list, mirrored in `web-demo/js/login.js`, because two lists would drift and the cost of
+/// drift here is either a leftover or a wiped subscription. The keys are literals rather than
+/// references to the declarations they mirror — those are statics on `@MainActor` stores —
+/// and `tools/qa/replay_login.js` reads BOTH sides out of the source and asserts they still match,
+/// which is the same trade the repo makes everywhere it cannot reach a constant directly.
+enum LoginAccountData {
+
+    /// Cleared: everything the account produced on this device.
+    static let erasedKeys: [String] = [
+        "biya.auth.session.v1",     // LoginSession.storageKey — the session itself
+        "biya.coach.takeback.v1",   // CoachStore.takeBackKey
+        "biya.analysis.engine.v1",  // EngineSettings.storageKey
+    ]
+
+    /// Cleared by prefix: a saved coach game is one key each, so there is no fixed list of them.
+    static let erasedKeyPrefixes: [String] = [
+        "biya.coach.draft.v1.",     // CoachGame.draftKeyPrefix
+    ]
+
+    /// Cleared: the JSON documents in Application Support/Biyaherong.
+    static let erasedFiles: [String] = [
+        "puzzle-progress.json", "pairing.json", "openings.json", "analysis-library.json",
+    ]
+
+    /// KEPT, and both on purpose.
+    ///
+    /// - `biya.store.subscription.v1` (`PremiumStore.snapshotKey`) is StoreKit's entitlement
+    ///   snapshot — device state, not user data. Apple requires that deleting an account does not
+    ///   forfeit a paid subscription, and `KeychainStorage` already outlives a delete-and-reinstall
+    ///   deliberately. The confirmation copy tells the user so, because Apple checks for that.
+    /// - `biya.store.usage.v1` (`PremiumStore.usageKey`) holds the daily free-tier counters.
+    ///   Clearing them would make "delete account, sign in again" a free reset of every cap — a
+    ///   paywall bypass wearing a privacy feature's clothes.
+    static let keptKeys: [String] = ["biya.store.subscription.v1", "biya.store.usage.v1"]
+}
+
+// MARK: - The sign-in state machine
+
+/// Where the Apple sign-in has got to.
+///
+/// The platform half lives in `LoginAppleAuth.swift` and cannot exist in a browser. What the two
+/// languages share is this: the DECISION half — which event moves the screen where, and which of
+/// them the user is told about. That is where the branch worth getting wrong lives (a cancel is
+/// not an error), and `tools/qa/replay_login.js` compares the whole table across both.
+enum LoginAuthPhase: String, CaseIterable, Sendable {
+    case idle
+    case requesting
+    case failed
+}
+
+/// What Apple's sheet can report back.
+enum LoginAuthEvent: String, CaseIterable, Sendable {
+    case start
+    case succeeded
+    case cancelled
+    case failed
+}
+
+enum LoginAuth {
+
+    /// The whole table. The `default` arm holds every impossible pair — a second `start` while a
+    /// request is already up, a `succeeded` that arrives twice — and returning the phase unchanged
+    /// is what makes those no-ops instead of a second Apple sheet.
+    static func next(_ phase: LoginAuthPhase, _ event: LoginAuthEvent) -> LoginAuthPhase {
+        switch (phase, event) {
+        case (.idle, .start), (.failed, .start): return .requesting
+        case (.requesting, .succeeded): return .idle
+        // Backing out of Apple's sheet is a choice, not a fault: the screen goes quietly back to
+        // where it was. This is the one branch that would be easy to get wrong in one language.
+        case (.requesting, .cancelled): return .idle
+        case (.requesting, .failed): return .failed
+        default: return phase
+        }
+    }
+
+    /// Only a genuine failure shows a message — which is why this asks about the PHASE rather than
+    /// about the event that produced it.
+    static func showsError(_ phase: LoginAuthPhase) -> Bool { phase == .failed }
+
+    /// The request is inert while Apple's sheet is up, so a double tap cannot raise two.
+    static func isBusy(_ phase: LoginAuthPhase) -> Bool { phase == .requesting }
+}
+
 // MARK: - Copy
 
 /// Taglish, matching the original app's voice. The button label is Apple's required wording and
@@ -337,23 +424,49 @@ enum LoginStrings {
 
     static let sheetClose = "Sige, salamat!"
 
-    static let privacyTitle = "Privacy"
-    static let privacyBody = """
-    Biyaherong Coach works 100% offline. It does not collect, store, or send any personal \
-    information anywhere — there is no account server and no analytics.
+    /// Shown only when Apple's sheet reports a real failure. A user-cancelled sign-in shows nothing
+    /// at all — see `LoginAuth.next`.
+    static let authFailed = "Hindi natuloy ang sign in. Subukan ulit."
 
-    Your puzzles, ratings, games and settings live on this device only. Signing in simply remembers \
-    you here so you do not see this screen again.
+    static let deleteAccount = "Delete account"
+    static let deleteTitle = "Burahin ang account?"
+    static let deleteConfirm = "Burahin"
+    static let deleteCancel = "Huwag na"
+    /// Names the subscription explicitly. Apple checks that deleting an account does not read as
+    /// cancelling a paid one, and pointing at where it IS managed is the clearest way to say so.
+    static let deleteBody = """
+    Mabubura lahat ng nasa device na ito: mga puzzle, rating, laro at settings mo. Hindi na ito \
+    maibabalik.
+
+    Hindi kasama ang subscription mo. Hindi ito makakansela at hindi mawawala — pamahalaan ito sa \
+    Settings > Apple Account > Subscriptions.
+    """
+
+    static let privacyTitle = "Privacy"
+    /// "100% offline" used to open this paragraph. Sign in with Apple is a real
+    /// `ASAuthorizationController` call now, and Apple's own servers answer it, so the first
+    /// sign-in needs a connection and the old wording was no longer true. Everything AFTER it
+    /// still is — which is what the replacement says, rather than dropping the claim entirely.
+    static let privacyBody = """
+    Biyaherong Coach works offline. It does not collect, store, or send any personal information \
+    anywhere — there is no account server and no analytics.
+
+    Signing in goes through Apple, so the first sign-in needs internet. Nothing else does: your \
+    puzzles, ratings, games and settings live on this device only.
 
     Walang datos na inilalabas. Lahat ay nasa device mo lang.
     """
 
     static let termsTitle = "Terms"
+    /// This told users "the app itself is GPL" while the repo had no LICENSE file at all — a
+    /// licence claim with nothing behind it. The GPL plan belongs to Stockfish (`CLAUDE.md`), which
+    /// is not in this repo and has been deferred, so the sentence described a future build. It now
+    /// names only what actually ships; see LICENSE and THIRD-PARTY-NOTICES.md.
     static let termsBody = """
     Biyaherong Coach is for learning and enjoying chess. Play fair, be kind, and have fun.
 
     The app is provided as-is for practice and study. Chess piece artwork is licensed CC BY-SA, the \
-    Nunito typeface under the SIL Open Font License, and the app itself is GPL.
+    Nunito typeface under the SIL Open Font License, and the opening names under CC0.
 
     Maglaro nang patas. Mag-enjoy!
     """

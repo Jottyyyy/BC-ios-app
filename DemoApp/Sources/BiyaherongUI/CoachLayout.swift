@@ -67,13 +67,16 @@ enum CoachLayout {
     static let defaultPromotion = "q"
 }
 
-/// The nav and back glyphs.
+/// The transport glyphs.
 ///
 /// Not `CoachStrings`: that file is generated from spec §2.14, which is COPY. These are icons that
 /// happen to be characters, and the browser twin writes them as literals in `coach-play.js` for the
 /// same reason. Kept together so the two languages can be compared at a glance.
+///
+/// `back` used to live here. It is a VECTOR now — `NavIconButton(.back, …)`, see NavIcons.swift —
+/// because "an icon that happens to be a character" is exactly the thing that rendered in a
+/// fallback face on a real phone. The four transport arrows below are deliberately left alone.
 enum CoachGlyph {
-    static let back = "\u{2190}"        // ←
     static let first = "\u{23EE}"       // ⏮
     static let prev = "\u{25C0}"        // ◀
     static let next = "\u{25B6}"        // ▶

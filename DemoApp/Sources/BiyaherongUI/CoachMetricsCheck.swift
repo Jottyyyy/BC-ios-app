@@ -111,7 +111,9 @@ public func biyaherongCoachMetricsCheck() -> CoachMetricsCheckResult {
     //
     // Icons that happen to be characters. Pinned because a missing one renders as an empty button
     // rather than as an error.
-    for (name, glyph) in [("back", CoachGlyph.back), ("first", CoachGlyph.first),
+    // `back` is deliberately absent: it is a vector now (NavIcons.swift), not a character. The four
+    // transport arrows stay glyphs, and stay pinned.
+    for (name, glyph) in [("first", CoachGlyph.first),
                           ("prev", CoachGlyph.prev), ("next", CoachGlyph.next),
                           ("last", CoachGlyph.last)] {
         expect(!glyph.isEmpty, "the \(name) glyph is not empty")

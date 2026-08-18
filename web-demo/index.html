@@ -7,9 +7,14 @@
   <title>Biyaherong Chess App iOS — Web Demo</title>
   <meta name="theme-color" content="#0F1A2E" />
   <link rel="icon" href="assets/brand/favicon.png" />
+  <!-- Every stylesheet in css/ is linked here, and tools/qa/web_shell_check.js fails the build if
+       one is missing. That gate exists because `coach.css` was NOT linked for the whole life of
+       Play vs Coach: 507 correct lines on disk that the page never loaded, so the coach screens
+       rendered as raw UA-styled buttons the moment app.js started routing to them. -->
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/pairing.css" />
+  <link rel="stylesheet" href="css/coach.css" />
 </head>
 
 <body>
@@ -70,7 +75,6 @@
           </span>
         </div>
         <div id="view" class="view"></div>
-        <nav id="tabbar" class="tabbar"></nav>
       </div>
       <span class="home-button"></span>
     </div>
@@ -90,6 +94,7 @@
        classic scripts (no ES modules) so this runs from file:// on Windows. eco-data.js is ~740 KB
        of generated book; it is loaded eagerly because fetch() is blocked on file:// and it parses
        in a few tens of milliseconds anyway. -->
+  <script src="js/icons.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/rating.js"></script>
@@ -150,11 +155,21 @@
   <script src="js/pairing-list.js"></script>
   <script src="js/pairing-create.js"></script>
   <script src="js/pairing-detail.js"></script>
+
+  <!-- Opening Tree. Order is load-bearing: opening-tree.js resolves engine.js and pgn.js lazily,
+       but opening-store.js and openings.js read their siblings at IIFE time. -->
+  <script src="js/opening-tree.js"></script>
+  <script src="js/opening-metrics.js"></script>
+  <script src="js/opening-store.js"></script>
+  <script src="js/openings.js"></script>
   <!-- Play vs Coach. Order is load-bearing: coach-game reads BiyaCoachGame's engine at load time,
        coach-strings is read by every screen, and coach-play reads coach-turn.
-       These are LOADED but not yet ROUTED — app.js still shows the old sample Play tab. Loading
-       them first is what lets `coach_screen_test.js` exercise them in the page's own order; the
-       route is repointed once the stylesheet exists, so the screens never appear unstyled. -->
+
+       This comment used to say these were "LOADED but not yet ROUTED", and that the route would be
+       repointed "once the stylesheet exists, so the screens never appear unstyled". The route WAS
+       repointed (app.js `renderPlay` calls BiyaCoachSelect.render) — and the stylesheet link was
+       never added, so the screens appeared exactly as unstyled as that sentence was written to
+       prevent. Both halves are true now; web_shell_check.js keeps them that way. -->
   <script src="js/coach-engine.js"></script>
   <script src="js/coach-book.js"></script>
   <script src="js/coach-game.js"></script>

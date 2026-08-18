@@ -152,14 +152,17 @@ var BiyaPairingList = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pgl-header');
-    var back = el('button', 'pgl-back', T.back);
+    var back = el('button', 'pgl-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
     var centre = el('div', 'pgl-header-center');
     centre.appendChild(el('div', 'pgl-title', T.tournaments));
     centre.appendChild(el('div', 'pgl-sub', T.listSub));
     header.appendChild(centre);
-    header.appendChild(el('div', 'pgl-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pgl-logo'));
     root.appendChild(header);
 
     var list = doc.tournaments;

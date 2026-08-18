@@ -37,8 +37,11 @@ function lookup(block, key, prop) {
 }
 
 // `matches("editFenInput", "borderRadius", …)` and `sourceString("x", "y")` read `stylesheets.styles`.
+// `deviates(...)` is the same lookup for a value we deliberately do NOT take from the source — it
+// still has to name a key that exists, or the "the source still says X" half asserts nothing.
 for (const re of [/\bmatches\("([^"]+)",\s*"([^"]+)"/g, /\bsourceString\("([^"]+)",\s*"([^"]+)"/g,
-                  /\bsourceNumber\("([^"]+)",\s*"([^"]+)"/g]) {
+                  /\bsourceNumber\("([^"]+)",\s*"([^"]+)"/g,
+                  /\bdeviates\("([^"]+)",\s*"([^"]+)"/g]) {
   let m;
   while ((m = re.exec(src)) !== null) {
     const [, key, prop] = m;

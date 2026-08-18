@@ -114,16 +114,24 @@ function run() {
   // ── CoachEngine: the level table ────────────────────────────────────────────
   {
     const rows = [...code(swEngine).matchAll(
-      /(\d+):\s*Config\(depth:\s*(\d+),\s*numMoves:\s*(\d+)\)/g)];
+      /(\d+):\s*Config\(depth:\s*(\d+),\s*numMoves:\s*(\d+),\s*movetimeMs:\s*(\d+)\)/g)];
     eq(rows.length, 5, 'five levels in the Swift LEVEL_CONFIG');
-    for (const [, lv, depth, numMoves] of rows) {
+    for (const [, lv, depth, numMoves, movetimeMs] of rows) {
       const js = ENG.LEVEL_CONFIG[Number(lv)];
       expect(!!js, `Swift has a level ${lv} the JS does not`);
       if (!js) continue;
       eq(js.depth, Number(depth), `L${lv} depth`);
       eq(js.numMoves, Number(numMoves), `L${lv} numMoves`);
+      // Per level since the flat `movetimeCapMs` was retired. This is the constant that decides
+      // real strength, so a drift here is a silently different opponent in one language.
+      eq(js.movetimeMs, Number(movetimeMs), `L${lv} movetimeMs`);
     }
-    eq(ENG.MOVETIME_CAP_MS, swNum(swEngine, 'movetimeCapMs'), 'the 1 s movetime cap');
+    expect(!/movetimeCapMs/.test(code(swEngine)),
+      'the flat movetime cap is gone from the Swift — it is per level now');
+    for (let lv = 1; lv < 5; lv++) {
+      expect(ENG.LEVEL_CONFIG[lv].movetimeMs < ENG.LEVEL_CONFIG[lv + 1].movetimeMs,
+        `the ladder is monotonic in time (L${lv} thinks less than L${lv + 1})`);
+    }
     eq(1, swNum(swEngine, 'minLevel'), 'minLevel');
     eq(5, swNum(swEngine, 'maxLevel'), 'maxLevel');
   }
@@ -544,7 +552,12 @@ function run() {
              `${layout.length} INVENTED layout constants — the list is growing`);
       expect(decls.length > layout.length,
              'and some of CoachLayout is derived from the extraction rather than chosen');
-      eq(glyphs.length, 5, 'five nav/back glyphs, no more');
+      // FOUR, not five. `back` was retired: it is a vector now (NavIcons.swift / js/icons.js), and
+      // "an icon that happens to be a character" was exactly the thing that rendered in a fallback
+      // face on a real phone. The four transport arrows stay glyphs.
+      eq(glyphs.length, 4, 'four transport glyphs, no more — back is a vector now');
+      expect(glyphs.indexOf('back') < 0,
+             'and `back` is not among them; nav_icons_check.js asserts it does not come back');
       // Three of the twelve are DERIVED from extracted values rather than chosen, which is why
       // they are allowed at all. If one is ever replaced by a bare number the count still passes,
       // so the derivation itself is what is pinned.
@@ -557,6 +570,40 @@ function run() {
                `${name} is derived from ${from}, not chosen`);
       }
     }
+  }
+
+  // -- Both languages draw the coach's FACE, not a number ----------------------
+  //
+  // Swift has drawn `CoachArt.image(level:)` inside the ring since the screen was written; the
+  // browser drew `String(c.level)` -- a bare digit in an empty circle. Nothing compared them,
+  // because the art is a file reference rather than a value, and the divergence stayed invisible
+  // for as long as `coach.css` was unlinked and the whole screen looked wrong anyway.
+  {
+    const swiftAvatar = code(read(UI, 'CoachScreens.swift'));
+    const jsSelect = code(read(JS, 'coach-select.js'));
+
+    expect(/CoachArt\.image\(level: coach\.id\)/.test(swiftAvatar),
+      'Swift still draws the coach portrait inside the ring');
+    expect(/level-' \+ c\.level \+ '\.webp/.test(jsSelect),
+      'coach-select.js draws the same per-level portrait, not the level number');
+    expect(/face\.onerror/.test(jsSelect),
+      'and falls back rather than showing a broken-image box, the way CoachArt degrades to the ring');
+
+    // The five files both halves point at.
+    for (let level = 1; level <= 5; level += 1) {
+      expect(fs.existsSync(path.join(ROOT, 'web-demo', 'assets', 'characters',
+                                     'level-' + level + '.webp')),
+        'web-demo/assets/characters/level-' + level + '.webp is missing');
+      expect(fs.existsSync(path.join(UI, 'Characters', 'level-' + level + '.webp')),
+        'the Swift bundle is missing Characters/level-' + level + '.webp');
+    }
+
+    // Sized the way Swift frames it: the image is `avatarRegular` inside a ring of `ringRegular`.
+    const coachCss = read(path.join(ROOT, 'web-demo', 'css'), 'coach.css');
+    expect(/\.cgs-avatar img\s*\{[^}]*--cgs-card-size-avatar-regular/.test(coachCss),
+      'the portrait is sized from the avatar metric, not from the ring it sits in');
+    expect(/\.cgs-avatar img\s*\{[^}]*object-fit:\s*cover/.test(coachCss),
+      'and cropped like scaledToFill + clipShape(Circle())');
   }
 
   // ── CoachReview: the adapter, against the JS ────────────────────────────────

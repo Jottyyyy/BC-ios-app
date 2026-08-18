@@ -86,37 +86,47 @@
 
   // ------------------------------------------------------------------- tabs --
   var view = document.getElementById('view');
-  var tabbarEl = document.getElementById('tabbar');
-  var TABS = [{ id: 'home', ico: ICON.home, lbl: 'Home' }, { id: 'puzzles', ico: ICON.puzzles, lbl: 'Puzzles' }, { id: 'play', ico: ICON.play, lbl: 'Play' }, { id: 'profile', ico: ICON.profile, lbl: 'Profile' }];
   // The login gate. `BiyaLogin` owns the session; a missing or unrecognised stored value means the
   // login screen, so a half-written key fails closed rather than letting someone straight into the
   // app. Signing in persists, so this is the first screen once and not on every launch —
   // Profile > Sign out is the way back to it.
   var current = BiyaLogin.shared().isSignedIn() ? 'home' : 'login';
-  function renderTabbar() {
-    tabbarEl.innerHTML = '';
-    TABS.forEach(function (t) {
-      var b = el('button', 'tab' + (t.id === current ? ' active' : ''));
-      b.innerHTML = '<span class="ico">' + t.ico + '</span><span class="lbl">' + t.lbl + '</span>';
-      b.onclick = function () {
-        // The solver owns timers and an in-flight search; leaving by the tab bar has to cancel
-        // both, or a stale opponent reply lands on whatever screen comes next.
-        leaveCurrentPuzzle();
-        current = t.id; renderTabbar(); render();
-      };
-      tabbarEl.appendChild(b);
-    });
+
+  /* ---- the trial gate ----------------------------------------------------- *
+   * Client decision, round 4: nothing is usable until the 7-day free trial is started, and every
+   * tap a locked user makes lands on the offer. This REVERSES what docs/subscription.md was
+   * written around, where the free tier was genuinely playable.
+   *
+   * The twin of `PhoneApp.locked` / `openTabs` / `gatedTab` in PhoneView.swift, and it lives at
+   * the same place: the router, not the screens. `gate()` and the per-mode caps below are
+   * untouched — they still describe what a LAPSED subscriber's counters mean.
+   *
+   * Home stays reachable so the offer has something to sell against, and Profile because it owns
+   * Sign out: walling it strands a user who signed in with the wrong account, and Restore lives on
+   * the paywall they would then be unable to leave.                                              */
+  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1 };
+  function locked() {
+    return BiyaLogin.shared().isSignedIn() && !BiyaPremium.shared().isPremium();
   }
+  function isOpenRoute(id) { return !!OPEN_ROUTES[id]; }
+
   function render() {
     view.scrollTop = 0; view.innerHTML = '';
     // Home is the one screen that owns the whole box with no gutter or scroll; every other screen
-    // wants .view's default padding back. Cleared here because this is the only place the tab
+    // wants .view's default padding back. Cleared here because this is the only place the route
     // changes — the leaf renderers reached directly (renderGame, renderCoachSelect) are all
     // non-home and always follow a render().
     view.classList.remove('flush');
-    // The Analysis Board also hides the tab bar: it is a pushed route in the original, and its
-    // seven bands cannot spare the height. Cleared here for the same reason .flush is.
-    appCard().classList.remove('an-mode');
+    // The trial gate's backstop. Every transition is intercepted at its source — the Home tiles in
+    // renderHome, which is now the only source there is — but an entitlement can lapse BETWEEN
+    // taps (the demo
+    // picker below does exactly that), so the router re-checks on every paint rather than trusting
+    // that no route can outlive its permission. `paywallReturn` is forced to Home: returning to
+    // the screen that was just walled would bounce straight back here.
+    if (locked() && !isOpenRoute(current)) {
+      paywallReturn = 'home';
+      current = 'paywall';
+    }
     if (current === 'login') renderLogin();
     else if (current === 'paywall') renderPaywall();
     else if (current === 'home') renderHome();
@@ -128,6 +138,7 @@
     else if (current === 'pairing') renderPairingList();
     else if (current === 'pairing-create') renderPairingCreate();
     else if (current === 'pairing-detail') renderPairingDetail();
+    else if (current === 'openings') renderOpenings();
     else if (current === 'puzzles') renderPuzzleHub();
     else if (current === 'puzzle-play') renderPuzzlePlayHome();
     else if (current === 'puzzle-solve') renderPuzzleSolver();
@@ -149,12 +160,11 @@
    *  LOGIN — see js/login.js
    * ======================================================================== */
 
-  // The gate owns the whole box and hides the tab bar, the same two flags every pushed route sets.
-  // `.flush` because it draws to the edges; `an-mode` because a login screen with a tab bar under
-  // it is not a gate.
+  // The gate owns the whole box, the way every pushed route does.
+  // `.flush` because it draws to the edges. It used to also set `an-mode` — a login screen with a
+  // tab bar under it is not a gate — but there is no tab bar left to hide.
   function renderLogin() {
     view.classList.add('flush');
-    appCard().classList.add('an-mode');
     BiyaLogin.render(view, finishSignIn);
   }
 
@@ -164,7 +174,6 @@
     var card = appCard();
     var secs = BiyaLogin.TIMING.signInFadeSeconds;
     current = 'home';
-    renderTabbar();
     render();
     card.style.setProperty('--lg-fade-secs', secs + 's');
     card.classList.add('lg-signing-in');
@@ -174,8 +183,44 @@
   function signOut() {
     BiyaLogin.shared().signOut();
     current = 'login';
-    renderTabbar();
     render();
+  }
+
+  /* The browser twin of AccountDeletion.erase. Reads the SAME two lists out of
+   * BiyaLogin.ACCOUNT_DATA, so neither language can quietly start keeping something the other
+   * erases. The four JSON documents are an iOS-side mechanism (Application Support has no browser
+   * equivalent), which is why only the keys are removed here. */
+  function eraseAccountData() {
+    var A = BiyaLogin.ACCOUNT_DATA;
+    function drop(k) { try { localStorage.removeItem(k); } catch (e) { /* private mode */ } }
+    A.erasedKeys.forEach(drop);
+    Object.keys(localStorage).forEach(function (k) {
+      A.erasedKeyPrefixes.forEach(function (p) { if (k.indexOf(p) === 0) drop(k); });
+    });
+  }
+
+  /* Guideline 5.1.1(v)'s deletion, confirmed first. A MODAL rather than a route, deliberately:
+   * OPEN_ROUTES is asserted to be exactly home/login/paywall/profile, and a `delete-account` route
+   * would fail that gate — rightly, because a destructive confirm is not somewhere you navigate
+   * to and then press Back out of. Mirrors the Swift `.alert`. */
+  function confirmDeleteAccount() {
+    var S = BiyaLogin.STRINGS;
+    var sheet = el('div', 'lg-confirm');
+    sheet.innerHTML = '<div class="lg-confirm-box">'
+      + '<div class="lg-confirm-title">' + S.deleteTitle + '</div>'
+      + '<div class="lg-confirm-body">' + S.deleteBody.replace(/\n\n/g, '<br><br>') + '</div>'
+      + '<div class="lg-confirm-actions">'
+      + '<button class="lg-confirm-no" type="button">' + S.deleteCancel + '</button>'
+      + '<button class="lg-confirm-yes" type="button">' + S.deleteConfirm + '</button>'
+      + '</div></div>';
+    function close() { if (sheet.parentNode) sheet.parentNode.removeChild(sheet); }
+    sheet.querySelector('.lg-confirm-no').onclick = close;
+    sheet.querySelector('.lg-confirm-yes').onclick = function () {
+      close();
+      eraseAccountData();
+      signOut();
+    };
+    document.querySelector('.app-card').appendChild(sheet);
   }
 
   /* ======================================================================== *
@@ -185,7 +230,6 @@
   // A pushed route, like the login gate: it owns the box and hides the tab bar.
   function renderPaywall() {
     view.classList.add('flush');
-    appCard().classList.add('an-mode');
     BiyaPremium.render(view, function () { goPaywallBack(); });
   }
 
@@ -195,12 +239,10 @@
   function goPaywall() {
     paywallReturn = (current === 'paywall') ? paywallReturn : current;
     current = 'paywall';
-    renderTabbar();
     render();
   }
   function goPaywallBack() {
     current = paywallReturn;
-    renderTabbar();
     render();
   }
 
@@ -237,9 +279,8 @@
    *  ANALYSIS BOARD — see js/analysis.js
    * ======================================================================== */
   function renderAnalysis() {
-    appCard().classList.add('an-mode');
     BiyaAnalysisBoard.render(view, function () {
-      current = 'home'; renderTabbar(); render();
+      current = 'home'; render();
     });
   }
 
@@ -252,10 +293,9 @@
    *  so the two cannot share a solver. They stay reachable at `?dev=samples` only, for the engine
    *  spot-check they were originally written for.
    * ======================================================================== */
-  function puzzleGo(id) { leaveCurrentPuzzle(); current = id; renderTabbar(); render(); }
+  function puzzleGo(id) { leaveCurrentPuzzle(); current = id; render(); }
 
   function renderPuzzleHub() {
-    appCard().classList.add('an-mode');           // a pushed route: no tab bar, full height
     BiyaPuzzleHub.render(view, function (mode) {
       // Only Thematic is gated here: it is the one hard premium gate. The others are daily
       // allowances, spent when a run actually starts — browsing a home screen and backing out
@@ -272,7 +312,6 @@
   }
 
   function renderPuzzlePlayHome() {
-    appCard().classList.add('an-mode');
     // The allowance is spent HERE, on the way into the solver — a failed attempt still costs a
     // use, exactly as the original counted them.
     BiyaPuzzleHome.render(view, function () {
@@ -281,39 +320,32 @@
   }
 
   function renderPuzzleSolver() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleSolver.render(view, function () { puzzleGo('puzzle-play'); });
   }
 
   function renderDailyHome() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleDaily.renderHome(view, function () { puzzleGo('puzzle-daily-solve'); },
                                function () { puzzleGo('puzzles'); });
   }
   function renderDailySolver() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleDaily.renderSolver(view, function () { puzzleGo('puzzle-daily'); });
   }
   function renderThematicGrid() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleThematic.renderGrid(view, function () { puzzleGo('puzzle-thematic-solve'); },
                                   function () { puzzleGo('puzzles'); });
   }
   function renderThematicSolver() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleThematic.renderSolver(view, BiyaPuzzleThematic.selectedTheme(),
                                     function () { puzzleGo('puzzle-thematic'); });
   }
 
   function renderStreakHome() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleStreak.renderHome(view, function () {
       gate(BiyaPremium.MODE.streak, BiyaPremium.STRINGS.streakCap,
            function () { puzzleGo('puzzle-streak-solve'); });
     }, function () { puzzleGo('puzzles'); });
   }
   function renderStreakSolver() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleStreak.renderSolver(view, function () { puzzleGo('puzzle-streak'); });
   }
 
@@ -322,7 +354,6 @@
   // re-render of the same route — a tab-bar repaint, say — does not silently restart the run.
   var turboLaunch = null;
   function renderTurboHome() {
-    appCard().classList.add('an-mode');
     BiyaPuzzleTurbo.renderHome(view, function (mode, draft) {
       // PER MODE — rush_0, rush_3 and rush_5 carry their own allowance. Resuming a draft is the
       // SAME run continued and already cost its use when it started.
@@ -332,7 +363,6 @@
     }, function () { puzzleGo('puzzles'); });
   }
   function renderTurboRun() {
-    appCard().classList.add('an-mode');
     var L = turboLaunch || { mode: BiyaPuzzleMetrics.TURBO_DEFAULT_MODE, draft: null };
     BiyaPuzzleTurbo.renderRun(view, L.mode, L.draft, function () {
       turboLaunch = null;
@@ -379,23 +409,21 @@
    */
   var pairingOpenId = null;
 
-  function pairingGo(id) { current = id; renderTabbar(); render(); }
+  function pairingGo(id) { current = id; render(); }
 
   /** The document, loaded fresh each paint and saved by whoever mutates it. */
   function pairingDoc() { return BiyaPairingStore.load(); }
 
   function renderPairingList() {
-    appCard().classList.add('an-mode');           // a pushed route: no tab bar, full height
     BiyaPairingList.render(view, pairingDoc(), {
       onOpen: function (id) { pairingOpenId = id; pairingGo('pairing-detail'); },
       onCreate: function () { pairingGo('pairing-create'); },
-      onExit: function () { current = 'home'; renderTabbar(); render(); },
+      onExit: function () { current = 'home'; render(); },
       onChanged: render,
     });
   }
 
   function renderPairingCreate() {
-    appCard().classList.add('an-mode');
     BiyaPairingCreate.render(view, {
       onCreated: function (id) { pairingOpenId = id; pairingGo('pairing-detail'); },
       onExit: function () { pairingGo('pairing'); },
@@ -403,12 +431,55 @@
   }
 
   function renderPairingDetail() {
-    appCard().classList.add('an-mode');
     // A tournament deleted from under the screen shows the empty state rather than a blank box or
     // a permanent spinner (spec 7 #19).
     BiyaPairingDetail.render(view, pairingOpenId, {
       onExit: function () { pairingGo('pairing'); },
       onChanged: render,
+    });
+  }
+
+  /* ======================================================================== *
+   *  OPENING TREE — see js/opening-tree.js, opening-store.js, openings.js
+   *
+   *  A pushed route, like Pairing: reached from a Home tile, not a tab, and its
+   *  three screens of its own leave no room for the app's.
+   *
+   *  `openingForm` is router-scoped for the reason every other pushed route's
+   *  state is: `render()` runs again on every repaint, so a half-typed PGN held
+   *  inside the screen would be lost on the first one.
+   * ======================================================================== */
+
+  var openingForm = null;
+  var openingMode = 'list';
+
+  function openingsGo(mode) { openingMode = mode; current = 'openings'; render(); }
+
+  function renderOpenings() {
+    var store = BiyaOpeningStore.shared();
+    if (!openingForm) openingForm = BiyaOpenings.emptyForm();
+    BiyaOpenings.render(view, store, openingForm, openingMode, {
+      onExit: function () { current = 'home'; render(); },
+      onBuild: function () { openingForm = BiyaOpenings.emptyForm(); openingsGo('form'); },
+      onCancel: function () { openingsGo('list'); },
+      onChanged: render,
+      onSubmit: function () {
+        // The clock is injected rather than read inside the builder, so the same call is
+        // reproducible in a test — the rule `pairing-store.js` follows for `createdAtMs`.
+        var r = BiyaOpenings.submit(openingForm, Date.now());
+        if (r.error) { openingForm.error = r.error; render(); return; }
+        store.add(r.tree);
+        store.openTree(r.tree.id);
+        openingForm = null;
+        openingsGo('list');
+      },
+      onOpen: function (id) { store.openTree(id); openingsGo('list'); },
+      onDelete: function (id) { store.remove(id); render(); },
+      onClose: function () { store.closeTree(); render(); },
+      onPlay: function (san) { store.play(san); render(); },
+      onBack: function () { store.stepBack(); render(); },
+      onForward: function () { store.stepForward(); render(); },
+      onReset: function () { store.reset(); render(); }
     });
   }
 
@@ -426,13 +497,20 @@
     BiyaHome.render(view, function (action) {
       // Only the actions with a real destination in this demo are wired; the rest are the empty
       // callbacks the screen is designed around (§12).
-      if (action === 'puzzles') { current = 'puzzles'; renderTabbar(); render(); }
-      else if (action === 'playCoach') { current = 'play'; renderTabbar(); render(); }
-      else if (action === 'analysis') { current = 'analysis'; renderTabbar(); render(); }
-      else if (action === 'avatar') { current = 'profile'; renderTabbar(); render(); }
+      //
+      // The trial gate, twin of `PhoneApp.gated` in PhoneView.swift. `avatar` and `membership` are
+      // deliberately outside it: one leads to Sign out, the other IS the offer.
+      if (locked() && action !== 'avatar' && action !== 'membership') { goPaywall(); return; }
+      if (action === 'puzzles') { current = 'puzzles'; render(); }
+      else if (action === 'playCoach') { current = 'play'; render(); }
+      else if (action === 'analysis') { current = 'analysis'; render(); }
+      else if (action === 'avatar') { current = 'profile'; render(); }
       // home.js has emitted 'pairing' since the tile was drawn; there was simply nothing here to
       // catch it.
       else if (action === 'pairing') pairingGo('pairing');
+      // home.js has emitted 'openingTrainer' since the tile was drawn and nothing caught it —
+      // the tile did nothing at all, which is the bug the client reported. This is where it goes.
+      else if (action === 'openingTrainer') openingsGo('list');
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
     });
@@ -468,7 +546,7 @@
                    // redrawn by `render()` on every progress tick.
                    review: null };
 
-  function coachGo(id) { current = id; renderTabbar(); render(); }
+  function coachGo(id) { current = id; render(); }
 
   /** The one place the game screen is drawn, so every mutation ends the same way. */
   function coachPaint() {
@@ -489,12 +567,11 @@
   function renderPlay() {
     BiyaCoachSelect.render(view, {
       onPick: function (level) { coachTab.level = level; coachGo('coach-color'); },
-      onExit: function () { current = 'home'; renderTabbar(); render(); },
+      onExit: function () { current = 'home'; render(); },
     });
   }
 
   function renderCoachColor() {
-    appCard().classList.add('an-mode');
     BiyaCoachColor.render(view, coachTab.level, coachProfile(coachTab.level).name, {
       onStart: coachStart,
       onExit: function () { coachGo('play'); },
@@ -502,7 +579,6 @@
   }
 
   function renderCoachGame() {
-    appCard().classList.add('an-mode');
     BiyaCoachPlay.render(view, coachTab.game, coachTab.ctl, coachTab.profile, {
       onMove: coachUserMove,
       onSeek: coachSeek,
@@ -758,7 +834,6 @@
     if (!payload) { coachPaint(); return; }
     coachLeave();
     current = 'analysis';
-    renderTabbar();
     render();
     if (BiyaAnalysisBoard && BiyaAnalysisBoard.loadReviewedGame) {
       BiyaAnalysisBoard.loadReviewedGame(payload);
@@ -790,7 +865,15 @@
   ];
   function renderProfile() {
     view.scrollTop = 0; view.innerHTML = '';
-    view.appendChild(el('div', 'screen-head', '<h1 class="screen-title">Profile</h1>'));
+    // Profile is reached from the Home header's avatar. Until the tab bar was removed it was the
+    // ONE screen in either language with no way out at all — the bar was its only exit.
+    var head = el('div', 'screen-head with-back');
+    var back = el('button', 'screen-back nav-icon');
+    back.innerHTML = BiyaIcons.back();
+    back.onclick = function () { current = 'home'; render(); };
+    head.appendChild(back);
+    head.appendChild(el('h1', 'screen-title', 'Profile'));
+    view.appendChild(head);
     var wrap = el('div', 'wrap-x stack');
     var tier = R.classify(store.puzzleRating);
     // The name comes from the session now, not a literal, so the badge and the header agree with
@@ -852,8 +935,10 @@
     var ac = el('div', 'card');
     ac.innerHTML = '<div class="card-label">' + S.accountCard + '</div>'
       + '<div class="lg-account-row">' + S.signedInWith + ' ' + BiyaLogin.shared().providerLabel()
-      + '</div><button class="lg-signout" type="button">' + S.signOut + '</button>';
+      + '</div><button class="lg-signout" type="button">' + S.signOut + '</button>'
+      + '<button class="lg-delete" type="button">' + S.deleteAccount + '</button>';
     ac.querySelector('.lg-signout').onclick = signOut;
+    ac.querySelector('.lg-delete').onclick = confirmDeleteAccount;
     wrap.appendChild(ac);
 
     view.appendChild(wrap);
@@ -1150,8 +1235,6 @@
     }
     render();
   };
-
-  renderTabbar();
   render();
   if (/(\?|&)selftest\b/.test(location.search)) runSelfTest();
 })();

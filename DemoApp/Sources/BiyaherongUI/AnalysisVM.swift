@@ -32,7 +32,6 @@ final class AnalysisVM: ObservableObject {
     @Published private(set) var engineRows: [EngineRow] = []
     @Published private(set) var boardArrows: [BoardArrow] = []
     @Published private(set) var openingText: String?
-    @Published private(set) var bookRows: [OpeningBook.Continuation] = []
     @Published private(set) var evalFraction: CGFloat = 0.5
     @Published private(set) var evalSymbol: String?
     @Published private(set) var depth = 0
@@ -159,11 +158,24 @@ final class AnalysisVM: ObservableObject {
             ? session.arrows.map { BoardArrow(from: $0.from, to: $0.to, rank: $0.rank) }
             : []
         openingText = session.openingText
-        bookRows = session.bookContinuations
         lastMove = session.lastMove
         checkSquare = session.checkSquare
         depth = session.snapshot?.depth ?? 0
         analyzing = session.analyzing
+
+        // While a line is being previewed the board shows THAT position. Everything else — the
+        // strip, the engine rows, the book, the eval — still describes the real cursor, because
+        // nothing has actually been played. Overriding here rather than in the view keeps the
+        // board band unaware that previewing exists.
+        if let state = previewState() {
+            lastMove = state.last
+            let status = state.pos.status()
+            checkSquare = (status == .check || status == .checkmate)
+                ? state.pos.kingSquare(state.pos.sideToMove) : nil
+            boardArrows = []          // the arrows belong to the root position, not this one
+            selected = nil
+            legalTargets = []
+        }
 
         // The one place the UI maps the session's raw score parts through the metrics tables.
         let parts = session.evalParts
@@ -180,16 +192,119 @@ final class AnalysisVM: ObservableObject {
     }
 
     private func rebuildPieces() {
-        let pos = session.position
+        rebuildPieces(of: previewState()?.pos ?? session.position)
+    }
+
+    private func rebuildPieces(of pos: ChessPosition) {
         pieces = (0..<64).compactMap { sq in
             pos.squares[sq].map { BoardPiece(id: UUID(), square: sq, piece: $0) }
         }
+    }
+
+    // MARK: - Line preview
+    //
+    // Tapping an engine line used to play its FIRST move into the tree and nothing else — you could
+    // not see the variation the engine was actually recommending. Now the whole line walks on the
+    // board, and the move tree is not touched until you ask for it with ＋.
+    //
+    // The state machine itself is `BiyaherongCoachCore.LinePreview` — pure, value-typed, and
+    // asserted by ParityRunner. What is left here is what genuinely needs a screen: the published
+    // property, the haptics, and the repaint.
+
+    @Published private(set) var preview: LinePreview?
+
+    var previewing: Bool { preview != nil }
+
+    /// One cell of the preview bar. `LinePreview.Token` plus the `Identifiable` conformance
+    /// `ForEach` wants — Core is Foundation-only and cannot know SwiftUI needs an id.
+    struct PreviewToken: Identifiable, Equatable {
+        var id: Int { token.ply }
+        let token: LinePreview.Token
+        var ply: Int { token.ply }
+        var san: String { token.san }
+        var played: Bool { token.played }
+        var isCurrent: Bool { token.isCurrent }
+    }
+
+    var previewTokens: [PreviewToken] {
+        (preview?.tokens ?? []).map { PreviewToken(token: $0) }
+    }
+
+    /// Which engine line is being walked, so the bar can borrow that line's arrow colour.
+    var previewRank: Int { preview?.rank ?? 0 }
+    var previewCanStepForward: Bool { preview?.canStepForward ?? false }
+
+    /// The position the preview is showing, and the move that got there.
+    private func previewState() -> (pos: ChessPosition, last: Move)? {
+        guard let p = preview, let st = session.previewPosition(p) else { return nil }
+        return (st.position, st.last)
+    }
+
+    /// Enter the preview on the line's first move. Refuses a line that will not play — a snapshot
+    /// can outlive the position it was computed for.
+    func previewLine(_ row: EngineRow) {
+        guard session.canPreview(row), let p = LinePreview.start(row) else { return }
+        preview = p
+        Haptics.play(.pickUp)
+        repaintPreview()
+    }
+
+    /// Step inside the line. Stepping off the FRONT exits, which is what the ◀ at ply 1 is for.
+    func previewStep(_ delta: Int) {
+        guard let p = preview else { return }
+        guard let next = p.stepped(delta) else { previewExit(); return }
+        guard next != p else { return }
+        preview = next
+        Haptics.play(.move)
+        repaintPreview()
+    }
+
+    /// Jump straight to a ply by tapping its chip. Tapping the ply you are already on is a no-op
+    /// rather than a wasted rebuild.
+    func previewGo(to ply: Int) {
+        guard let p = preview else { return }
+        let next = p.jumped(to: ply)
+        guard next != p else { return }
+        preview = next
+        Haptics.play(.move)
+        repaintPreview()
+    }
+
+    /// Back to the game, exactly where it was. Nothing to undo — nothing was ever done.
+    func previewExit() {
+        guard preview != nil else { return }
+        preview = nil
+        repaintPreview()
+    }
+
+    /// Commit what is on screen into the move tree, as a real variation. `perform` already creates
+    /// a branch when the move differs from the one on the main line, and the strip already draws
+    /// branch chips, so there is nothing new downstream.
+    func previewCommit() {
+        guard let p = preview else { return }
+        let moves = p.movesToCommit
+        preview = nil
+        for uci in moves {
+            guard let m = session.position.move(forUCI: uci) else { break }
+            perform(m)
+        }
+        Haptics.play(.success)
+    }
+
+    /// The board is the only band a preview changes, but the pieces have to be rebuilt rather than
+    /// slid: a jump can land anywhere in the line, and a jump has no direction.
+    private func repaintPreview() {
+        rebuildPieces()
+        refresh()
     }
 
     // MARK: - Interaction
 
     func tap(_ sq: Int) {
         if editing { editTap(sq); return }     // the editor owns the board while it is open
+        // A tap on the board while a line is being previewed means "get me out of here": the pieces
+        // under the finger are the previewed position's, and dragging one would be a lie.
+        if previewing { previewExit(); return }
         let pos = session.position
         if let sel = selected {
             if sq == sel { deselect(); return }
@@ -206,6 +321,9 @@ final class AnalysisVM: ObservableObject {
     /// move here — an analysis board is not a game.
     func drag(from: Int, to: Int) {
         if editing { return }                  // edit-mode input is taps, not drags
+        // No dragging a piece out of a position that does not exist yet — tap ＋ first. The tap
+        // path exits instead, because a tap is ambiguous and a drag is not.
+        if previewing { return }
         let moves = session.position.legalMoves(from: from).filter { $0.to == to }
         if moves.count > 1 { pendingPromotion = (from, to); return }
         if let m = moves.first { perform(m) }
@@ -277,6 +395,8 @@ final class AnalysisVM: ObservableObject {
     // round: a played move has a direction, a jump does not.
 
     private func afterNavigation() {
+        // A jump anywhere in the tree ends the preview: the line belonged to the cursor we just left.
+        preview = nil
         stopAutoplay()
         deselect()
         rebuildPieces()
@@ -311,15 +431,6 @@ final class AnalysisVM: ObservableObject {
         afterNavigation()
     }
 
-    /// Play an engine line's first move — tapping a row in the engine panel.
-    func playEngineRow(_ row: EngineRow) {
-        guard !row.uci.isEmpty, let m = session.position.move(forUCI: row.uci) else { return }
-        perform(m)
-    }
-    func playBookMove(_ san: String) {
-        guard let m = session.position.move(forSAN: san) else { return }
-        perform(m)
-    }
 
     // MARK: - Toggles
 

@@ -225,14 +225,10 @@ struct PuzzleStreakSolverScreen: View {
 
     private var header: some View {
         HStack {
-            Button { engine.leave(); onExit() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: PuzzleStreakSolver.backSize, weight: .bold))
-                    .foregroundStyle(PuzzlePalette.textPrimary)
-                    .frame(width: PuzzleStreakSolver.backBtnW,
-                           height: PuzzleStreakSolver.backBtnH)
-            }
-            .buttonStyle(PuzzlePressStyle())
+            NavIconButton(.back, size: PuzzleStreakSolver.backSize,
+                          tint: PuzzlePalette.textPrimary,
+                          action: { engine.leave(); onExit() })
+                .frame(width: PuzzleStreakSolver.backBtnW, height: PuzzleStreakSolver.backBtnH)
             Spacer()
             Text(PuzzleStrings.streakRunScore(store.state.streak.currentStreak))
                 .font(Theme.nunito(PuzzleStreakSolver.counterSize, .bold))
@@ -244,11 +240,10 @@ struct PuzzleStreakSolverScreen: View {
             // only the width, so the header reported an unbounded max height, became a flexible
             // child of the outer VStack, and claimed a slice of the screen as blank space.
             // Both axes are spelled out here, deliberately, the way CoachScreens.swift:76 does.
-            Circle()
-                .strokeBorder(PuzzlePalette.gold, lineWidth: PuzzleStreakSolver.logoBorder)
-                .frame(width: PuzzleStreakSolver.logoSize, height: PuzzleStreakSolver.logoSize)
-                .shadow(color: PuzzleStreakSolver.logoGlowColor,
-                        radius: PuzzleStreakSolver.logoGlowRadius)
+            // …and it was an EMPTY ring. `AppLogo.tsx` is a ring around an image; both languages
+            // ported the ring and neither ported the image. `HomeLogo` is that ring with the mark
+            // in it, at the same size, so this is a drop-in.
+            HomeLogo(size: PuzzleStreakSolver.logoSize)
         }
         .padding(.horizontal, PuzzleStreakSolver.headerPaddingH)
         .padding(.vertical, PuzzleStreakSolver.headerPaddingV)

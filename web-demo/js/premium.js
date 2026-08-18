@@ -777,12 +777,12 @@ var BiyaPremium = (function () {
     applyMetrics(root);
 
     var head = el('div', 'pw-head');
-    head.innerHTML = '<button class="pw-back" type="button">←</button>'
+    head.innerHTML = '<button class="pw-back nav-icon" type="button">' + BiyaIcons.back() + '</button>'
       + '<div class="pw-head-title">'
       + (store.isPremium() ? STRINGS.premium : STRINGS.goPremium) + '</div>'
       + (store.isPremium()
         ? '<span class="pw-active">' + STRINGS.active + '</span>'
-        : '<img class="pw-logo" src="assets/images/app-icon.png" alt="" '
+        : '<img class="pw-logo" src="assets/images/brand-logo.png" alt="" '
           + 'style="margin-left:auto">');
     head.querySelector('.pw-back').onclick = onClose;
     root.appendChild(head);

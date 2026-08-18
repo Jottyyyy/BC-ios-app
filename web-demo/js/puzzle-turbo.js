@@ -166,7 +166,10 @@ var BiyaPuzzleTurbo = (function () {
     applyMetrics(root);
 
     var header = el('div', 'pzr-header');
-    var back = el('button', 'pzd-back', '←');
+    var back = el('button', 'pzd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (onExit) onExit(); };
     header.appendChild(back);
     header.appendChild(el('div', 'pzr-title', T.turboTitle));

@@ -443,7 +443,10 @@ var BiyaPairingDetail = (function () {
     var t = ST.tournament(doc, id);
 
     var header = el('div', 'pgd-header');
-    var back = el('button', 'pgd-back', T.back);
+    var back = el('button', 'pgd-back nav-icon');
+    // `el`'s third argument is textContent in most of
+    // these files, so the markup has to be set explicitly.
+    back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
 
@@ -471,7 +474,7 @@ var BiyaPairingDetail = (function () {
                         T.roundsMeta(t.rounds.length, ST.totalRoundsOf(t))));
     centre.appendChild(meta);
     header.appendChild(centre);
-    header.appendChild(el('div', 'pgd-logo'));
+    header.appendChild(BiyaIcons.brandLogoEl('pgd-logo'));
     root.appendChild(header);
 
     var tabs = el('div', 'pgd-tabs');
