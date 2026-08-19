@@ -9,6 +9,49 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (fixed) — "Sign Up Not Completed": a testable sideload build, and the app icon is the brand mark
+
+Client: *"hindi ma-try ng client kasi nag-ganito… pwede ba simulate mo muna yung login with Apple para
+ma-test ng maayos… at yung kabayo na logo, gawin mong logo ng Biyaherong Coach."*
+
+**The sign-in failure was never a code bug.** Build 43's own commit message already had it: *"the
+signed .ipa loses `com.apple.developer.applesignin` because the provisioning profile does not carry
+it."* `ASAuthorizationController` ran correctly — Apple's sheet appeared, the account was picked, and
+it stopped at the last step.
+
+**Codesign drops entitlements the profile does not allow, silently.** No compile error, no crash, no
+log. The build installs and looks fine until the sheet refuses. The profile only carries the
+entitlement after the capability is enabled for the App ID in the Developer portal **and the profile
+is regenerated** — this doc previously said the capability's absence makes *signing fail*, which is
+wrong and is why the symptom was so confusing. `codesign -d --entitlements :- Payload/Biyaherong.app`
+is the pre-flight check; it is now in the doc.
+
+**The free path can never carry it at all** — `ios-free-unsigned` is signed afterwards by Sideloadly
+with a free provisioning profile, and free profiles do not support Sign in with Apple. Since the login
+gate is the last ZStack sibling and covers the whole app, that build was not merely awkward to test,
+it was **impossible to open**.
+
+So `BIYA_SIMULATED_SIGNIN`, a Swift compilation condition set by that workflow **and no other**, makes
+the button open the session directly. `ios-testflight` never sets it.
+
+**Both halves are pinned**, because a stopgap that reached App Review would be the exact fake sign-in
+the real call replaced: `replay_login.js` asserts the `#elseif os(iOS)` branch still holds the real
+`ASAuthorizationController`, and that `BIYA_SIMULATED_SIGNIN` appears nowhere in the `ios-testflight`
+half of `codemagic.yaml`. Mutation-checked in both directions — the flag leaking into the shipping
+workflow, and the real branch being disabled.
+
+**The app icon is the Biyaherong Coach mark now.** The knight in the screenshot was Apple's sheet
+drawing the *app icon*, which the client had earlier chosen to keep as the knight and, having now seen
+it in context, asked to change. Rebuilt from `brand-logo.png`: converted palette → **RGB with no alpha**,
+because App Store Connect rejects an icon with an alpha channel. Verified 1024×1024, no `tRNS`.
+
+`icon-1024.png` was byte-identical to `Images/app-icon.png` — the shipped icon and the bundled asset
+were one file — so the cheapest proof it changed is that they are no longer equal, which is what
+`home_chrome_check.js` now asserts. The knight is kept on disk (`Images/app-icon.png`, `ios/AppIcon.svg`)
+and is drawn nowhere.
+
+`replay_login` 457 → 462, `home_chrome_check` 268 → 272.
+
 ### 2026-08-18 (fixed) — Three compile errors that broke the iOS Release archive, and the entitlement the profile does not carry
 
 Merged `origin/main` (23 commits: the App Store rejection fixes, per-coach clocks, Home-as-root, the

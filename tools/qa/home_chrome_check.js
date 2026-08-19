@@ -243,6 +243,20 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
     expect(!/HomeAppIcon\([^)]*asset: \.appIcon/s.test(src),
       `${f} draws HomeAppIcon with the knight`);
   }
+  // THE SHIPPED APP ICON. It used to be the knight, and the client kept it there deliberately —
+  // until they saw it inside Apple's own Sign in with Apple sheet, which draws the app icon, and
+  // asked for the brand mark there too. `icon-1024.png` was byte-identical to `Images/app-icon.png`
+  // for exactly that reason, so the cheapest proof that it changed is that they are no longer the
+  // same file.
+  {
+    const icon = fs.readFileSync(path.join(ROOT, 'ios', 'App', 'Assets.xcassets',
+                                           'AppIcon.appiconset', 'icon-1024.png'));
+    const knight = fs.readFileSync(path.join(UI, 'Images', 'app-icon.png'));
+    expect(!icon.equals(knight),
+      'the shipped iOS app icon is no longer the gold knight');
+    expect(icon.length > 0, 'and the catalog still has an icon at all');
+  }
+
   // And nothing may take it by default any more, so a NEW call site cannot get it by omission.
   expect(/var asset: HomeArt\.Asset = \.brandLogo/.test(read(UI, 'HomeArt.swift')),
     "HomeAppIcon defaults to the brand mark, so a new call site cannot draw the knight by accident");

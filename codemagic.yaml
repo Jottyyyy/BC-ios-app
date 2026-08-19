@@ -28,6 +28,17 @@ workflows:
         script: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           cd ios && xcodegen generate
+      # BIYA_SIMULATED_SIGNIN is set HERE and in no other workflow.
+      #
+      # This path is signed afterwards by Sideloadly with a free provisioning profile, which cannot
+      # carry `com.apple.developer.applesignin`. Sign in with Apple therefore fails at the very end
+      # with "Sign Up Not Completed" — and since the login gate covers the whole app, the tester
+      # cannot get in at all. The flag makes the button open the session directly so this build is
+      # actually testable.
+      #
+      # `ios-testflight` below MUST NOT set it: that build goes to App Review, where a
+      # "Continue with Apple" that performs no Apple authentication is a rejection.
+      # `tools/qa/replay_login.js` fails the gate if the flag ever appears in that workflow.
       - name: Archive WITHOUT code signing
         script: |
           xcodebuild -project "$XCODE_PROJECT" \
@@ -35,6 +46,7 @@ workflows:
             -configuration Release -sdk iphoneos \
             -archivePath "$CM_BUILD_DIR/Biyaherong.xcarchive" \
             archive \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_SIMULATED_SIGNIN' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER=""
       - name: Package unsigned .app into an .ipa
         script: |

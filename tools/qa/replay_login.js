@@ -452,6 +452,30 @@ function run() {
       .test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
   eq(importers.join(','), 'LoginAppleAuth.swift',
     'exactly one file in the UI imports AuthenticationServices');
+  //     The TEST-BUILD escape hatch. `BIYA_SIMULATED_SIGNIN` makes the button open the session
+  //     directly, because the free/sideload path is signed with a profile that cannot carry
+  //     `com.apple.developer.applesignin` — Apple's sheet ends in "Sign Up Not Completed" and the
+  //     tester is locked out of the whole app. It exists so that build is testable, and it is a
+  //     rejection if it ever reaches App Review, so BOTH halves are pinned.
+  {
+    const sw = code(sources['LoginAppleAuth.swift']);
+    expect(sw.indexOf('#if BIYA_SIMULATED_SIGNIN') >= 0,
+      'LoginAppleAuth.swift has the test-build branch');
+    expect(/#elseif os\(iOS\)[\s\S]*ASAuthorizationController/.test(sw),
+      'and the REAL call is still the branch every other build takes');
+
+    const ci = fs.readFileSync(path.join(ROOT, 'codemagic.yaml'), 'utf8');
+    const split = ci.indexOf('ios-testflight:');
+    expect(split > 0, 'codemagic.yaml still declares ios-testflight');
+    const free = ci.slice(0, split), ship = ci.slice(split);
+    expect(free.indexOf('SWIFT_ACTIVE_COMPILATION_CONDITIONS') >= 0
+      && free.indexOf('BIYA_SIMULATED_SIGNIN') >= 0,
+      'ios-free-unsigned sets BIYA_SIMULATED_SIGNIN, so the sideload build is testable');
+    expect(ship.indexOf('BIYA_SIMULATED_SIGNIN') < 0,
+      'ios-testflight does NOT set it — that build goes to App Review, where a sign-in that '
+      + 'performs no Apple authentication is a rejection');
+  }
+
   //     And the browser twin declares itself a stub, so it can never be read as the real thing.
   expect(/var SIMULATED_AUTH = true;/.test(code(sources['web-demo/js/login.js'])),
     'the browser sign-in declares itself simulated');

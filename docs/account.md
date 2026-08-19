@@ -37,6 +37,31 @@ The keep list is the half that is easy to lose in a refactor, and both halves ma
 `store.reset()` runs **before** the erase: the hub's progress is live in memory, and a store that
 persisted itself after its file had been removed would write the deleted progress straight back.
 
+## The test-build escape hatch, and the failure it exists for
+
+**Symptom:** Apple's sheet appears, the user picks their Apple Account, and it ends on **"Sign Up Not
+Completed"**. No compile error, no crash. Because the login gate is the last ZStack sibling and covers
+everything, the whole app is unreachable.
+
+**Cause:** `com.apple.developer.applesignin` has to be in the **provisioning profile**, not just in
+`ios/Biyaherong.entitlements`. Codesign keeps only the entitlements the profile allows and drops the
+rest silently. The profile carries it only after the capability is enabled for the App ID in the Apple
+Developer portal *and* the profile is regenerated. The free/sideload path cannot carry it at all — a
+free provisioning profile does not support Sign in with Apple.
+
+**The real fix** is the portal. **The stopgap** is `BIYA_SIMULATED_SIGNIN`, a Swift compilation
+condition that makes `start(onSuccess:)` open the session directly:
+
+| Workflow | Flag | Sign-in |
+|---|---|---|
+| `ios-free-unsigned` (Sideloadly) | **set** | opens directly — the build is testable |
+| `ios-testflight` (App Store) | never | the real `ASAuthorizationController` |
+
+`tools/qa/replay_login.js` pins both halves: the real call must still be the branch every other build
+takes, and the flag must **not** appear anywhere in `ios-testflight`. Shipping the simulated branch to
+App Review would be the exact fake sign-in the real call was written to replace. Mutation-checked in
+both directions.
+
 ## The thing that changed about "100% offline"
 
 The app is still offline — it makes no network call of its own, and `replay_login.js` /
@@ -58,6 +83,7 @@ Apple framework over OS-provided TLS, the same reasoning already written there f
 | `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
 | `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
 | `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
+| `codemagic.yaml` | sets `BIYA_SIMULATED_SIGNIN` in the free workflow, and only there |
 | `web-demo/js/login.js` | the twin: same state machine, same lists, `SIMULATED_AUTH = true` |
 | `web-demo/js/app.js` | `confirmDeleteAccount()` + `eraseAccountData()` |
 
