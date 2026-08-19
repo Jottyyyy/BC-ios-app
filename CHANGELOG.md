@@ -9,6 +9,30 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (fixed) — `access = .premium` does not compile, and a new gate for the whole class
+
+The premium grant added an hour ago was wrong. `Entitlement.Access` declares
+`case premium(trial: Bool)`, so `access = .premium` is a **type error** — without the argument list
+that expression is a function, not an `Access`. Fixed to `.premium(trial: false)`: a plain active
+subscription rather than the introductory period, so a tester sees ordinary premium UI and not a
+countdown for a trial nobody started.
+
+**Why nothing caught it.** `switch` arms and `if case` may legally drop a payload — `case .premium:`
+is correct — so the mistake reads as ordinary Swift. `swift_lint.js` checks brackets and access
+levels; `swift_symbol_check.js` resolves `Namespace.member`, not enum construction. Neither looks at
+this, and there is no compiler on the Windows checkout. It would have died on a Mac, hours later,
+after another failed build — which is exactly what happened with the three errors in build 43.
+
+So **`tools/qa/swift_enum_payload_check.js`** is new. It collects every enum case in the tree,
+records which carry payloads, and flags the unambiguous *construction* sites — `= .name` and
+`return .name` with no argument list. Pattern-matching contexts are excluded because dropping the
+payload there is legal, and a name is only checked when **every** declaration of it carries a
+payload: `LoginAuthPhase.failed` has none while another enum's `.failed` might, so ambiguous names
+are skipped rather than reported. Quiet and trustworthy beats noisy and ignored.
+
+Run over the whole tree: **26 payload-carrying case names across 119 files, no other instance.**
+Mutation-checked against the bug it was written for.
+
 ### 2026-08-19 (fixed) — The test build also needs the subscription, or the tester just hits a wall
 
 Client: *"kailangan pa magbayad… i-simulate mo din yung payment para magamit… paano ma-te-test ng

@@ -70,6 +70,7 @@ python3 tools/qa/mutation_test.py             # mutation testing (proves the sui
 node tools/qa/js_goldens.js                   # every JS suite + the oracle replays + the Swift cross-checks
 node tools/qa/swift_lint.js                   # brackets + public-exposes-internal, for uncompilable Swift
 node tools/qa/swift_symbol_check.js           # every Namespace.member and Puzzle*/Analysis* type resolves
+node tools/qa/swift_enum_payload_check.js     # `.premium` where the case is `premium(trial:)` — a type error
 node tools/qa/replay_puzzle_vm.js             # the Swift screens BRANCHES, replayed against the JS twin
 # ^ run these two with NO arguments: narrowing degrades them (swift_lint warns when it happens)
 node tools/metrics/extract_board_styles.js    # re-derive board_styles.json from the RN source (committed)
