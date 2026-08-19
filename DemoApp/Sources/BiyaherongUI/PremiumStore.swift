@@ -285,7 +285,9 @@ final class PremiumStore: ObservableObject {
         // or bypassed; it is simply not consulted in a build that has no store to consult.
         //
         // `ios-appstore` never sets this flag and REFUSES to build if it finds it.
-        access = .premium
+        // `trial: false` — a plain active subscription rather than the introductory period, so a
+        // tester sees the ordinary premium UI and not a trial countdown for a trial nobody started.
+        access = .premium(trial: false)
         #else
         access = Entitlement.resolve(snapshot, now: nowMs())
         #endif

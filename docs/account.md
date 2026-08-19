@@ -134,7 +134,8 @@ navigate to and then press Back out of.
 ## How to test
 
 ```bash
-node tools/qa/replay_login.js       # 457 assertions: the reducer, both lists, the allowlist of one
+node tools/qa/swift_enum_payload_check.js  # a payload case built with no payload does not compile
+node tools/qa/replay_login.js       # the reducer, both lists, the allowlist of one, the flag split
 node tools/qa/trial_gate_check.js   # the gate still opens only for the two open routes
 node tools/qa/replay_premium.js     # still exactly one StoreKit importer
 node tools/qa/js_goldens.js
