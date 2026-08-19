@@ -452,14 +452,14 @@ function run() {
       .test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
   eq(importers.join(','), 'LoginAppleAuth.swift',
     'exactly one file in the UI imports AuthenticationServices');
-  //     The TEST-BUILD escape hatch. `BIYA_SIMULATED_SIGNIN` makes the button open the session
+  //     The TEST-BUILD escape hatch. `BIYA_TEST_BUILD` makes the button open the session
   //     directly, because the free/sideload path is signed with a profile that cannot carry
   //     `com.apple.developer.applesignin` — Apple's sheet ends in "Sign Up Not Completed" and the
   //     tester is locked out of the whole app. It exists so that build is testable, and it is a
   //     rejection if it ever reaches App Review, so BOTH halves are pinned.
   {
     const sw = code(sources['LoginAppleAuth.swift']);
-    expect(sw.indexOf('#if BIYA_SIMULATED_SIGNIN') >= 0,
+    expect(sw.indexOf('#if BIYA_TEST_BUILD') >= 0,
       'LoginAppleAuth.swift has the test-build branch');
     expect(/#elseif os\(iOS\)[\s\S]*ASAuthorizationController/.test(sw),
       'and the REAL call is still the branch every other build takes');
@@ -479,20 +479,37 @@ function run() {
     const iFree = at('ios-free-unsigned'), iTf = at('ios-testflight'), iAs = at('ios-appstore');
     expect(iFree < iTf && iTf < iAs, 'the three workflows are in the documented order');
     const sets = (block) =>
-      /SWIFT_ACTIVE_COMPILATION_CONDITIONS=[^\n]*BIYA_SIMULATED_SIGNIN/.test(block);
+      /SWIFT_ACTIVE_COMPILATION_CONDITIONS=[^\n]*BIYA_TEST_BUILD/.test(block);
 
     expect(sets(ci.slice(iFree, iTf)),
-      'ios-free-unsigned sets BIYA_SIMULATED_SIGNIN — Sideloadly signs with a free profile, which '
+      'ios-free-unsigned sets BIYA_TEST_BUILD — Sideloadly signs with a free profile, which '
       + 'cannot carry the entitlement at all');
     expect(sets(ci.slice(iTf, iAs)),
       'ios-testflight sets it too — testers cannot open the app otherwise');
     expect(!sets(ci.slice(iAs)),
       'ios-appstore does NOT set it: that build goes to App Review, where a sign-in performing no '
       + 'Apple authentication is a rejection');
-    expect(/REFUSING: BIYA_SIMULATED_SIGNIN is compiled into a submission build/
+    expect(/REFUSING: BIYA_TEST_BUILD is compiled into a submission build/
       .test(ci.slice(iAs)),
       'and ios-appstore refuses to build if it ever appears, so the split is enforced rather than '
       + 'remembered');
+
+    // The flag's SECOND half. A build that can sign in but cannot get past the paywall is no more
+    // testable than one that cannot sign in — there is no product in App Store Connect yet, so
+    // `Product.products(for:)` is empty and the trial gate stands in front of every route.
+    // One flag for both, so they can never disagree about whether this is a test build.
+    const premium = code(read(UI, 'PremiumStore.swift'));
+    expect(/#if BIYA_TEST_BUILD[\s\S]{0,80}access = \.premium/.test(premium),
+      'PremiumStore grants the entitlement in test builds');
+    expect(/#else[\s\S]{0,80}access = Entitlement\.resolve\(snapshot, now: nowMs\(\)\)/
+      .test(premium),
+      'and the REAL resolution is untouched in every other build');
+    // Granted at the one funnel, not by forging a Snapshot — so the trust floor, the grace window
+    // and the expiry maths below it are not edited, merely not consulted.
+    expect((premium.match(/access = /g) || []).length === 2,
+      'exactly two writers of `access`: the test grant and the real resolve');
+    // (No assertion that nothing sets `isSubscribed = true`: `apply(expiry:…)` legitimately does,
+    //  from a REAL verified transaction. The two-writer check above is what pins the test path.)
     expect(/codesign -d --entitlements[^\n]*\n[^\n]*applesignin|applesignin/.test(ci.slice(iAs)),
       'ios-appstore also checks the entitlement survived signing — the failure with no other symptom');
   }

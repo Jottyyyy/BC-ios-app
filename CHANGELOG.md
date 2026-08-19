@@ -9,6 +9,33 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (fixed) — The test build also needs the subscription, or the tester just hits a wall
+
+Client: *"kailangan pa magbayad… i-simulate mo din yung payment para magamit… paano ma-te-test ng
+client?"* Fair — the previous fix only got them past the login screen.
+
+**Signing in was never the whole gate.** Nothing in this app opens without an entitlement, and there
+is no subscription product in App Store Connect yet, so `Product.products(for:)` returns an empty
+list and the paywall can only say "Store Unavailable". A tester got past the login and straight into
+a paywall with nothing to buy. Fixing one half of a two-part gate is not a fix.
+
+So `BIYA_SIMULATED_SIGNIN` became **`BIYA_TEST_BUILD`** and now covers both: the sign-in opens the
+session directly **and** `PremiumStore.recompute()` returns `.premium`. One flag, because two could
+disagree about whether this is a test build, and either one alone leaves the app unusable.
+
+**The grant sits at the one funnel** — `recompute()` is where every path already resolves `access` —
+rather than in a forged `Snapshot`. So the trust floor, the grace window and the expiry maths below
+it are not edited or bypassed; in a build with no store to consult they are simply not consulted.
+`replay_login.js` asserts `access` has exactly **two** writers, the test grant and the real resolve,
+and that the real one still stands in the `#else`.
+
+`ios-appstore` is unchanged and still the only submittable workflow — its refusal guard now names
+both consequences, since a subscription granted without a purchase is its own rejection quite apart
+from the sign-in. Mutation-checked: granting premium unconditionally, and deleting the real
+resolution. Both caught.
+
+`replay_login` 468 → 471, `js_goldens` 34,276.
+
 ### 2026-08-19 (changed) — 1.0.6 (44) shipped, with the REAL sign-in, on the first run of the new script
 
 Merged `origin/main` (the `BIYA_SIMULATED_SIGNIN` split, the brand-mark app icon) and shipped
@@ -56,7 +83,7 @@ with a free provisioning profile, and free profiles do not support Sign in with 
 gate is the last ZStack sibling and covers the whole app, that build was not merely awkward to test,
 it was **impossible to open**.
 
-So `BIYA_SIMULATED_SIGNIN`, a Swift compilation condition that makes the button open the session
+So `BIYA_TEST_BUILD`, a Swift compilation condition that makes the button open the session
 directly. **Both test workflows set it** — `ios-free-unsigned` and `ios-testflight` — because a build
 whose login gate cannot be passed is not a degraded build, it is an unopenable one, and testers reach
 this app through TestFlight as often as through Sideloadly.
