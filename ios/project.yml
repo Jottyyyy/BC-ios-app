@@ -67,7 +67,7 @@ targets:
         # CURRENT_PROJECT_VERSION on the xcodebuild command line and left this line reading "38",
         # so the file said 38 while the record was already at 40 — the next person to trust it
         # would have been rejected as a duplicate. The next manual upload must use 44 or higher.
-        CURRENT_PROJECT_VERSION: "45"
+        CURRENT_PROJECT_VERSION: "46"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone

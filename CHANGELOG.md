@@ -9,6 +9,24 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (changed) — 1.0.6 (46) shipped
+
+Merged `origin/main` (`.premium(trial: false)` and the new `swift_enum_payload_check.js` gate) and
+shipped **1.0.6 (46)** — delivery UUID `b4a545d5-0e6f-43a3-8f8a-022c09922358`, VERIFY SUCCEEDED first,
+entitlement confirmed in the archive and again in the signed `.ipa`. Neither test flag is set locally,
+so 46 is the genuine sign-in and the genuine entitlement maths. `ios/` untouched by the merge.
+
+**The `.premium` bug never reached a shipped build.** It sat inside `#if BIYA_TEST_BUILD`, which no
+local build compiles, so builds 44 and 45 were unaffected — the error could only have surfaced in a
+Codemagic test build. Worth stating plainly because a dead `#if` branch is exactly the kind of thing a
+green local build says nothing about; `swift_enum_payload_check.js` (26 payload-carrying cases across
+119 files) now checks it without needing a compiler, and passes.
+
+**Also.** `CLAUDE.md` was trimmed back to 199 lines — the new gate's command line pushed it to exactly
+200, and the rule is *under* 200. Tightened the shipping block rather than dropping anything.
+
+`web-demo/` not updated — a release.
+
 ### 2026-08-19 (fixed) — `access = .premium` does not compile, and a new gate for the whole class
 
 The premium grant added an hour ago was wrong. `Entitlement.Access` declares
