@@ -28,7 +28,7 @@ workflows:
         script: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           cd ios && xcodegen generate
-      # BIYA_SIMULATED_SIGNIN is set HERE and in no other workflow.
+      # BIYA_TEST_BUILD is set HERE and in no other workflow.
       #
       # This path is signed afterwards by Sideloadly with a free provisioning profile, which cannot
       # carry `com.apple.developer.applesignin`. Sign in with Apple therefore fails at the very end
@@ -46,7 +46,7 @@ workflows:
             -configuration Release -sdk iphoneos \
             -archivePath "$CM_BUILD_DIR/Biyaherong.xcarchive" \
             archive \
-            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_SIMULATED_SIGNIN' \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_TEST_BUILD' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER=""
       - name: Package unsigned .app into an .ipa
         script: |
@@ -66,10 +66,14 @@ workflows:
   #   2. Codemagic ▸ Settings ▸ Integrations ▸ App Store Connect ▸ add that key, NAME it `CodemagicASCKey`.
   #   3. Run this workflow.
   # ========================================================================================
-  # THIS IS A TEST BUILD. It compiles BIYA_SIMULATED_SIGNIN, so "Continue with Apple" opens the
-  # session directly instead of calling Apple. That is what makes the build usable by testers before
-  # the App ID has the Sign in with Apple capability — without it the login gate, which covers the
-  # whole app, cannot be passed at all.
+  # THIS IS A TEST BUILD. It compiles BIYA_TEST_BUILD, which does two things and both are needed
+  # before the app can be tested at all:
+  #   1. "Continue with Apple" opens the session directly instead of calling Apple, because the
+  #      App ID does not have the Sign in with Apple capability yet;
+  #   2. the subscription is granted, because there is no product in App Store Connect yet, so the
+  #      paywall can only say "Store Unavailable" — and the trial gate stands in front of
+  #      everything.
+  # Without both, a tester gets a login screen they cannot pass, or a paywall they cannot buy.
   #
   # DO NOT SUBMIT A BUILD FROM THIS WORKFLOW FOR REVIEW. Use `ios-appstore` below, which does not
   # set the flag and refuses to build if it is ever present. tools/qa/replay_login.js pins the split.
@@ -116,7 +120,7 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
-            -- SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_SIMULATED_SIGNIN'
+            -- SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_TEST_BUILD'
     artifacts:
       - build/ios/ipa/*.ipa                     # the installable file, downloadable from the Codemagic build page
       - /tmp/xcodebuild_logs/*.log
@@ -128,9 +132,10 @@ workflows:
   # ========================================================================================
   # SUBMISSION PATH — the ONLY workflow whose build may be sent to App Review.
   #
-  # Identical to ios-testflight except that it does NOT set BIYA_SIMULATED_SIGNIN, so the button
-  # makes the real ASAuthorizationController call. It exists as a separate workflow rather than as
-  # a note on the one above, because "remember to remove the flag" is not a safeguard.
+  # Identical to ios-testflight except that it does NOT set BIYA_TEST_BUILD — so the button makes
+  # the real ASAuthorizationController call and the subscription comes from StoreKit. It exists as
+  # a separate workflow rather than as a note on the one above, because "remember to remove the
+  # flag" is not a safeguard.
   #
   # Sign in with Apple only WORKS in this build once the capability is enabled for the App ID in
   # the Apple Developer portal AND the provisioning profile has been regenerated. Codesign drops
@@ -176,9 +181,10 @@ workflows:
             | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true)
           echo "$FLAGS"
           case "$FLAGS" in
-            *BIYA_SIMULATED_SIGNIN*)
-              echo "REFUSING: BIYA_SIMULATED_SIGNIN is compiled into a submission build."
-              echo "That is a sign-in that performs no Apple authentication — an App Review rejection."
+            *BIYA_TEST_BUILD*)
+              echo "REFUSING: BIYA_TEST_BUILD is compiled into a submission build."
+              echo "That is a sign-in performing no Apple authentication AND a subscription granted"
+              echo "without a purchase — two App Review rejections in one flag."
               exit 1 ;;
           esac
       - name: Fetch signing profiles (managed by the App Store Connect key)

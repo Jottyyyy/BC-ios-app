@@ -2341,7 +2341,7 @@ entitlement — free provisioning profiles do not support Sign in with Apple. An
 is the last ZStack sibling, covering every route above it, a build that cannot sign in cannot be
 opened **at all**. Not degraded: unusable.
 
-`BIYA_SIMULATED_SIGNIN` is therefore set by that one workflow, and `LoginAppleAuth.start` takes a
+`BIYA_TEST_BUILD` is therefore set by that one workflow, and `LoginAppleAuth.start` takes a
 `finish(.succeeded)` branch ahead of the real call.
 
 **This is the fake sign-in that was just removed as an App Store blocker, deliberately reintroduced

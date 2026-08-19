@@ -38,7 +38,7 @@ final class LoginAppleAuth: NSObject, ObservableObject {
         guard !LoginAuth.isBusy(phase) else { return }
         self.onSuccess = onSuccess
         phase = LoginAuth.next(phase, .start)
-        #if BIYA_SIMULATED_SIGNIN
+        #if BIYA_TEST_BUILD
         // ── TEST BUILDS ONLY ──────────────────────────────────────────────────────────────────
         //
         // Sign in with Apple needs `com.apple.developer.applesignin` in the PROVISIONING PROFILE,
@@ -51,10 +51,13 @@ final class LoginAppleAuth: NSObject, ObservableObject {
         // tester is locked out of the ENTIRE app, because the login gate is the last ZStack
         // sibling and covers everything. A build nobody can open is not testable.
         //
-        // The flag is set by that one workflow and nowhere else. `ios-testflight` never sets it,
-        // and `tools/qa/replay_login.js` fails the build if it ever appears in that workflow —
-        // shipping this branch to App Review would be the exact fake sign-in the real call
-        // replaced.
+        // BOTH test workflows set the flag; `ios-appstore` never does and refuses to build if it
+        // finds it. `tools/qa/replay_login.js` pins that split. Shipping this branch to App Review
+        // would be the exact fake sign-in the real call replaced.
+        //
+        // The same flag also grants the subscription in `PremiumStore.recompute()` — one switch
+        // for "this is a test build", because a build that can sign in but cannot get past the
+        // paywall is no more testable than one that cannot sign in.
         finish(.succeeded)
         #elseif os(iOS)
         let request = ASAuthorizationAppleIDProvider().createRequest()
