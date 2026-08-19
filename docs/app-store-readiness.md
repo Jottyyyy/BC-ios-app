@@ -39,13 +39,32 @@ Bundle Resources — but that is **inference**, so the archive must be checked (
 `Biyaherong.storekit` rather than under `App/`, because everything in `App/` is swept into the target
 and an entitlements plist does not belong in the bundle; both get `buildPhase: none`.
 
-**This file alone is not enough.** Three things must be true, and two of them are outside this repo:
+**This file alone is not enough, and the way it fails is quiet.** Three things must be true:
 
 1. `CODE_SIGN_ENTITLEMENTS` in `ios/project.yml` — done.
-2. The capability enabled for the App ID in the Apple Developer portal, or **signing fails**.
-3. The build actually signed. `codemagic.yaml`'s `ios-free-unsigned` archives with
-   `CODE_SIGNING_ALLOWED=NO`, so entitlements are never applied there — that `.ipa` compiles but
-   cannot sign in. Use `ios-testflight`.
+2. **The capability enabled for the App ID in the Apple Developer portal**, and the provisioning
+   profile regenerated afterwards.
+3. The build actually signed with that profile.
+
+**Correction to what this doc first said:** step 2 does *not* make signing fail. Codesign takes the
+entitlements the **profile** allows and silently drops the rest, so the build succeeds, installs, and
+looks fine — and then Apple's sheet runs to the very end and stops on **"Sign Up Not Completed"**.
+That is what happened on build 43: *"the signed .ipa loses `com.apple.developer.applesignin` because
+the provisioning profile does not carry it."* There is no compile error and no runtime crash to
+follow; the only symptom is the sheet refusing at the last step.
+
+To check a build before shipping it:
+
+```bash
+codesign -d --entitlements :- Payload/Biyaherong.app | grep applesignin
+```
+
+Nothing printed means the entitlement was dropped and the sign-in cannot work.
+
+**The free path can never carry it.** `ios-free-unsigned` archives with `CODE_SIGNING_ALLOWED=NO` and
+is signed afterwards by Sideloadly with a free provisioning profile, which does not support Sign in
+with Apple at all. Because the login gate covers the whole app, that build was untestable — so that
+workflow, and only that workflow, sets `BIYA_SIMULATED_SIGNIN`. See [`account.md`](account.md).
 
 ## The licence
 
@@ -67,6 +86,16 @@ Fixed by making the text true rather than making the app GPL:
 - The in-app Terms now names those three and drops the GPL sentence, in both languages —
   `replay_login.js` compares the legal bodies in full, so it could not have been changed in one.
 
+## Submit only from `ios-appstore`
+
+There are three workflows. Both test paths compile `BIYA_SIMULATED_SIGNIN`, so the sign-in button
+opens the session directly and the build is actually usable before the App ID has the capability.
+`ios-appstore` is the only one that does not, and it is the only one whose build may go to review.
+
+It enforces that itself rather than relying on anyone remembering: it refuses to build if the flag
+is in the effective build settings, and after signing it checks that
+`com.apple.developer.applesignin` is really in the `.ipa`. See [`account.md`](account.md).
+
 ## What only App Store Connect can do
 
 `docs/subscription.md` has listed these since the paywall landed. None can be done from this repo,
@@ -76,7 +105,9 @@ and **this is the highest-risk item after the fake login**:
 2. Add the **7-day free trial** introductory offer.
 3. Set the price.
 4. Enable the **billing grace period**.
-5. Enable **Sign in with Apple** for the App ID (Developer portal, not ASC).
+5. Enable **Sign in with Apple** for the App ID (Developer portal, not ASC), **then regenerate the
+   provisioning profile** — an existing profile does not gain the entitlement on its own, and a
+   build signed with the stale one fails at "Sign Up Not Completed" with no other symptom.
 6. Submit the IAP for review **alongside** the build.
 7. Bump `CURRENT_PROJECT_VERSION` past 41 for a manual upload (CI auto-stamps it).
 

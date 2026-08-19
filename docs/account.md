@@ -37,6 +37,44 @@ The keep list is the half that is easy to lose in a refactor, and both halves ma
 `store.reset()` runs **before** the erase: the hub's progress is live in memory, and a store that
 persisted itself after its file had been removed would write the deleted progress straight back.
 
+## The test-build escape hatch, and the failure it exists for
+
+**Symptom:** Apple's sheet appears, the user picks their Apple Account, and it ends on **"Sign Up Not
+Completed"**. No compile error, no crash. Because the login gate is the last ZStack sibling and covers
+everything, the whole app is unreachable.
+
+**Cause:** `com.apple.developer.applesignin` has to be in the **provisioning profile**, not just in
+`ios/Biyaherong.entitlements`. Codesign keeps only the entitlements the profile allows and drops the
+rest silently. The profile carries it only after the capability is enabled for the App ID in the Apple
+Developer portal *and* the profile is regenerated. The free/sideload path cannot carry it at all — a
+free provisioning profile does not support Sign in with Apple.
+
+**The real fix** is the portal. **The stopgap** is `BIYA_SIMULATED_SIGNIN`, a Swift compilation
+condition that makes `start(onSuccess:)` open the session directly:
+
+| Workflow | Flag | Sign-in | Use it for |
+|---|---|---|---|
+| `ios-free-unsigned` | **set** | opens directly | sideload testing (Sideloadly) |
+| `ios-testflight` | **set** | opens directly | handing a build to testers |
+| **`ios-appstore`** | never | the real `ASAuthorizationController` | **the only build you submit** |
+
+**Both test paths simulate.** A build whose login gate cannot be passed cannot be tested at all — the
+gate is the last ZStack sibling and covers every route — so a TestFlight build that fails the sign-in
+is not a degraded build, it is an unopenable one.
+
+**The submission path is a separate workflow, not a note.** "Remember to remove the flag before
+submitting" is not a safeguard. `ios-appstore` never sets it and **refuses to build** if it finds it
+in the effective build settings, which catches it however it got there — including from a stray value
+committed into `project.yml`. It also verifies, after signing, that
+`com.apple.developer.applesignin` actually survived into the `.ipa`, because that failure has no
+other symptom.
+
+`tools/qa/replay_login.js` pins the whole split: the real call is still the branch every non-flagged
+build takes, both test workflows set the flag, `ios-appstore` does not, and its refusal guard exists.
+Note the gate looks for the **assignment**, not the string — `ios-appstore` names the flag inside the
+guard that rejects it. Mutation-checked three ways: the flag leaking into the submission workflow,
+TestFlight silently ceasing to simulate, and the guard being deleted.
+
 ## The thing that changed about "100% offline"
 
 The app is still offline — it makes no network call of its own, and `replay_login.js` /
@@ -58,6 +96,7 @@ Apple framework over OS-provided TLS, the same reasoning already written there f
 | `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
 | `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
 | `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
+| `codemagic.yaml` | sets `BIYA_SIMULATED_SIGNIN` in the free workflow, and only there |
 | `web-demo/js/login.js` | the twin: same state machine, same lists, `SIMULATED_AUTH = true` |
 | `web-demo/js/app.js` | `confirmDeleteAccount()` + `eraseAccountData()` |
 
