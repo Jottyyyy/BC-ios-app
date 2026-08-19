@@ -9,6 +9,25 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (changed) — 1.0.6 (45) shipped: the real sign-in AND the real entitlement maths
+
+Merged `origin/main` (`BIYA_TEST_BUILD` now also grants `access = .premium` in test builds) and shipped
+**1.0.6 (45)** — delivery UUID `c024a5dc-8942-48a0-a367-e7a22c0e5fbb`, VERIFY SUCCEEDED first.
+`ios/` was untouched by the merge, so the signing configuration is unchanged.
+
+**This build sets NEITHER test flag**, verified by grep before recording: nothing in `ios/project.yml`,
+the generated `.xcodeproj` or `tools/ship/` defines `BIYA_TEST_BUILD`, so 45 compiles the genuine
+`AuthenticationServices` call and the genuine `Entitlement.resolve(snapshot:now:)` — a tester on this
+build gets the real trial, not a granted premium.
+
+**Worth noting the convergence:** `codemagic.yaml`'s new `ios-appstore` workflow now refuses to build
+if `BIYA_TEST_BUILD` is compiled in **and** greps the signed app for
+`com.apple.developer.applesignin`, failing the build when it is absent. That is the same conclusion
+`tools/ship/ship_testflight.sh` reached from the other direction — the only trustworthy check is
+reading the artifact back, never the exit code. The two now agree, from CI and from the desk.
+
+`web-demo/` not updated — a release.
+
 ### 2026-08-19 (fixed) — The test build also needs the subscription, or the tester just hits a wall
 
 Client: *"kailangan pa magbayad… i-simulate mo din yung payment para magamit… paano ma-te-test ng
