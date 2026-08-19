@@ -31,14 +31,25 @@ with a free provisioning profile, and free profiles do not support Sign in with 
 gate is the last ZStack sibling and covers the whole app, that build was not merely awkward to test,
 it was **impossible to open**.
 
-So `BIYA_SIMULATED_SIGNIN`, a Swift compilation condition set by that workflow **and no other**, makes
-the button open the session directly. `ios-testflight` never sets it.
+So `BIYA_SIMULATED_SIGNIN`, a Swift compilation condition that makes the button open the session
+directly. **Both test workflows set it** — `ios-free-unsigned` and `ios-testflight` — because a build
+whose login gate cannot be passed is not a degraded build, it is an unopenable one, and testers reach
+this app through TestFlight as often as through Sideloadly.
 
-**Both halves are pinned**, because a stopgap that reached App Review would be the exact fake sign-in
+**The submission path is therefore a third workflow, `ios-appstore`, not a note on the second one.**
+"Remember to remove the flag before submitting" is not a safeguard. `ios-appstore` never sets the
+flag, **refuses to build** if it finds it in the effective build settings — which catches it however
+it arrived, including from a stray value in `project.yml` — and after signing verifies that
+`com.apple.developer.applesignin` actually survived into the `.ipa`, the failure that has no other
+symptom.
+
+**Everything is pinned**, because a stopgap that reached App Review would be the exact fake sign-in
 the real call replaced: `replay_login.js` asserts the `#elseif os(iOS)` branch still holds the real
-`ASAuthorizationController`, and that `BIYA_SIMULATED_SIGNIN` appears nowhere in the `ios-testflight`
-half of `codemagic.yaml`. Mutation-checked in both directions — the flag leaking into the shipping
-workflow, and the real branch being disabled.
+`ASAuthorizationController`, that both test workflows set the flag, that `ios-appstore` does not, and
+that its refusal guard exists. The gate looks for the **assignment** rather than the string, since
+`ios-appstore` names the flag inside the guard that rejects it. Mutation-checked three ways: the flag
+leaking into the submission workflow, TestFlight silently ceasing to simulate, and the guard being
+deleted.
 
 **The app icon is the Biyaherong Coach mark now.** The knight in the screenshot was Apple's sheet
 drawing the *app icon*, which the client had earlier chosen to keep as the knight and, having now seen

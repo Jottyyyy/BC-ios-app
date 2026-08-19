@@ -52,15 +52,28 @@ free provisioning profile does not support Sign in with Apple.
 **The real fix** is the portal. **The stopgap** is `BIYA_SIMULATED_SIGNIN`, a Swift compilation
 condition that makes `start(onSuccess:)` open the session directly:
 
-| Workflow | Flag | Sign-in |
-|---|---|---|
-| `ios-free-unsigned` (Sideloadly) | **set** | opens directly — the build is testable |
-| `ios-testflight` (App Store) | never | the real `ASAuthorizationController` |
+| Workflow | Flag | Sign-in | Use it for |
+|---|---|---|---|
+| `ios-free-unsigned` | **set** | opens directly | sideload testing (Sideloadly) |
+| `ios-testflight` | **set** | opens directly | handing a build to testers |
+| **`ios-appstore`** | never | the real `ASAuthorizationController` | **the only build you submit** |
 
-`tools/qa/replay_login.js` pins both halves: the real call must still be the branch every other build
-takes, and the flag must **not** appear anywhere in `ios-testflight`. Shipping the simulated branch to
-App Review would be the exact fake sign-in the real call was written to replace. Mutation-checked in
-both directions.
+**Both test paths simulate.** A build whose login gate cannot be passed cannot be tested at all — the
+gate is the last ZStack sibling and covers every route — so a TestFlight build that fails the sign-in
+is not a degraded build, it is an unopenable one.
+
+**The submission path is a separate workflow, not a note.** "Remember to remove the flag before
+submitting" is not a safeguard. `ios-appstore` never sets it and **refuses to build** if it finds it
+in the effective build settings, which catches it however it got there — including from a stray value
+committed into `project.yml`. It also verifies, after signing, that
+`com.apple.developer.applesignin` actually survived into the `.ipa`, because that failure has no
+other symptom.
+
+`tools/qa/replay_login.js` pins the whole split: the real call is still the branch every non-flagged
+build takes, both test workflows set the flag, `ios-appstore` does not, and its refusal guard exists.
+Note the gate looks for the **assignment**, not the string — `ios-appstore` names the flag inside the
+guard that rejects it. Mutation-checked three ways: the flag leaking into the submission workflow,
+TestFlight silently ceasing to simulate, and the guard being deleted.
 
 ## The thing that changed about "100% offline"
 

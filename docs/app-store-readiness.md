@@ -86,6 +86,16 @@ Fixed by making the text true rather than making the app GPL:
 - The in-app Terms now names those three and drops the GPL sentence, in both languages —
   `replay_login.js` compares the legal bodies in full, so it could not have been changed in one.
 
+## Submit only from `ios-appstore`
+
+There are three workflows. Both test paths compile `BIYA_SIMULATED_SIGNIN`, so the sign-in button
+opens the session directly and the build is actually usable before the App ID has the capability.
+`ios-appstore` is the only one that does not, and it is the only one whose build may go to review.
+
+It enforces that itself rather than relying on anyone remembering: it refuses to build if the flag
+is in the effective build settings, and after signing it checks that
+`com.apple.developer.applesignin` is really in the `.ipa`. See [`account.md`](account.md).
+
 ## What only App Store Connect can do
 
 `docs/subscription.md` has listed these since the paywall landed. None can be done from this repo,

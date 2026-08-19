@@ -464,16 +464,37 @@ function run() {
     expect(/#elseif os\(iOS\)[\s\S]*ASAuthorizationController/.test(sw),
       'and the REAL call is still the branch every other build takes');
 
+    // Three workflows, and the split between them is the whole safeguard. BOTH test paths
+    // simulate, because a build whose login gate cannot be passed cannot be tested at all; the
+    // submission path does not, and REFUSES to build if the flag reaches it.
+    //
+    // "Sets it" is not the same as "mentions it": ios-appstore names the flag inside the guard
+    // that rejects it, so the test has to look for the ASSIGNMENT, not the string.
     const ci = fs.readFileSync(path.join(ROOT, 'codemagic.yaml'), 'utf8');
-    const split = ci.indexOf('ios-testflight:');
-    expect(split > 0, 'codemagic.yaml still declares ios-testflight');
-    const free = ci.slice(0, split), ship = ci.slice(split);
-    expect(free.indexOf('SWIFT_ACTIVE_COMPILATION_CONDITIONS') >= 0
-      && free.indexOf('BIYA_SIMULATED_SIGNIN') >= 0,
-      'ios-free-unsigned sets BIYA_SIMULATED_SIGNIN, so the sideload build is testable');
-    expect(ship.indexOf('BIYA_SIMULATED_SIGNIN') < 0,
-      'ios-testflight does NOT set it — that build goes to App Review, where a sign-in that '
-      + 'performs no Apple authentication is a rejection');
+    const at = (k) => {
+      const i = ci.indexOf('\n  ' + k + ':');
+      expect(i > 0, `codemagic.yaml declares ${k}`);
+      return i;
+    };
+    const iFree = at('ios-free-unsigned'), iTf = at('ios-testflight'), iAs = at('ios-appstore');
+    expect(iFree < iTf && iTf < iAs, 'the three workflows are in the documented order');
+    const sets = (block) =>
+      /SWIFT_ACTIVE_COMPILATION_CONDITIONS=[^\n]*BIYA_SIMULATED_SIGNIN/.test(block);
+
+    expect(sets(ci.slice(iFree, iTf)),
+      'ios-free-unsigned sets BIYA_SIMULATED_SIGNIN — Sideloadly signs with a free profile, which '
+      + 'cannot carry the entitlement at all');
+    expect(sets(ci.slice(iTf, iAs)),
+      'ios-testflight sets it too — testers cannot open the app otherwise');
+    expect(!sets(ci.slice(iAs)),
+      'ios-appstore does NOT set it: that build goes to App Review, where a sign-in performing no '
+      + 'Apple authentication is a rejection');
+    expect(/REFUSING: BIYA_SIMULATED_SIGNIN is compiled into a submission build/
+      .test(ci.slice(iAs)),
+      'and ios-appstore refuses to build if it ever appears, so the split is enforced rather than '
+      + 'remembered');
+    expect(/codesign -d --entitlements[^\n]*\n[^\n]*applesignin|applesignin/.test(ci.slice(iAs)),
+      'ios-appstore also checks the entitlement survived signing — the failure with no other symptom');
   }
 
   //     And the browser twin declares itself a stub, so it can never be read as the real thing.
