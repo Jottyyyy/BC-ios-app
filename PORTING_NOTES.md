@@ -2368,6 +2368,32 @@ and `home_chrome_check.js` asserts the inequality, which is both the cheapest ch
 an image library in Node and the exact thing a revert would undo. The knight file itself stays, drawn
 nowhere; `ios/AppIcon.svg` is now the source art for a retired icon rather than the shipped one.
 
+## A payload case built without its payload (2026-08-19)
+
+`Entitlement.Access` is `case premium(trial: Bool)`. The test-build grant was written
+`access = .premium`, which does not compile — that expression is a function, not an `Access`.
+
+**The reason it is easy to write and impossible to see** is that pattern matching legitimately drops
+the payload: `case .premium:` inside a `switch`, and `if case .premium = x`, are both correct, and
+they are what most of this file's existing code looks like. Construction is the only context where
+the argument list is mandatory, and nothing in the repo's toolchain looked at construction.
+
+`swift_lint.js` checks brackets and `public`-exposes-`internal`. `swift_symbol_check.js` resolves
+`Namespace.member` references and project types. Enum construction fell between them, and there is no
+Swift compiler on this checkout — so the failure mode is a Mac build hours later, which is precisely
+how build 43 lost a cycle to three other invisible errors.
+
+`tools/qa/swift_enum_payload_check.js` closes it. Two design choices matter:
+
+- **Only unambiguous names.** A case name is checked only when *every* declaration of it in the tree
+  carries a payload. `.failed` is declared with no payload on `LoginAuthPhase`, so it is skipped
+  even though some other enum might carry one. A gate that cries wolf gets ignored, and an ignored
+  gate is worse than none.
+- **Only construction sites.** `= .name` and `return .name`, never `case`/`if case`/`guard case`.
+
+26 payload-carrying names across 119 files at the time of writing, with no second instance of the
+bug — so the fix was the only one needed, which is itself worth knowing.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had
