@@ -9,6 +9,31 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-19 (changed) — 1.0.6 (44) shipped, with the REAL sign-in, on the first run of the new script
+
+Merged `origin/main` (the `BIYA_SIMULATED_SIGNIN` split, the brand-mark app icon) and shipped
+**1.0.6 (44)** — delivery UUID `60fefb83-f295-4633-b8b7-f395f4028151`, VERIFY SUCCEEDED first.
+
+`tools/ship/ship_testflight.sh` did the whole thing in one command on its first real outing: bumped
+43 → 44, archived signed, checked `com.apple.developer.applesignin` in **both** the archive and the
+signed `.ipa`, validated, uploaded. The pinned `manageAppVersionAndBuildNumber` held — the `.ipa`
+reports 44, not 45.
+
+**This build compiles the REAL `AuthenticationServices` call.** `BIYA_SIMULATED_SIGNIN` is a
+`SWIFT_ACTIVE_COMPILATION_CONDITIONS` flag set only by `codemagic.yaml`; nothing in `ios/project.yml`
+or the ship script sets it, so a local build is always the genuine path. Verified by grep before
+recording this.
+
+**Note for whoever picks this up next:** `codemagic.yaml`'s `ios-testflight` workflow now compiles the
+simulated sign-in, on the stated grounds that the App ID lacks the Sign in with Apple capability.
+**That premise expired on 2026-08-18** — the capability is enabled (`7DLZPANX72_APPLE_ID_AUTH`) and the
+`Biyaherong App Store` profile carries the entitlement, which is exactly how 43 and 44 shipped a
+working real sign-in. That workflow can drop the flag whenever someone verifies it against a CI build;
+`LoginAppleAuth.swift`'s own comment still says "`ios-testflight` never sets it", which is no longer
+true and should be reconciled in the same change.
+
+`web-demo/` not updated — a release, plus a note about CI config.
+
 ### 2026-08-19 (fixed) — "Sign Up Not Completed": a testable sideload build, and the app icon is the brand mark
 
 Client: *"hindi ma-try ng client kasi nag-ganito… pwede ba simulate mo muna yung login with Apple para
