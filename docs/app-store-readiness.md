@@ -64,7 +64,7 @@ Nothing printed means the entitlement was dropped and the sign-in cannot work.
 **The free path can never carry it.** `ios-free-unsigned` archives with `CODE_SIGNING_ALLOWED=NO` and
 is signed afterwards by Sideloadly with a free provisioning profile, which does not support Sign in
 with Apple at all. Because the login gate covers the whole app, that build was untestable — so that
-workflow, and only that workflow, sets `BIYA_SIMULATED_SIGNIN`. See [`account.md`](account.md).
+workflow, and only that workflow, sets `BIYA_TEST_BUILD`. See [`account.md`](account.md).
 
 ## The licence
 
@@ -88,7 +88,7 @@ Fixed by making the text true rather than making the app GPL:
 
 ## Submit only from `ios-appstore`
 
-There are three workflows. Both test paths compile `BIYA_SIMULATED_SIGNIN`, so the sign-in button
+There are three workflows. Both test paths compile `BIYA_TEST_BUILD`, so the sign-in button
 opens the session directly and the build is actually usable before the App ID has the capability.
 `ios-appstore` is the only one that does not, and it is the only one whose build may go to review.
 

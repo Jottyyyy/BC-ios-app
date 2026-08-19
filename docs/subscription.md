@@ -226,6 +226,17 @@ In `web-demo/index.html`, set the **Subscription** picker to **Free**:
 - switching it back to **Free** *while standing inside the Puzzle Hub* bounces to the paywall on the
   next paint — that is the `render()` backstop, and it is the case a tap-time-only gate misses.
 
+## Testing before the product exists
+
+Until the four App Store Connect steps below are done, `Product.products(for:)` returns an empty
+list, the paywall can only render "Store Unavailable", and — because nothing in the app opens
+without an entitlement — there is no way for a tester to see any of it.
+
+So the two **test** workflows compile `BIYA_TEST_BUILD`, and `PremiumStore.recompute()` grants
+`.premium` under it. `ios-appstore` never sets it and refuses to build if it finds it: a
+subscription granted without a purchase is its own App Review rejection, quite apart from the
+sign-in. See [`account.md`](account.md) for the full split and the guards.
+
 ## Before this can ship
 
 Four things must happen in **App Store Connect**, and none of them can be done from this repo:

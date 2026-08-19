@@ -271,7 +271,24 @@ final class PremiumStore: ObservableObject {
     }
 
     private func recompute() {
+        #if BIYA_TEST_BUILD
+        // ── TEST BUILDS ONLY ──────────────────────────────────────────────────────────────────
+        //
+        // There is no subscription product in App Store Connect yet, so `Product.products(for:)`
+        // returns an empty list and the paywall can only say "Store Unavailable". The trial gate
+        // stands in front of every route, so a tester gets past the login screen and then has
+        // nothing at all they can open — the app is a paywall with no way through it.
+        //
+        // Granted here rather than by faking a `Snapshot`, because this is the one funnel every
+        // path already goes through, and everything below it — the trust floor, the grace window,
+        // the expiry maths — stays exactly as it ships. Nothing in the real resolution is edited
+        // or bypassed; it is simply not consulted in a build that has no store to consult.
+        //
+        // `ios-appstore` never sets this flag and REFUSES to build if it finds it.
+        access = .premium
+        #else
         access = Entitlement.resolve(snapshot, now: nowMs())
+        #endif
     }
 
     private func persist<T: Encodable>(_ key: String, _ value: T) {
