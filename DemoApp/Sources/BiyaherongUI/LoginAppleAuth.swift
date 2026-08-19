@@ -38,7 +38,25 @@ final class LoginAppleAuth: NSObject, ObservableObject {
         guard !LoginAuth.isBusy(phase) else { return }
         self.onSuccess = onSuccess
         phase = LoginAuth.next(phase, .start)
-        #if os(iOS)
+        #if BIYA_SIMULATED_SIGNIN
+        // ── TEST BUILDS ONLY ──────────────────────────────────────────────────────────────────
+        //
+        // Sign in with Apple needs `com.apple.developer.applesignin` in the PROVISIONING PROFILE,
+        // not merely in the entitlements file. A profile only carries it once the capability is
+        // enabled for the App ID in the Apple Developer portal — and the free/sideload path
+        // (`codemagic.yaml`'s `ios-free-unsigned`, signed afterwards with Sideloadly) can never
+        // carry it at all.
+        //
+        // Without this branch Apple's own sheet gets as far as "Sign Up Not Completed" and the
+        // tester is locked out of the ENTIRE app, because the login gate is the last ZStack
+        // sibling and covers everything. A build nobody can open is not testable.
+        //
+        // The flag is set by that one workflow and nowhere else. `ios-testflight` never sets it,
+        // and `tools/qa/replay_login.js` fails the build if it ever appears in that workflow —
+        // shipping this branch to App Review would be the exact fake sign-in the real call
+        // replaced.
+        finish(.succeeded)
+        #elseif os(iOS)
         let request = ASAuthorizationAppleIDProvider().createRequest()
         // NO scopes, deliberately. The app shows `LoginStrings.defaultDisplayName` and persists
         // nothing but the provider string, so asking for a name or an email would be collecting

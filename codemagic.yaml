@@ -28,6 +28,17 @@ workflows:
         script: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           cd ios && xcodegen generate
+      # BIYA_SIMULATED_SIGNIN is set HERE and in no other workflow.
+      #
+      # This path is signed afterwards by Sideloadly with a free provisioning profile, which cannot
+      # carry `com.apple.developer.applesignin`. Sign in with Apple therefore fails at the very end
+      # with "Sign Up Not Completed" — and since the login gate covers the whole app, the tester
+      # cannot get in at all. The flag makes the button open the session directly so this build is
+      # actually testable.
+      #
+      # `ios-testflight` below MUST NOT set it: that build goes to App Review, where a
+      # "Continue with Apple" that performs no Apple authentication is a rejection.
+      # `tools/qa/replay_login.js` fails the gate if the flag ever appears in that workflow.
       - name: Archive WITHOUT code signing
         script: |
           xcodebuild -project "$XCODE_PROJECT" \
@@ -35,6 +46,7 @@ workflows:
             -configuration Release -sdk iphoneos \
             -archivePath "$CM_BUILD_DIR/Biyaherong.xcarchive" \
             archive \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_SIMULATED_SIGNIN' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER=""
       - name: Package unsigned .app into an .ipa
         script: |
@@ -54,8 +66,15 @@ workflows:
   #   2. Codemagic ▸ Settings ▸ Integrations ▸ App Store Connect ▸ add that key, NAME it `CodemagicASCKey`.
   #   3. Run this workflow.
   # ========================================================================================
+  # THIS IS A TEST BUILD. It compiles BIYA_SIMULATED_SIGNIN, so "Continue with Apple" opens the
+  # session directly instead of calling Apple. That is what makes the build usable by testers before
+  # the App ID has the Sign in with Apple capability — without it the login gate, which covers the
+  # whole app, cannot be passed at all.
+  #
+  # DO NOT SUBMIT A BUILD FROM THIS WORKFLOW FOR REVIEW. Use `ios-appstore` below, which does not
+  # set the flag and refuses to build if it is ever present. tools/qa/replay_login.js pins the split.
   ios-testflight:
-    name: Biyaherong iOS — TestFlight
+    name: Biyaherong iOS — TestFlight (TEST BUILD, simulated sign-in)
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
@@ -92,11 +111,12 @@ workflows:
             echo "AppIcon missing from the repo — upload would be rejected ITMS-90713"; exit 1; }
       - name: Fetch signing profiles (managed by the App Store Connect key)
         script: xcode-project use-profiles
-      - name: Build & export signed .ipa
+      - name: Build & export signed .ipa (with the simulated sign-in)
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
+            -- SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) BIYA_SIMULATED_SIGNIN'
     artifacts:
       - build/ios/ipa/*.ipa                     # the installable file, downloadable from the Codemagic build page
       - /tmp/xcodebuild_logs/*.log
@@ -104,6 +124,91 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true              # testers get it via the TestFlight app + your invite link
+
+  # ========================================================================================
+  # SUBMISSION PATH — the ONLY workflow whose build may be sent to App Review.
+  #
+  # Identical to ios-testflight except that it does NOT set BIYA_SIMULATED_SIGNIN, so the button
+  # makes the real ASAuthorizationController call. It exists as a separate workflow rather than as
+  # a note on the one above, because "remember to remove the flag" is not a safeguard.
+  #
+  # Sign in with Apple only WORKS in this build once the capability is enabled for the App ID in
+  # the Apple Developer portal AND the provisioning profile has been regenerated. Codesign drops
+  # entitlements the profile does not allow, silently — the symptom is Apple's sheet ending on
+  # "Sign Up Not Completed". Verify before submitting:
+  #   codesign -d --entitlements :- Payload/Biyaherong.app | grep applesignin
+  # ========================================================================================
+  ios-appstore:
+    name: Biyaherong iOS — App Store submission (real sign-in)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: CodemagicASCKey
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.prince24pogi.biyaherongchessapp
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "ios/Biyaherong.xcodeproj"
+        XCODE_SCHEME: "Biyaherong"
+    scripts:
+      - name: Install XcodeGen & generate the Xcode project
+        script: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd ios
+          sed -i '' "s/^        CURRENT_PROJECT_VERSION: .*/        CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
+          grep -n "CURRENT_PROJECT_VERSION" project.yml
+          xcodegen generate
+      - name: Fail fast if the app icon is missing from the clone
+        script: |
+          test -f ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png || {
+            echo "AppIcon missing from the repo — upload would be rejected ITMS-90713"; exit 1; }
+      - name: REFUSE to build if the simulated sign-in is compiled in
+        # The guard that makes the two-workflow split real rather than advisory. A fake
+        # "Continue with Apple" is an App Store rejection, so this build must never contain one —
+        # and reading the EFFECTIVE build settings catches it however it got there, including from
+        # a stray value committed into project.yml.
+        script: |
+          cd ios
+          FLAGS=$(xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
+            -configuration Release -showBuildSettings 2>/dev/null \
+            | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true)
+          echo "$FLAGS"
+          case "$FLAGS" in
+            *BIYA_SIMULATED_SIGNIN*)
+              echo "REFUSING: BIYA_SIMULATED_SIGNIN is compiled into a submission build."
+              echo "That is a sign-in that performs no Apple authentication — an App Review rejection."
+              exit 1 ;;
+          esac
+      - name: Fetch signing profiles (managed by the App Store Connect key)
+        script: xcode-project use-profiles
+      - name: Build & export signed .ipa
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+      - name: Confirm the Sign in with Apple entitlement survived signing
+        # The failure this catches has no other symptom: the build installs and looks fine, and
+        # Apple's sheet only refuses at the very last step.
+        script: |
+          APP=$(find build/ios/ipa -name "*.ipa" | head -1)
+          test -n "$APP" || { echo "no .ipa produced"; exit 1; }
+          rm -rf /tmp/entcheck && mkdir -p /tmp/entcheck && cd /tmp/entcheck
+          unzip -q "$OLDPWD/$APP"
+          codesign -d --entitlements :- Payload/*.app 2>/dev/null | grep -q applesignin || {
+            echo "REFUSING: com.apple.developer.applesignin is NOT in the signed app."
+            echo "Enable Sign in with Apple for the App ID in the Developer portal, then"
+            echo "REGENERATE the provisioning profile. Signing drops it silently otherwise."
+            exit 1; }
+          echo "entitlement present"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true              # lands in App Store Connect; submit it for review there
 
   # Optional variant: produce an .ipa for specific phones (registered UDIDs) instead of TestFlight.
   # Duplicate the workflow above, set distribution_type: ad_hoc, and drop the `publishing` block —

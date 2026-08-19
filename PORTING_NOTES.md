@@ -2316,6 +2316,58 @@ it starves level 5 back to level 3's clock, which *is* the defect this change fi
 monotonicity assertion. "Both languages agree it is 1000" was exactly what the old line could not
 catch, and is why this survived as long as it did.
 
+## The entitlement the profile did not carry (2026-08-19)
+
+### A failure mode with no error
+
+Sign in with Apple needs `com.apple.developer.applesignin` in the **provisioning profile**, not merely
+in `ios/Biyaherong.entitlements`. Codesign takes the entitlements the profile allows and **drops the
+rest without a word** — so the archive succeeds, validation passes, the app installs, and the only
+symptom is Apple's own sheet stopping on "Sign Up Not Completed" after the user has already picked
+their account.
+
+`docs/app-store-readiness.md` originally said the missing capability makes *signing fail*. It does
+not, and that wrong sentence is exactly why the symptom read as a code bug. Corrected, with the
+pre-flight check that would have shown it:
+
+```
+codesign -d --entitlements :- Payload/Biyaherong.app | grep applesignin
+```
+
+### DEVIATION: a compile-time simulated sign-in, for one workflow only
+
+The free path (`ios-free-unsigned`, signed afterwards with Sideloadly) can never carry that
+entitlement — free provisioning profiles do not support Sign in with Apple. And because the login gate
+is the last ZStack sibling, covering every route above it, a build that cannot sign in cannot be
+opened **at all**. Not degraded: unusable.
+
+`BIYA_SIMULATED_SIGNIN` is therefore set by that one workflow, and `LoginAppleAuth.start` takes a
+`finish(.succeeded)` branch ahead of the real call.
+
+**This is the fake sign-in that was just removed as an App Store blocker, deliberately reintroduced
+behind a build flag.** That is only defensible because it cannot reach a shipping build, so the guard
+is the point rather than a formality: `replay_login.js` asserts the real `ASAuthorizationController`
+is still the `#elseif os(iOS)` branch every other build takes, and that the flag appears nowhere in
+the `ios-testflight` half of `codemagic.yaml`. Both directions are mutation-checked. A compile flag
+was chosen over a runtime fallback on `ASAuthorizationError` precisely because a runtime fallback
+would also fire on the reviewer's device.
+
+### The app icon is the brand mark; the earlier decision was reversed
+
+The client chose to keep the knight as the app icon when asked, on the argument that a photo collage
+with a wordmark turns to mud at 60 px. They then saw it inside Apple's Sign in with Apple sheet, which
+draws the app icon, and asked for the brand mark there too. Reversed on their instruction.
+
+Rebuilt from `brand-logo.png` with a **palette → RGB conversion**: App Store Connect rejects an icon
+carrying an alpha channel, and the source is a palette PNG. Checked first that it had no `tRNS` chunk
+and that its alpha was uniformly opaque, so the conversion loses nothing.
+
+`icon-1024.png` and `DemoApp/…/Images/app-icon.png` were byte-identical (md5 `2d05a4c4…`) — recorded
+in this file as "the shipped app icon and the bundled asset are one file". **That is no longer true**,
+and `home_chrome_check.js` asserts the inequality, which is both the cheapest check available without
+an image library in Node and the exact thing a revert would undo. The knight file itself stays, drawn
+nowhere; `ios/AppIcon.svg` is now the source art for a retired icon rather than the shipped one.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had
