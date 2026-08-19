@@ -174,16 +174,15 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   that every constant reference and every source lookup resolves — in Swift as well as JS, because there is
   no compiler here to do it.
 - **Shipping is one command — `tools/ship/ship_testflight.sh`** (runbook: `docs/shipping-to-testflight.md`).
-  **On this pipeline an exit code is not evidence.** `xcodebuild` prints `EXPORT SUCCEEDED` while
-  silently dropping an entitlement the provisioning profile lacks, and Apple's API returns 201 for a
-  capability it did not persist. The only check that has ever caught it is decoding the artifact:
-  `codesign -d --entitlements :- Payload/Biyaherong.app`. The script does that and refuses to upload if
-  anything in `ios/Biyaherong.entitlements` is missing. Three rules fall out and each cost a session:
-  an **unsigned archive cannot carry an entitlement** (so the archive is signed now, with the signing
-  settings TARGET-scoped in `project.yml` — as `xcodebuild` overrides they break SwiftPM's
-  `BiyaherongUI_BiyaherongUI` bundle); a **profile snapshots the App ID's capabilities when minted**, so
-  enabling one means delete-and-recreate, never refresh; and `manageAppVersionAndBuildNumber` **defaults
-  to true** and rewrites the build number at export, so `ExportOptions.plist` pins it false.
+  **On this pipeline an exit code is not evidence** — `xcodebuild` prints `EXPORT SUCCEEDED` while
+  dropping an entitlement the profile lacks, and Apple's API returns 201 for a capability it never
+  persisted. Only decoding the artifact catches it (`codesign -d --entitlements :- <app>`); the script
+  does, and refuses to upload if anything in `ios/Biyaherong.entitlements` is missing. Three rules fall
+  out, each of which cost a session: an **unsigned archive cannot carry an entitlement** (so it is signed
+  now, signing settings TARGET-scoped — as `xcodebuild` overrides they break SwiftPM's resource bundle);
+  a **profile snapshots the App ID's capabilities when minted**, so enabling one means delete-and-recreate,
+  never refresh; and `manageAppVersionAndBuildNumber` **defaults to true**, rewriting the build number at
+  export, so `ExportOptions.plist` pins it false.
 - **Licensing:** piece art is CC BY-SA, Nunito is SIL OFL, and the Stockfish decision makes the whole app
   **GPL** — keep attributions intact.
 
