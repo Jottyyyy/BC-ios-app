@@ -219,7 +219,7 @@
 				CODE_SIGN_ENTITLEMENTS = Biyaherong.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				DEVELOPMENT_TEAM = 3C29G97AU5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Biyaherong;
@@ -238,6 +238,7 @@
 				PRODUCT_NAME = Biyaherong;
 				PROVISIONING_PROFILE_SPECIFIER = "Biyaherong App Store";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -250,7 +251,7 @@
 				CODE_SIGN_ENTITLEMENTS = Biyaherong.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 46;
+				CURRENT_PROJECT_VERSION = 47;
 				DEVELOPMENT_TEAM = 3C29G97AU5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Biyaherong;
@@ -269,6 +270,7 @@
 				PRODUCT_NAME = Biyaherong;
 				PROVISIONING_PROFILE_SPECIFIER = "Biyaherong App Store";
 				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};

@@ -9,6 +9,33 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-20 (changed) — 1.0.6 (47) shipped: the first build the inverted default actually reaches a tester in
+
+Merged `origin/main` (the build switch moved out of the SwiftPM package into the app target) and shipped
+**1.0.6 (47)** — delivery UUID `39d05127-e6f8-4a5e-8639-a09960c77cc5`, VERIFY SUCCEEDED first,
+`com.apple.developer.applesignin` confirmed in the archive and again in the signed `.ipa`.
+
+**47 is a TEST build, and that is the point of the merge.** `ios/project.yml` carries
+`SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""` and `ship_testflight.sh` sets nothing, so `#if BIYA_APPSTORE`
+in `ios/App/BiyaherongApp.swift` is false and `BiyaherongBuild.isTestBuild` stays `true`: no login
+screen at launch, no paywall, every daily cap lifted. Read back out of the effective build settings
+rather than assumed — `SWIFT_ACTIVE_COMPILATION_CONDITIONS = ""` on the app target's Release config,
+which is the same check `ios-appstore` uses in the other direction. That is the difference from 46,
+which shipped the real sign-in and the real entitlement maths and is what the client could not open.
+
+**This build must not be submitted to App Review.** A "Continue with Apple" that performs no Apple
+authentication and a subscription granted without a purchase are two rejections; use codemagic's
+`ios-appstore`, which rewrites the flag and refuses to build if it did not arrive.
+
+**`swift build` passed — the first verification this merge had.** `BuildMode.swift` and its three call
+sites were written blind on Windows; both packages compile clean here, and `replay_login` (481),
+`swift_lint` (131 files), `swift_symbol_check` (3611 refs / 157 types) and `swift_enum_payload_check`
+(26 cases / 120 files) all pass. `js_goldens` could not run on this Mac — the sibling
+`../BYAHERONG-COACH-LARAVEL` is not cloned here, so `generate_goldens.php` produced no
+`san_parse.json`. No Parity Core file changed in the merge.
+
+`web-demo/` not updated — a release.
+
 ### 2026-08-20 (fixed) — Why three "fixes" changed nothing: the flag was in the package, where it can never apply
 
 Client: *"ganun pa rin, pinapa-connect pa rin ako sa Sign in with Apple… hindi pa rin malaro…
