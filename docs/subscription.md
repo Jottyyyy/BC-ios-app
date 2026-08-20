@@ -232,10 +232,14 @@ Until the four App Store Connect steps below are done, `Product.products(for:)` 
 list, the paywall can only render "Store Unavailable", and — because nothing in the app opens
 without an entitlement — there is no way for a tester to see any of it.
 
-So the two **test** workflows compile `BIYA_TEST_BUILD`, and `PremiumStore.recompute()` grants
-`.premium` under it. `ios-appstore` never sets it and refuses to build if it finds it: a
-subscription granted without a purchase is its own App Review rejection, quite apart from the
-sign-in. See [`account.md`](account.md) for the full split and the guards.
+So `PremiumStore.recompute()` grants `.premium(trial: false)` whenever `BiyaherongBuild.isTestBuild`
+— which is **every build except one**. `ios-appstore` is the exception: it sets `BIYA_APPSTORE` and
+refuses to build if that did not reach the compiler, because a subscription granted without a
+purchase is its own App Review rejection quite apart from the sign-in.
+
+The switch is a runtime Bool handed down from the app target, not a `#if` in this package: a
+compilation condition set on the Xcode project never reaches a SwiftPM package's targets, which is
+why two earlier attempts at this had no effect on the device at all. See [`account.md`](account.md).
 
 ## Before this can ship
 

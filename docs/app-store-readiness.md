@@ -63,8 +63,10 @@ Nothing printed means the entitlement was dropped and the sign-in cannot work.
 
 **The free path can never carry it.** `ios-free-unsigned` archives with `CODE_SIGNING_ALLOWED=NO` and
 is signed afterwards by Sideloadly with a free provisioning profile, which does not support Sign in
-with Apple at all. Because the login gate covers the whole app, that build was untestable — so that
-workflow, and only that workflow, sets `BIYA_TEST_BUILD`. See [`account.md`](account.md).
+with Apple at all.
+
+That is why the app's **default** is a test build — no login screen, no paywall — rather than
+something a workflow has to switch on. See [`account.md`](account.md).
 
 ## The licence
 
@@ -88,9 +90,15 @@ Fixed by making the text true rather than making the app GPL:
 
 ## Submit only from `ios-appstore`
 
-There are three workflows. Both test paths compile `BIYA_TEST_BUILD`, so the sign-in button
-opens the session directly and the build is actually usable before the App ID has the capability.
-`ios-appstore` is the only one that does not, and it is the only one whose build may go to review.
+There are three workflows. **Neither test path sets anything** — the app's default is the testable
+one, so no build setting has to arrive anywhere for a tester to get in. `ios-appstore` is the only
+workflow that opts into the real sign-in and real StoreKit, and the only one whose build may go to
+review.
+
+It opts in by rewriting `ios/project.yml` before `xcodegen generate` — the same mechanism it already
+uses for `CURRENT_PROJECT_VERSION`, and the only one this repo has proved works. Passing a build
+setting through the Codemagic CLI does not, and a `#if` inside the `BiyaherongUI` package would be
+inert whatever CI passed. See [`account.md`](account.md).
 
 It enforces that itself rather than relying on anyone remembering: it refuses to build if the flag
 is in the effective build settings, and after signing it checks that
