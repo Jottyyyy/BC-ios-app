@@ -2394,6 +2394,53 @@ how build 43 lost a cycle to three other invisible errors.
 26 payload-carrying names across 119 files at the time of writing, with no second instance of the
 bug — so the fix was the only one needed, which is itself worth knowing.
 
+## The compilation condition that could never have worked (2026-08-20)
+
+Three consecutive rounds set `BIYA_TEST_BUILD` in `codemagic.yaml` to make the app testable, and all
+three produced builds that behaved exactly as before. The code was correct, merged, and gated.
+
+### The mechanism
+
+**`SWIFT_ACTIVE_COMPILATION_CONDITIONS` set at the Xcode project or target level does not propagate
+into a local SwiftPM package's targets.** Both `#if` sites — `PremiumStore.recompute` and
+`LoginAppleAuth.start` — are in `DemoApp/Sources/BiyaherongUI/`, which `ios/project.yml` consumes as
+a package dependency. Neither `Package.swift` declares any `swiftSettings`/`.define`, so those
+`#if`s were false in every build ever made, including the sideloaded one.
+
+A second bug sat on top and looked like the whole story: `ios-testflight` passed the setting as
+`xcode-project build-ipa … -- SETTING=value`, which the Codemagic CLI does not accept (it exposes
+`--archive-xcargs`; argparse rejects unknown trailing tokens). **Fixing that alone would have fixed
+nothing** — the correctly-formed override in `ios-free-unsigned` had been equally inert all along.
+
+### What made it invisible
+
+The gate asserted the *string* was in the right workflow block. That was true for three commits while
+the built app never had the behaviour. **A test that reads the build file is not a test that reads
+the build.** `replay_login.js` now asserts the thing that is actually load-bearing: that **no file in
+the `BiyaherongUI` package branches on `BIYA_APPSTORE` at all**, because such a branch is inert by
+construction.
+
+### DEVIATION: a runtime Bool, and the default is the test behaviour
+
+The `#if` lives in `ios/App/BiyaherongApp.swift` — a real Xcode target — and its `init()` hands the
+value to `BiyaherongBuild.configure(isTestBuild:)` before the view tree exists. The package reads a
+plain `@MainActor` static.
+
+The default is `true`, i.e. testable, and the asymmetry is deliberate:
+
+- **Default testable** fails as a submission build that forgot to opt in. `ios-appstore` reads the
+  *effective* build settings and refuses to build unless `BIYA_APPSTORE` really reached the
+  compiler — a loud failure, in the rare workflow, before anything is signed or uploaded.
+- **Default real** fails as a build nobody can open, with no error to explain it. That is the exact
+  failure this entry exists about, and it happened three times.
+
+`ios-appstore` sets the flag by rewriting `ios/project.yml` before `xcodegen generate` — the same
+mechanism it already uses for `CURRENT_PROJECT_VERSION`, and the only one this repo has evidence for.
+
+Also recorded: the login SCREEN is skipped entirely in a test build (`LoginStore.init` opens a
+session), not merely made one-tap. Asked for directly — the client is testing features, and a login
+screen was still a wall.
+
 ## Analysis Board + navigation chrome — client revision (2026-08-18, second round)
 
 Three asks, one round after the previous entry. The first of them removes something that entry had

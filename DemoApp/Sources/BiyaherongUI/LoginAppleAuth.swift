@@ -38,28 +38,13 @@ final class LoginAppleAuth: NSObject, ObservableObject {
         guard !LoginAuth.isBusy(phase) else { return }
         self.onSuccess = onSuccess
         phase = LoginAuth.next(phase, .start)
-        #if BIYA_TEST_BUILD
-        // ── TEST BUILDS ONLY ──────────────────────────────────────────────────────────────────
-        //
-        // Sign in with Apple needs `com.apple.developer.applesignin` in the PROVISIONING PROFILE,
-        // not merely in the entitlements file. A profile only carries it once the capability is
-        // enabled for the App ID in the Apple Developer portal — and the free/sideload path
-        // (`codemagic.yaml`'s `ios-free-unsigned`, signed afterwards with Sideloadly) can never
-        // carry it at all.
-        //
-        // Without this branch Apple's own sheet gets as far as "Sign Up Not Completed" and the
-        // tester is locked out of the ENTIRE app, because the login gate is the last ZStack
-        // sibling and covers everything. A build nobody can open is not testable.
-        //
-        // BOTH test workflows set the flag; `ios-appstore` never does and refuses to build if it
-        // finds it. `tools/qa/replay_login.js` pins that split. Shipping this branch to App Review
-        // would be the exact fake sign-in the real call replaced.
-        //
-        // The same flag also grants the subscription in `PremiumStore.recompute()` — one switch
-        // for "this is a test build", because a build that can sign in but cannot get past the
-        // paywall is no more testable than one that cannot sign in.
-        finish(.succeeded)
-        #elseif os(iOS)
+        // Decided by the APP TARGET — see `BiyaherongBuild`. A `#if` here would be inert,
+        // because a project-level compilation condition never reaches a SwiftPM package target.
+        if BiyaherongBuild.isTestBuild {
+            finish(.succeeded)
+            return
+        }
+        #if os(iOS)
         let request = ASAuthorizationAppleIDProvider().createRequest()
         // NO scopes, deliberately. The app shows `LoginStrings.defaultDisplayName` and persists
         // nothing but the provider string, so asking for a name or an email would be collecting
@@ -74,8 +59,7 @@ final class LoginAppleAuth: NSObject, ObservableObject {
         #else
         // macOS: the demo shell is built unsigned (`DemoApp/run-demo.sh`), and Sign in with Apple
         // needs an entitlement only a signed app carries — the same fence, for the same reason, as
-        // `SecureStorage`'s Keychain branch. The desktop preview opens the session directly rather
-        // than raising a sheet that cannot succeed.
+        // `SecureStorage`'s Keychain branch.
         finish(.succeeded)
         #endif
     }

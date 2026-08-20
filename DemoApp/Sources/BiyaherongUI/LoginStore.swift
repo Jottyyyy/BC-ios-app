@@ -47,6 +47,19 @@ final class LoginStore: ObservableObject {
         // of silently letting someone past it.
         let raw = storage.get(LoginSession.storageKey)
         self.provider = LoginSession.isSignedIn(raw) ? raw : nil
+        // In a TEST build, open the session at launch so the app boots straight to Home and the
+        // login screen never appears. Asked for directly: the client is testing FEATURES, and a
+        // login screen — even a one-tap one — was still a wall in front of them.
+        //
+        // A real, persisted session rather than a bypass of the gate, so everything downstream is
+        // unchanged: `PhoneApp`'s gate simply finds itself already signed in, Profile still shows
+        // "Signed in with Apple", and Sign out still works — and then one tap comes straight back.
+        //
+        // Decided by the APP TARGET (`BiyaherongBuild`). A `#if` here would be INERT.
+        if BiyaherongBuild.isTestBuild, self.provider == nil {
+            self.provider = LoginSession.appleProvider
+            storage.set(LoginSession.storageKey, LoginSession.appleProvider)
+        }
     }
 
     /// Opens a session. Idempotent — signing in twice is not an error and does not re-publish.
