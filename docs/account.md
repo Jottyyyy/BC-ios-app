@@ -37,56 +37,58 @@ The keep list is the half that is easy to lose in a refactor, and both halves ma
 `store.reset()` runs **before** the erase: the hub's progress is live in memory, and a store that
 persisted itself after its file had been removed would write the deleted progress straight back.
 
-## The test-build escape hatch, and the failure it exists for
+## Test builds: no login screen, no paywall
 
-**Symptom:** Apple's sheet appears, the user picks their Apple Account, and it ends on **"Sign Up Not
-Completed"**. No compile error, no crash. Because the login gate is the last ZStack sibling and covers
-everything, the whole app is unreachable.
+**Every build is a test build unless the app target says otherwise.** `BiyaherongBuild.isTestBuild`
+defaults to `true`, and in that mode:
 
-**Cause:** `com.apple.developer.applesignin` has to be in the **provisioning profile**, not just in
-`ios/Biyaherong.entitlements`. Codesign keeps only the entitlements the profile allows and drops the
-rest silently. The profile carries it only after the capability is enabled for the App ID in the Apple
-Developer portal *and* the profile is regenerated. The free/sideload path cannot carry it at all — a
-free provisioning profile does not support Sign in with Apple.
+- `LoginStore.init` opens a session at launch, so **the login screen never appears** — the app boots
+  straight to Home;
+- `LoginAppleAuth.start` opens the session directly rather than calling Apple, so a signed-out
+  tester gets back in with one tap;
+- `PremiumStore.recompute` grants `.premium(trial: false)`, so **the paywall never appears** and
+  every daily cap lifts (`DailyLimits.isAtDailyLimit` returns `false` on its first line for premium).
 
-**The real fix** is the portal. **The stopgap** is `BIYA_TEST_BUILD`, a Swift compilation
-condition that makes `start(onSuccess:)` open the session directly:
+All three are needed together. There is no Sign in with Apple capability on the App ID yet and no
+subscription product in App Store Connect, so any one of them alone still leaves a wall.
 
-`BIYA_TEST_BUILD` covers **two** things, because either one alone still leaves the app unusable:
-the sign-in opens the session directly, **and** the subscription is granted. There is no product in
-App Store Connect yet, so `Product.products(for:)` comes back empty and the paywall can only say
-"Store Unavailable" — and the trial gate stands in front of every route. A tester who gets past the
-login screen and straight into a paywall they cannot buy is no better off than one who cannot sign
-in. One flag for both, so the two halves can never disagree about whether this is a test build.
+`ios-appstore` sets `BIYA_APPSTORE`, which turns all three back into the real thing.
 
-| Workflow | `BIYA_TEST_BUILD` | Sign-in | Subscription | Use it for |
-|---|---|---|---|---|
-| `ios-free-unsigned` | **set** | opens directly | granted | sideload testing (Sideloadly) |
-| `ios-testflight` | **set** | opens directly | granted | handing a build to testers |
-| **`ios-appstore`** | never | real `ASAuthorizationController` | real StoreKit | **the only build you submit** |
+### Why the switch is NOT a `#if` in this package
 
-**Both test paths simulate.** A build whose login gate cannot be passed cannot be tested at all — the
-gate is the last ZStack sibling and covers every route — so a TestFlight build that fails the sign-in
-is not a degraded build, it is an unopenable one.
+It was, twice, and **it never once took effect**. `SWIFT_ACTIVE_COMPILATION_CONDITIONS` set on the
+Xcode project — in `ios/project.yml`, on the `xcodebuild` command line, anywhere at target level —
+**does not reach a local SwiftPM package's targets.** Every file under
+`DemoApp/Sources/BiyaherongUI/` belongs to the `BiyaherongUI` package, so a `#if` there compiles
+identically in every build no matter what CI passes.
 
-**The submission path is a separate workflow, not a note.** "Remember to remove the flag before
-submitting" is not a safeguard. `ios-appstore` never sets it and **refuses to build** if it finds it
-in the effective build settings, which catches it however it got there — including from a stray value
-committed into `project.yml`. It also verifies, after signing, that
-`com.apple.developer.applesignin` actually survived into the `.ipa`, because that failure has no
-other symptom.
+That is the whole explanation for three rounds of "the flag is set in `codemagic.yaml`" producing
+three builds that behaved exactly the same, with no error anywhere. A second bug hid it: the
+TestFlight workflow passed the setting as `xcode-project build-ipa … -- SETTING=value`, which is not
+a Codemagic CLI feature either. Fixing only that would have changed nothing.
 
-The grant sits in `PremiumStore.recompute()` — the one funnel every path already goes through —
-rather than in a forged `Snapshot`. Everything below it (the trust floor, the grace window, the
-expiry maths) is therefore neither edited nor bypassed; in a build with no store to consult, it is
-simply not consulted.
+So the `#if` lives in **`ios/App/BiyaherongApp.swift`** — a real Xcode target, where the setting does
+apply — and its `init()` hands a Bool to the package before any view exists.
+`tools/qa/replay_login.js` asserts that **no file in the package branches on `BIYA_APPSTORE`**, so
+the inert form cannot come back.
 
-`tools/qa/replay_login.js` pins the whole split: the real call is still the branch every non-flagged
-build takes, `access` has exactly two writers (the test grant and the real resolve), both test
-workflows set the flag, `ios-appstore` does not, and its refusal guard exists.
-Note the gate looks for the **assignment**, not the string — `ios-appstore` names the flag inside the
-guard that rejects it. Mutation-checked three ways: the flag leaking into the submission workflow,
-TestFlight silently ceasing to simulate, and the guard being deleted.
+### Why the default is "testable"
+
+The two failure directions are not symmetric:
+
+- **Default testable** → a submission build that forgot to opt in. Caught loudly: `ios-appstore`
+  reads the effective build settings and **refuses to build** unless `BIYA_APPSTORE` really reached
+  the compiler, before anything is signed or uploaded.
+- **Default real** → a test build nobody can open, with no error to explain it. That has now
+  happened three times and cost three days.
+
+A loud failure in the rare workflow beats a silent one in the daily workflow.
+
+| Workflow | `BIYA_APPSTORE` | Login | Subscription |
+|---|---|---|---|
+| `ios-free-unsigned` | no | skipped | granted |
+| `ios-testflight` | no | skipped | granted |
+| **`ios-appstore`** | **sed into `project.yml` before `xcodegen`** | real Apple sheet | real StoreKit |
 
 ## The thing that changed about "100% offline"
 
@@ -109,7 +111,9 @@ Apple framework over OS-provided TLS, the same reasoning already written there f
 | `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
 | `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
 | `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
-| `codemagic.yaml` | sets `BIYA_TEST_BUILD` in the free workflow, and only there |
+| `DemoApp/…/BuildMode.swift` | `BiyaherongBuild.isTestBuild` — the switch, defaulting to `true` |
+| `ios/App/BiyaherongApp.swift` | the **only** `#if BIYA_APPSTORE`, in a real Xcode target |
+| `codemagic.yaml` | `ios-appstore` seds the flag into `project.yml`, and refuses to build without it |
 | `web-demo/js/login.js` | the twin: same state machine, same lists, `SIMULATED_AUTH = true` |
 | `web-demo/js/app.js` | `confirmDeleteAccount()` + `eraseAccountData()` |
 

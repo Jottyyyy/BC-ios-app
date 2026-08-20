@@ -271,26 +271,27 @@ final class PremiumStore: ObservableObject {
     }
 
     private func recompute() {
-        #if BIYA_TEST_BUILD
-        // ── TEST BUILDS ONLY ──────────────────────────────────────────────────────────────────
+        // In a TEST build there is no subscription product in App Store Connect, so
+        // `Product.products(for:)` comes back empty and the paywall can only say "Store
+        // Unavailable" — with the trial gate in front of every route, that leaves a tester nothing
+        // they can open.
         //
-        // There is no subscription product in App Store Connect yet, so `Product.products(for:)`
-        // returns an empty list and the paywall can only say "Store Unavailable". The trial gate
-        // stands in front of every route, so a tester gets past the login screen and then has
-        // nothing at all they can open — the app is a paywall with no way through it.
+        // Granted at this ONE funnel rather than by forging a `Snapshot`, so everything the real
+        // resolution does — the trust floor, the grace window, the expiry maths — is neither
+        // edited nor bypassed; in a build with no store to consult it is simply not consulted.
         //
-        // Granted here rather than by faking a `Snapshot`, because this is the one funnel every
-        // path already goes through, and everything below it — the trust floor, the grace window,
-        // the expiry maths — stays exactly as it ships. Nothing in the real resolution is edited
-        // or bypassed; it is simply not consulted in a build that has no store to consult.
+        // `trial: false` is a plain active subscription, not the introductory period: ordinary
+        // premium UI rather than a countdown for a trial nobody started. The associated value is
+        // mandatory — `access = .premium` does not compile, which is what
+        // `tools/qa/swift_enum_payload_check.js` exists to catch.
         //
-        // `ios-appstore` never sets this flag and REFUSES to build if it finds it.
-        // `trial: false` — a plain active subscription rather than the introductory period, so a
-        // tester sees the ordinary premium UI and not a trial countdown for a trial nobody started.
-        access = .premium(trial: false)
-        #else
-        access = Entitlement.resolve(snapshot, now: nowMs())
-        #endif
+        // Decided by the APP TARGET (`BiyaherongBuild`). A `#if` here would be INERT: a
+        // project-level compilation condition never reaches a SwiftPM package target.
+        if BiyaherongBuild.isTestBuild {
+            access = .premium(trial: false)
+        } else {
+            access = Entitlement.resolve(snapshot, now: nowMs())
+        }
     }
 
     private func persist<T: Encodable>(_ key: String, _ value: T) {

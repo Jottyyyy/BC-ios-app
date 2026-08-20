@@ -46,6 +46,19 @@ targets:
         # "Biyaherong Chess Coach", team Deniel Causo). This is the bundle ID the earlier
         # Expo/React-Native build shipped under, so uploading with it updates that app
         # instead of silently creating a second one. Do not "tidy" this string.
+        # EMPTY on purpose, and this is the app's TEST behaviour: the sign-in opens the session
+        # directly and the subscription is granted, so any build anybody makes — CI, Xcode, a
+        # sideload — can actually be opened and used.
+        #
+        # `BIYA_APPSTORE` turns the real Sign in with Apple and real StoreKit back on, and ONLY
+        # codemagic.yaml's `ios-appstore` sets it, by rewriting this line before `xcodegen
+        # generate` — the same mechanism it already uses for CURRENT_PROJECT_VERSION, because
+        # passing a build setting through the Codemagic CLI is not reliable and silently failing
+        # to arrive is what cost three test cycles.
+        #
+        # Do not put BIYA_APPSTORE here by hand. That would make every build a submission build,
+        # and the whole point of the default is that a tester never depends on plumbing.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.prince24pogi.biyaherongchessapp
         PRODUCT_NAME: Biyaherong
         # This app ships into the EXISTING "Biyaherong Chess Coach" App Store Connect record,

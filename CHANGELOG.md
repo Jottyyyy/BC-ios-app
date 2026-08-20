@@ -9,6 +9,51 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-20 (fixed) — Why three "fixes" changed nothing: the flag was in the package, where it can never apply
+
+Client: *"ganun pa rin, pinapa-connect pa rin ako sa Sign in with Apple… hindi pa rin malaro…
+walang pinagbago."* Correct, and the code was on `main` the whole time.
+
+**`SWIFT_ACTIVE_COMPILATION_CONDITIONS` set on the Xcode project does not reach a local SwiftPM
+package's targets.** Every UI file lives in the `BiyaherongUI` package, so `#if BIYA_TEST_BUILD`
+there compiled identically in every build no matter what `codemagic.yaml` passed. Three rounds of
+setting the flag produced three identical builds, and there was no error anywhere to say so — the
+YAML contained the flag, the gate asserted the YAML contained the flag, and the device never saw it.
+
+A second, independent bug hid it: `ios-testflight` passed the setting as
+`xcode-project build-ipa … -- SETTING=value`. That is not a Codemagic CLI feature — the tool exposes
+`--archive-xcargs`, and argparse rejects unknown trailing tokens. **Fixing only that would still
+have changed nothing**, which is worth recording, because it was the obvious-looking culprit.
+
+**The switch moved to the app target.** `ios/App/BiyaherongApp.swift` is a real Xcode target, where
+the setting genuinely applies; its `init()` calls `BiyaherongBuild.configure(isTestBuild:)` before
+any view exists, and the package reads a plain Bool. `replay_login.js` now asserts that **no file in
+the package branches on `BIYA_APPSTORE`**, so the inert form cannot come back — the single most
+valuable assertion in this change.
+
+**And the default inverted.** Every build is a test build unless the app target says otherwise:
+
+- `LoginStore.init` opens a session at launch, so **the login screen never appears** (asked for
+  directly — a one-tap login was still a wall);
+- `LoginAppleAuth.start` opens the session without calling Apple;
+- `PremiumStore.recompute` grants `.premium(trial: false)`, so **no paywall**, and every daily cap
+  lifts with it.
+
+The two failure directions are not symmetric, which is the whole argument. Default-testable fails as
+a submission build that forgot to opt in — and `ios-appstore` reads the *effective* build settings
+and **refuses to build** unless `BIYA_APPSTORE` really arrived, before anything is signed. Default-real
+fails as a build nobody can open, silently, which has now cost three days.
+
+Neither test workflow sets anything at all now. That is the point: a tester depends on no plumbing.
+
+Four mutants, all killed: an inert `#if` back inside the package, a non-testable default, the
+submission workflow ceasing to opt in, and the app target losing its real branch.
+
+`replay_login` 471 → 481, `js_goldens` 34,297.
+
+**Still not verified here:** `swift build`. `BuildMode.swift` and the three call sites were written
+blind, and no Codemagic workflow runs on push.
+
 ### 2026-08-19 (fixed) — `access = .premium` does not compile, and a new gate for the whole class
 
 The premium grant added an hour ago was wrong. `Entitlement.Access` declares

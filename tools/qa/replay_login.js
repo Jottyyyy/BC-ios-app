@@ -452,24 +452,67 @@ function run() {
       .test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
   eq(importers.join(','), 'LoginAppleAuth.swift',
     'exactly one file in the UI imports AuthenticationServices');
-  //     The TEST-BUILD escape hatch. `BIYA_TEST_BUILD` makes the button open the session
-  //     directly, because the free/sideload path is signed with a profile that cannot carry
-  //     `com.apple.developer.applesignin` — Apple's sheet ends in "Sign Up Not Completed" and the
-  //     tester is locked out of the whole app. It exists so that build is testable, and it is a
-  //     rejection if it ever reaches App Review, so BOTH halves are pinned.
+  //     THE BUILD SWITCH, and WHERE it is allowed to live.
+  //
+  //     `SWIFT_ACTIVE_COMPILATION_CONDITIONS` set on the Xcode project — in `ios/project.yml`, on
+  //     the xcodebuild command line, anywhere at target level — does NOT reach a local SwiftPM
+  //     package's targets. Every UI file is in the `BiyaherongUI` package, so a `#if` in there
+  //     compiles identically in every build whatever CI passes. Three rounds of "the flag is set
+  //     in codemagic.yaml" produced three identical builds and no error anywhere to explain it.
+  //
+  //     So the `#if` lives in `ios/App/BiyaherongApp.swift`, a real Xcode target, and hands a
+  //     Bool to the package at runtime. These assertions exist to stop it drifting back.
   {
-    const sw = code(sources['LoginAppleAuth.swift']);
-    expect(sw.indexOf('#if BIYA_TEST_BUILD') >= 0,
-      'LoginAppleAuth.swift has the test-build branch');
-    expect(/#elseif os\(iOS\)[\s\S]*ASAuthorizationController/.test(sw),
-      'and the REAL call is still the branch every other build takes');
+    const UIDIR = UI;
+    const buildMode = read(UIDIR, 'BuildMode.swift');
+    expect(!!buildMode, 'BuildMode.swift exists');
+    const bm = code(buildMode || '');
+    expect(/public private\(set\) static var isTestBuild = true/.test(bm),
+      'the default is a TESTABLE build — a build nobody can open is the failure that keeps '
+      + 'happening, and it is silent; the opposite failure is caught loudly by ios-appstore');
+    expect(/public static func configure\(isTestBuild: Bool\)/.test(bm),
+      'and the app target sets it through configure(isTestBuild:)');
 
-    // Three workflows, and the split between them is the whole safeguard. BOTH test paths
-    // simulate, because a build whose login gate cannot be passed cannot be tested at all; the
-    // submission path does not, and REFUSES to build if the flag reaches it.
-    //
-    // "Sets it" is not the same as "mentions it": ios-appstore names the flag inside the guard
-    // that rejects it, so the test has to look for the ASSIGNMENT, not the string.
+    // THE assertion this whole section exists for: an inert `#if` must never come back.
+    const pkg = fs.readdirSync(UIDIR).filter((f) => f.endsWith('.swift'));
+    const inert = pkg.filter((f) =>
+      /#if\s+!?\s*BIYA_APPSTORE/.test(code(fs.readFileSync(path.join(UIDIR, f), 'utf8'))));
+    eq(inert.join(','), '',
+      'NO file in the BiyaherongUI package may branch on BIYA_APPSTORE — a compilation condition '
+      + 'set on the Xcode project never reaches a package target, so such a `#if` is inert and '
+      + 'compiles the same way in every build');
+
+    // The app target, where it genuinely applies.
+    const appMain = fs.readFileSync(
+      path.join(ROOT, 'ios', 'App', 'BiyaherongApp.swift'), 'utf8');
+    const am = code(appMain);
+    expect(/#if BIYA_APPSTORE[\s\S]{0,200}configure\(isTestBuild: false\)/.test(am),
+      'the app target turns the REAL sign-in and StoreKit on under BIYA_APPSTORE');
+    expect(/#else[\s\S]{0,200}configure\(isTestBuild: true\)[\s\S]{0,40}#endif/.test(am),
+      'and every other build is a test build');
+    expect(/init\(\)/.test(am),
+      'set from init(), before the view tree exists, so every reader sees the right value');
+
+    // The three readers.
+    const sw = code(sources['LoginAppleAuth.swift']);
+    expect(/if BiyaherongBuild\.isTestBuild \{[\s\S]{0,80}finish\(\.succeeded\)/.test(sw),
+      'the sign-in opens the session directly in a test build');
+    expect(/#if os\(iOS\)[\s\S]{0,600}ASAuthorizationController/.test(sw),
+      'and the REAL Apple call is still there for a submission build');
+    const store = code(sources['LoginStore.swift']);
+    expect(/if BiyaherongBuild\.isTestBuild, self\.provider == nil/.test(store),
+      'the login SCREEN is skipped too — a session is opened at launch');
+    const premium = code(read(UIDIR, 'PremiumStore.swift'));
+    expect(/if BiyaherongBuild\.isTestBuild \{[\s\S]{0,80}access = \.premium\(trial: false\)/
+      .test(premium),
+      'the entitlement is granted in a test build, with its mandatory associated value');
+    expect(/\} else \{[\s\S]{0,120}access = Entitlement\.resolve\(snapshot, now: nowMs\(\)\)/
+      .test(premium),
+      'and the real resolution is untouched otherwise');
+    expect((premium.match(/access = /g) || []).length === 2,
+      'exactly two writers of `access`: the test grant and the real resolve');
+
+    // ── The three workflows ────────────────────────────────────────────────────────────────────
     const ci = fs.readFileSync(path.join(ROOT, 'codemagic.yaml'), 'utf8');
     const at = (k) => {
       const i = ci.indexOf('\n  ' + k + ':');
@@ -478,40 +521,24 @@ function run() {
     };
     const iFree = at('ios-free-unsigned'), iTf = at('ios-testflight'), iAs = at('ios-appstore');
     expect(iFree < iTf && iTf < iAs, 'the three workflows are in the documented order');
-    const sets = (block) =>
-      /SWIFT_ACTIVE_COMPILATION_CONDITIONS=[^\n]*BIYA_TEST_BUILD/.test(block);
+    const sets = (block) => /SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/.test(block);
 
-    expect(sets(ci.slice(iFree, iTf)),
-      'ios-free-unsigned sets BIYA_TEST_BUILD — Sideloadly signs with a free profile, which '
-      + 'cannot carry the entitlement at all');
-    expect(sets(ci.slice(iTf, iAs)),
-      'ios-testflight sets it too — testers cannot open the app otherwise');
-    expect(!sets(ci.slice(iAs)),
-      'ios-appstore does NOT set it: that build goes to App Review, where a sign-in performing no '
-      + 'Apple authentication is a rejection');
-    expect(/REFUSING: BIYA_TEST_BUILD is compiled into a submission build/
-      .test(ci.slice(iAs)),
-      'and ios-appstore refuses to build if it ever appears, so the split is enforced rather than '
-      + 'remembered');
-
-    // The flag's SECOND half. A build that can sign in but cannot get past the paywall is no more
-    // testable than one that cannot sign in — there is no product in App Store Connect yet, so
-    // `Product.products(for:)` is empty and the trial gate stands in front of every route.
-    // One flag for both, so they can never disagree about whether this is a test build.
-    const premium = code(read(UI, 'PremiumStore.swift'));
-    expect(/#if BIYA_TEST_BUILD[\s\S]{0,80}access = \.premium/.test(premium),
-      'PremiumStore grants the entitlement in test builds');
-    expect(/#else[\s\S]{0,80}access = Entitlement\.resolve\(snapshot, now: nowMs\(\)\)/
-      .test(premium),
-      'and the REAL resolution is untouched in every other build');
-    // Granted at the one funnel, not by forging a Snapshot — so the trust floor, the grace window
-    // and the expiry maths below it are not edited, merely not consulted.
-    expect((premium.match(/access = /g) || []).length === 2,
-      'exactly two writers of `access`: the test grant and the real resolve');
-    // (No assertion that nothing sets `isSubscribed = true`: `apply(expiry:…)` legitimately does,
-    //  from a REAL verified transaction. The two-writer check above is what pins the test path.)
-    expect(/codesign -d --entitlements[^\n]*\n[^\n]*applesignin|applesignin/.test(ci.slice(iAs)),
+    expect(!sets(ci.slice(iFree, iTf)),
+      'ios-free-unsigned sets no compilation condition — a test build must not depend on plumbing');
+    expect(!sets(ci.slice(iTf, iAs)), 'ios-testflight sets none either; that is the inversion');
+    expect(sets(ci.slice(iAs)),
+      'ios-appstore opts in by rewriting project.yml before xcodegen — the mechanism this repo has '
+      + 'proved works, unlike passing a setting through the Codemagic CLI');
+    expect(/REFUSING: BIYA_APPSTORE did NOT reach the compiler/.test(ci.slice(iAs)),
+      'and REFUSES to build if it did not arrive, which is what makes the default safe');
+    expect(/applesignin/.test(ci.slice(iAs)),
       'ios-appstore also checks the entitlement survived signing — the failure with no other symptom');
+
+    const proj = fs.readFileSync(path.join(ROOT, 'ios', 'project.yml'), 'utf8');
+    expect(/SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""/.test(proj),
+      'ios/project.yml ships the testable default');
+    expect(!/SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/.test(proj),
+      'and does not hard-code BIYA_APPSTORE — only the submission workflow seds it in');
   }
 
   //     And the browser twin declares itself a stub, so it can never be read as the real thing.
