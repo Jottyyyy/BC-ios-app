@@ -35,6 +35,16 @@ enum AnalysisBoard {
         return (( physical / 8).rounded(.down) * 8) / r
     }
 
+    /// The board's edge with the eval rail beside it.
+    ///
+    /// `size(screenWidth:pixelRatio:)` above is PINNED to the RN source and does not change; what
+    /// changes is what it is asked about. Take the rail and its gap off the width FIRST, then snap.
+    /// Snapping first and subtracting after would land the board on a fractional physical pixel and
+    /// put a seam between the squares, which is the whole reason that formula exists.
+    static func sizeBesideRail(screenWidth: CGFloat, pixelRatio: CGFloat) -> CGFloat {
+        size(screenWidth: max(0, screenWidth - AnalysisEval.railTotal), pixelRatio: pixelRatio)
+    }
+
     static func square(screenWidth: CGFloat, pixelRatio: CGFloat) -> CGFloat {
         size(screenWidth: screenWidth, pixelRatio: pixelRatio) / 8
     }
@@ -478,9 +488,12 @@ enum AnalysisLayout {
     static let sheetRadius: CGFloat = 12
     static let sheetMaxWidth: CGFloat = 280
 
-    /// The board band's whole height: the top padding, the board, the gap, and the 8pt eval bar.
+    /// The board band's whole height: the top padding, the board, and the same padding under it.
+    ///
+    /// There is no 8pt bar in this band any more — the eval rail is BESIDE the board, so it costs
+    /// the band WIDTH, not height. The rail is exactly `edge` tall, so it never sets this either.
     static func boardBandHeight(edge: CGFloat) -> CGFloat {
-        boardPaddingTop + edge + boardPaddingTop + AnalysisEval.mainHeight
+        boardPaddingTop * 2 + edge
     }
 
     /// Every band above the engine panel, at their real heights — including the status LINE, which
@@ -588,8 +601,15 @@ enum AnalysisLayout {
 // MARK: - Eval bar and graph
 
 enum AnalysisEval {
-    /// The MAIN bar under the board is 8; only the per-engine-line micro bar is 3. The written spec
-    /// says "height 3" without distinguishing them.
+    /// The horizontal bar that used to sit under the board. **NOTHING DRAWS THIS ANY MORE** — the
+    /// main eval bar is the vertical rail below. It survives as the only pin on the source's
+    /// `evalBarTrack` block, which is where `railRadius` comes from; deleting it would unpin that
+    /// key on the very change that starts depending on it. `AnalysisMetricsCheck` §6b turns it from
+    /// an inert number into a live one (`railWidth > mainHeight`, `railRadius == mainRadius`).
+    ///
+    /// The MAIN bar was 8; only the per-engine-line micro bar is 3, and that one is still drawn —
+    /// horizontally, in the engine panel. The written spec says "height 3" without distinguishing
+    /// them, which is why these are extracted rather than transcribed.
     static let mainHeight: CGFloat = 8
     static let mainRadius: CGFloat = 4
     static let microHeight: CGFloat = 3
@@ -598,6 +618,71 @@ enum AnalysisEval {
     static let clamp: Int = 500
     /// `AnalysisTiming.evalBarAnimationMs` as seconds, so no view body divides by 1000.
     static let animationSeconds: Double = Double(AnalysisTiming.evalBarAnimationMs) / 1000
+
+    // MARK: - The vertical rail
+    //
+    // LEFT, FIXED, never mirrored — Lichess and Chess.com both keep it put, and a rail that swapped
+    // ends on every flip would be unreadable. White fills from the BOTTOM regardless, because
+    // `EngineScore` is documented "Always White-relative" (AnalysisEngine.swift:22-25), so nothing
+    // here can know or care which way the board is facing.
+    //
+    // Every number below is a real key in the source's own `evalBar*` block — the block that
+    // `renderEvalBar` (board.tsx:2741) never rendered. Its header comment reads
+    // "RENDER EVAL BAR (vertical, DroidFish-style)" and the style beneath it says
+    // `flexDirection: 'row'`. DEVIATION: we build the axis the comment describes, not the one the
+    // style declares. Recorded in PORTING_NOTES.md.
+
+    /// `evalBarText.minWidth` — the source's own minimum width for exactly this text.
+    static let railWidth: CGFloat = 32
+    /// `evalBarContainer.gap` — the eval component's own spacing unit, applied outward.
+    static let railGap: CGFloat = 5
+    /// `evalBarTrack.borderRadius`. The same number as `mainRadius`, named separately so the
+    /// retired horizontal bar's constant can never take the rail's corner with it.
+    static let railRadius: CGFloat = 4
+    /// `evalBarContainer.paddingVertical` — how far the label sits in from its end.
+    static let railPaddingV: CGFloat = 2
+    /// The widest string `EngineScore.displayText` can emit: `+10.5` / `-12.7`.
+    static let labelMaxGlyphs = 5
+
+    /// What the rail costs the board: its own width, plus the gap to the board.
+    static var railTotal: CGFloat { railWidth + railGap }
+
+    /// White's block, measured from the BOTTOM of the rail. Clamped, so a caller handing over a
+    /// fraction outside 0…1 draws a full or an empty rail rather than overflowing the clip.
+    static func fillHeight(rail: CGFloat, fraction: CGFloat) -> CGFloat {
+        rail * min(max(fraction, 0), 1)
+    }
+
+    /// Which end the score hangs off: the LEADING side's. White ahead → bottom, Black ahead → top.
+    ///
+    /// This is not a style choice, it is the legibility rule, and it is exact rather than tuned.
+    /// `fraction >= 0.5` is precisely the condition under which the BOTTOM of the rail is inside
+    /// the white fill, and `< 0.5` precisely the condition under which the TOP is bare track — so
+    /// the label always lands on a block of solid colour it was inked for, with no threshold to
+    /// tune. A dead-level position resolves to the bottom, stably.
+    static func labelAtBottom(fraction: CGFloat) -> Bool { fraction >= 0.5 }
+
+    static func labelAlignment(fraction: CGFloat) -> Alignment {
+        labelAtBottom(fraction: fraction) ? .bottom : .top
+    }
+
+    /// Dark ink on the white fill, light ink on the dark track. `onGold` is this screen's existing
+    /// dark-ink-over-a-light-fill token; `textPrimary` is its ordinary light ink.
+    static func labelInk(fraction: CGFloat) -> Color {
+        labelAtBottom(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
+    }
+
+    /// How many monospace glyphs fit across the rail at full size. Four — which covers every label
+    /// a real game produces: `+0.5`, `-1.3`, `M-3`, `1-0`, `½-½`.
+    static var labelGlyphsAtFullSize: Int {
+        Int(railWidth / (AnalysisType.evalRail * AnalysisLayout.monoAdvanceRatio))
+    }
+
+    /// How far a five-glyph label may shrink to fit — 32/33, i.e. 3%. Only `±10.5` and wider ever
+    /// need it, and by then the exact number stopped mattering three pawns ago.
+    static var labelMinScale: CGFloat {
+        railWidth / (AnalysisType.evalRail * AnalysisLayout.monoAdvanceRatio * CGFloat(labelMaxGlyphs))
+    }
 
     /// White's share of the bar, 0…1. A mate pins to 0.95 / 0.05 rather than the full end.
     static func fraction(cp: Int?, mate: Int?) -> CGFloat {
@@ -1283,6 +1368,10 @@ enum AnalysisType {
     /// for a line nobody has played yet. Its two action buttons take the branch-chip size.
     static let previewPly: CGFloat = stripMove
     static let previewBtn: CGFloat = altChip
+    /// The eval rail's score. `evalBarText.fontSize` / `.fontWeight` (800 → `.heavy`), and Menlo
+    /// in the source, so it takes `mono` like the engine rows do.
+    static let evalRail: CGFloat = 11
+    static let evalRailWeight: Font.Weight = .heavy
     // Phase 11 — the annotation picker's own scale.
     static let annotationPickerTitle: CGFloat = 16
     static let annotationSymbol: CGFloat = 20

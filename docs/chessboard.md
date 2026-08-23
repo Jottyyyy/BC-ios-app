@@ -83,7 +83,7 @@ Horizontal centring is the parent stack's job, which a `VStack` already does.
 |---|---|
 | The five puzzle solvers | `geo.size.width` (full bleed, like `.pz-board`) |
 | Play vs Coach | `geo.size.width` |
-| Analysis Board | `AnalysisBoard.size(screenWidth:pixelRatio:)` — snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. Pinned to the RN source; do not replace it with the plain width. |
+| Analysis Board | `AnalysisBoard.sizeBesideRail(screenWidth:pixelRatio:)` — the screen width **less the 32pt eval rail and its 5pt gap**, then snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. `size(screenWidth:pixelRatio:)` does the snapping and is pinned to the RN source; `sizeBesideRail` only narrows its INPUT. Subtract *then* snap — the other order lands the board on a fractional physical pixel and puts a seam between the squares. Do not replace either with the plain width. |
 | The two macOS demo panels | a constant (480 / 460); they are fixed-size desktop panels |
 
 ---
