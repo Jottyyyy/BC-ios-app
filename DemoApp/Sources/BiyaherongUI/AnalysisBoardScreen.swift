@@ -105,10 +105,11 @@ struct AnalysisBoardScreen: View {
     /// geometry — no measurement, and it does not have to be exact: `rowsBox` clips, so an answer a
     /// point or two out costs a hidden row, never an overdrawn move strip.
     private func enginePlan(size: CGSize) -> (rows: Int, lines: Int) {
-        // The SAME edge the board draws at — rail-aware. Budgeting against the full screen width
-        // would size the panel for a board 37pt wider than the real one, and the symptom is a
-        // silently missing engine row rather than anything visible.
-        let edge = AnalysisBoard.sizeBesideRail(screenWidth: size.width, pixelRatio: displayScale)
+        // The SAME edge the board draws at, engine state and all. Budget against a different one
+        // and the panel is sized for a board that is not on screen — the symptom is a silently
+        // missing engine row rather than anything visible.
+        let edge = AnalysisBoard.edge(screenWidth: size.width, pixelRatio: displayScale,
+                                      engineOn: vm.autoAnalyze)
         let available = AnalysisLayout.engineAvailable(viewportHeight: size.height,
                                                        edge: edge,
                                                        autoplaying: vm.autoplaying)
@@ -157,6 +158,11 @@ struct AnalysisBoardScreen: View {
     // We build the comment. There is ONE main eval bar now; the 3pt micro bar is a different bar,
     // real in the source, and still horizontal in the engine panel.
     //
+    // THE RAIL IS ONLY THERE WHEN THE ENGINE IS. `toggleEngine` drops the snapshot when it turns
+    // the engine off, so the rail would sit at a dead 50/50 with no number — "hindi na need yun pag
+    // nakapatay engine … yung space nya kainin na ng chessboard". The board takes the width back,
+    // via the one `AnalysisBoard.edge` both this and `enginePlan` call.
+    //
     // THE RAIL IS A SIBLING OF `ChessBoardBand`, NEVER A WRAPPER. `BoardArrows` and
     // `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` ON THE BAND and anchor to
     // its frame. Wrap or pad the band and every arrow and every badge slides right by the rail's
@@ -168,11 +174,14 @@ struct AnalysisBoardScreen: View {
         // whole multiple of 8 physical pixels so squares land on pixel boundaries, and that is
         // pinned to the RN source. It still goes through `ChessBoardBand`, so there is exactly one
         // place that turns an edge into a square.
-        let edge = AnalysisBoard.sizeBesideRail(screenWidth: width, pixelRatio: displayScale)
+        let edge = AnalysisBoard.edge(screenWidth: width, pixelRatio: displayScale,
+                                      engineOn: vm.autoAnalyze)
         // `alignment: .top` is spelled rather than left to the default `.center`: both children are
         // exactly `edge` tall today, and this is what keeps them aligned if one ever is not.
+        // An HStack applies its spacing BETWEEN children, so with the rail gone the gap goes too and
+        // the board is centred on its own — no stray `railGap` to trim.
         return HStack(alignment: .top, spacing: AnalysisEval.railGap) {
-            evalRail(height: edge)
+            if vm.autoAnalyze { evalRail(height: edge) }
             ChessBoardBand(edge: edge) { side in
                 BoardView(pieces: vm.pieces,
                           selected: vm.selected,

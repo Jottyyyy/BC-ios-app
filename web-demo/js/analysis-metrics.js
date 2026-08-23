@@ -44,6 +44,18 @@ var BiyaAnalysisMetrics = (function () {
   function boardSizeBesideRail(screenWidth, pixelRatio) {
     return boardSize(Math.max(0, screenWidth - railTotal()), pixelRatio);
   }
+  /**
+   * THE Analysis Board's board edge — the one entry point; nothing else on that screen picks.
+   * Mirrors AnalysisBoard.edge.
+   *
+   * The eval rail is only there when the engine is: switching the engine off drops the snapshot,
+   * so the rail would show a dead 50/50 track with no number. It goes, and the board takes the
+   * railTotal back. Both branches end in the same pinned snap-to-8 formula.
+   */
+  function boardEdge(screenWidth, pixelRatio, engineOn) {
+    return engineOn ? boardSizeBesideRail(screenWidth, pixelRatio)
+                    : boardSize(screenWidth, pixelRatio);
+  }
   function squareSize(screenWidth, pixelRatio) { return boardSize(screenWidth, pixelRatio) / 8; }
   var PIECE_RATIO = 0.95;                     // spec 3.1: piece is 95% of a square
   function pieceSize(square) { return square * PIECE_RATIO; }
@@ -854,6 +866,17 @@ var BiyaAnalysisMetrics = (function () {
     expectNear(railWidth(), EVAL_BAR.mainHeight + EVAL_BAR.railPaddingH * 2,
       'the rail is an 8px track inside 6px of padding each side, stood on end');
     expectNear(railWidth(), 20, 'which comes to 20px');
+    // The rail is only there when the ENGINE is, and the board takes the width back when it is not.
+    [375, 390, 430].forEach(function (w) {
+      expectNear(boardEdge(w, 3, true), boardSizeBesideRail(w, 3),
+        'engine ON at ' + w + ' leaves room for the rail');
+      expectNear(boardEdge(w, 3, false), boardSize(w, 3),
+        'engine OFF at ' + w + ' gives the board the FULL width — the rail is not drawn');
+      expect(boardEdge(w, 3, false) > boardEdge(w, 3, true),
+        'so the board is strictly WIDER with the engine off at ' + w);
+      expect(boardEdge(w, 3, false) - boardEdge(w, 3, true) <= railTotal() + 8 / 3 + 1e-9,
+        'and it gains the rail back, to within one snapped pixel step, at ' + w);
+    });
     expectNear(evalFillHeight(200, 0.5), 100, 'half an eval, half a rail');
     expectNear(evalFillHeight(200, 0), 0, 'no White share draws nothing');
     expectNear(evalFillHeight(200, 1), 200, 'a mate delivered fills it');
@@ -1712,7 +1735,8 @@ var BiyaAnalysisMetrics = (function () {
 
   return {
     boardSize: boardSize, squareSize: squareSize, pieceSize: pieceSize, PIECE_RATIO: PIECE_RATIO,
-    boardSizeBesideRail: boardSizeBesideRail, railTotal: railTotal, railWidth: railWidth,
+    boardSizeBesideRail: boardSizeBesideRail, boardEdge: boardEdge,
+    railTotal: railTotal, railWidth: railWidth,
     visual: visual, squareCenter: squareCenter, isLightSquare: isLightSquare,
     PALETTE: PALETTE, BOARD_THEMES: BOARD_THEMES, DEFAULT_BOARD_THEME: DEFAULT_BOARD_THEME,
     HIGHLIGHT: HIGHLIGHT, squareFill: squareFill,

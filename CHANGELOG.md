@@ -9,6 +9,44 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-23 (changed) — No engine, no eval rail: the board takes the width back
+
+Client: *"pwede ba kapag nakaoff yung engine remove mo yung evaluation bar hindi na need yun pag
+nakapatay engine … tapos yung space nya kainin na ng chessboard"*. Correct, and the current
+behaviour was worse than "unnecessary": `toggleEngine` already drops the snapshot when it switches
+the engine off, so the rail sat there at a dead 50/50 with **no number on it at all**. It is gone
+now when the engine is, and the board is 25 pt wider for it (362.67 → 389.33 at 390@3x, back to the
+full-bleed edge it had before the rail existed). `web-demo/` updated.
+
+**One entry point decides, and that is the whole design.**
+`AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)` — mirrored by `MET.boardEdge(w, dpr, on)` —
+picks between `sizeBesideRail` and `size`. Both branches still end in the pinned snap-to-8 formula,
+so squares land on whole physical pixels either way.
+
+The reason it is one function rather than a conditional at each call site: **the board band and
+`enginePlan` must agree about how wide the board is.** They are two separate call sites reading the
+same viewport, and if one takes the rail off the width and the other does not, the engine panel is
+budgeted against a board that is not on screen — which shows up as a silently missing engine row and
+nothing else. `swift_layout_check.js` §4d now asserts that neither call site names `size` or
+`sizeBesideRail` directly, that **both** go through `edge`, and that neither hardcodes `engineOn`.
+
+**The rail leaves the layout, not just the eye.** `.an-eval.off` is `display: none`, deliberately not
+`visibility: hidden` or an opacity: a hidden-but-present rail keeps both its own 20 px and
+`.an-board`'s 5 px gap, so the board would gain nothing and the row would sit off-centre by half of
+both — visible on a phone, invisible to every metrics assertion. In SwiftUI the same thing falls out
+of `if vm.autoAnalyze { evalRail(...) }` inside the `HStack`, because a stack applies its spacing
+*between* children and there is only one. Pinned in both languages, with a mutant each.
+
+**The toggle re-fits the bands.** Nothing else called `sizeBands()` on a toggle, so without that one
+line the browser kept the old edge until the next resize — the board would have stayed narrow until
+you rotated the phone. Asserted by slicing the toggle handler and looking for the call, and the
+mutant that removes it is killed.
+
+Suite: **34,543 assertions across 78 suites**. Mutants **21/21**, up from 16 — five new ones:
+rail drawn with the engine off, board width no longer tracking the toggle, `enginePlan` picking a
+branch for itself, the rail hidden with `visibility` instead of `display`, and the toggle that
+forgets to re-fit.
+
 ### 2026-08-23 (changed) — The eval bar moved to the side, and the RN source had asked for that all along
 
 Client, with a screenshot of the Analysis Board and the eval bar circled: *"Yung engine bar pwede

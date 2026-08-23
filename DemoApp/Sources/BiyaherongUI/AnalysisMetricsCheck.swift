@@ -128,6 +128,19 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
                AnalysisEval.mainHeight + AnalysisEval.railPaddingH * 2,
                "the rail is an 8pt track inside 6pt of padding each side, stood on end")
     expectNear(AnalysisEval.railWidth, 20, "which comes to 20pt")
+    // The rail is only there when the ENGINE is, and the board takes the width back when it is not.
+    // Mirrored assertion-for-assertion in analysis-metrics.js §7b.
+    for w in [CGFloat(375), 390, 430] {
+        let on = AnalysisBoard.edge(screenWidth: w, pixelRatio: 3, engineOn: true)
+        let off = AnalysisBoard.edge(screenWidth: w, pixelRatio: 3, engineOn: false)
+        expectNear(on, AnalysisBoard.sizeBesideRail(screenWidth: w, pixelRatio: 3),
+                   "engine ON at \(Int(w)) leaves room for the rail")
+        expectNear(off, AnalysisBoard.size(screenWidth: w, pixelRatio: 3),
+                   "engine OFF at \(Int(w)) gives the board the FULL width — no rail is drawn")
+        expect(off > on, "so the board is strictly WIDER with the engine off at \(Int(w))")
+        expect(off - on <= AnalysisEval.railTotal + 8 / 3 + 0.000001,
+               "and it gains the rail back, to within one snapped pixel step, at \(Int(w))")
+    }
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0.5), 100, "half an eval, half a rail")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0), 0, "no White share draws nothing")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 1), 200, "a mate delivered fills it")
