@@ -449,6 +449,10 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   text-align: center; line-height: 1;
   font-family: var(--mono); font-size: var(--an-fs-rail); font-weight: 800;
 }
+/* Engine off: no rail, and the board takes the width back. `display: none` and not `visibility`
+   or an opacity — a hidden-but-present rail keeps its width AND .an-board's gap, so the board
+   would gain nothing and the row would sit off-centre by half of both. */
+.an-eval.off { display: none; }
 .an-eval .lbl.bottom { bottom: 0; color: var(--an-on-gold); }
 .an-eval .lbl.top { top: 0; color: var(--an-text); }
 

@@ -45,6 +45,22 @@ enum AnalysisBoard {
         size(screenWidth: max(0, screenWidth - AnalysisEval.railTotal), pixelRatio: pixelRatio)
     }
 
+    /// **The Analysis Board's board edge. The one entry point — nothing else on that screen picks.**
+    ///
+    /// The eval rail is only there when the engine is. Switch the engine off and `toggleEngine`
+    /// drops the snapshot, so the rail would show a dead 50/50 track with no number on it; the
+    /// client's word for that was "hindi na need yun pag nakapatay engine … yung space nya kainin
+    /// na ng chessboard". So it goes, and the board takes the `railTotal` back.
+    ///
+    /// Both branches end in the same pinned snap-to-8 formula, so the squares land on whole
+    /// physical pixels either way. Having ONE function decide is what keeps the board and
+    /// `enginePlan`'s budget from disagreeing about how wide the board is — they take the same
+    /// `engineOn`, or the panel is sized for a board that is not on screen.
+    static func edge(screenWidth: CGFloat, pixelRatio: CGFloat, engineOn: Bool) -> CGFloat {
+        engineOn ? sizeBesideRail(screenWidth: screenWidth, pixelRatio: pixelRatio)
+                 : size(screenWidth: screenWidth, pixelRatio: pixelRatio)
+    }
+
     static func square(screenWidth: CGFloat, pixelRatio: CGFloat) -> CGFloat {
         size(screenWidth: screenWidth, pixelRatio: pixelRatio) / 8
     }

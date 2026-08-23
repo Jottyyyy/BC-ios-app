@@ -1311,7 +1311,10 @@ var BiyaAnalysisBoard = (function () {
     // The rail-aware edge: the pinned snap-to-8 formula, fed a width the rail has already been
     // taken out of. Never MET.boardSize directly, or the board is sized for a screen the rail is
     // standing in and every band below it is budgeted against a board 37px too wide.
-    var edge = MET.boardSizeBesideRail(box.width, window.devicePixelRatio || 2);
+    // Engine off means no rail, so the board takes that width back. ONE function decides, and
+    // planEngine() below reads the same edge — budget against a different one and the panel is
+    // sized for a board that is not on screen.
+    var edge = MET.boardEdge(box.width, window.devicePixelRatio || 2, session.autoAnalyze);
     var bands = MET.bandLayout(box.height, edge);
     root.style.setProperty('--an-board-edge', bands.board + 'px');
     root.style.setProperty('--an-panels-h', bands.panels + 'px');
@@ -1683,6 +1686,10 @@ var BiyaAnalysisBoard = (function () {
   }
 
   function paintEval() {
+    // The rail is only there when the engine is. `display: none` rather than `visibility`, so it
+    // leaves the flex row entirely — a hidden-but-present rail would keep both its width and
+    // `.an-board`'s gap, and the board would gain nothing.
+    ui.evalRail.classList.toggle('off', !session.autoAnalyze);
     var f = evalFraction(session);
     // The RAIL fills from the BOTTOM, so it animates its HEIGHT. The engine panel's 3px micro bar
     // is a DIFFERENT bar — real in the RN source, still horizontal — so it still animates width.
@@ -2127,6 +2134,9 @@ var BiyaAnalysisBoard = (function () {
       session.autoAnalyze = !session.autoAnalyze;
       if (!session.autoAnalyze) session.snapshot = null;
       scheduleAnalysis(); paintAll(false);
+      // The rail appears and disappears with it, so the board's width changes. Nothing else calls
+      // sizeBands on a toggle — without this the board keeps the old edge until the next resize.
+      sizeBands();
     });
     var tFlip = tool('an-tool', '🔄', 'Flip the board', function () {
       session.flipped = !session.flipped; paintBoard(false);
@@ -2168,7 +2178,7 @@ var BiyaAnalysisBoard = (function () {
     view.appendChild(root);
 
     ui = {
-      board: board, evalFill: evalBar.querySelector('.fill'),
+      board: board, evalRail: evalBar, evalFill: evalBar.querySelector('.fill'),
       evalLabel: evalBar.querySelector('.lbl'),
       microFill: micro.querySelector('.fill'),
       status: statusText_, statusLine: statusLine, spinner: spinner, autoplayBar: autoplayBar,

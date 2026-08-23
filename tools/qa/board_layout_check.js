@@ -142,11 +142,34 @@ expect(stack !== null && /flex:\s*none/.test(stack) && /width:\s*var\(--an-board
     'the rail is appended to .an-board BEFORE the board stack — it lives on the LEFT');
   expect(!/boardStack\.appendChild\(evalBar\)/.test(JS),
     'and it is a SIBLING of .an-board-stack, never a child of it');
-  expect(/MET\.boardSizeBesideRail\(/.test(JS),
-    'sizeBands() takes the edge from MET.boardSizeBesideRail — the pure function that subtracts the '
-    + 'rail BEFORE the pinned snap-to-8 formula runs');
-  expect(!/MET\.boardSize\(/.test(JS),
-    'and never MET.boardSize directly, or the board is sized for a screen the rail is standing in');
+  // ONE entry point picks the edge, because the rail is only there when the ENGINE is: switching
+  // the engine off drops the snapshot, so the rail would sit at a dead 50/50 with no number, and
+  // the board takes that width back. sizeBands() and planEngine() must agree about how wide the
+  // board is — budget against the other one and the panel is sized for a board not on screen.
+  expect(/MET\.boardEdge\(box\.width,[^)]*session\.autoAnalyze\)/.test(JS),
+    'sizeBands() takes the edge from MET.boardEdge(..., session.autoAnalyze) — the one function '
+    + 'that decides whether the rail is costing the board any width');
+  expect(!/MET\.boardSize\(/.test(JS) && !/MET\.boardSizeBesideRail\(/.test(JS),
+    'and never either branch directly: two call sites picking for themselves is how the board and '
+    + "the engine panel's budget drift apart");
+  // The rail leaves the LAYOUT when the engine is off, not merely the eye. A hidden-but-present
+  // rail keeps its width and .an-board's gap, so the board gains nothing and the row sits
+  // off-centre by half of both — visible, and invisible to every metrics assertion.
+  const railOff = rule('.an-eval.off');
+  expect(railOff !== null && /display:\s*none/.test(railOff),
+    '.an-eval.off is \`display: none\` — not visibility/opacity, which keeps the width and gap');
+  expect(/ui\.evalRail\.classList\.toggle\('off', !session\.autoAnalyze\)/.test(JS),
+    'and paintEval puts that class on exactly when the engine is off');
+  // Toggling the engine changes the board's width, so the bands have to be re-fitted. Nothing else
+  // calls sizeBands on a toggle: without this the board keeps the old edge until the next resize.
+  {
+    const t = JS.indexOf("'Toggle the engine'");
+    expect(t >= 0, 'the engine toggle button is where it was');
+    const handler = JS.slice(t, t + 600);
+    expect(/sizeBands\(\)/.test(handler),
+      'the engine toggle calls sizeBands() — the rail appears and disappears with it, so the '
+      + 'board\'s width changes and the old edge would otherwise survive until the next resize');
+  }
   expect(/MET\.evalLabelAtBottom\(/.test(JS),
     'and which end the label hangs off is the shared pure function, not a second `f >= 0.5` here');
   expect(/ui\.evalFill\.style\.height/.test(JS),

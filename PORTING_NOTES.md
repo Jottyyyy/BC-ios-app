@@ -542,6 +542,14 @@ colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` wher
 - **The board is narrower and the engine panel is taller.** 25pt off the width (389.33 → 362.67 at
   390@3x; squares 48.67 → 45.33, 6.9%), and the §10d row floors were **raised** to match — a
   375×667 SE goes from 4 single-line engine rows to 5 and from 2 wrapped to 3, met exactly.
+- **…and only while the engine is ON.** `toggleEngine` drops the snapshot when it switches the
+  engine off, so the rail would show a dead 50/50 track with no number; the client asked for it to
+  go and for the board to take the space. `AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)` is
+  the single chooser and **both** the board band and `enginePlan` call it — two call sites picking
+  the branch for themselves is how the engine panel ends up budgeted against a board that is not on
+  screen, which shows up as a missing engine row and nothing else. In the browser the rail is
+  `display: none` and never `visibility`: a hidden-but-present rail keeps its 20px *and*
+  `.an-board`'s 5px gap, so the board gains nothing and the row sits off-centre by half of both.
 
 ### The status line's own row (Analysis Board — deviation from `statusToolbarRow`)
 

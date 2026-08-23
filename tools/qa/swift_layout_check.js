@@ -277,14 +277,30 @@ function lineOf(file, re) {
       expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
         'the arrow and badge overlays stay attached to ChessBoardBand, not to the HStack — the '
         + 'band IS the board box and every offset is measured from its frame');
-      expect(/AnalysisBoard\.sizeBesideRail\(screenWidth:/.test(band),
-        'the edge comes from AnalysisBoard.sizeBesideRail — the pinned snap-to-8 formula fed a '
-        + 'width the rail has already been taken out of');
+      expect(/AnalysisBoard\.edge\(screenWidth:[\s\S]{0,120}?engineOn: vm\.autoAnalyze\)/.test(band),
+        'the edge comes from AnalysisBoard.edge(..., engineOn: vm.autoAnalyze) — the one function '
+        + 'that decides whether the rail is costing the board any width');
+      // The rail is only there when the engine is. Draw it unconditionally and it sits at a dead
+      // 50/50 with no number on it the moment toggleEngine drops the snapshot.
+      expect(/if vm\.autoAnalyze \{ evalRail\(height: edge\) \}/.test(band),
+        'and the rail itself is conditional on vm.autoAnalyze — engine off, no rail, and the board '
+        + 'takes the width back');
     }
-    expect(!/AnalysisBoard\.size\(screenWidth:/.test(s),
-      'no call site on this screen sizes the board from the FULL width — enginePlan has to budget '
-      + 'against the same edge the board draws at, or a row goes missing on a short screen with '
-      + 'nothing to show for it');
+    // RESTATED for the one entry point. This used to ban AnalysisBoard.size outright; the full
+    // width is now CORRECT when the engine is off, so what has to be banned is a call site picking
+    // the branch for itself. enginePlan and the band must be handed the same engineOn, or the
+    // panel is budgeted against a board that is not on screen — a silently missing engine row.
+    expect(!/AnalysisBoard\.size\(screenWidth:/.test(s)
+      && !/AnalysisBoard\.sizeBesideRail\(screenWidth:/.test(s),
+      'no call site on this screen names either sizing branch directly — both go through '
+      + 'AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)');
+    expect((s.match(/AnalysisBoard\.edge\(screenWidth:/g) || []).length >= 2,
+      'and BOTH of them do: the board band and enginePlan, or the panel is budgeted against a '
+      + 'board that is not on screen');
+    expect(!/AnalysisBoard\.edge\([^)]*engineOn: true/.test(s)
+      && !/AnalysisBoard\.edge\([^)]*engineOn: false/.test(s),
+      'and neither hardcodes engineOn — it is vm.autoAnalyze, or the board stops tracking the '
+      + 'toggle it is supposed to follow');
     // ONE main eval bar. Inverted rather than deleted, the way the book strip was.
     expect(!/func evalBar\(width:/.test(s),
       'the full-width horizontal eval bar is gone — there is one main eval bar and it is the rail');
