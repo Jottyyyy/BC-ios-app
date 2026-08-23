@@ -53,13 +53,6 @@ final class ChessGameVM: ObservableObject {
     var checkKingSquare: Int? {
         (status == .check || status == .checkmate) ? position.kingSquare(position.sideToMove) : nil
     }
-    /// Static eval from White's perspective (centipawns) and the derived White win %.
-    var whiteCentipawns: Int {
-        let e = ChessAI.evaluate(position)
-        return position.sideToMove == .white ? e : -e
-    }
-    var whiteWinPct: Double { GameReview.evalToWinPct(evalCp: whiteCentipawns, color: "w") }
-
     func rebuildPieces() {
         pieces = (0..<64).compactMap { sq in position.squares[sq].map { BoardPiece(id: UUID(), square: sq, piece: $0) } }
     }

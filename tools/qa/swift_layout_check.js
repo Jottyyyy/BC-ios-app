@@ -242,6 +242,81 @@ function lineOf(file, re) {
   }
 }
 
+// ---- 4d. the eval rail is a fixed-side SIBLING of the board ---------------------
+//
+// `BoardArrows` and `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` ON
+// `ChessBoardBand`, so they anchor to the BAND's frame. Put the rail anywhere that adds leading
+// width to what those overlays anchor to — a wrapper, a padding, an HStack the band is not
+// directly in — and every arrow and every badge slides right by the rail's width while the board
+// still looks perfect. That is the annotation-badge failure mode again, one layer up, and no
+// compiler and no assertion about numbers can see it.
+//
+// This is `board_layout_check.js` §2d's Swift twin. The two renderers degrade differently, so
+// neither stands in for the other.
+{
+  const s = code.get('AnalysisBoardScreen.swift');
+  expect(s !== undefined, 'AnalysisBoardScreen.swift is missing');
+  if (s) {
+    const i = s.indexOf('private func boardBand(');
+    expect(i >= 0, 'AnalysisBoardScreen still has a boardBand(width:)');
+    if (i >= 0) {
+      // To the next member, not a fixed window — the band body is long and a short guess would
+      // fail a correct file, which is the mistake §4c already documents.
+      const rest = s.slice(i + 1);
+      const end = rest.search(/\n {4}(private )?(var|func) /);
+      const band = end < 0 ? rest : rest.slice(0, end);
+      expect(/HStack\(alignment: \.top, spacing: AnalysisEval\.railGap\)/.test(band),
+        'boardBand must be an HStack, top-aligned, spaced by AnalysisEval.railGap. A default '
+        + '`.center` alignment drifts the moment the two children stop being the same height, and '
+        + 'a literal spacing is a number in a view body.');
+      expect(band.indexOf('evalRail(') >= 0
+        && band.indexOf('evalRail(') < band.indexOf('ChessBoardBand('),
+        'the rail comes FIRST — it is on the LEFT, and it stays there when the board is flipped');
+      expect(!/evalRail\([^)]*flip/.test(band),
+        'and nothing about the rail depends on the flip: the side is FIXED, like Lichess');
+      expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
+        'the arrow and badge overlays stay attached to ChessBoardBand, not to the HStack — the '
+        + 'band IS the board box and every offset is measured from its frame');
+      expect(/AnalysisBoard\.sizeBesideRail\(screenWidth:/.test(band),
+        'the edge comes from AnalysisBoard.sizeBesideRail — the pinned snap-to-8 formula fed a '
+        + 'width the rail has already been taken out of');
+    }
+    expect(!/AnalysisBoard\.size\(screenWidth:/.test(s),
+      'no call site on this screen sizes the board from the FULL width — enginePlan has to budget '
+      + 'against the same edge the board draws at, or a row goes missing on a short screen with '
+      + 'nothing to show for it');
+    // ONE main eval bar. Inverted rather than deleted, the way the book strip was.
+    expect(!/func evalBar\(width:/.test(s),
+      'the full-width horizontal eval bar is gone — there is one main eval bar and it is the rail');
+    expect(/func evalRail\(height:/.test(s), 'and the rail replaced it');
+    expect(!/AnalysisEval\.mainHeight/.test(s),
+      'nothing in a view draws AnalysisEval.mainHeight any more — it survives only as the pin on '
+      + "the source's evalBarTrack.height (see AnalysisEval's doc comment)");
+    // The label's placement and its ink are DECISIONS, made once, in the metrics layer.
+    expect(/AnalysisEval\.labelAlignment\(fraction:/.test(s)
+      && /AnalysisEval\.labelInk\(fraction:/.test(s),
+      'which end the label hangs off, and what colour it is, come from AnalysisEval — a `>= 0.5` '
+      + 'in a view body is a second copy of the rule and would drift from the JS twin');
+    expect(/AnalysisEval\.fillHeight\(rail:/.test(s) && !/height: height \*/.test(s),
+      'and the fill height is the pure function, not arithmetic in a view body');
+  }
+}
+
+// ---- 4e. there is only ONE vertical eval bar in the module ----------------------
+//
+// `Graphics.swift` carried a `struct EvalBar` — a vertical bar with 14pt, radius 5, a 0.02/0.98
+// clamp and `Theme.violet` all hardcoded in its view body — that was never once instantiated. It
+// was harmless while the Analysis Board's bar was horizontal. With a real rail beside the board it
+// is the wrong answer sitting next to the right one, and the first thing anyone looking for "the
+// vertical eval bar" would find. Inverted rather than deleted.
+{
+  expect(!/struct EvalBar\b/.test(code.get('Graphics.swift') || ''),
+    'Graphics.swift declares no second EvalBar — AnalysisBoardScreen.evalRail is the only eval bar '
+    + 'in the app, and the hardcoded one was never instantiated');
+  expect(!/whiteWinPct/.test(code.get('PlayView.swift') || ''),
+    'and its only feed is gone with it — whiteCentipawns ran a full ChessAI.evaluate for nobody');
+}
+
 // ---- 5. the five solver screens keep the shape the browser has ----------------
 // Board rigid, bottom band flexible — `.pz-board { flex: none }` + a trailing Spacer.
 {

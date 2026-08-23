@@ -85,7 +85,8 @@ Home ang app root — lahat ng iba ay bubukas mula sa isang tile at may back but
 - **Puzzles** — ang **Puzzle Hub**: 5 mode cards + daily-goal ring. **Live na ang lahat ng lima** —
   Play Puzzles, Daily Puzzle, Thematic, Streak at Turbo.
 - **Play** ⭐ — 5 coach opponents (Jaden Pogi 650 → Coach Pogi 2250). Tap-tap na paggalaw, promotion
-  picker, undo, flip, sounds, spring animations, eval bar, at "pass & play" para 2-player.
+  picker, undo, flip, sounds, spring animations, at "pass & play" para 2-player. (Walang eval bar
+  dito — nasa **Analysis Board** iyon, patayo sa kaliwa ng board tulad ng Lichess/Chess.com.)
 - **Profile** — rating, tier, stats, at ang 5 coaches. Naka-save sa `localStorage`. May **Sign out**
   at **Delete account** (may kumpirmasyon muna). Ang delete ay nagbubura ng session, settings at mga
   naka-save na laro — pero HINDI nito binubura ang subscription at ang daily counters, kaya hindi ito

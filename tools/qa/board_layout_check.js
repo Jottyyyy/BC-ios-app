@@ -53,6 +53,21 @@ if (boardBand) {
     + 'every move, got: ' + (/(flex:[^;]*)/.exec(boardBand) || ['(no flex)'])[0]);
   expect(!/container-type/.test(boardBand),
     '.an-board must NOT declare container-type — that is what let `cqh` leak into the board width');
+  // The band is a ROW now: the eval rail sits beside the board, not under it.
+  expect(/flex-direction:\s*row/.test(boardBand),
+    '.an-board is a ROW — the eval rail sits beside the board, not under it, got: '
+    + (/(flex-direction:[^;]*)/.exec(boardBand) || ['(none)'])[0]);
+  expect(/align-items:\s*flex-start/.test(boardBand),
+    'and top-aligned, so the rail and the board share a top edge');
+  expect(/justify-content:\s*center/.test(boardBand),
+    'and centred, so rail + gap + board sits in the middle of the phone');
+  expect(/gap:\s*var\(--an-rail-gap\)/.test(boardBand),
+    'and the gap between them comes from the metrics layer, not a literal');
+  // The two spellings that would silently undo the decision.
+  expect(!/flex-direction:\s*column/.test(boardBand),
+    'and never column — that is the old bar-under-the-board layout');
+  expect(!/row-reverse/.test(boardBand),
+    'and never row-reverse — the rail is on the LEFT and the side is FIXED, it does not mirror');
 }
 
 // ---- 2. the board is sized from the published width, not from a container query ----
@@ -64,9 +79,81 @@ if (boardEl) {
     + (/(width:[^;]*)/.exec(boardEl) || ['(none)'])[0]);
   expect(!/cq[whibm]/.test(boardEl), 'and uses no container-query unit');
 }
-const evalBar = rule('.an-eval');
-expect(evalBar !== null && /width:\s*var\(--an-board-edge\)/.test(evalBar),
-  'the eval bar matches the board width, so the two cannot drift apart');
+// ---- 2b. the eval RAIL ---------------------------------------------------------
+//
+// This rule used to read "the eval bar matches the board WIDTH, so the two cannot drift apart",
+// back when the bar was an 8px strip under the board. The bar is a vertical rail on the left now.
+// Same invariant, other axis — RESTATED rather than deleted, because deleting it is exactly how a
+// deviation gets smuggled instead of declared.
+const evalRail = rule('.an-eval');
+expect(evalRail !== null, '.an-eval exists — the vertical eval rail');
+if (evalRail) {
+  expect(/height:\s*var\(--an-board-edge\)/.test(evalRail),
+    'the rail is exactly as tall as the board is wide, so the two cannot drift apart, got: '
+    + (/(height:[^;]*)/.exec(evalRail) || ['(none)'])[0]);
+  expect(/width:\s*var\(--an-rail-w\)/.test(evalRail),
+    'and its width comes from the metrics layer, not a literal');
+  expect(!/width:\s*var\(--an-board-edge\)/.test(evalRail),
+    'and it is NOT the old full-width horizontal bar — there is ONE main eval bar, on the side');
+  expect(/flex:\s*none/.test(evalRail),
+    '.an-eval must be `flex: none` — a flexible rail eats the width the board was sized for');
+  expect(!/cq[whibm]/.test(evalRail), 'and uses no container-query unit');
+}
+// The fill grows UPWARD from the bottom. Anchor it at the top and the rail reads INVERTED, with no
+// other symptom whatsoever — the eval is White-relative and White is always at the bottom.
+const evalFill = rule('.an-eval .fill');
+expect(evalFill !== null && /bottom:\s*0/.test(evalFill),
+  'the rail fill is anchored at the BOTTOM — White grows upward');
+expect(evalFill !== null && /transition:\s*height/.test(evalFill),
+  'and animates its HEIGHT, not the old width');
+// Both label ends exist and are inked differently, or one of them is invisible against its ground.
+const lblBottom = rule('.an-eval .lbl.bottom');
+const lblTop = rule('.an-eval .lbl.top');
+expect(lblBottom !== null && /bottom:\s*0/.test(lblBottom) && /color:/.test(lblBottom),
+  'the label has a BOTTOM placement with its own ink (dark, on the white fill)');
+expect(lblTop !== null && /top:\s*0/.test(lblTop) && /color:/.test(lblTop),
+  'and a TOP one (light, on the dark track)');
+expect(lblBottom !== null && lblTop !== null
+  && /color:\s*([^;]+)/.exec(lblBottom)[1] !== /color:\s*([^;]+)/.exec(lblTop)[1],
+  'and they are DIFFERENT colours — the whole point is that the label lands on solid contrast');
+
+// ---- 2c. the board stack is exactly the board box ------------------------------
+const stack = rule('.an-board-stack');
+expect(stack !== null && /flex:\s*none/.test(stack) && /width:\s*var\(--an-board-edge\)/.test(stack),
+  '.an-board-stack is `flex: none` and exactly --an-board-edge wide — `.an-badge` is `inset: 0` '
+  + 'against it and paintBadge builds the badge viewBox from its measured width, so a stack that '
+  + 'stretched to include the rail would put every annotation badge off by the rail width');
+
+// ---- 2d. the rail is a fixed-side SIBLING, in the JS ----------------------------
+//
+// The failure mode this guards is silent: put the rail anywhere that adds leading width to what
+// `.an-badge` measures, and every badge slides right by the rail's width while the board still
+// looks perfect. `swift_layout_check.js` §4d is the SwiftUI twin — the two renderers degrade
+// differently, so neither stands in for the other.
+{
+  const a = JS.indexOf("el('div', 'an-board')");
+  const b = JS.indexOf("el('div', 'an-statusline')");
+  expect(a >= 0 && b > a, 'the band-building block is where it was — the slice found nothing');
+  const bandBuild = JS.slice(a, b);
+  expect(bandBuild.indexOf("'an-eval'") >= 0
+    && bandBuild.indexOf('boardBand.appendChild(evalBar)') >= 0
+    && bandBuild.indexOf('boardBand.appendChild(evalBar)')
+       < bandBuild.indexOf('boardBand.appendChild(boardStack)'),
+    'the rail is appended to .an-board BEFORE the board stack — it lives on the LEFT');
+  expect(!/boardStack\.appendChild\(evalBar\)/.test(JS),
+    'and it is a SIBLING of .an-board-stack, never a child of it');
+  expect(/MET\.boardSizeBesideRail\(/.test(JS),
+    'sizeBands() takes the edge from MET.boardSizeBesideRail — the pure function that subtracts the '
+    + 'rail BEFORE the pinned snap-to-8 formula runs');
+  expect(!/MET\.boardSize\(/.test(JS),
+    'and never MET.boardSize directly, or the board is sized for a screen the rail is standing in');
+  expect(/MET\.evalLabelAtBottom\(/.test(JS),
+    'and which end the label hangs off is the shared pure function, not a second `f >= 0.5` here');
+  expect(/ui\.evalFill\.style\.height/.test(JS),
+    'paintEval sets the RAIL fill height — setting width again would leave the rail frozen');
+  expect(/ui\.microFill\.style\.width/.test(JS),
+    'and still sets the micro bar WIDTH — that one is a different bar and is still horizontal');
+}
 
 // No `cq` unit anywhere in the Analysis Board's section. `.puz-board` legitimately uses them, and
 // it sits above that marker. Comments are stripped first — the section explains the old broken rule
@@ -168,7 +255,7 @@ expect(erow !== null && /flex:\s*none/.test(erow),
   + (/(flex:[^;]*)/.exec(erow || '') || ['(no flex)'])[0]);
 
 // ---- 4. the JS publishes what the CSS asks for -------------------------------
-for (const prop of ['--an-board-edge', '--an-panels-h']) {
+for (const prop of ['--an-board-edge', '--an-panels-h', '--an-rail-w', '--an-rail-gap']) {
   expect(CSS.includes('var(' + prop + ')'), 'the CSS reads ' + prop);
   expect(JS.includes("'" + prop + "'"), 'and analysis.js publishes ' + prop);
 }
@@ -380,6 +467,26 @@ expect(!/an-status-left/.test(CSS + JS),
     expect(value !== '#5BA3F5' && value !== '#2C4A73', `${what} is still the invented blue`);
   }
 }
+
+// ---- 9. the OTHER vertical eval bar cannot come back ---------------------------
+//
+// `.eval-bar` was a second, never-referenced vertical eval bar with its own invented palette
+// (#f2f2f2 on #242424, with a gold midline) and its own `.board-row` wrapper. Nothing in
+// web-demo/*.js or index.html ever built one. It was harmless while the Analysis Board's bar was
+// horizontal; with a real rail beside the board it becomes a trap — the wrong answer sitting next
+// to the right one, and the first thing anyone looking for "the vertical eval bar" would find.
+//
+// Inverted rather than deleted, the way the book strip was. Note these rules sat ABOVE the
+// `/* ---- Analysis Board` marker, so the analysisSection slice never saw them — which is how they
+// survived every sweep for three rounds.
+for (const gone of ['.board-row', '.board-row chess-board', '.eval-bar', '.eval-bar .fill',
+                    '.eval-bar .mid', '.board-solo']) {
+  expect(rule(gone) === null,
+    gone + ' is gone — a second, never-referenced vertical eval bar with its own palette. The '
+    + 'Analysis Board has a real one now, built from the extraction.');
+}
+expect(!/\beval-bar\b/.test(CSS),
+  'and no rule mentions eval-bar at all any more — .an-eval is the only eval bar in the stylesheet');
 
 const result = {
   passed,

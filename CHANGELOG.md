@@ -9,6 +9,91 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-23 (changed) — The eval bar moved to the side, and the RN source had asked for that all along
+
+Client, with a screenshot of the Analysis Board and the eval bar circled: *"Yung engine bar pwede
+ilagay sa gilid tulad lichess or chesscom"*. So band 2 stops being `VStack{board; bar}` and becomes
+`HStack{rail; board}`: a **vertical rail on the LEFT**, board-height, White filling from the bottom,
+with the score inside it. The 8 pt horizontal strip under the board is **gone** — one main eval bar,
+not two. `web-demo/` updated.
+
+**This restores the source's own stated intent rather than deviating from it.** `renderEvalBar`
+(`board.tsx:2741`) is dead code — one grep hit, the declaration — and its header comment reads:
+
+    // ══════════════════════════════════════════════
+    // RENDER EVAL BAR (vertical, DroidFish-style)
+    // ══════════════════════════════════════════════
+
+while the style beneath it says `flexDirection: 'row'`. The original author commented *vertical*,
+implemented *horizontal*, and then never rendered it at all. We build the comment.
+
+**Nothing is invented.** Every rail number is a real key in that same abandoned `evalBar*` block, so
+all of it is pinned by `matches(...)` / `same(...)` and resolves in `swift_source_keys.js` with no
+change to that gate: width 32 (`evalBarText.minWidth`), gap 5 (`evalBarContainer.gap`), radius 4
+(`evalBarTrack.borderRadius`), label inset 2 (`evalBarContainer.paddingVertical`), label 11/800/Menlo
+(`evalBarText`). The width is the one that mattered: `minWidth: 32` is the source's own minimum for
+exactly this text, so the label fits inside the rail by construction rather than by taste.
+
+**Three decisions worth stating, because each has a silent failure mode.**
+
+- **The rail is a SIBLING of `ChessBoardBand`, never a wrapper.** `BoardArrows` and
+  `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` *on the band* and anchor to its
+  frame. Wrap or pad the band instead and every arrow and every badge slides right by 37 pt while
+  the board still looks perfect. Browser twin: `.an-badge` is `inset: 0` against `.an-board-stack`
+  and `paintBadge` measures that stack, so the rail is a sibling there too and the stack is pinned
+  to `--an-board-edge`.
+- **`AnalysisBoard.size` is untouched** — it is pinned to the RN source. The new
+  `sizeBesideRail` narrows its *input* and hands the rest to the same snap-to-8-physical-pixels
+  formula, so squares still land on whole pixels. Subtract then snap; the other order puts a seam
+  between the squares. `enginePlan` had to move to it too, or the panel budgets against a board
+  37 pt wider than the one that draws and silently loses a row.
+- **The side is FIXED — flipping the board does not move the rail**, which is what Lichess and
+  Chess.com do. `EngineScore` is documented "Always White-relative", so no code path connects the
+  flip to the rail, and the gate asserts none is added. With Black at the bottom the white block is
+  still at the bottom: intended, not a bug.
+
+**The label hangs off the leading end** — bottom when White leads, on the white block, in dark ink;
+top when Black leads, on the bare dark track, in light ink. `labelAtBottom` is `fraction >= 0.5`,
+which is *exact* rather than tuned: that is precisely the condition under which the bottom of the
+rail is inside the fill. Asserted as a 21-step sweep over the whole range on the shortest rail the
+app can draw, not as a comment. `Alignment` is not animatable, so the number jumps ends the instant
+the eval crosses zero while the fill keeps animating — same as Lichess, and deliberately not
+"fixed" by cross-fading two `Text`s, which would draw it at both ends mid-transition.
+
+**What it costs and what it buys.** The board loses 37 pt of width (389.33 → 352 at 390@3x; squares
+48.6 → 44.0). In exchange the board band stops spending 12 pt on the bar and its gap, so the engine
+panel — the band that was actually starving — gains **45.33 pt on every screen**. The §10d floors
+were **raised**, 375×667 from (4, 2) to (5, 3) rows: a floor that no longer bites is the vacuous
+case the floors exist to prevent.
+
+**Gate rules restated, never weakened.** `board_layout_check.js` §2's *"the eval bar matches the
+board WIDTH"* becomes *"the rail is exactly as tall as the board is wide"* — same invariant, other
+axis. Added with it: the fill is bottom-anchored and animates height, both label ends exist in
+different inks, `.an-board` is a row and never `row-reverse`, the rail is appended before the stack
+and is never a child of it, and `MET.boardSize` is no longer called directly. New
+`swift_layout_check.js` §4d is the SwiftUI twin — the two renderers degrade differently, so neither
+stands in for the other. **13 hand-written mutants, 13 killed**: rail on the right, fill anchored
+top, band back to a column, both labels inked the same, `>= 0.5` back in a view body, and eight
+more.
+
+**Deleted, in the same change, ~30 lines that were never referenced:** `Graphics.swift`'s
+`struct EvalBar` — a *vertical* eval bar with 14 pt, radius 5, a 0.02/0.98 clamp and `Theme.violet`
+hardcoded in its view body, never once instantiated — plus its only feed (`PlayView.whiteWinPct`,
+which ran a full `ChessAI.evaluate` for nobody), and `app.css`'s `.board-row` / `.eval-bar` /
+`.board-solo`, a third invented eval palette with no JS consumer. Harmless while the real bar was
+horizontal; with a rail beside the board they become the wrong answer sitting next to the right one.
+Both are inverted assertions now, not just deletions. The CSS ones sat **above** the
+`/* ---- Analysis Board` marker, which is exactly why `analysisSection` never saw them — the new
+rule 9 is deliberately outside that slice.
+
+`AnalysisEval.mainHeight` (8) is **kept and retired in place**: nothing draws it, but
+`AnalysisMetricsCheck` is the only pin on `styles.evalBarTrack`, the block `railRadius` now comes
+from. Deleting the constant would delete that assertion on the very change that starts depending on
+it. It earns its keep as two live invariants instead — `railWidth > mainHeight` and
+`railRadius == mainRadius`.
+
+Suite: **34,489 assertions across 78 suites**, up 192.
+
 ### 2026-08-20 (fixed) — Why three "fixes" changed nothing: the flag was in the package, where it can never apply
 
 Client: *"ganun pa rin, pinapa-connect pa rin ako sa Sign in with Apple… hindi pa rin malaro…

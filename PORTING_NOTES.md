@@ -458,6 +458,65 @@ slide it to the target once the app repainted, so a drag ended with the piece ju
 travelling. chess.com and lichess leave it. Ported as behaviour, not as a source detail — the RN
 board's drag is `DragDropChessBoard`, which we replaced wholesale.
 
+### The eval bar is VERTICAL and beside the board (Analysis Board — building the source's comment)
+
+**DELIBERATE DEVIATION — and the smallest one available.** The client asked for the eval bar on the
+side, *"tulad lichess or chesscom"*. The RN source's `renderEvalBar` settles what "correct" means
+here, because it points both ways at once:
+
+```
+board.tsx:2738-2741
+  // ══════════════════════════════════════════════
+  // RENDER EVAL BAR (vertical, DroidFish-style)
+  // ══════════════════════════════════════════════
+  const renderEvalBar = () => {
+```
+
+The comment says **vertical**. The style beneath it says `evalBarContainer { flexDirection: 'row' }`,
+with `evalBarTrack { flex: 1, height: 8 }` and `evalBarWhite` animated on **width** — horizontal.
+And `grep -n renderEvalBar board.tsx` returns exactly **one** hit, the declaration: it is never
+called, so the RN app renders no eval bar at all. Dead, like `styles.statusLine` and
+`styles.menuContainer`.
+
+So there is no shipped behaviour to be differentially correct against, and the two halves of the
+source disagree. We build **the comment**: a vertical rail, left, fixed.
+
+**The numbers are not invented.** All five come from that same abandoned `evalBar*` block, which
+means every one is pinned by `matches(...)` in `AnalysisMetricsCheck` and `same(...)` in
+`analysis-metrics.js`, and resolves in `swift_source_keys.js` with no change to that gate:
+
+| rail property | source key | value |
+|---|---|---|
+| width | `evalBarText.minWidth` | 32 |
+| gap to the board | `evalBarContainer.gap` | 5 |
+| corner radius | `evalBarTrack.borderRadius` | 4 |
+| label inset | `evalBarContainer.paddingVertical` | 2 |
+| label face | `evalBarText.fontSize` / `fontWeight` / `fontFamily` | 11 · 800 · Menlo |
+
+`evalBarText.minWidth` is the load-bearing one: it is the source's own minimum width for exactly
+this text, so a 32pt rail holds `+0.5` / `M-3` / `1-0` at full size **by construction**, not by
+taste. Only a five-glyph label (`+10.5`, past ten pawns) shrinks, by 3%.
+
+**What is deliberately NOT taken from the source:** the axis (row → column, above), and the fill
+colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` where the source says
+`#333333` / `#F5F5F5`; those two were already invented before this change and still carry no
+`same()` assertion. Left as they were — re-colouring the bar was not what was asked for.
+
+**Consequences that are decisions, not accidents:**
+
+- **The side is FIXED.** Flipping the board does not move the rail, and White always fills from the
+  bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
+  "Always White-relative", so nothing connects the flip to the rail and the gate asserts nothing
+  will. With Black at the bottom, the white block is still at the bottom — intended.
+- **`AnalysisEval.mainHeight` (8) is retired in place, not deleted.** Nothing draws it. It stays
+  because `matches("evalBarTrack", "height", …)` is the only pin on `evalBarTrack`, the block
+  `railRadius` now depends on — deleting the constant deletes the assertion on the very change that
+  starts reading that block. It carries two live invariants instead: `railWidth > mainHeight` and
+  `railRadius == mainRadius`. Deleting an assertion to make a change fit is the thing `deviates()`
+  exists to prevent.
+- **The board is narrower and the engine panel is taller.** 37pt off the width (389.33 → 352 at
+  390@3x), 45.33pt onto the engine panel, and the §10d row floors were **raised** to match.
+
 ### The status line's own row (Analysis Board — deviation from `statusToolbarRow`)
 
 **DELIBERATE DEVIATION.** The source puts the status text and the toolbar on one row

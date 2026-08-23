@@ -118,6 +118,55 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(AnalysisEval.mainHeight == 8 && AnalysisEval.microHeight == 3,
            "the MAIN eval bar is 8 and only the per-line micro bar is 3")
 
+    // ── 6b. The vertical eval rail ──
+    // Mirrored assertion-for-assertion in analysis-metrics.js §7b.
+    let railEdge = AnalysisBoard.sizeBesideRail(screenWidth: 375, pixelRatio: 3)   // the tightest
+    expectNear(AnalysisEval.railTotal, AnalysisEval.railWidth + AnalysisEval.railGap,
+               "the rail costs the board its own width plus the gap")
+    expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0.5), 100, "half an eval, half a rail")
+    expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0), 0, "no White share draws nothing")
+    expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 1), 200, "a mate delivered fills it")
+    expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 2), 200, "a fraction past 1 clamps")
+    expectNear(AnalysisEval.fillHeight(rail: 200, fraction: -1), 0, "and one below 0 clamps too")
+    expect(AnalysisEval.labelAtBottom(fraction: 1), "1-0 hangs off the BOTTOM, on the white block")
+    expect(AnalysisEval.labelAtBottom(fraction: 0.95), "so does a forced mate for White")
+    expect(AnalysisEval.labelAtBottom(fraction: 0.5), "and a dead-level position, stably")
+    expect(!AnalysisEval.labelAtBottom(fraction: 0.49), "a Black edge hangs off the TOP")
+    expect(!AnalysisEval.labelAtBottom(fraction: 0), "and so does 0-1, on the bare dark track")
+
+    // LEGIBILITY, as the geometric fact it rests on rather than as a promise. The label's band is
+    // one line of rail type plus its two insets. `labelAtBottom` is true exactly when that band at
+    // the BOTTOM is inside the white fill, and false exactly when the band at the TOP is bare
+    // track — so the label always lands on solid colour. Swept over the whole range, on the
+    // SHORTEST rail the app can draw. No threshold to tune, which is why this is a sweep and not a
+    // comment.
+    let labelBand = (AnalysisType.evalRail * AnalysisLayout.engineLineRatio
+                     + AnalysisEval.railPaddingV * 2) / railEdge
+    for step in 0...20 {
+        let f = CGFloat(step) / 20
+        if AnalysisEval.labelAtBottom(fraction: f) {
+            expect(f >= labelBand, "at \(f) the bottom label sits inside the white fill")
+        } else {
+            expect(1 - f >= labelBand, "at \(f) the top label sits on bare track")
+        }
+    }
+    expect(AnalysisEval.labelInk(fraction: 1) == AnalysisPalette.onGold,
+           "White's end takes the screen's dark-ink-over-a-light-fill colour")
+    expect(AnalysisEval.labelInk(fraction: 0) == AnalysisPalette.textPrimary,
+           "Black's end takes the ordinary light ink")
+    expect(AnalysisEval.labelInk(fraction: 1) != AnalysisEval.labelInk(fraction: 0),
+           "and the two are different, or one end of the rail is unreadable")
+    expect(AnalysisEval.labelGlyphsAtFullSize >= 4,
+           "every label a real game produces — +0.5, -1.3, M-3, 1-0 — fits the rail at full size")
+    expect(AnalysisEval.labelMaxGlyphs >= 5, "displayText can emit five glyphs: +10.5")
+    expect(AnalysisEval.labelMinScale > 0.9,
+           "and the widest one shrinks imperceptibly rather than clipping")
+    // The two live invariants that keep the RETIRED horizontal bar's constants honest.
+    expect(AnalysisEval.railWidth > AnalysisEval.mainHeight,
+           "the rail is wider than the 8pt bar it replaced — it has to hold a label")
+    expect(AnalysisEval.railRadius == AnalysisEval.mainRadius,
+           "both bars round by the source's one evalBarTrack.borderRadius")
+
     // ── 7. Eval graph: y is flipped so +500 is at the top ──
     expectNear(AnalysisGraph.point(cp: 500, mate: nil, index: 0, count: 2, width: 100, height: 52).y,
                0, "+500 is at the top")
@@ -215,9 +264,24 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
                "nor at \(Int(w))x932")
         // And it fills the width it is given, to within one snapped pixel step.
         expect(w - edge < 8 / 3 + 0.000001, "the board is edge-to-edge at \(Int(w)) (snap only)")
+        // The rail-aware edge is height-independent for exactly the same reason.
+        let railed = AnalysisBoard.sizeBesideRail(screenWidth: w, pixelRatio: 3)
+        for h in [CGFloat(500), 667, 844, 932, 1200] {
+            expect(AnalysisBoard.sizeBesideRail(screenWidth: w, pixelRatio: 3) == railed,
+                   "sizeBesideRail(\(Int(w))) ignores a \(Int(h))pt viewport")
+        }
+        // RESTATED, not relaxed. The old rule was "the board fills the width". The board no longer
+        // has the width to itself, so the thing that must be edge-to-edge is the ROW: the rail,
+        // the gap, and the board.
+        expect(AnalysisEval.railTotal + railed <= w,
+               "rail + gap + board never overflows the screen at \(Int(w))")
+        expect(w - (AnalysisEval.railTotal + railed) < 8 / 3 + 0.000001,
+               "and they fill it, to within the snap, at \(Int(w))")
+        expect(railed < edge, "the rail really did narrow the board at \(Int(w))")
     }
-    // The one screen where it IS capped, and it must still be usable.
-    let seEdge = AnalysisBoard.size(screenWidth: 375, pixelRatio: 3)
+    // The one screen where it IS capped, and it must still be usable. The rail-aware edge, because
+    // that is the one the screen actually draws.
+    let seEdge = AnalysisBoard.sizeBesideRail(screenWidth: 375, pixelRatio: 3)
     let se = AnalysisLayout.bands(viewportHeight: 667, boardEdge: seEdge)
     expect(se.board > 0 && se.board <= seEdge, "a 375x667 SE caps the board but keeps it")
     expect(se.panels < AnalysisLayout.panelsMaxHeight,
@@ -258,10 +322,14 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     // local copy of the arithmetic. The copy that used to live here omitted the status LINE and the
     // board band's own chrome while adding the book strip, and the two errors nearly cancelled; it
     // reported budgets that were never real.
-    for (w, h, wantSingle, wantWrapped) in [(CGFloat(375), CGFloat(667), 4, 2),
+    // The SE floors were RAISED from (4, 2) when the eval bar moved beside the board: the band
+    // stopped spending 12pt on the bar and its gap, and the engine panel is the band that gets it.
+    // Leaving them at (4, 2) would be leaving a floor that no longer bites — the vacuous case the
+    // floors exist to prevent.
+    for (w, h, wantSingle, wantWrapped) in [(CGFloat(375), CGFloat(667), 5, 3),
                                             (390, 844, 5, 5),
                                             (430, 932, 5, 5)] {
-        let edge = AnalysisBoard.size(screenWidth: w, pixelRatio: 3)
+        let edge = AnalysisBoard.sizeBesideRail(screenWidth: w, pixelRatio: 3)
         let available = AnalysisLayout.engineAvailable(viewportHeight: h, edge: edge,
                                                        autoplaying: false)
         expect(available > 0, "there is room for an engine panel at \(Int(w))x\(Int(h))")
@@ -557,10 +625,24 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     matches("navBtn", "paddingHorizontal", AnalysisLayout.navBtnPaddingH)
     matches("navBtn", "minWidth", AnalysisLayout.navBtnMinWidth)
     // The two eval bars — the case the prose spec conflates.
-    matches("evalBarTrack", "height", AnalysisEval.mainHeight, "MAIN eval bar height")
+    matches("evalBarTrack", "height", AnalysisEval.mainHeight, "MAIN eval bar height (retired)")
     matches("evalBarTrack", "borderRadius", AnalysisEval.mainRadius)
     matches("engineEvalBarTrack", "height", AnalysisEval.microHeight, "MICRO eval bar height")
     matches("engineEvalBarTrack", "borderRadius", AnalysisEval.microRadius)
+    // The vertical rail — five numbers and three strings, one source block, nothing invented.
+    matches("evalBarTrack", "borderRadius", AnalysisEval.railRadius, "the rail corner")
+    matches("evalBarText", "minWidth", AnalysisEval.railWidth, "the rail width")
+    matches("evalBarText", "fontSize", AnalysisType.evalRail, "the rail label size")
+    matches("evalBarContainer", "gap", AnalysisEval.railGap, "the rail-to-board gap")
+    matches("evalBarContainer", "paddingVertical", AnalysisEval.railPaddingV, "the label inset")
+    expect(sourceString("evalBarText", "fontWeight") == "800", "the rail label is 800 — .heavy")
+    expect(sourceString("evalBarText", "fontFamily") == "Menlo", "and mono, like the engine rows")
+    // THE DEVIATION, declared rather than smuggled. `renderEvalBar` (board.tsx:2741) is commented
+    // "RENDER EVAL BAR (vertical, DroidFish-style)" and then built horizontally — and never
+    // rendered at all. We build the comment. If this ever reads "column" the source changed its
+    // mind and this whole block should be revisited.
+    expect(sourceString("evalBarContainer", "flexDirection") == "row",
+           "the source eval bar really is horizontal, its comment notwithstanding")
     // Palette
     expect(sourceString("container", "backgroundColor") == "#263238", "screen background matches the source")
     expect(sourceString("header", "backgroundColor") == "#1B2631", "surface matches the source")
