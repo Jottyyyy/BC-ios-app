@@ -13,9 +13,9 @@ Each entry notes whether `web-demo/` was updated.
 
 Client, with a screenshot of the Analysis Board and the eval bar circled: *"Yung engine bar pwede
 ilagay sa gilid tulad lichess or chesscom"*. So band 2 stops being `VStack{board; bar}` and becomes
-`HStack{rail; board}`: a **vertical rail on the LEFT**, board-height, White filling from the bottom,
-with the score inside it. The 8 pt horizontal strip under the board is **gone** — one main eval bar,
-not two. `web-demo/` updated.
+`HStack{rail; board}`: a **20 pt vertical rail on the LEFT**, board-height, White filling from the
+bottom, with the score inside it. The 8 pt horizontal strip under the board is **gone** — one main
+eval bar, not two. `web-demo/` updated.
 
 **This restores the source's own stated intent rather than deviating from it.** `renderEvalBar`
 (`board.tsx:2741`) is dead code — one grep hit, the declaration — and its header comment reads:
@@ -29,16 +29,30 @@ implemented *horizontal*, and then never rendered it at all. We build the commen
 
 **Nothing is invented.** Every rail number is a real key in that same abandoned `evalBar*` block, so
 all of it is pinned by `matches(...)` / `same(...)` and resolves in `swift_source_keys.js` with no
-change to that gate: width 32 (`evalBarText.minWidth`), gap 5 (`evalBarContainer.gap`), radius 4
-(`evalBarTrack.borderRadius`), label inset 2 (`evalBarContainer.paddingVertical`), label 11/800/Menlo
-(`evalBarText`). The width is the one that mattered: `minWidth: 32` is the source's own minimum for
-exactly this text, so the label fits inside the rail by construction rather than by taste.
+change to that gate: gap 5 (`evalBarContainer.gap`), radius 4 (`evalBarTrack.borderRadius`), label
+inset 2 (`evalBarContainer.paddingVertical`), label size cap 11/800/Menlo (`evalBarText`).
+
+**The width went 32 → 20 after a first look on device.** It shipped at `evalBarText.minWidth` (32),
+and the client's answer was *"panipisan lang ng konti masyado ata makapal"*. 32 was the source's
+minimum for the **label**, so using it sized the rail to its own caption — three quarters of a
+square. The rail is now the source eval component's own **cross-axis thickness**, stood on end:
+an 8 pt track (`evalBarTrack.height`) inside 6 pt of padding each side
+(`evalBarContainer.paddingHorizontal`) = **20 pt**, derived rather than typed. Still nothing
+invented, and it puts `evalBarTrack.height` back to work — it had been retired-but-pinned for
+exactly one round.
+
+**The label is fitted to the rail instead, and that number has to be SHARED.** `labelFontSize` is
+whatever fits four glyphs across the rail, capped at the source's 11: on a 20 pt rail the budget
+binds first, so it draws at 8⅓ pt (4 × 8⅓ × 0.6 = 20.0 exactly). **CSS has no
+`minimumScaleFactor`** — hand the browser 11 px and it would clip `-0.3` inside a 20 px rail while
+SwiftUI quietly shrank it, and the two renderers would disagree on screen with every suite still
+green. Both draw `labelFontSize`; three of the sixteen mutants exist for precisely that hole.
 
 **Three decisions worth stating, because each has a silent failure mode.**
 
 - **The rail is a SIBLING of `ChessBoardBand`, never a wrapper.** `BoardArrows` and
   `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` *on the band* and anchor to its
-  frame. Wrap or pad the band instead and every arrow and every badge slides right by 37 pt while
+  frame. Wrap or pad the band instead and every arrow and every badge slides right by 25 pt while
   the board still looks perfect. Browser twin: `.an-badge` is `inset: 0` against `.an-board-stack`
   and `paintBadge` measures that stack, so the rail is a sibling there too and the stack is pinned
   to `--an-board-edge`.
@@ -46,7 +60,7 @@ exactly this text, so the label fits inside the rail by construction rather than
   `sizeBesideRail` narrows its *input* and hands the rest to the same snap-to-8-physical-pixels
   formula, so squares still land on whole pixels. Subtract then snap; the other order puts a seam
   between the squares. `enginePlan` had to move to it too, or the panel budgets against a board
-  37 pt wider than the one that draws and silently loses a row.
+  25 pt wider than the one that draws and silently loses a row.
 - **The side is FIXED — flipping the board does not move the rail**, which is what Lichess and
   Chess.com do. `EngineScore` is documented "Always White-relative", so no code path connects the
   flip to the rail, and the gate asserts none is added. With Black at the bottom the white block is
@@ -60,11 +74,12 @@ app can draw, not as a comment. `Alignment` is not animatable, so the number jum
 the eval crosses zero while the fill keeps animating — same as Lichess, and deliberately not
 "fixed" by cross-fading two `Text`s, which would draw it at both ends mid-transition.
 
-**What it costs and what it buys.** The board loses 37 pt of width (389.33 → 352 at 390@3x; squares
-48.6 → 44.0). In exchange the board band stops spending 12 pt on the bar and its gap, so the engine
-panel — the band that was actually starving — gains **45.33 pt on every screen**. The §10d floors
-were **raised**, 375×667 from (4, 2) to (5, 3) rows: a floor that no longer bites is the vacuous
-case the floors exist to prevent.
+**What it costs and what it buys.** The board loses 25 pt of width (389.33 → 362.67 at 390@3x;
+squares 48.67 → 45.33, i.e. 6.9%). In exchange the board band stops spending 12 pt on the bar and
+its gap, so the engine panel — the band that was actually starving — gains height on every screen:
+a 375×667 SE goes from 4 single-line engine rows to 5, and from 2 wrapped to 3. The §10d floors
+were **raised** to match, and they are met exactly on the SE — a floor that no longer bites is the
+vacuous case the floors exist to prevent.
 
 **Gate rules restated, never weakened.** `board_layout_check.js` §2's *"the eval bar matches the
 board WIDTH"* becomes *"the rail is exactly as tall as the board is wide"* — same invariant, other
@@ -72,9 +87,9 @@ axis. Added with it: the fill is bottom-anchored and animates height, both label
 different inks, `.an-board` is a row and never `row-reverse`, the rail is appended before the stack
 and is never a child of it, and `MET.boardSize` is no longer called directly. New
 `swift_layout_check.js` §4d is the SwiftUI twin — the two renderers degrade differently, so neither
-stands in for the other. **13 hand-written mutants, 13 killed**: rail on the right, fill anchored
-top, band back to a column, both labels inked the same, `>= 0.5` back in a view body, and eight
-more.
+stands in for the other. **16 hand-written mutants, 16 killed**: rail on the right, fill anchored
+top, band back to a column, both labels inked the same, `>= 0.5` back in a view body, either
+renderer's label size wired back to the source 11, and ten more.
 
 **Deleted, in the same change, ~30 lines that were never referenced:** `Graphics.swift`'s
 `struct EvalBar` — a *vertical* eval bar with 14 pt, radius 5, a 0.02/0.98 clamp and `Theme.violet`
@@ -86,13 +101,19 @@ Both are inverted assertions now, not just deletions. The CSS ones sat **above**
 `/* ---- Analysis Board` marker, which is exactly why `analysisSection` never saw them — the new
 rule 9 is deliberately outside that slice.
 
-`AnalysisEval.mainHeight` (8) is **kept and retired in place**: nothing draws it, but
-`AnalysisMetricsCheck` is the only pin on `styles.evalBarTrack`, the block `railRadius` now comes
-from. Deleting the constant would delete that assertion on the very change that starts depending on
-it. It earns its keep as two live invariants instead — `railWidth > mainHeight` and
-`railRadius == mainRadius`.
+`AnalysisEval.mainHeight` (8) is **load-bearing again** — it is the track inside the rail, and
+`railWidth` is built from it. It spent one round retired-but-pinned (kept only because
+`AnalysisMetricsCheck` is the only thing pinning `styles.evalBarTrack`, the block `railRadius`
+comes from). Keeping it rather than deleting it is what made the 20 pt derivation available at all —
+the argument for not deleting an assertion to make a change fit, paying off one round later.
 
-Suite: **34,489 assertions across 78 suites**, up 192.
+The one deviation that IS declared rather than derived: the rail is **narrower than
+`evalBarText.minWidth`** (20 < 32). The source value is still asserted, alongside
+`railWidth < 32` and `labelFontSize < evalBarText.fontSize`, so the gap stays visible and an
+accidental drift is still caught — the `deviates()` precedent, spelled out because this one is
+*smaller* than the source rather than larger.
+
+Suite: **34,513 assertions across 78 suites**, up 216.
 
 ### 2026-08-20 (fixed) — Why three "fixes" changed nothing: the flag was in the package, where it can never apply
 

@@ -487,15 +487,40 @@ means every one is pinned by `matches(...)` in `AnalysisMetricsCheck` and `same(
 
 | rail property | source key | value |
 |---|---|---|
-| width | `evalBarText.minWidth` | 32 |
+| track | `evalBarTrack.height` | 8 |
+| padding either side | `evalBarContainer.paddingHorizontal` | 6 |
+| **width** = track + 2 × padding | *derived from the two above* | **20** |
 | gap to the board | `evalBarContainer.gap` | 5 |
 | corner radius | `evalBarTrack.borderRadius` | 4 |
 | label inset | `evalBarContainer.paddingVertical` | 2 |
-| label face | `evalBarText.fontSize` / `fontWeight` / `fontFamily` | 11 · 800 · Menlo |
+| label face (the CAP) | `evalBarText.fontSize` / `fontWeight` / `fontFamily` | 11 · 800 · Menlo |
 
-`evalBarText.minWidth` is the load-bearing one: it is the source's own minimum width for exactly
-this text, so a 32pt rail holds `+0.5` / `M-3` / `1-0` at full size **by construction**, not by
-taste. Only a five-glyph label (`+10.5`, past ten pawns) shrinks, by 3%.
+**The width is the source component's own cross-axis thickness, stood on end.** `evalBarContainer`
+is a row holding an 8pt track with 6pt of padding either side, so the thing is 20pt thick. Rotate
+it and that is the rail.
+
+It shipped at **32** for one round — `evalBarText.minWidth`, which is the source's minimum for the
+**label**, not for the bar — and the client's answer was *"panipisan lang ng konti masyado ata
+makapal"*. Sizing a bar to its own caption is the error; 32 is still the right number for the text
+and the wrong one for the rail. Recorded because the wrong reading was defensible: both numbers sit
+in the same block, and `minWidth: 32` is the more obvious one to reach for.
+
+**The label is fitted to the rail, not the other way round.** `labelFontSize` is whatever fits four
+glyphs across the rail, capped at the source's 11; on a 20pt rail the budget binds and it draws at
+8⅓pt (4 × 8⅓ × 0.6 = 20.0 exactly). Four glyphs covers `+0.5`, `-0.3`, `M-3`, `1-0`, `½-½` —
+everything a real game produces short of a ten-pawn rout, and `+10.5` shrinks 4/5 rather than
+clipping.
+
+That number is **shared between the two renderers on purpose**. CSS has no `minimumScaleFactor`:
+hand the browser the source's 11px and it clips `-0.3` inside a 20px rail while SwiftUI quietly
+shrinks it — the two screens disagreeing with every metrics assertion still green. Both gates pin
+it (`board_layout_check.js` §2d, `swift_layout_check.js` §4d) and three mutants prove they bite.
+
+**A DECLARED deviation, not a derived one:** the rail is narrower than `evalBarText.minWidth`
+(20 < 32). The source value is still asserted, next to `railWidth < 32` and
+`labelFontSize < evalBarText.fontSize`, so the gap stays visible and an accidental drift is still
+caught. This is the `deviates()` precedent, written out longhand because that helper only expresses
+"bigger than the source" and this one is smaller.
 
 **What is deliberately NOT taken from the source:** the axis (row → column, above), and the fill
 colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` where the source says
@@ -508,14 +533,15 @@ colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` wher
   bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
   "Always White-relative", so nothing connects the flip to the rail and the gate asserts nothing
   will. With Black at the bottom, the white block is still at the bottom — intended.
-- **`AnalysisEval.mainHeight` (8) is retired in place, not deleted.** Nothing draws it. It stays
-  because `matches("evalBarTrack", "height", …)` is the only pin on `evalBarTrack`, the block
-  `railRadius` now depends on — deleting the constant deletes the assertion on the very change that
-  starts reading that block. It carries two live invariants instead: `railWidth > mainHeight` and
-  `railRadius == mainRadius`. Deleting an assertion to make a change fit is the thing `deviates()`
-  exists to prevent.
-- **The board is narrower and the engine panel is taller.** 37pt off the width (389.33 → 352 at
-  390@3x), 45.33pt onto the engine panel, and the §10d row floors were **raised** to match.
+- **`AnalysisEval.mainHeight` (8) is load-bearing** — it is the track inside the rail, and
+  `railWidth` is built from it. For one round it was retired-but-kept, on the argument that
+  `matches("evalBarTrack", "height", …)` is the only pin on `evalBarTrack` and deleting the
+  constant would delete that assertion on the very change that started reading the block. Keeping
+  it is what made the 20pt derivation available a round later: the case for not deleting an
+  assertion to make a change fit, paying for itself.
+- **The board is narrower and the engine panel is taller.** 25pt off the width (389.33 → 362.67 at
+  390@3x; squares 48.67 → 45.33, 6.9%), and the §10d row floors were **raised** to match — a
+  375×667 SE goes from 4 single-line engine rows to 5 and from 2 wrapped to 3, met exactly.
 
 ### The status line's own row (Analysis Board — deviation from `statusToolbarRow`)
 

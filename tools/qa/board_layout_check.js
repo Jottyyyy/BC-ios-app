@@ -153,6 +153,19 @@ expect(stack !== null && /flex:\s*none/.test(stack) && /width:\s*var\(--an-board
     'paintEval sets the RAIL fill height — setting width again would leave the rail frozen');
   expect(/ui\.microFill\.style\.width/.test(JS),
     'and still sets the micro bar WIDTH — that one is a different bar and is still horizontal');
+  // The rail's width and its label size are both DERIVED, and both must come from the metrics
+  // layer. CSS has no `minimumScaleFactor`: hand the browser the source's 11px and it clips
+  // `-0.3` inside a 20px rail while SwiftUI quietly shrinks it — the two renderers disagreeing on
+  // screen with every suite still green. That is the failure this pair exists to make impossible.
+  expect(/MET\.railWidth\(\)/.test(JS),
+    "--an-rail-w comes from MET.railWidth() — the rail is an 8px track inside 6px of padding "
+    + 'each side, derived, not a literal');
+  expect(/MET\.evalLabelFontSize\(\)/.test(JS),
+    '--an-fs-rail comes from MET.evalLabelFontSize() — the size that FITS the rail, shared with '
+    + 'Swift, not the source font size the rail is too narrow for');
+  expect(!/set\('--an-fs-rail',\s*T2\.evalRail/.test(JS),
+    'and NOT from T2.evalRail directly: 11px in a 20px rail clips in the browser and only in the '
+    + 'browser, which is the one bug neither metrics suite can see');
 }
 
 // No `cq` unit anywhere in the Analysis Board's section. `.puz-board` legitimately uses them, and

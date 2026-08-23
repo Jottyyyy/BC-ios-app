@@ -123,6 +123,11 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     let railEdge = AnalysisBoard.sizeBesideRail(screenWidth: 375, pixelRatio: 3)   // the tightest
     expectNear(AnalysisEval.railTotal, AnalysisEval.railWidth + AnalysisEval.railGap,
                "the rail costs the board its own width plus the gap")
+    // The width is DERIVED, not typed: the source eval component's own cross-axis thickness.
+    expectNear(AnalysisEval.railWidth,
+               AnalysisEval.mainHeight + AnalysisEval.railPaddingH * 2,
+               "the rail is an 8pt track inside 6pt of padding each side, stood on end")
+    expectNear(AnalysisEval.railWidth, 20, "which comes to 20pt")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0.5), 100, "half an eval, half a rail")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 0), 0, "no White share draws nothing")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 1), 200, "a mate delivered fills it")
@@ -140,7 +145,7 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     // track — so the label always lands on solid colour. Swept over the whole range, on the
     // SHORTEST rail the app can draw. No threshold to tune, which is why this is a sweep and not a
     // comment.
-    let labelBand = (AnalysisType.evalRail * AnalysisLayout.engineLineRatio
+    let labelBand = (AnalysisEval.labelFontSize * AnalysisLayout.engineLineRatio
                      + AnalysisEval.railPaddingV * 2) / railEdge
     for step in 0...20 {
         let f = CGFloat(step) / 20
@@ -156,16 +161,29 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
            "Black's end takes the ordinary light ink")
     expect(AnalysisEval.labelInk(fraction: 1) != AnalysisEval.labelInk(fraction: 0),
            "and the two are different, or one end of the rail is unreadable")
-    expect(AnalysisEval.labelGlyphsAtFullSize >= 4,
-           "every label a real game produces — +0.5, -1.3, M-3, 1-0 — fits the rail at full size")
-    expect(AnalysisEval.labelMaxGlyphs >= 5, "displayText can emit five glyphs: +10.5")
-    expect(AnalysisEval.labelMinScale > 0.9,
-           "and the widest one shrinks imperceptibly rather than clipping")
-    // The two live invariants that keep the RETIRED horizontal bar's constants honest.
+    // THE LABEL FITS BY CONSTRUCTION, at a size both renderers draw.
+    //
+    // The rail is 20pt now, so the four-glyph budget binds before the source's 11pt does and the
+    // label lands at 8⅓pt. That number has to be SHARED: CSS has no `minimumScaleFactor`, so a
+    // browser handed 11px would clip `-0.3` inside a 20px rail while SwiftUI quietly shrank it —
+    // the two renderers disagreeing on screen with every suite still green.
+    expect(AnalysisEval.labelMaxGlyphs > AnalysisEval.labelGlyphs,
+           "displayText can emit one glyph more than the rail is sized for: +10.5")
+    expectNear(AnalysisEval.labelFontSize,
+               AnalysisEval.railWidth
+                 / (CGFloat(AnalysisEval.labelGlyphs) * AnalysisLayout.monoAdvanceRatio),
+               "on a 20pt rail the four-glyph budget binds, not the source's 11pt")
+    expect(AnalysisEval.labelFontSize <= AnalysisType.evalRail,
+           "and the source's evalBarText.fontSize is the CAP — the label never grows past it")
+    expect(AnalysisEval.labelFontSize * CGFloat(AnalysisEval.labelGlyphs)
+             * AnalysisLayout.monoAdvanceRatio <= AnalysisEval.railWidth + 0.000001,
+           "four glyphs fit ACROSS the rail at that size — the whole point of deriving it")
+    expectNear(AnalysisEval.labelMinScale, 0.8, "and the fifth glyph shrinks 4/5, not clips")
+    // The rail's own geometry, and the constants it is built from.
     expect(AnalysisEval.railWidth > AnalysisEval.mainHeight,
-           "the rail is wider than the 8pt bar it replaced — it has to hold a label")
+           "the rail is wider than the track inside it — that is what the padding is for")
     expect(AnalysisEval.railRadius == AnalysisEval.mainRadius,
-           "both bars round by the source's one evalBarTrack.borderRadius")
+           "and it rounds by the source's one evalBarTrack.borderRadius")
 
     // ── 7. Eval graph: y is flipped so +500 is at the top ──
     expectNear(AnalysisGraph.point(cp: 500, mate: nil, index: 0, count: 2, width: 100, height: 52).y,
@@ -631,8 +649,20 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     matches("engineEvalBarTrack", "borderRadius", AnalysisEval.microRadius)
     // The vertical rail — five numbers and three strings, one source block, nothing invented.
     matches("evalBarTrack", "borderRadius", AnalysisEval.railRadius, "the rail corner")
-    matches("evalBarText", "minWidth", AnalysisEval.railWidth, "the rail width")
-    matches("evalBarText", "fontSize", AnalysisType.evalRail, "the rail label size")
+    matches("evalBarContainer", "paddingHorizontal", AnalysisEval.railPaddingH, "the rail padding")
+    matches("evalBarText", "fontSize", AnalysisType.evalRail, "the rail label size CAP")
+    // DECLARED, not dropped. The rail was `evalBarText.minWidth` (32) for one round — the source's
+    // minimum for the LABEL — and the client's answer was "panipisan lang ng konti masyado ata
+    // makapal". 32 sized the rail to its caption; the rail is 20 now, built from the track and its
+    // padding, and the LABEL is fitted to the rail instead. The source value is still asserted so
+    // the gap stays visible and an accidental drift is still caught — the `deviates()` precedent,
+    // spelled out because this one is smaller than the source rather than larger.
+    expectNear(sourceNumber("evalBarText", "minWidth") ?? 0, 32,
+               "the source still reserves 32 for the eval text")
+    expect(AnalysisEval.railWidth < 32,
+           "and we deliberately draw a NARROWER rail than that, at the client's request")
+    expect(AnalysisEval.labelFontSize < AnalysisType.evalRail,
+           "which is exactly why the label is drawn below the source's own font size")
     matches("evalBarContainer", "gap", AnalysisEval.railGap, "the rail-to-board gap")
     matches("evalBarContainer", "paddingVertical", AnalysisEval.railPaddingV, "the label inset")
     expect(sourceString("evalBarText", "fontWeight") == "800", "the rail label is 800 — .heavy")
