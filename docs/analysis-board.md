@@ -135,7 +135,7 @@ may not have — the same reasoning that commits `eco.tsv`.
 | # | Band | Height |
 |---|---|---|
 | 1 | Header — `←` · Analysis Board · `☰` | fixed |
-| 2 | The **32pt** vertical eval rail, then board + arrows beside it | **fixed — a square derived from the WIDTH, less the rail** |
+| 2 | The **20pt** vertical eval rail, then board + arrows beside it | **fixed — a square derived from the WIDTH, less the rail** |
 | 3a | Status line — its own row here, not the source's shared one | fixed |
 | 3b | Toolbar — 📂 · ✏️ · 💡 · 🔄 · ▶ · `⏮ ◀ ▶ ⏭` | fixed |
 | 4 | Autoplay speed bar — only while autoplaying | fixed |
@@ -163,6 +163,12 @@ Two things reading the source corrected:
   commented *vertical*, implemented *horizontal*, and shipped neither. When the client asked for the
   bar "sa gilid tulad lichess or chesscom", the answer was already in the source — so band 2 is an
   `HStack{rail; board}` now, and every rail number comes from that same abandoned `evalBar*` block.
+  The rail is **20pt**: the eval container's own cross-axis thickness (an 8pt `evalBarTrack` inside
+  6pt of `paddingHorizontal` each side), stood on end. It shipped at 32 — `evalBarText.minWidth`,
+  the minimum for the *label* — and the client asked for it thinner; sizing a bar to its own caption
+  was the mistake. The label is fitted to the rail instead (`AnalysisEval.labelFontSize`), at a size
+  **both** renderers draw, because CSS has no `minimumScaleFactor` and would clip where SwiftUI
+  shrinks.
   Full reasoning, and what is deliberately *not* taken from it, in
   [`../PORTING_NOTES.md`](../PORTING_NOTES.md).
 - **The opening name lives in the engine panel's info row** (`board.tsx:2836-2841`), beside the depth
@@ -761,7 +767,7 @@ so "the same size as the notation" is true by construction.
 | `engineText` | 9 | **13** = `stripMove` |
 | opening name (`engineOpening`) | 9 | **12** = `altChip` |
 | depth chip `d:6` (`engineDepth`) | 8 | **11** — a chip as large as the moves would out-shout them |
-| eval rail `+0.5` (`evalRail`) | 11 | **11** = `evalBarText.fontSize` — the source's own number, unaltered |
+| eval rail `+0.5` (`evalRail`) | 11 | **8⅓** — `evalBarText.fontSize` is the CAP; on a 20pt rail the four-glyph budget binds first |
 
 The source assertions are **not deleted, they are inverted** — the ⩲/⩱ precedent. `deviates(key, prop,
 ours, source, why)` asserts that the RN source still holds its value *and* that ours differs in the

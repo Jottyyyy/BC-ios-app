@@ -299,6 +299,16 @@ function lineOf(file, re) {
       + 'in a view body is a second copy of the rule and would drift from the JS twin');
     expect(/AnalysisEval\.fillHeight\(rail:/.test(s) && !/height: height \*/.test(s),
       'and the fill height is the pure function, not arithmetic in a view body');
+    // The label is drawn at the size that FITS the rail, which is the same number the browser is
+    // handed. Draw `AnalysisType.evalRail` (the source's 11) here instead and SwiftUI shrinks it
+    // silently via minimumScaleFactor while the browser — which has no such thing — clips. The two
+    // renderers would disagree on screen with every metrics assertion still green.
+    expect(/AnalysisType\.mono\(AnalysisEval\.labelFontSize,/.test(s),
+      'the rail label is drawn at AnalysisEval.labelFontSize — the size derived to fit the rail '
+      + 'and shared with the browser, not the source size the rail is too narrow for');
+    expect(!/AnalysisType\.mono\(AnalysisType\.evalRail/.test(s),
+      'and never AnalysisType.evalRail directly: that is the CAP inside labelFontSize, not a size '
+      + 'to draw at');
   }
 }
 

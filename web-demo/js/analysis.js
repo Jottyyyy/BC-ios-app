@@ -1408,7 +1408,7 @@ var BiyaAnalysisBoard = (function () {
     set('--an-engine-lines', String(B.engineLineLimit));
     // The vertical rail. `--an-eval-h` is GONE with the horizontal bar it sized: a property that
     // is set but nothing reads fails the --an-* audit as a dead metric, in that direction too.
-    set('--an-rail-w', MET.EVAL_BAR.railWidth + 'px');
+    set('--an-rail-w', MET.railWidth() + 'px');
     set('--an-rail-gap', MET.EVAL_BAR.railGap + 'px');
     set('--an-rail-r', MET.EVAL_BAR.railRadius + 'px');
     set('--an-rail-pad-v', MET.EVAL_BAR.railPaddingV + 'px');
@@ -1428,7 +1428,9 @@ var BiyaAnalysisBoard = (function () {
     set('--an-fs-epv', T2.enginePv + 'px'); set('--an-fs-etext', T2.engineText + 'px');
     set('--an-fs-depth', T2.engineDepth + 'px'); set('--an-fs-opening', T2.engineOpening + 'px');
     set('--an-fs-pvply', T2.previewPly + 'px'); set('--an-fs-pvbtn', T2.previewBtn + 'px');
-    set('--an-fs-rail', T2.evalRail + 'px');
+    // The FITTED size, not the source's 11px: CSS has no minimumScaleFactor, so the browser has to
+    // be handed a size that already fits the rail or it would clip where SwiftUI shrinks.
+    set('--an-fs-rail', MET.evalLabelFontSize() + 'px');
     set('--board-light', MET.BOARD_THEMES[boardTheme].light);
     set('--board-dark', MET.BOARD_THEMES[boardTheme].dark);
     // Review modal — every value from accModalStyles, via the metrics layer.

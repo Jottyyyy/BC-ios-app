@@ -601,15 +601,16 @@ enum AnalysisLayout {
 // MARK: - Eval bar and graph
 
 enum AnalysisEval {
-    /// The horizontal bar that used to sit under the board. **NOTHING DRAWS THIS ANY MORE** — the
-    /// main eval bar is the vertical rail below. It survives as the only pin on the source's
-    /// `evalBarTrack` block, which is where `railRadius` comes from; deleting it would unpin that
-    /// key on the very change that starts depending on it. `AnalysisMetricsCheck` §6b turns it from
-    /// an inert number into a live one (`railWidth > mainHeight`, `railRadius == mainRadius`).
+    /// `evalBarTrack.height` — the source's eval TRACK thickness.
     ///
-    /// The MAIN bar was 8; only the per-engine-line micro bar is 3, and that one is still drawn —
-    /// horizontally, in the engine panel. The written spec says "height 3" without distinguishing
-    /// them, which is why these are extracted rather than transcribed.
+    /// This was the height of the horizontal bar that used to sit under the board. Nothing draws
+    /// that bar any more, but the number did not retire with it: it is the track inside the
+    /// vertical rail, and `railWidth` is built from it. Same constant, same source key, same 8pt —
+    /// stood on end.
+    ///
+    /// The written spec says "eval bar height 3" without distinguishing the two bars. It is 8 here;
+    /// only the per-engine-line micro bar is 3, and that one is still drawn horizontally in the
+    /// engine panel. That conflation is why these are extracted rather than transcribed.
     static let mainHeight: CGFloat = 8
     static let mainRadius: CGFloat = 4
     static let microHeight: CGFloat = 3
@@ -632,8 +633,20 @@ enum AnalysisEval {
     // `flexDirection: 'row'`. DEVIATION: we build the axis the comment describes, not the one the
     // style declares. Recorded in PORTING_NOTES.md.
 
-    /// `evalBarText.minWidth` — the source's own minimum width for exactly this text.
-    static let railWidth: CGFloat = 32
+    /// `evalBarContainer.paddingHorizontal` — the padding either side of the source's track.
+    static let railPaddingH: CGFloat = 6
+
+    /// The rail's width: the source eval component's own CROSS-AXIS thickness, stood on end — an
+    /// 8pt track (`evalBarTrack.height`) inside 6pt of padding each side
+    /// (`evalBarContainer.paddingHorizontal`). **20pt.**
+    ///
+    /// It was 32 for one round — `evalBarText.minWidth`, the source's minimum for the LABEL — and
+    /// the client's answer to that was "panipisan lang ng konti masyado ata makapal". 32 is still
+    /// the right number for the text and the wrong one for the bar: it sized the rail to its
+    /// caption. This sizes it to the thing it actually is, from the same block, and the label is
+    /// fitted to the rail instead (`labelFontSize`). The deviation from `evalBarText.minWidth` is
+    /// asserted rather than dropped — see `AnalysisMetricsCheck` §12.
+    static var railWidth: CGFloat { mainHeight + railPaddingH * 2 }
     /// `evalBarContainer.gap` — the eval component's own spacing unit, applied outward.
     static let railGap: CGFloat = 5
     /// `evalBarTrack.borderRadius`. The same number as `mainRadius`, named separately so the
@@ -641,6 +654,9 @@ enum AnalysisEval {
     static let railRadius: CGFloat = 4
     /// `evalBarContainer.paddingVertical` — how far the label sits in from its end.
     static let railPaddingV: CGFloat = 2
+    /// How many glyphs the rail is SIZED to hold. Four covers every label a real game produces:
+    /// `+0.5`, `-0.3`, `M-3`, `1-0`, `½-½`.
+    static let labelGlyphs = 4
     /// The widest string `EngineScore.displayText` can emit: `+10.5` / `-12.7`.
     static let labelMaxGlyphs = 5
 
@@ -672,17 +688,24 @@ enum AnalysisEval {
         labelAtBottom(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
     }
 
-    /// How many monospace glyphs fit across the rail at full size. Four — which covers every label
-    /// a real game produces: `+0.5`, `-1.3`, `M-3`, `1-0`, `½-½`.
-    static var labelGlyphsAtFullSize: Int {
-        Int(railWidth / (AnalysisType.evalRail * AnalysisLayout.monoAdvanceRatio))
+    /// The size the label is actually drawn at: whatever fits `labelGlyphs` across the rail, capped
+    /// at the source's own `evalBarText.fontSize`. On a 20pt rail the four-glyph budget binds
+    /// first, so this is 8⅓pt rather than 11.
+    ///
+    /// **This has to be a shared number, not a SwiftUI-only concern.** CSS has no
+    /// `minimumScaleFactor`: hand the browser 11px and it would clip `-0.3` inside a 20px rail
+    /// while SwiftUI quietly shrank it, and the two renderers would disagree on screen with every
+    /// suite still green. Both draw `labelFontSize`.
+    static var labelFontSize: CGFloat {
+        min(AnalysisType.evalRail,
+            railWidth / (CGFloat(labelGlyphs) * AnalysisLayout.monoAdvanceRatio))
     }
 
-    /// How far a five-glyph label may shrink to fit — 32/33, i.e. 3%. Only `±10.5` and wider ever
-    /// need it, and by then the exact number stopped mattering three pawns ago.
-    static var labelMinScale: CGFloat {
-        railWidth / (AnalysisType.evalRail * AnalysisLayout.monoAdvanceRatio * CGFloat(labelMaxGlyphs))
-    }
+    /// How far a FIVE-glyph label may shrink past that: 4/5. Only `±10.5` and wider ever need it,
+    /// and by then the exact number stopped mattering ten pawns ago. SwiftUI applies this; the
+    /// browser lets the rail's own `overflow: hidden` take the edge off instead, which is the one
+    /// place the two renderers differ and is why the budget is four glyphs and not five.
+    static var labelMinScale: CGFloat { CGFloat(labelGlyphs) / CGFloat(labelMaxGlyphs) }
 
     /// White's share of the bar, 0…1. A mate pins to 0.95 / 0.05 rather than the full end.
     static func fraction(cp: Int?, mate: Int?) -> CGFloat {

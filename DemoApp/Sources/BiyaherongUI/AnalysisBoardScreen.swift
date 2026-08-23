@@ -237,11 +237,11 @@ struct AnalysisBoardScreen: View {
             }
             .overlay(alignment: AnalysisEval.labelAlignment(fraction: vm.evalFraction)) {
                 Text(vm.evalLabel)
-                    .font(AnalysisType.mono(AnalysisType.evalRail, AnalysisType.evalRailWeight))
+                    .font(AnalysisType.mono(AnalysisEval.labelFontSize, AnalysisType.evalRailWeight))
                     .foregroundStyle(AnalysisEval.labelInk(fraction: vm.evalFraction))
                     .lineLimit(AnalysisLayout.singleLine)
-                    // Four glyphs fit at full size, which is every label a real game produces.
-                    // `+10.5` shrinks 3% rather than clipping; the factor is derived, not chosen.
+                    // The rail is SIZED for four glyphs, which is every label a real game
+                    // produces. `+10.5` is the fifth, and shrinks 4/5 rather than clipping.
                     .minimumScaleFactor(AnalysisEval.labelMinScale)
                     .padding(.vertical, AnalysisEval.railPaddingV)
             }
