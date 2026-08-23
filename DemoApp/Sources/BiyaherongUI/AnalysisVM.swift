@@ -34,6 +34,8 @@ final class AnalysisVM: ObservableObject {
     @Published private(set) var openingText: String?
     @Published private(set) var evalFraction: CGFloat = 0.5
     @Published private(set) var evalSymbol: String?
+    /// The eval rail's score text: `+0.5`, `M4`, `1-0`, `½-½`. Empty until the engine reports.
+    @Published private(set) var evalLabel = ""
     @Published private(set) var depth = 0
     @Published private(set) var analyzing = false
     @Published private(set) var lastMove: Move?
@@ -189,6 +191,12 @@ final class AnalysisVM: ObservableObject {
             evalFraction = AnalysisEval.fraction(cp: parts.cp, mate: parts.mate)
             evalSymbol = AnalysisTables.evalSymbol(cp: parts.cp, mate: parts.mate)
         }
+        // ONE formatter. `EngineScore.displayText` is what the engine rows' eval column already
+        // uses, so `+1.3` in the rail and `+1.3` in row 1 cannot disagree — they are two
+        // projections of the same `score`, which is also what `evalParts` above destructures. A
+        // previewed line does not change it: like the strip and the rows, the rail describes the
+        // real cursor.
+        evalLabel = session.snapshot?.score?.displayText ?? ""
     }
 
     private func rebuildPieces() {

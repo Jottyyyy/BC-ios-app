@@ -204,18 +204,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .coach-card .rating-big b { font-family: var(--mono); font-size: 20px; font-weight: 800; }
 .coach-card .rating-big span { display: block; font-size: 10px; color: var(--muted-fg); text-transform: uppercase; }
 
-/* ---- Board + eval --------------------------------------------------------- */
-/* chessboard sits flush against the phone's screen edges (edge-to-edge) */
-.board-row { display: flex; gap: 8px; align-items: stretch; padding-inline: 0; margin: 6px 0 10px; }
-.board-row chess-board { flex: 1; min-width: 0; }
-.board-row chess-board, .board-solo chess-board { --board-radius: 0; }
-.eval-bar { position: relative; width: 14px; flex: none; border-radius: 6px; overflow: hidden; background: #242424; border: 1px solid rgba(0, 0, 0, .3); }
-.eval-bar .fill { position: absolute; left: 0; right: 0; bottom: 0; background: #f2f2f2; transition: height .4s ease; }
-.eval-bar .mid { position: absolute; left: 0; right: 0; top: 50%; height: 1.5px; background: rgba(253, 176, 34, .9); transform: translateY(-.75px); }
-
-/* full-width board (no eval bar) — flush to both screen edges */
-.board-solo { padding-inline: 0; margin: 6px 0 10px; }
-
 /* ---- Status + material ---------------------------------------------------- */
 .status-line { text-align: center; font-weight: 700; font-size: 14.5px; min-height: 20px; padding: 2px 18px; }
 .status-line.good { color: var(--green); }
@@ -421,27 +409,48 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .an-hbtn:active { background: var(--an-surface-alt); }
 .an-title { flex: 1; text-align: center; font-weight: 800; font-size: var(--an-fs-title); letter-spacing: -.2px; }
 
-/* 2 — board, then the main eval bar directly under it */
-/* THE BOARD IS SIZED BY WIDTH, AND IT DOES NOT FLEX.
-   `--an-board-edge` is BOARD_SIZE for this screen, published by sizeBands() from the metrics
-   layer's own formula. It used to be `flex: 1 1 auto` with `container-type: size` and
+/* 2 — the board, with the vertical eval RAIL on its LEFT.
+   FIXED SIDE: the rail does not mirror when the board is flipped. Lichess and Chess.com both keep
+   it put, and a rail that swapped ends on every ⇅ would be unreadable. White always fills from the
+   BOTTOM — the score is White-relative, so nothing here knows which way the board faces.
+   THE BOARD IS STILL SIZED BY WIDTH, AND IT STILL DOES NOT FLEX.
+   `--an-board-edge` is boardSizeBesideRail() for this screen, published by sizeBands() from the
+   metrics layer's own formula — the pinned snap-to-8 formula fed a width the rail has already been
+   taken out of. It used to be `flex: 1 1 auto` with `container-type: size` and
    `min(100cqw, calc(100cqh - …))`, which made the board's WIDTH track the leftover HEIGHT — so it
    grew and shrank every time the ECO or engine panel gained a row, and never filled the screen.
-   Keep this band `flex: none`; `.an-panels` is the one that gives way. */
+   Keep this band `flex: none`; `.an-panels` is the one that gives way.
+   THE RAIL IS A SIBLING OF `.an-board-stack`, NEVER INSIDE IT: `.an-badge` is `inset: 0` against
+   that stack and paintBadge builds its viewBox from the stack's measured width, so a rail inside it
+   would put every annotation badge off by the rail's width. */
 .an-board {
-  flex: none; padding-top: var(--an-board-pad-top);
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  flex: none; padding-block: var(--an-board-pad-top);
+  display: flex; flex-direction: row; align-items: flex-start; justify-content: center;
+  gap: var(--an-rail-gap);
+}
+.an-board-stack {
+  flex: none; width: var(--an-board-edge);
+  position: relative; display: flex; flex-direction: column; align-items: center;
 }
 .an-board chess-board { width: var(--an-board-edge); --board-radius: 0; }
 .an-eval {
-  flex: none; width: var(--an-board-edge);
-  height: var(--an-eval-h); margin-top: 2px; border-radius: var(--an-eval-r);
-  background: var(--an-eval-track); overflow: hidden;
+  flex: none; position: relative;
+  width: var(--an-rail-w); height: var(--an-board-edge);
+  border-radius: var(--an-rail-r); background: var(--an-eval-track); overflow: hidden;
 }
 .an-eval .fill {
-  height: 100%; width: 50%; background: var(--an-eval-fill);
-  transition: width var(--an-eval-anim) ease;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 50%;
+  background: var(--an-eval-fill);
+  transition: height var(--an-eval-anim) ease;
 }
+.an-eval .lbl {
+  position: absolute; left: 0; right: 0;
+  padding-block: var(--an-rail-pad-v);
+  text-align: center; line-height: 1;
+  font-family: var(--mono); font-size: var(--an-fs-rail); font-weight: 800;
+}
+.an-eval .lbl.bottom { bottom: 0; color: var(--an-on-gold); }
+.an-eval .lbl.top { top: 0; color: var(--an-text); }
 
 /* 3 — the status line, then the toolbar.
    TWO ROWS, not the source's one: nine emoji buttons measure 346px in a 365px card and left the
@@ -933,8 +942,8 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 }
 .an-mn-dot.on { background: var(--an-mn-dot-on); }
 
-/* the manual-annotation badge, in the same 8x8 viewBox the arrows use */
-.an-board-stack { position: relative; display: flex; flex-direction: column; align-items: center; }
+/* the manual-annotation badge, in the same 8x8 viewBox the arrows use.
+   `.an-board-stack` itself is declared with band 2, next to the rail it has to stay a sibling of. */
 .an-badge { position: absolute; inset: 0; pointer-events: none; }
 .an-badge svg { width: 100%; height: 100%; display: block; }
 
