@@ -562,6 +562,103 @@ const ST = require(path.join(JS, 'opening-store.js'));
     'and the browser drops a download that resolves into a screen the user has left');
 }
 
+// ── 13. Off book — the distinction the explorer could not make ──────────────────
+//
+// `children(at:)` answers empty both at a leaf and for a path that has left the tree, so one card
+// meant two things and Forward was dead either way. `bookDepth` is the same walk reporting WHERE
+// IT STOPPED. Everything below runs in the JS and is checked against the Swift source text.
+{
+  const core = CORE_CODE.slice(CORE_CODE.indexOf('public func bookDepth(along path:'));
+  expect(core.length > 60, 'bookDepth is in the Core, beside children(at:)');
+  expect(/guard let next = level\[san\] else \{ return depth \}/.test(core),
+    'and it RETURNS the depth it reached rather than falling out with [:] — the whole difference '
+    + 'between "your games stop here" and "you played something none of them did"');
+
+  const t = OT.create();
+  OT.addGame(t, { sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true, outcome: OT.OUTCOMES.whiteWin });
+  eq(OT.bookDepth(t, []), 0, 'the empty path is zero plies into the book');
+  eq(OT.bookDepth(t, ['e4']), 1, 'one on-book ply');
+  eq(OT.bookDepth(t, ['e4', 'c5', 'Nf3']), 3, 'the whole line');
+  eq(OT.bookDepth(t, ['d4']), 0, 'a first move nobody played is zero, not one');
+  eq(OT.bookDepth(t, ['e4', 'e5']), 1, 'a divergence at ply two reports ply one');
+  eq(OT.bookDepth(t, ['e4', 'e5', 'Nf3']), 1, 'and stays there however far the user plays on');
+  eq(OT.bookDepth(t, ['e4', 'c5', 'Nf3', 'd6']), 3,
+    'playing on past a LEAF is off book too — a leaf and a divergence give the same answer');
+  eq(OT.bookDepth(t, ['Zz9']), 0, 'an unreadable SAN is simply not in the tree');
+
+  // The transposition, asserted as a DECISION rather than discovered as a surprise.
+  eq(OT.bookDepth(t, ['Nf3', 'c5', 'e4']), 0,
+    '1.Nf3 c5 2.e4 transposes into 1.e4 c5 2.Nf3 and is STILL off book: the tree is keyed by the '
+    + 'LINE you played, not by the position, which is why OpeningBook exists and keys by FEN');
+
+  const m = /static let maxFreePlies = (\d+)/.exec(CORE_CODE);
+  eq(OT.MAX_FREE_PLIES, m ? Number(m[1]) : null, 'maxFreePlies');
+  expect(OT.MAX_FREE_PLIES > 0 && OT.MAX_FREE_PLIES % 2 === 0,
+    'the free-play cap is a whole number of full moves');
+  expect(OT.MAX_FREE_PLIES < OT.DEFAULT_MAX_PLIES,
+    'and shorter than the tree itself — a wander, not a second game');
+}
+
+// ── 14. The two stores agree about leaving the book and getting back ────────────
+{
+  const store = code(STORE_SRC);
+  // Derived, not decided a second way. Two definitions of "off book" is two answers.
+  expect(/var isOffBook: Bool \{ bookDepth < path\.count \}/.test(store),
+    'Swift derives isOffBook from bookDepth rather than tracking a flag of its own');
+  expect(/var freePlies: Int \{ path\.count - bookDepth \}/.test(store), 'and freePlies with it');
+  expect(/path = Array\(path\.prefix\(bookDepth\)\)/.test(store),
+    'backToTree truncates to bookDepth — one definition of where the book ended, not a second '
+    + 'count of the way out');
+  expect(/guard freePlies < OpeningTree\.maxFreePlies else \{ return false \}/.test(store),
+    'and the cap lives in play(), which is the one place a move enters the path — a cap on the '
+    + 'board handler alone would be bypassed by every other route');
+
+  const JSSTORE = code(read(JS, 'opening-store.js'));
+  expect(/api\.bookDepth\(\) < path\.length/.test(JSSTORE), 'the JS derives it the same way');
+  expect(/path\.slice\(0, api\.bookDepth\(\)\)/.test(JSSTORE), 'and truncates the same way');
+  expect(/if \(api\.freePlies\(\) >= OT\.MAX_FREE_PLIES\) return false;/.test(JSSTORE),
+    'and caps in the same place');
+
+  // Executed, not just read: the whole round trip out of the book and back in.
+  const ST_ = require(path.join(JS, 'opening-store.js'));
+  function mem() {
+    const map = {};
+    return { getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+             setItem: (k, v) => { map[k] = String(v); },
+             removeItem: (k) => { delete map[k]; } };
+  }
+  const s = ST_.create(mem());
+  const tree = ST_.build({
+    games: [{ sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true, outcome: OT.OUTCOMES.whiteWin }],
+    name: 'x', colour: 'both', source: 'pgn', username: '', nowMs: 1 });
+  s.add(tree); s.openTree(tree.id);
+  expect(!s.isOffBook(), 'the root is on book');
+  s.play('e4');
+  expect(!s.isOffBook() && s.candidates().length === 1, 'a tree move stays on book');
+  expect(s.play('e5') === true, 'a legal move no game played is accepted');
+  expect(s.isOffBook() && s.freePlies() === 1, 'and it is one ply off book');
+  expect(s.candidates().length === 0 && !s.canStepForward(),
+    'off book there are no candidates and Forward is dead');
+  s.stepBack();
+  expect(!s.isOffBook(), 'a single Back over the divergence is also a way home');
+  s.play('e5');
+  s.backToTree();
+  expect(!s.isOffBook() && s.path().join(' ') === 'e4', 'and backToTree is the one-step way');
+
+  // The highest-risk bug in the whole feature, asserted directly: a move made on the BOARD must
+  // land on the tree's own branch. Spell the SAN by hand anywhere and an ON-book move reads as
+  // off book — the board advances, the list empties, and nothing says why.
+  const E = require(path.join(JS, 'engine.js'));
+  const start = E.start();
+  eq(E.san(start, E.parseUci(start, 'e2e4')), 'e4',
+    'e2e4 resolves to the SAN the tree is keyed by');
+  const s2 = ST_.create(mem());
+  s2.add(tree); s2.openTree(tree.id);
+  s2.play(E.san(start, E.parseUci(start, 'e2e4')));
+  expect(!s2.isOffBook(),
+    'so a move made on the board lands on the tree`s own branch rather than beside it');
+}
+
 // ---- report ------------------------------------------------------------------
 const result = {
   passed,

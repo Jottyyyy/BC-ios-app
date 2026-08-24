@@ -129,16 +129,42 @@ final class OpeningTreeStore: ObservableObject {
     var open: SavedOpeningTree? { trees.first { $0.id == openID } }
 
     /// The candidate list at the current path, or empty when nothing is open.
+    ///
+    /// Already empty off book, because `children(at:)` is — no branch needed here, and deliberately
+    /// none added. Returning the candidates at the `bookDepth` prefix instead would describe a
+    /// *different position* than the board is showing, and a W/D/L bar attached to the wrong
+    /// position is a worse lie than an empty list.
     var candidates: [OpeningTree.Candidate] {
         open?.tree.sortedMoves(at: path) ?? []
     }
+
+    // MARK: Off book
+    //
+    // The explorer used to show one empty card for two different things: a line whose games simply
+    // stop here, and a move no game in the tree ever played. Forward was dead either way and
+    // nothing said which had happened. These four make the difference expressible.
+
+    /// How many leading plies of `path` are still in the tree.
+    var bookDepth: Int { open?.tree.bookDepth(along: path) ?? 0 }
+
+    /// True once a move has been played that no game in this tree contains.
+    var isOffBook: Bool { bookDepth < path.count }
+
+    /// Plies of free play hanging off the tree. Zero on book.
+    var freePlies: Int { path.count - bookDepth }
+
+    /// The board stops accepting moves here — and the card says so rather than swallowing the drag.
+    var atFreeLimit: Bool { freePlies >= OpeningTree.maxFreePlies }
 
     /// The position `path` reaches, replayed from the start.
     ///
     /// Replayed rather than stored beside the path for the same reason `MoveTree` stores keys and
     /// not boards: a cached FEN and a path are two representations of one thing, and they drift.
-    /// The walk is bounded by `OpeningTree.defaultMaxPlies`, so it is 40 `makeMove`s at worst —
-    /// cheaper than the candidate list it is drawn beside.
+    /// The walk is bounded by `defaultMaxPlies` on book and by `maxFreePlies` beyond it, so it is
+    /// 60 `makeMove`s at worst — cheaper than the candidate list it is drawn beside. That bound is
+    /// the whole reason `maxFreePlies` exists: this sentence used to say 40 and cite
+    /// `defaultMaxPlies` alone, which held only while the UI offered nothing but the tree's own
+    /// moves. A board you can play on removes that guarantee, and this replay runs on every `body`.
     /// Optional for the same reason every other caller of `ChessPosition(fen:)` is: the initialiser
     /// is failable and nothing here is allowed to force-unwrap. `CoachScreens` handles the nil the
     /// same way — `pos.map(piecesFrom) ?? []` draws an empty board rather than crashing.
@@ -201,9 +227,28 @@ final class OpeningTreeStore: ObservableObject {
     // a `@State` path inside the screen would be reset by any parent repaint — the same reason
     // `app.js` keeps `pairingOpenId` router-scoped.
 
-    func play(_ san: String) { path.append(san) }
+    /// The ONE place a move enters the path, whichever route offered it — a tapped candidate row, a
+    /// tapped square or a dragged piece.
+    ///
+    /// The cap can only bite OFF book: on book the only moves offered are the tree's own, and the
+    /// tree is itself bounded by `defaultMaxPlies`. `@discardableResult` so the candidate rows,
+    /// which cannot be refused, read as they always did.
+    @discardableResult
+    func play(_ san: String) -> Bool {
+        guard freePlies < OpeningTree.maxFreePlies else { return false }
+        path.append(san)
+        return true
+    }
+
     func stepBack() { if !path.isEmpty { path.removeLast() } }
     func reset() { path.removeAll() }
+
+    /// Drop every off-book ply in ONE step.
+    ///
+    /// Leaving the book is one decision, so returning from it is one too — N taps of Back is the
+    /// same journey spelled as a chore. It truncates to `bookDepth` rather than counting its own
+    /// way back, so there is one definition of where the book ended.
+    func backToTree() { if isOffBook { path = Array(path.prefix(bookDepth)) } }
 
     /// Forward plays the **most-played** continuation, matching the RN screen's `handleForward`.
     func stepForward() {

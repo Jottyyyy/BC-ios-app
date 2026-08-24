@@ -45,6 +45,9 @@
 
   /* ---- constants (mirrored in Swift) --------------------------------------- */
   var DEFAULT_MAX_PLIES = 40;   // INVENTED — see the Swift, and PORTING_NOTES
+  // INVENTED — how far off the tree a user may wander. NOT a reuse of DEFAULT_MAX_PLIES: that one
+  // bounds how much of a GAME is worth recording, this one how far a USER may go. See the Swift.
+  var MAX_FREE_PLIES = 20;
 
   var OUTCOMES = { whiteWin: '1-0', blackWin: '0-1', draw: '1/2-1/2' };
 
@@ -150,6 +153,28 @@
       level = next.children;
     }
     return level;
+  }
+
+  /**
+   * How many LEADING plies of `path` still exist in the tree.
+   *
+   * `childrenAt` answers `{}` both at a leaf and for a path that has left the tree, which is why
+   * the explorer could not tell "your games stop here" from "you played something none of them
+   * did". This is the same walk, reporting WHERE IT STOPPED. `bookDepth === path.length` is on
+   * book; anything less is the ply at which the user left it.
+   *
+   * A transposition is still off book — the tree is keyed by the LINE you played, which is the
+   * type's whole premise. See the Swift.
+   */
+  function bookDepth(tree, path) {
+    var level = tree.root, depth = 0;
+    for (var i = 0; i < path.length; i++) {
+      var next = level[path[i]];
+      if (!next) return depth;
+      depth++;
+      level = next.children;
+    }
+    return depth;
   }
 
   function nodeAt(tree, path) {
@@ -366,6 +391,8 @@
       'the cap truncates the walk');
     expect(depth(t8) === 6, 'and the tree is exactly that deep');
     expect(DEFAULT_MAX_PLIES === 40, 'the ply cap');
+    expect(MAX_FREE_PLIES === 20 && MAX_FREE_PLIES % 2 === 0 && MAX_FREE_PLIES < DEFAULT_MAX_PLIES,
+      'the free-play cap is a whole number of full moves, shorter than the tree');
 
     // 9. PGN -> games, including who the owner was
     var pgn = '[White "Alice"]\n[Black "Bob"]\n[Result "0-1"]\n\n1. e4 e5 2. Nf3 0-1\n\n'
@@ -402,6 +429,25 @@
     expect(childrenAt(t10, ['Zz9', 'e4']) && Object.keys(childrenAt(t10, ['Zz9'])).length === 0,
       'walking past it stays empty');
 
+    // 12. bookDepth — the distinction `childrenAt` cannot make. Both of the cases below give it
+    //     `{}`, and only one of them means "you left the book".
+    var t12 = createTree();
+    addGame(t12, { sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true, outcome: OUTCOMES.whiteWin });
+    expect(bookDepth(t12, []) === 0, 'the empty path is zero plies into the book');
+    expect(bookDepth(t12, ['e4']) === 1, 'one on-book ply is one');
+    expect(bookDepth(t12, ['e4', 'c5', 'Nf3']) === 3, 'and the whole line is three');
+    expect(bookDepth(t12, ['d4']) === 0, 'a first move nobody played is zero, not one');
+    expect(bookDepth(t12, ['e4', 'e5']) === 1, 'a divergence at ply two reports ply one');
+    expect(bookDepth(t12, ['e4', 'e5', 'Nf3']) === 1,
+      'and stays there however far the user plays on');
+    expect(bookDepth(t12, ['e4', 'c5', 'Nf3', 'd6']) === 3,
+      'playing on past a LEAF is off book too — a leaf and a divergence answer the same');
+    expect(bookDepth(t12, ['Zz9']) === 0, 'an unreadable SAN is simply not in the tree');
+    // The transposition, asserted as a DECISION rather than discovered as a surprise.
+    expect(bookDepth(t12, ['Nf3', 'c5', 'e4']) === 0,
+      '1.Nf3 c5 2.e4 transposes into 1.e4 c5 2.Nf3 and is STILL off book: this tree is keyed by '
+      + 'the LINE you played, which is why OpeningBook exists and keys by FEN');
+
     return {
       passed: passed, failures: failures, ok: failures.length === 0,
       summary: failures.length === 0
@@ -413,6 +459,7 @@
 
   global.BiyaOpeningTree = {
     DEFAULT_MAX_PLIES: DEFAULT_MAX_PLIES,
+    MAX_FREE_PLIES: MAX_FREE_PLIES,
     OUTCOMES: OUTCOMES,
     COLOURS: COLOURS,
     parseOutcome: parseOutcome,
@@ -422,6 +469,7 @@
     addGame: addGame,
     addGames: addGames,
     childrenAt: childrenAt,
+    bookDepth: bookDepth,
     nodeAt: nodeAt,
     scored: scored,
     share: share,

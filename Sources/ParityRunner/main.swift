@@ -3144,6 +3144,32 @@ do {
     h.check(capped.depth == 6, "and the tree is exactly that deep")
     h.check(OT.defaultMaxPlies == 40, "the default cap is 20 full moves")
 
+    // ---- off book: where the path LEAVES the tree -----------------------------
+    //
+    // `children(at:)` answers [:] both at a leaf and for a path that has left the tree, so the
+    // explorer showed one empty card for two different things and Forward was dead either way.
+    // `bookDepth` is the same walk, reporting where it stopped.
+    var book = OT()
+    book.add(OT.Game(sanMoves: ["e4", "c5", "Nf3"], userIsWhite: true, outcome: .whiteWin))
+    h.check(book.bookDepth(along: []) == 0, "the empty path is zero plies into the book")
+    h.check(book.bookDepth(along: ["e4"]) == 1, "one on-book ply is one")
+    h.check(book.bookDepth(along: ["e4", "c5", "Nf3"]) == 3, "and the whole line is three")
+    h.check(book.bookDepth(along: ["d4"]) == 0, "a first move nobody played is zero, not one")
+    h.check(book.bookDepth(along: ["e4", "e5"]) == 1, "a divergence at ply two reports ply one")
+    h.check(book.bookDepth(along: ["e4", "e5", "Nf3"]) == 1,
+            "and everything after it is off book too, however legal")
+    h.check(book.bookDepth(along: ["e4", "c5", "Nf3", "d6"]) == 3,
+            "playing past a LEAF is off book as well — a leaf and a divergence answer the same")
+    h.check(book.bookDepth(along: ["Zz9"]) == 0, "an unreadable SAN is simply not in the tree")
+    h.check(book.sortedMoves(at: ["e4", "e5"]).isEmpty, "and off book there are no candidates")
+    // The transposition, asserted as a DECISION rather than discovered as a surprise.
+    h.check(book.bookDepth(along: ["Nf3", "c5", "e4"]) == 0,
+            "1.Nf3 c5 2.e4 transposes into 1.e4 c5 2.Nf3 and is STILL off book — the tree is keyed "
+            + "by the line you played, which is why OpeningBook exists and keys by FEN")
+    h.check(OT.maxFreePlies == 20, "twenty plies of free play hang off the tree")
+    h.check(OT.maxFreePlies < OT.defaultMaxPlies, "fewer than the tree itself is deep")
+    h.check(OT.maxFreePlies % 2 == 0, "and a whole number of full moves")
+
     // ---- paths off the tree --------------------------------------------------
     h.check(sorted.node(at: ["Zz9"]) == nil, "an unknown path has no node")
     h.check(sorted.children(at: ["Zz9"]).isEmpty, "and no children")
@@ -3349,9 +3375,9 @@ h.requireMinCounts([
     // oracle. The differential partner is web-demo/js/opening-tree.js, compared source-to-source
     // by tools/qa/replay_opening_tree.js.
     // 60 -> 97: the download's parse half (limits, endpoints, NDJSON, archives, the ceiling and
-    // the aborted-game deviation) now runs here too. RAISED, never lowered — one assertion was
-    // deleted with the wrong `maxGamesLimit` constant and 38 were added.
-    "opening_tree": 97,
+    // the aborted-game deviation). 97 -> 110: `bookDepth` and `maxFreePlies` — the off-book model
+    // an interactive board needs, including the transposition decision. RAISED, never lowered.
+    "opening_tree": 110,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,
