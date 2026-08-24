@@ -229,7 +229,7 @@ struct PhoneApp: View {
                         #if os(macOS)
                         statusBar
                         #endif
-                        OpeningTreeRootScreen(store: openingStore,
+                        OpeningTreeRootScreen(store: openingStore, premium: premium,
                                               onExit: { showOpenings = false })
                     }
                     .background(OpeningPalette.screenBg)

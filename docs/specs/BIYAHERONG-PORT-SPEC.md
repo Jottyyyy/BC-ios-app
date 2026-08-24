@@ -1728,6 +1728,18 @@ Sources of truth: `tournaments/{index,create,[id]}.tsx` (275 + 293 + 1,588),
 `VideoPlayer` (Phase 5.3). If you find yourself writing one anywhere else, you have misunderstood
 the requirement.
 
+> **Amended 2026-08-24.** A third site exists: `BiyaherongUI/OpeningDownloader.swift`, the Opening
+> Tree's Lichess/Chess.com game download. It is not an exception to the rule — it is the FIRST
+> PART OF THIS ONLINE HALF TO SHIP, ahead of both files named above, and `ContentClient` will copy
+> its shape (a transport with no opinions, over a parser in the parity core). The rule is now
+> enforced rather than asserted: `tools/qa/replay_opening_tree.js` §12 sweeps every file in
+> `BiyaherongUI` and every file in `web-demo/js` and fails if more than one of each opens a
+> connection, with a floor on the sweep so it cannot pass vacuously. Update this list when
+> `ContentClient` and `VideoPlayer` land — do not add a fourth without one.
+>
+> Consequence for the product claim: the app is **~90% offline**, which is the client's own
+> number. See `PORTING_NOTES.md` → "The one networked path".
+
 ### 0.2 Entitlement — StoreKit 2, on-device
 
 ```swift

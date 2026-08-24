@@ -2104,13 +2104,75 @@ count rather than a golden-case count.
   `ROOT/../BYAHERONG-COACH-FRONTEND` resolves inside `.claude/worktrees/`. This extractor takes a
   `FRONTEND_ROOT` override, as `tools/oracle` takes `LARAVEL_ROOT`; the other four still do not.
 
-### The one networked path, declared but not wired
+### The one networked path — declared, not wired, then WIRED (2026-08-24)
 
 `OpeningSource` has four cases and `isOnline` is the single source of truth for which two need the
-radio. The form draws all four — hiding them would lie about what the feature is — and the online
-pair refuses with a named message. The download belongs in `ContentClient` (spec §0.1: the only
-`URLSession` sites in the app), and putting a second one in a SwiftUI button is exactly the leak that
-rule exists to prevent. `replay_opening_tree.js` §7 asserts the two languages agree on the set.
+radio. The form drew all four — hiding them would lie about what the feature is — and the online
+pair *refused with a named message*, on the reasoning that the download belonged in `ContentClient`
+(spec §0.1: the only `URLSession` sites in the app).
+
+**That reasoning was right about where the code goes and wrong about what the user sees.** The named
+message was `errNetwork` — *"Could not reach that site. Check your connection and try again."* — so
+the app blamed the user's connection for a feature that did not exist. The client reported it as
+*"hindi nag-oopening tree"*, and it survived a green suite and TestFlight because the two failures
+are indistinguishable from the outside. `openings.js`'s selfTest had even pinned it in place
+(*"and then says the download is not wired"*): **a test that asserts a bug makes the bug look
+decided.**
+
+The client's ruling on the trade-off, verbatim: *"dito kailangan ng internet kaya pwedeng hndi 100
+percent offline 90 percent lang kasi ito kailangan online pati yung sa videos online din yun"*. So
+the app is documented as **~90% offline** — Sign in with Apple, this download, and Videos when they
+land — and `README.md`, `CLAUDE.md`, `ios/project.yml` and the in-app privacy sheet all say so.
+
+**Spec §0.1 is honoured rather than excepted.** It already drew an ONLINE half (Opening Trainer
+packs, Tutorial Videos); this is the first part of it to ship, so `OpeningDownloader.swift` is that
+rule's first inhabitant and `ContentClient` will copy its shape. The rule is now a *test*:
+`replay_opening_tree.js` §12 sweeps every file in `BiyaherongUI` and every file in `web-demo/js`
+and fails if more than one of each opens a connection. Both sweeps assert their own file counts, so
+a detector that stops matching cannot report a clean sweep of nothing.
+
+#### Four deviations from the RN implementation, all deliberate
+
+| # | RN behaviour | Ours | Why |
+|---|---|---|---|
+| 1 | A game with no `winner` is scored **1/2-1/2** | `nil` when `status` is unfinished (`aborted`, `noStart`, …) | The RN mapping gives an aborted game — often the first in a stream — half a point to both sides. `OpeningTree.Outcome` already decided that `*` contributes a count and no W/D/L for pasted PGN; two import paths disagreeing about one game is worse than the bug being fixed. |
+| 2 | The White/Black picker **is** the colour whenever it is not "both" | The colour is read from the game; the picker **filters** | `addGamesToTree` labels every game in a "White" tree as White, so games the user had Black in land inverted. The username is known for every online game, so the truth is available. Same picker, same meaning, all three sources. |
+| 3 | Jumps to the explorer and grows the tree **live** | Accumulates, builds once, saves only on success | The RN version leaves a half-built tree saved whenever a download fails — indistinguishable from a real one once the banner is gone. A failure here leaves the form open with the reason on it. The counter still moves. |
+| 4 | `extractMovesFromPgn` + a `[Result "…"]` regex for Chess.com | `OpeningTree.games(fromPGN:)` | That parser is already pinned to the real `PgnImportService` by the `pgn_split`/`pgn_tokens` goldens, and Chess.com already writes `White`/`Black`/`Result` tags — so the colour match, the result and the RAV/NAG handling come for free and agree with the paste path. |
+
+#### An invented constant, corrected rather than added
+
+`OpeningTree.maxGamesLimit` was `2000`, documented as *"the download ceiling the RN form offers"*.
+**The RN form's ceiling is 1000**, clamped in both of its two places (`openingtree.tsx:479` and
+`:917`). The ParityRunner assertion read the constant back to itself, so a wrong number passed under
+correct prose — the exact failure mode `CLAUDE.md`'s "EXTRACT, DON'T TRANSCRIBE" exists to prevent,
+and the second one this repo has found after the annotation-badge sign. The constant is **deleted**,
+not corrected: the limits belong to the download, so `OpeningDownload.premiumMaxGames` is the one
+copy and §12 checks it against the RN source's real value.
+
+#### One asymmetry between the two languages, on purpose
+
+`opening-download.js` has a `lastCompleteLineEnd`; `OpeningDownload.swift` does not. A chunk
+boundary falls anywhere, including inside a JSON object, so the RN `processBuffer` keeps a buffer
+and cuts it at the last newline. Swift gets that from `URLSession.AsyncBytes.lines`, which splits
+the *byte* stream and therefore handles UTF-8 boundaries a String-index version would have to
+re-derive. The browser has no equivalent — `ReadableStream` hands back bytes and nothing else. Both
+files say so, so the next reader does not "restore" the missing half.
+
+#### The privacy sheet has now been narrowed twice
+
+It opened with "100% offline" until Sign in with Apple became a real `ASAuthorizationController`
+call. The replacement claimed the app *"does not collect, store, or send any personal information
+anywhere"* — which this download makes false in the most literal way available: it sends **the
+username the user typed** to a third party. The claim is narrowed rather than dropped (no account
+server, no analytics, no tracking — all still true) and both exceptions are named, in both
+languages. `replay_login.js` compares the two copies in full.
+
+**Still open, and no gate here can see it:** the App Store Connect privacy answers were filled in
+for an app that sent nothing. They need re-checking before the next submission. Noted in
+`ios/project.yml` beside the export-compliance declaration, which does **not** change — the download
+is OS-provided TLS with no cryptography of the app's own, so the standard-encryption exemption
+still applies and `ITSAppUsesNonExemptEncryption: NO` stays correct.
 
 ## The web shell — two things that were never wired (2026-08-18, round-4 follow-up)
 

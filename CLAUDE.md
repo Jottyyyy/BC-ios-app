@@ -4,10 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Native, **100% offline** Swift rebuild of **Biyaherong Chess Coach** (originally Laravel 12 + React/Inertia
+Native, **~90% offline** Swift rebuild of **Biyaherong Chess Coach** (originally Laravel 12 + React/Inertia
 + a Sanctum mobile API). The state is a **Parity Core** — a pure-Swift domain layer pinned to the original
 backend by a golden-vector parity harness — plus two user-facing screens built on it: the **Home dashboard**
 and the **Analysis Board** (the app's most complex screen, and complete).
+
+**"90% offline", not 100%, and the number is the client's own.** Spec §0.1 always drew an online half
+(Opening Trainer packs, Tutorial Videos); the Opening Tree's Lichess/Chess.com download is the first part
+of it to ship. Three things need the radio — Sign in with Apple, that download, and Videos when they land
+— and **everything else works in Airplane Mode forever**. All app networking lives in exactly one file per
+language (`OpeningDownloader.swift` / `web-demo/js/opening-download.js`), and `replay_opening_tree.js` §12
+fails the gate if a second one appears.
 
 **Ground truth for every ported algorithm is the real Laravel backend at `../BYAHERONG-COACH-LARAVEL`**
 (a sibling repo, *not* in this tree) — the actual PHP controller behavior, not prose. The proposal

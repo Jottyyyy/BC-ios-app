@@ -15,6 +15,20 @@ var BiyaOpenings = (function () {
   var OT = isNode ? require('./opening-tree.js') : BiyaOpeningTree;
   var ST = isNode ? require('./opening-store.js') : BiyaOpeningStore;
 
+  /**
+   * The download module, resolved LAZILY.
+   *
+   * Eagerly, this file would pull `opening-download.js` in at load time — and that file is the
+   * only one in `web-demo/` that touches `fetch`. Keeping the reference behind a call means the
+   * screens still load, render and self-test in an environment with no network stack at all,
+   * which is what `js_goldens.js` runs in.
+   */
+  function DL() {
+    if (typeof BiyaOpeningDownload !== 'undefined') return BiyaOpeningDownload;
+    if (isNode) return require('./opening-download.js');
+    throw new Error('openings.js needs opening-download.js — load it first');
+  }
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -152,6 +166,18 @@ var BiyaOpenings = (function () {
       user.value = form.username;
       user.oninput = function () { form.username = user.value; };
       body.appendChild(user);
+
+      body.appendChild(label(MET.STRINGS.maxLabel));
+      var max = el('input', 'op-input');
+      // `text`, not `number`. A number input renders spinners the phone frame has no room for and
+      // reports '' for anything it dislikes, which is indistinguishable from an empty box —
+      // `resolvedMax` already clamps, so the strict input would only hide typing from it.
+      max.type = 'text';
+      max.inputMode = 'numeric';
+      max.placeholder = MET.STRINGS.maxPlaceholder;
+      max.value = form.maxGames;
+      max.oninput = function () { form.maxGames = max.value; };
+      body.appendChild(max);
     } else if (form.source === 'pgn') {
       body.appendChild(label(MET.STRINGS.pgnLabel));
       var pgn = el('textarea', 'op-input op-textarea');
@@ -171,10 +197,25 @@ var BiyaOpenings = (function () {
       online ? MET.STRINGS.onlineNoteSub : MET.STRINGS.offlineNoteSub));
     body.appendChild(note);
 
+    // The live counter, drawn only while a download is running. It borrows the connectivity note's
+    // box rather than introducing a fourth panel style — same slot, same kind of statement.
+    if (form.downloading) {
+      var prog = el('div', 'op-note');
+      prog.appendChild(el('div', 'op-note-title', MET.STRINGS.fetching));
+      prog.appendChild(el('div', 'op-note-sub',
+        MET.fill(MET.STRINGS.fetched, { n: form.fetched || 0 })));
+      body.appendChild(prog);
+    }
+
     if (form.error) body.appendChild(el('div', 'op-error', form.error));
 
-    var submit = el('button', 'op-submit', MET.STRINGS.build);
-    submit.onclick = function () { handlers.onSubmit(); };
+    var submit = el('button', 'op-submit',
+      form.downloading ? MET.STRINGS.building : MET.STRINGS.build);
+    // Disabled rather than hidden. A second click would start a SECOND download into the same
+    // tree and double every count in it — a bug that reads as "the numbers are wrong", never as
+    // "I double-clicked".
+    submit.disabled = !!form.downloading;
+    submit.onclick = function () { if (!form.downloading) handlers.onSubmit(); };
     body.appendChild(submit);
 
     root.appendChild(body);
@@ -278,22 +319,38 @@ var BiyaOpenings = (function () {
   }
 
   /**
-   * The form's submit, as a pure function of the form and the games it can reach — so the router
-   * stays a router and this is testable without a DOM.
+   * The form's submit, still a PURE function — so the router stays a router and this stays
+   * testable without a DOM or a network.
    *
-   * Returns `{ tree }` or `{ error }`. The two ONLINE sources are declared and drawn (a form that
-   * hid them would be lying about what the feature is) but not wired: the download belongs beside
-   * the Swift `ContentClient`, and a second `fetch` in a click handler is exactly the leak that
-   * rule exists to prevent.
+   * Returns one of three things: `{ tree }` when the games were already on the device,
+   * `{ error }`, or `{ download }` — a plan naming the site, the username, the colour and the
+   * ceiling. It never fetches. The router awaits the plan and comes back through `submitGames`,
+   * which is the same tail the paste path takes.
+   *
+   * It used to return `{ error: errNetwork }` for both online sources: "Could not reach that
+   * site. Check your connection and try again.", for a download that had never been written. That
+   * is the bug the client reported as *"hindi nag-oopening tree"* — the message is
+   * indistinguishable from a real outage, so they checked their wifi and reported the app.
    */
-  function submit(form, nowMs) {
+  function submit(form, nowMs, isPremium) {
     var name = String(form.name || '').trim();
     if (!name) return { error: MET.STRINGS.errNoName };
 
     if (form.source === 'coach') return { error: MET.STRINGS.errNoCoachGames };
     if (MET.isOnlineSource(form.source)) {
-      if (!String(form.username || '').trim()) return { error: MET.STRINGS.errNoUser };
-      return { error: MET.STRINGS.errNetwork };
+      var user = String(form.username || '').trim();
+      if (!user) return { error: MET.STRINGS.errNoUser };
+      return {
+        download: {
+          site: form.source,
+          username: user,
+          colour: form.colour,
+          // The screen is behind the trial gate, so `isPremium` is true for anyone who can see
+          // this form; it is still read rather than assumed, because the gate is a product
+          // decision and this is a limit.
+          limit: DL().resolvedMax(isPremium !== false, form.maxGames)
+        }
+      };
     }
 
     if (!String(form.pgn || '').trim()) return { error: MET.STRINGS.errNoPgn };
@@ -313,8 +370,29 @@ var BiyaOpenings = (function () {
     return { tree: built };
   }
 
+  /**
+   * The downloaded half's tail — build, or say why not. The same three checks the paste path ends
+   * on, in the same order, because a tree built from Lichess and a tree built from a pasted export
+   * of the same games must be the same tree.
+   *
+   * A username that exists but has no games in the chosen colour comes back as `errUnknownUser`
+   * rather than `errNetwork`: it is not a connection problem, and telling the user to check their
+   * connection sends them to fix the one thing that is working.
+   */
+  function submitGames(form, games, nowMs) {
+    if (!games || !games.length) return { error: MET.STRINGS.errUnknownUser };
+    var built = ST.build({ games: games, name: String(form.name || '').trim(),
+                           colour: form.colour, source: form.source,
+                           username: form.username || '', nowMs: nowMs });
+    if (!built.positionCount) return { error: MET.STRINGS.errNoGames };
+    return { tree: built };
+  }
+
   function emptyForm() {
-    return { name: '', colour: 'both', source: 'pgn', pgn: '', username: '', error: null };
+    return {
+      name: '', colour: 'both', source: 'pgn', pgn: '', username: '',
+      maxGames: MET.STRINGS.maxDefault, downloading: false, fetched: 0, error: null
+    };
   }
 
   function selfTest() {
@@ -334,13 +412,38 @@ var BiyaOpenings = (function () {
     expect(ok.tree.name === 'Mine' && ok.tree.gameCount === 1, 'with the name and one game');
     expect(ok.tree.createdAtMs === 1234, 'and the injected clock, never Date.now()');
 
-    // The two online sources are reachable in the form and refuse politely rather than silently.
+    // The two online sources return a PLAN, not an apology. This is the assertion that used to
+    // read `errNetwork === 'and then says the download is not wired'` — it pinned the client's bug
+    // in place, which is why 346 green expectations never saw it.
     f.source = 'lichess';
     expect(submit(f, 1).error === MET.STRINGS.errNoUser, 'an online source needs a username');
-    f.username = 'someone';
-    expect(submit(f, 1).error === MET.STRINGS.errNetwork, 'and then says the download is not wired');
+    f.username = '  someone  ';
+    var plan = submit(f, 1, true);
+    expect(!plan.error && !!plan.download, 'and with one it plans a download');
+    expect(plan.download.site === 'lichess', 'naming the site');
+    expect(plan.download.username === 'someone', 'the TRIMMED username');
+    expect(plan.download.colour === f.colour, 'the colour');
+    expect(plan.download.limit === 100, 'and the default ceiling');
+    f.maxGames = '900';
+    expect(submit(f, 1, true).download.limit === 900, 'a premium box raises it');
+    expect(submit(f, 1, false).download.limit === 100, 'a free one does not');
+    f.source = 'chesscom';
+    expect(submit(f, 1, true).download.site === 'chesscom', 'chess.com plans too');
     f.source = 'coach';
-    expect(submit(f, 1).error === MET.STRINGS.errNoCoachGames, 'coach games say so too');
+    expect(submit(f, 1).error === MET.STRINGS.errNoCoachGames, 'coach games still say so');
+
+    // The downloaded tail — same three checks as the paste path, same order.
+    var d = emptyForm();
+    d.name = 'Downloaded';
+    d.source = 'lichess';
+    d.username = 'someone';
+    expect(submitGames(d, [], 5).error === MET.STRINGS.errUnknownUser,
+      'no games back is a username problem, NOT a connection one');
+    var built = submitGames(d, [{ sanMoves: ['e4', 'c5'], userIsWhite: true, outcome: '1-0' }], 5);
+    expect(!built.error && built.tree.gameCount === 1, 'and real games build a tree');
+    expect(built.tree.source === 'lichess' && built.tree.username === 'someone',
+      'which remembers where it came from');
+    expect(built.tree.createdAtMs === 5, 'on the injected clock');
 
     // The colour filter reaches the builder.
     var g = emptyForm();
@@ -364,6 +467,7 @@ var BiyaOpenings = (function () {
   return {
     render: render,
     submit: submit,
+    submitGames: submitGames,
     emptyForm: emptyForm,
     applyMetrics: applyMetrics,
     selfTest: selfTest

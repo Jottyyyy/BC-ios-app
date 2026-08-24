@@ -13,11 +13,16 @@ App Store rejection. It now raises Apple's own sheet through `ASAuthorizationCon
 where it was. `LoginStore` did not change at all — the store, the persistence and the fail-closed read were
 already the right shape.
 
-Two consequences. The app still makes **no network call of its own** (`replay_login.js` fails the build on
-a `URLSession` or any URL, in the new file too), so the export-compliance `NO` stands — but Apple's servers
-answer the sign-in, so **the first launch needs a connection**, and the in-app privacy sheet was reworded
-from "100% offline" to say so. And a real Sign in with Apple obliges in-app **account deletion** under
-Guideline 5.1.1(v), which ships with it. Both are covered in [`account.md`](account.md).
+Two consequences. Apple's servers answer the sign-in, so **the first launch needs a connection**, and the
+in-app privacy sheet was reworded from "100% offline" to say so. And a real Sign in with Apple obliges
+in-app **account deletion** under Guideline 5.1.1(v), which ships with it. Both are covered in
+[`account.md`](account.md).
+
+The **login feature** still makes no network call of its own — `replay_login.js` fails the build on a
+`URLSession` or any URL in these files — but the **app** no longer can claim that: the Opening Tree's
+Lichess/Chess.com download shipped on 2026-08-24 and the honest claim is now **~90% offline**. The
+export-compliance `NO` is unaffected either way (OS-provided TLS is exempt); see
+[`opening-tree.md`](opening-tree.md).
 
 This screen has **no counterpart in the React Native app** — the original's `(auth)/login.tsx` is a
 username/password form against a Laravel API. So most of its numbers are invented, not extracted, and

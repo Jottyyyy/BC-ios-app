@@ -455,6 +455,64 @@
 
   function openingsGo(mode) { openingMode = mode; current = 'openings'; render(); }
 
+  /** Save a freshly built tree, open it, and drop the form. Both sources end here. */
+  function openingsSave(store, tree) {
+    store.add(tree);
+    store.openTree(tree.id);
+    openingForm = null;
+    openingsGo('list');
+  }
+
+  /**
+   * Run a download plan and build from what comes back.
+   *
+   * The games are accumulated and the tree is built ONCE at the end, which is deliberately less
+   * than the RN screen does. That one jumps to the explorer with an empty tree and grows it live,
+   * and pays for the effect with a half-built tree left saved whenever a download fails —
+   * indistinguishable from a real one after the banner is gone. Here nothing is saved until the
+   * download finishes, so a failure leaves the form open with the reason on it. The counter still
+   * moves, because that is what the banner is for.
+   *
+   * The `form` captured here is compared by identity on the way out: tapping Back replaces
+   * `openingForm`, so an in-flight download that resolves afterwards must not write its tree into
+   * a screen the user has left. It is the browser's answer to the Swift `.onDisappear` cancel —
+   * `fetch` cannot be un-sent without an AbortController, but its ANSWER can be dropped.
+   */
+  function runOpeningDownload(store, plan) {
+    var form = openingForm;
+    form.downloading = true;
+    form.fetched = 0;
+    form.error = null;
+    render();
+
+    BiyaOpeningDownload.run(plan.site, {
+      username: plan.username,
+      colour: plan.colour,
+      limit: plan.limit,
+      cancelled: function () { return openingForm !== form; },
+      onGames: function (games, total) {
+        if (openingForm !== form) return;
+        form.games = (form.games || []).concat(games);
+        form.fetched = total;
+        render();
+      }
+    }).then(function () {
+      if (openingForm !== form) return;
+      form.downloading = false;
+      var r = BiyaOpenings.submitGames(form, form.games || [], Date.now());
+      if (r.error) { form.error = r.error; form.games = []; render(); return; }
+      openingsSave(store, r.tree);
+    }, function (e) {
+      if (openingForm !== form) return;
+      form.downloading = false;
+      form.games = [];
+      form.error = e && e.openingFailure === BiyaOpeningDownload.FAILURES.unknownUser
+        ? BiyaOpeningMetrics.STRINGS.errUnknownUser
+        : BiyaOpeningMetrics.STRINGS.errNetwork;
+      render();
+    });
+  }
+
   function renderOpenings() {
     var store = BiyaOpeningStore.shared();
     if (!openingForm) openingForm = BiyaOpenings.emptyForm();
@@ -464,14 +522,13 @@
       onCancel: function () { openingsGo('list'); },
       onChanged: render,
       onSubmit: function () {
+        if (openingForm.downloading) return;
         // The clock is injected rather than read inside the builder, so the same call is
         // reproducible in a test — the rule `pairing-store.js` follows for `createdAtMs`.
-        var r = BiyaOpenings.submit(openingForm, Date.now());
+        var r = BiyaOpenings.submit(openingForm, Date.now(), BiyaPremium.shared().isPremium());
         if (r.error) { openingForm.error = r.error; render(); return; }
-        store.add(r.tree);
-        store.openTree(r.tree.id);
-        openingForm = null;
-        openingsGo('list');
+        if (r.download) { runOpeningDownload(store, r.download); return; }
+        openingsSave(store, r.tree);
       },
       onOpen: function (id) { store.openTree(id); openingsGo('list'); },
       onDelete: function (id) { store.remove(id); render(); },

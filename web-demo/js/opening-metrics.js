@@ -200,6 +200,10 @@
     userLabel: 'Username',
     userPlaceholder: 'your username on that site',
     maxLabel: 'Games to fetch',
+    // What the box opens on. The RN form opens on the same 100 — its free ceiling — so a user who
+    // never touches the field gets the same tree in both apps.
+    maxDefault: '100',
+    maxPlaceholder: 'e.g. 500',
     build: 'Build Tree',
     building: 'Building…',
     // The online path is the ONE networked thing in the app, so it says so rather than failing
