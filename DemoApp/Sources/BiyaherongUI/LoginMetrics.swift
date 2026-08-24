@@ -443,18 +443,31 @@ enum LoginStrings {
     """
 
     static let privacyTitle = "Privacy"
-    /// "100% offline" used to open this paragraph. Sign in with Apple is a real
-    /// `ASAuthorizationController` call now, and Apple's own servers answer it, so the first
-    /// sign-in needs a connection and the old wording was no longer true. Everything AFTER it
-    /// still is — which is what the replacement says, rather than dropping the claim entirely.
+    /// This paragraph has now been narrowed TWICE, and both times because a real network call
+    /// landed under a claim written before it existed.
+    ///
+    /// It opened with "100% offline" until Sign in with Apple became a real
+    /// `ASAuthorizationController` call answered by Apple's servers. The replacement then said the
+    /// app "does not collect, store, or send any personal information anywhere" — which the
+    /// Opening Tree's download makes false in the most literal way available: it sends **the
+    /// username the user typed** to Lichess or Chess.com. That is a third party receiving an
+    /// identifier, and no reading of the old sentence survives it.
+    ///
+    /// So the claim is narrowed rather than deleted: no account server, no analytics, no tracking
+    /// — all still true and all still worth saying — and then the two things that do leave the
+    /// device, named, with what is sent and why. A privacy sheet that overstates is worse than one
+    /// that admits two exceptions, and this one is also an App Store answer.
     static let privacyBody = """
-    Biyaherong Coach works offline. It does not collect, store, or send any personal information \
-    anywhere — there is no account server and no analytics.
+    Biyaherong Coach works offline. There is no account server and no analytics, and nothing \
+    about you is collected or tracked.
 
-    Signing in goes through Apple, so the first sign-in needs internet. Nothing else does: your \
-    puzzles, ratings, games and settings live on this device only.
+    Two things need internet, and only when you ask for them: signing in goes through Apple, and \
+    building an Opening Tree sends the username you type to Lichess or Chess.com so your games \
+    can be downloaded. Everything else — your puzzles, ratings, games and settings — stays on \
+    this device.
 
-    Walang datos na inilalabas. Lahat ay nasa device mo lang.
+    Walang account server at walang analytics. Kailangan lang ng internet kapag nag-sign in ka o \
+    kumukuha ng laro mula sa Lichess o Chess.com.
     """
 
     static let termsTitle = "Terms"

@@ -5,7 +5,7 @@ import BiyaherongCoachCore
 // (board.tsx:4565-4712). See docs/analysis-board.md.
 //
 //   1  header            ←  Analysis Board  ☰
-//   2  board             a FIXED square derived from the WIDTH, + the main eval bar under it
+//   2  board             a FIXED square derived from the WIDTH, + the eval RAIL on its left
 //   3  status, toolbar   two rows here, not the source's one — see `statusLine`
 
 //   4  autoplay bar      only while autoplaying
@@ -105,7 +105,11 @@ struct AnalysisBoardScreen: View {
     /// geometry — no measurement, and it does not have to be exact: `rowsBox` clips, so an answer a
     /// point or two out costs a hidden row, never an overdrawn move strip.
     private func enginePlan(size: CGSize) -> (rows: Int, lines: Int) {
-        let edge = AnalysisBoard.size(screenWidth: size.width, pixelRatio: displayScale)
+        // The SAME edge the board draws at, engine state and all. Budget against a different one
+        // and the panel is sized for a board that is not on screen — the symptom is a silently
+        // missing engine row rather than anything visible.
+        let edge = AnalysisBoard.edge(screenWidth: size.width, pixelRatio: displayScale,
+                                      engineOn: vm.autoAnalyze)
         let available = AnalysisLayout.engineAvailable(viewportHeight: size.height,
                                                        edge: edge,
                                                        autoplaying: vm.autoplaying)
@@ -142,18 +146,42 @@ struct AnalysisBoardScreen: View {
             .frame(width: AnalysisLayout.headerBtnWidth)
     }
 
-    // MARK: - 2. Board + the main eval bar
+    // MARK: - 2. Board + the vertical eval rail
     //
-    // The RN render has NO eval bar (`renderEvalBar:2741` is dead code); the 8pt bar is the spec's
-    // addition and belongs here, under the board. The 3pt one is real and lives in the engine panel.
+    // LEFT, FIXED, never mirrored — flipping the board does not move the rail. That is what Lichess
+    // and Chess.com do, and what the client asked for: "pwede ilagay sa gilid tulad lichess or
+    // chesscom".
+    //
+    // The RN render has no eval bar at all — `renderEvalBar:2741` is declared and never called. Its
+    // header comment reads "RENDER EVAL BAR (vertical, DroidFish-style)" while the style beneath it
+    // says `flexDirection: 'row'`: the original intended a vertical bar and shipped a horizontal one.
+    // We build the comment. There is ONE main eval bar now; the 3pt micro bar is a different bar,
+    // real in the source, and still horizontal in the engine panel.
+    //
+    // THE RAIL IS ONLY THERE WHEN THE ENGINE IS. `toggleEngine` drops the snapshot when it turns
+    // the engine off, so the rail would sit at a dead 50/50 with no number — "hindi na need yun pag
+    // nakapatay engine … yung space nya kainin na ng chessboard". The board takes the width back,
+    // via the one `AnalysisBoard.edge` both this and `enginePlan` call.
+    //
+    // THE RAIL IS A SIBLING OF `ChessBoardBand`, NEVER A WRAPPER. `BoardArrows` and
+    // `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` ON THE BAND and anchor to
+    // its frame. Wrap or pad the band and every arrow and every badge slides right by the rail's
+    // width, with the board still looking perfect — a silent failure. `swift_layout_check.js` §4d
+    // pins the ordering and the attachment.
 
     private func boardBand(width: CGFloat) -> some View {
         // This screen keeps its own edge formula — `AnalysisBoard.size` snaps the edge down to a
         // whole multiple of 8 physical pixels so squares land on pixel boundaries, and that is
         // pinned to the RN source. It still goes through `ChessBoardBand`, so there is exactly one
         // place that turns an edge into a square.
-        let edge = AnalysisBoard.size(screenWidth: width, pixelRatio: displayScale)
-        return VStack(spacing: AnalysisLayout.boardPaddingTop) {
+        let edge = AnalysisBoard.edge(screenWidth: width, pixelRatio: displayScale,
+                                      engineOn: vm.autoAnalyze)
+        // `alignment: .top` is spelled rather than left to the default `.center`: both children are
+        // exactly `edge` tall today, and this is what keeps them aligned if one ever is not.
+        // An HStack applies its spacing BETWEEN children, so with the rail gone the gap goes too and
+        // the board is centred on its own — no stray `railGap` to trim.
+        return HStack(alignment: .top, spacing: AnalysisEval.railGap) {
+            if vm.autoAnalyze { evalRail(height: edge) }
             ChessBoardBand(edge: edge) { side in
                 BoardView(pieces: vm.pieces,
                           selected: vm.selected,
@@ -183,9 +211,8 @@ struct AnalysisBoardScreen: View {
                         PromotionOverlay(color: vm.position.sideToMove) { vm.choosePromotion($0) }
                     }
                 }
-            evalBar(width: edge)
         }
-        .padding(.top, AnalysisLayout.boardPaddingTop)
+        .padding(.vertical, AnalysisLayout.boardPaddingTop)
         // `maxHeight: .infinity` here is what starved the ECO panel: the board band claimed every
         // spare point while `AnalysisOpeningPanel` sat capped at `panelsMaxHeight`. The board is a
         // FIXED square derived from the width — it must hug that, and the panel below must be the
@@ -194,17 +221,27 @@ struct AnalysisBoardScreen: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    private func evalBar(width: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: AnalysisEval.mainRadius, style: .continuous)
-            .fill(AnalysisPalette.evalTrack)
-            .frame(width: width, height: AnalysisEval.mainHeight)
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: AnalysisEval.mainRadius, style: .continuous)
-                    .fill(AnalysisPalette.evalFill)
-                    .frame(width: width * vm.evalFraction, height: AnalysisEval.mainHeight)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AnalysisEval.mainRadius, style: .continuous))
-            .animation(.easeInOut(duration: AnalysisEval.animationSeconds), value: vm.evalFraction)
+    /// The vertical eval rail. White fills from the BOTTOM regardless of the flip: `EngineScore` is
+    /// documented "Always White-relative", so nothing here can know or care which way the board is
+    /// facing.
+    ///
+    /// The score hangs off the LEADING side's end — bottom when White leads, on the white block, in
+    /// dark ink; top when Black leads, on the bare dark track, in light ink. Those are the only two
+    /// placements where the label is guaranteed to sit on solid colour, and
+    /// `AnalysisEval.labelAtBottom` is exact about it rather than heuristic.
+    ///
+    /// `Alignment` is not animatable, so the number JUMPS ends the instant the eval crosses zero
+    /// while the fill keeps animating. That is what Lichess does. Do not "fix" it by cross-fading
+    /// two `Text`s — that draws the number at both ends mid-transition and reads as a bug.
+    /// The rail's SHAPE moved to `EvalRail.swift` when the Opening Tree explorer grew an engine of
+    /// its own — one rail, two screens, which is what §4e's "only ONE vertical eval bar" means now
+    /// that there is more than one place to draw it.
+    ///
+    /// This forwarder stays rather than naming `EvalRail(...)` at the call site, and that is not
+    /// ceremony: it keeps `evalRail(height: edge)` in `boardBand`, so every mount assertion and
+    /// every mount mutant written against this screen still matches character for character.
+    private func evalRail(height: CGFloat) -> some View {
+        EvalRail(height: height, fraction: vm.evalFraction, label: vm.evalLabel)
     }
 
     /// `UIScreen.main.scale` is iOS-only and deprecated; the environment value works on both

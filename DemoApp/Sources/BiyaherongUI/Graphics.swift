@@ -32,29 +32,6 @@ enum CoachArt {
     }
 }
 
-/// Vertical evaluation bar — white advantage fills from the bottom. The signature chess element.
-struct EvalBar: View {
-    let whitePct: Double     // 0…100 (White win probability)
-    let height: CGFloat
-    var body: some View {
-        let frac = max(0.02, min(0.98, whitePct / 100))
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(Color(white: 0.14))
-            .overlay(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color(white: 0.95))
-                    .frame(height: height * frac)
-            }
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.violet).frame(height: 1.5).offset(y: -height / 2)
-            }
-            .frame(width: 14, height: height)
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(Theme.border, lineWidth: 1))
-            .animation(.easeInOut(duration: 0.4), value: frac)
-    }
-}
-
 /// Circular progress ring with a centered readout.
 struct RingGauge: View {
     let value: Double        // 0…1

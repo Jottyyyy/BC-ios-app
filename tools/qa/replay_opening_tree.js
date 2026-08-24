@@ -134,6 +134,9 @@ const OPENINGS_JS = read(JS, 'openings.js');
  *  this file silently skipped ten assertions on a source that was correct. */
 const CORE_CODE = code(CORE_SRC);
 
+/** OpeningMetrics.swift, comment-stripped — §15 reads OpeningBoard.edge and engineEvalInk. */
+const CORE_MET = code(MET_SRC);
+
 const OT = require(path.join(JS, 'opening-tree.js'));
 const MET = require(path.join(JS, 'opening-metrics.js'));
 const ST = require(path.join(JS, 'opening-store.js'));
@@ -144,8 +147,11 @@ const ST = require(path.join(JS, 'opening-store.js'));
   expect(block !== null, 'OpeningTree is a type in the Core');
   const m = /static let defaultMaxPlies = (\d+)/.exec(code(CORE_SRC));
   eq(OT.DEFAULT_MAX_PLIES, m ? Number(m[1]) : null, 'defaultMaxPlies');
-  const g = /static let maxGamesLimit = (\d+)/.exec(code(CORE_SRC));
-  eq(OT.MAX_GAMES_LIMIT, g ? Number(g[1]) : null, 'maxGamesLimit');
+  // `maxGamesLimit` used to be checked here and is deliberately gone from both languages — it was
+  // a transcription of the RN ceiling that got the number wrong (2000 for a form that clamps at
+  // 1000) and this assertion read it back to itself. The ceiling lives in `OpeningDownload` now
+  // and §12 checks it against the RN source's real value.
+  expect(OT.MAX_GAMES_LIMIT === undefined, 'the JS twin has dropped its copy of the ceiling too');
   expect(OT.DEFAULT_MAX_PLIES > 0 && OT.DEFAULT_MAX_PLIES % 2 === 0,
     'the ply cap is a whole number of full moves');
 }
@@ -310,8 +316,31 @@ const ST = require(path.join(JS, 'opening-store.js'));
   const set = new Set();
   for (const k of Object.keys(MET.LAYOUT)) set.add('--op-' + k);
   for (const k of Object.keys(MET.PALETTE)) set.add('--opc-' + k);
-  ['--op-barHeight', '--op-barRadius', '--opc-win', '--opc-draw', '--opc-loss', '--opc-loadFill']
+  ['--op-barHeight', '--op-barRadius', '--opc-win', '--opc-draw', '--opc-loss', '--opc-loadFill',
+    // MEASURED, not tabled. The explorer's board edge depends on the viewport and on whether the
+    // engine is on, so it cannot be a `LAYOUT` key — §6 requires every one of those to be a literal
+    // `static let name = <number>` in the Swift. `sizeExplorer` sets it through `MET.boardEdge`,
+    // which is the one entry point both the board and the rail read.
+    '--op-boardEdge']
     .forEach((k) => set.add(k));
+  // …and it really is set, through the one function. A property listed here but never written is
+  // an exemption with nothing under it.
+  expect(/root\.style\.setProperty\('--op-boardEdge', MET\.boardEdge\(/.test(OPENINGS_JS),
+    'openings.js sets --op-boardEdge through MET.boardEdge — not by hand, and not from two places');
+
+  // The rail's own properties come from the ANALYSIS table, because it is the analysis rail. They
+  // are set on this screen's root too, since `analysis.js` sets them on a root this screen is not
+  // inside — so they are excluded from the audit above rather than duplicated into MET.LAYOUT.
+  for (const k of ['--an-rail-w', '--an-rail-r', '--an-rail-pad-v', '--an-rail-gap',
+                   '--an-eval-anim', '--an-fs-rail', '--an-eval-track', '--an-eval-fill',
+                   '--an-on-gold', '--an-text']) {
+    expect(OPENINGS_JS.includes("set('" + k + "'"),
+      `openings.js sets ${k} — the rail is drawn by .an-eval, whose properties analysis.js sets on `
+      + 'a root this screen is never inside');
+  }
+  expect(!/setProperty\('--an-board-edge'/.test(OPENINGS_JS),
+    'and NOT --an-board-edge: the rail is as tall as THIS screen`s board, which is --op-boardEdge; '
+    + 'setting the analysis one would give it the other screen`s height');
 
   for (const name of readProps) {
     expect(set.has(name), `app.css reads ${name} but openings.js never sets it`);
@@ -329,8 +358,8 @@ const ST = require(path.join(JS, 'opening-store.js'));
 
 // ── 10. Load order ──────────────────────────────────────────────────────────────
 {
-  const order = ['js/opening-tree.js', 'js/opening-metrics.js', 'js/opening-store.js',
-                 'js/openings.js'];
+  const order = ['js/opening-tree.js', 'js/opening-metrics.js', 'js/opening-download.js',
+                 'js/opening-store.js', 'js/openings.js'];
   let last = -1;
   for (const f of order) {
     const at = INDEX.indexOf('src="' + f + '"');
@@ -365,6 +394,441 @@ const ST = require(path.join(JS, 'opening-store.js'));
   const literals = body.match(/:\s*-?\d+(\.\d+)?px/g) || [];
   expect(literals.length === 0,
     `openings.js writes ${literals.length} pixel literal(s): ${literals.join(', ')}`);
+}
+
+// ── 12. The download ────────────────────────────────────────────────────────────
+//
+// The client's bug: picking Lichess or Chess.com validated the username and then set
+// `errNetwork` — "Could not reach that site. Check your connection and try again." — for a
+// download that had never been written. It survived 346 green expectations because §7 below
+// asserted only that the two sources were MARKED online, and the JS selfTest asserted the refusal
+// itself ("and then says the download is not wired"). A test that pins the bug is worse than no
+// test: it makes the bug look decided.
+//
+// So this section checks the thing that actually broke — that picking an online source starts a
+// download — and then that the two languages agree about what that download IS.
+{
+  const DOWN_SRC = read(CORE, 'OpeningDownload.swift');
+  const DOWN_CODE = code(DOWN_SRC);
+  const LOADER_SRC = read(UI, 'OpeningDownloader.swift');
+  const DL = require(path.join(JS, 'opening-download.js'));
+
+  // -- the regression guard, first. Both languages, both sources. --------------
+  for (const site of ['lichess', 'chesscom']) {
+    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site},`)
+      .test(code(SCREENS_SRC)), `picking ${site} starts a download in Swift, not an apology`);
+  }
+  // `errNetwork` may still be SET — a download really can fail — but only from a `catch`. Set
+  // anywhere else it is the old refusal wearing the new code's clothes, which is exactly how this
+  // bug would come back: someone adds an early return for a case they have not wired yet.
+  {
+    const screens = code(SCREENS_SRC);
+    const uses = [];
+    let at = screens.indexOf('errNetwork');
+    while (at >= 0) { uses.push(at); at = screens.indexOf('errNetwork', at + 1); }
+    expect(uses.length > 0, 'the Swift form can still report a real outage');
+    for (const i of uses) {
+      expect(/\bcatch\b[^{]*\{[^{}]*$/.test(screens.slice(Math.max(0, i - 240), i)),
+        'and every errNetwork it sets is inside a catch, not an unwired early return');
+    }
+  }
+  expect(/return \{\s*\n?\s*download: \{/.test(code(OPENINGS_JS)),
+    'the JS submit returns a download PLAN for an online source');
+  expect(!/isOnlineSource\(form\.source\)[\s\S]{0,200}errNetwork/.test(code(OPENINGS_JS)),
+    'and no longer returns errNetwork for one');
+
+  // -- the limits ---------------------------------------------------------------
+  const num = (name) => {
+    const m = new RegExp(`static let ${name} = (\\d+)`).exec(DOWN_CODE);
+    return m ? Number(m[1]) : null;
+  };
+  eq(DL.FREE_MAX_GAMES, num('freeMaxGames'), 'freeMaxGames');
+  eq(DL.PREMIUM_MAX_GAMES, num('premiumMaxGames'), 'premiumMaxGames');
+  eq(DL.MIN_MAX_GAMES, num('minMaxGames'), 'minMaxGames');
+  // The constant this feature was built on top of a transcription error: `OpeningTree` carried
+  // `maxGamesLimit = 2000` described as "the download ceiling the RN form offers", and the parity
+  // check read that constant back to itself. The RN form's ceiling is 1000, twice over —
+  // `Math.min(…, 1000)` at openingtree.tsx:479 and :917.
+  eq(DL.PREMIUM_MAX_GAMES, 1000, 'the RN form ceiling, which is 1000 and was written as 2000');
+  expect(!/maxGamesLimit/.test(CORE_CODE), 'and the wrong constant is gone rather than corrected');
+
+  // `resolvedMax` is the one piece of arithmetic here, so it is replayed rather than read.
+  eq(DL.resolvedMax(false, 900), DL.FREE_MAX_GAMES, 'free ignores the box');
+  eq(DL.resolvedMax(true, 900), 900, 'premium gets what it asks for');
+  eq(DL.resolvedMax(true, 99999), DL.PREMIUM_MAX_GAMES, 'and is clamped at the ceiling');
+  eq(DL.resolvedMax(true, 0), DL.MIN_MAX_GAMES, 'an empty box is one game, not none');
+  expect(/guard isPremium else \{ return freeMaxGames \}/.test(DOWN_CODE),
+    'and the Swift takes the same two branches');
+  expect(/min\(max\(requested, minMaxGames\), premiumMaxGames\)/.test(DOWN_CODE),
+    'in the same order — clamp low, then high');
+
+  // -- the endpoints ------------------------------------------------------------
+  //
+  // Compared as SUBSTRINGS of the Swift literal rather than by reconstructing its interpolation:
+  // the point is that neither language can quietly change host, path or query.
+  const lich = DL.lichessGamesURL('bob', 7);
+  eq(lich, 'https://lichess.org/api/games/user/bob?pgnInJson=true&max=7', 'the lichess URL');
+  expect(DOWN_SRC.includes('https://lichess.org/api/games/user/'),
+    'and the Swift builds the same host and path');
+  expect(DOWN_SRC.includes('?pgnInJson=true&max='),
+    'with the same query — pgnInJson is what puts `moves` on each line');
+  const cc = DL.chesscomArchivesURL('bob');
+  eq(cc, 'https://api.chess.com/pub/player/bob/games/archives', 'the chess.com archives URL');
+  expect(DOWN_SRC.includes('https://api.chess.com/pub/player/')
+    && DOWN_SRC.includes('/games/archives'), 'and the Swift builds that one too');
+  const accept = /static let lichessAccept = "([^"]+)"/.exec(DOWN_SRC);
+  eq(DL.LICHESS_ACCEPT, accept ? accept[1] : null, 'the NDJSON Accept header');
+
+  // A username must not be able to escape its path segment. `CharacterSet.urlPathAllowed` would
+  // let `/` through, which is why the Swift spells `encodeURIComponent`'s set out by hand.
+  eq(DL.lichessGamesURL('a/b', 1),
+    'https://lichess.org/api/games/user/a%2Fb?pgnInJson=true&max=1',
+    'a slash in a username is escaped');
+  const allowed = /charactersIn:\s*\n?\s*"([^"]+)"\)/.exec(DOWN_SRC);
+  expect(allowed !== null, 'the Swift names its allowed set');
+  if (allowed) {
+    for (const ch of ['/', ':', '@', '+', '&', '?', '#', ' ']) {
+      expect(!allowed[1].includes(ch),
+        `and it does NOT permit ${JSON.stringify(ch)}, which would change the endpoint`);
+    }
+  }
+
+  // -- what a status means ------------------------------------------------------
+  eq(DL.failureForStatus(404), 'unknownUser', '404 is a username the site does not have');
+  eq(DL.failureForStatus(500), 'network', 'and anything else is worth retrying');
+  expect(/code == 404 \? \.unknownUser : \.network/.test(DOWN_CODE),
+    'the Swift makes the same one-case distinction');
+  expect(/\(200\.\.\.299\)\.contains\(code\)/.test(DOWN_CODE), 'and accepts the same 2xx range');
+  expect(DL.isSuccess(200) && DL.isSuccess(299) && !DL.isSuccess(300) && !DL.isSuccess(199),
+    'as does the JS');
+  const failCases = /enum Failure[^{]*\{\s*case (\w+)\s*\n\s*case (\w+)/.exec(DOWN_SRC);
+  expect(failCases !== null, 'Failure has exactly two cases in Swift');
+  if (failCases) {
+    eq(Object.keys(DL.FAILURES).join(','), `${failCases[1]},${failCases[2]}`, 'and the JS agrees');
+  }
+  const siteCases = /enum Site[^{]*\{\s*case ([\w, ]+)\n/.exec(DOWN_SRC);
+  eq(Object.keys(DL.SITES).join(','),
+    siteCases ? siteCases[1].split(',').map((s) => s.trim()).join(',') : null, 'the site ids');
+
+  // -- the aborted-game deviation ----------------------------------------------
+  //
+  // The RN mapping scores a game with no winner as a DRAW, so an aborted game — very often the
+  // first in a stream — becomes half a point for both sides. `OpeningTree.Outcome` already
+  // decided the other way for pasted PGN, and two import paths disagreeing about one game is
+  // worse than the bug being fixed. Both languages must carry the same status list.
+  const statuses = /lichessUnfinishedStatuses: Set<String> =\s*\n?\s*\[([^\]]+)\]/.exec(DOWN_SRC);
+  expect(statuses !== null, 'Swift lists the unfinished statuses');
+  if (statuses) {
+    const swift = statuses[1].split(',').map((s) => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    eq(DL.LICHESS_UNFINISHED.join(','), swift.join(','), 'the unfinished statuses, in order');
+    expect(swift.includes('aborted'), 'and "aborted" is one of them — the whole point');
+  }
+  expect(DL.lichessOutcome({ winner: 'white' }) === '1-0'
+    && DL.lichessOutcome({ winner: 'black' }) === '0-1'
+    && DL.lichessOutcome({ status: 'draw' }) === '1/2-1/2'
+    && DL.lichessOutcome({ status: 'aborted' }) === null,
+    'and the JS mapping is winner / draw / no-result');
+  expect(/case "white": return \.whiteWin/.test(DOWN_CODE)
+    && /case "black": return \.blackWin/.test(DOWN_CODE)
+    && /contains\(status\) \? nil : \.draw/.test(DOWN_CODE),
+    'as is the Swift one');
+
+  // -- the colour rule ----------------------------------------------------------
+  //
+  // The online path reads the colour off the GAME and lets the picker filter, where the RN screen
+  // takes the picker as the answer and mislabels every game the user had the other colour in.
+  expect(/if let w = name\("white"\), w\.caseInsensitiveCompare\(wanted\) == \.orderedSame/
+    .test(DOWN_CODE), 'Swift matches the username case-insensitively against White');
+  eq(DL.lichessUserIsWhite({ players: { white: { user: { name: 'Bob' } } } }, 'bob', false), true,
+    'and so does the JS');
+  eq(DL.lichessUserIsWhite({ players: { black: { user: { name: 'Bob' } } } }, 'bob', true), false,
+    'Black too');
+  eq(DL.lichessUserIsWhite({}, 'bob', true), true, 'an unmatched game falls back to the picker');
+  expect(/colour\.accepts\(isWhite: game\.userIsWhite\)/.test(DOWN_CODE),
+    'and the picker FILTERS in Swift, exactly as it does on the paste path');
+
+  // -- the ceiling, and the archive order ---------------------------------------
+  eq(DL.trim([1, 2, 3], 0, 2).length, 2, 'a chunk is trimmed to the room left');
+  eq(DL.trim([1, 2, 3], 2, 2).length, 0, 'and nothing survives once the ceiling is reached');
+  expect(/let room = limit - have/.test(DOWN_CODE) && /Array\(games\.prefix\(room\)\)/.test(DOWN_CODE),
+    'the Swift trims the same way');
+  eq(DL.chesscomArchives({ archives: ['2024/01', '2024/02'] })[0], '2024/02',
+    'archives come back NEWEST first');
+  expect(/\.reversed\(\)/.test(DOWN_CODE),
+    'and the Swift reverses too — oldest-first would build every tree from the user’s first month');
+
+  // -- the transport is in ONE file ---------------------------------------------
+  //
+  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and
+  // VideoPlayer". Neither exists yet and this download reached the client first, so
+  // OpeningDownloader is that rule's first inhabitant — and it stays the ONLY one.
+  expect(!/URLSession|URLRequest/.test(DOWN_CODE),
+    'the parity core opens no socket — it only describes the request');
+  expect(/URLSession/.test(LOADER_SRC), 'OpeningDownloader is where the transport lives');
+  const uiFiles = fs.readdirSync(UI).filter((f) => f.endsWith('.swift'));
+  const networked = uiFiles.filter((f) =>
+    /URLSession|URLRequest/.test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
+  eq(networked.join(','), 'OpeningDownloader.swift',
+    'and it is the ONLY file in BiyaherongUI that does');
+  expect(uiFiles.length > 20, `swept ${uiFiles.length} UI files — the sweep is not vacuous`);
+
+  // Same rule in the browser: one file with `fetch`, and it is the twin.
+  const jsFiles = fs.readdirSync(JS).filter((f) => f.endsWith('.js'));
+  const fetching = jsFiles.filter((f) =>
+    /\bfetch\(|XMLHttpRequest/.test(code(fs.readFileSync(path.join(JS, f), 'utf8'))));
+  eq(fetching.join(','), 'opening-download.js', 'exactly one web-demo file fetches');
+  expect(jsFiles.length > 20, `swept ${jsFiles.length} JS files — the sweep is not vacuous`);
+
+  // -- and cancellation is real -------------------------------------------------
+  expect(/\.onDisappear \{ download\?\.cancel\(\)/.test(code(SCREENS_SRC)),
+    'leaving the Swift form cancels the download');
+  expect(/Task\.checkCancellation\(\)/.test(code(LOADER_SRC)),
+    'and the loader checks for it inside both loops');
+  expect(/openingForm !== form/.test(code(read(path.join(ROOT, 'web-demo'), 'js/app.js'))),
+    'and the browser drops a download that resolves into a screen the user has left');
+}
+
+// ── 13. Off book — the distinction the explorer could not make ──────────────────
+//
+// `children(at:)` answers empty both at a leaf and for a path that has left the tree, so one card
+// meant two things and Forward was dead either way. `bookDepth` is the same walk reporting WHERE
+// IT STOPPED. Everything below runs in the JS and is checked against the Swift source text.
+{
+  const core = CORE_CODE.slice(CORE_CODE.indexOf('public func bookDepth(along path:'));
+  expect(core.length > 60, 'bookDepth is in the Core, beside children(at:)');
+  expect(/guard let next = level\[san\] else \{ return depth \}/.test(core),
+    'and it RETURNS the depth it reached rather than falling out with [:] — the whole difference '
+    + 'between "your games stop here" and "you played something none of them did"');
+
+  const t = OT.create();
+  OT.addGame(t, { sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true, outcome: OT.OUTCOMES.whiteWin });
+  eq(OT.bookDepth(t, []), 0, 'the empty path is zero plies into the book');
+  eq(OT.bookDepth(t, ['e4']), 1, 'one on-book ply');
+  eq(OT.bookDepth(t, ['e4', 'c5', 'Nf3']), 3, 'the whole line');
+  eq(OT.bookDepth(t, ['d4']), 0, 'a first move nobody played is zero, not one');
+  eq(OT.bookDepth(t, ['e4', 'e5']), 1, 'a divergence at ply two reports ply one');
+  eq(OT.bookDepth(t, ['e4', 'e5', 'Nf3']), 1, 'and stays there however far the user plays on');
+  eq(OT.bookDepth(t, ['e4', 'c5', 'Nf3', 'd6']), 3,
+    'playing on past a LEAF is off book too — a leaf and a divergence give the same answer');
+  eq(OT.bookDepth(t, ['Zz9']), 0, 'an unreadable SAN is simply not in the tree');
+
+  // The transposition, asserted as a DECISION rather than discovered as a surprise.
+  eq(OT.bookDepth(t, ['Nf3', 'c5', 'e4']), 0,
+    '1.Nf3 c5 2.e4 transposes into 1.e4 c5 2.Nf3 and is STILL off book: the tree is keyed by the '
+    + 'LINE you played, not by the position, which is why OpeningBook exists and keys by FEN');
+
+  const m = /static let maxFreePlies = (\d+)/.exec(CORE_CODE);
+  eq(OT.MAX_FREE_PLIES, m ? Number(m[1]) : null, 'maxFreePlies');
+  expect(OT.MAX_FREE_PLIES > 0 && OT.MAX_FREE_PLIES % 2 === 0,
+    'the free-play cap is a whole number of full moves');
+  expect(OT.MAX_FREE_PLIES < OT.DEFAULT_MAX_PLIES,
+    'and shorter than the tree itself — a wander, not a second game');
+}
+
+// ── 14. The two stores agree about leaving the book and getting back ────────────
+{
+  const store = code(STORE_SRC);
+  // Derived, not decided a second way. Two definitions of "off book" is two answers.
+  expect(/var isOffBook: Bool \{ bookDepth < path\.count \}/.test(store),
+    'Swift derives isOffBook from bookDepth rather than tracking a flag of its own');
+  expect(/var freePlies: Int \{ path\.count - bookDepth \}/.test(store), 'and freePlies with it');
+  expect(/path = Array\(path\.prefix\(bookDepth\)\)/.test(store),
+    'backToTree truncates to bookDepth — one definition of where the book ended, not a second '
+    + 'count of the way out');
+  expect(/guard freePlies < OpeningTree\.maxFreePlies else \{ return false \}/.test(store),
+    'and the cap lives in play(), which is the one place a move enters the path — a cap on the '
+    + 'board handler alone would be bypassed by every other route');
+
+  const JSSTORE = code(read(JS, 'opening-store.js'));
+  expect(/api\.bookDepth\(\) < path\.length/.test(JSSTORE), 'the JS derives it the same way');
+  expect(/path\.slice\(0, api\.bookDepth\(\)\)/.test(JSSTORE), 'and truncates the same way');
+  expect(/if \(api\.freePlies\(\) >= OT\.MAX_FREE_PLIES\) return false;/.test(JSSTORE),
+    'and caps in the same place');
+
+  // Executed, not just read: the whole round trip out of the book and back in.
+  const ST_ = require(path.join(JS, 'opening-store.js'));
+  function mem() {
+    const map = {};
+    return { getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+             setItem: (k, v) => { map[k] = String(v); },
+             removeItem: (k) => { delete map[k]; } };
+  }
+  const s = ST_.create(mem());
+  const tree = ST_.build({
+    games: [{ sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true, outcome: OT.OUTCOMES.whiteWin }],
+    name: 'x', colour: 'both', source: 'pgn', username: '', nowMs: 1 });
+  s.add(tree); s.openTree(tree.id);
+  expect(!s.isOffBook(), 'the root is on book');
+  s.play('e4');
+  expect(!s.isOffBook() && s.candidates().length === 1, 'a tree move stays on book');
+  expect(s.play('e5') === true, 'a legal move no game played is accepted');
+  expect(s.isOffBook() && s.freePlies() === 1, 'and it is one ply off book');
+  expect(s.candidates().length === 0 && !s.canStepForward(),
+    'off book there are no candidates and Forward is dead');
+  s.stepBack();
+  expect(!s.isOffBook(), 'a single Back over the divergence is also a way home');
+  s.play('e5');
+  s.backToTree();
+  expect(!s.isOffBook() && s.path().join(' ') === 'e4', 'and backToTree is the one-step way');
+
+  // The highest-risk bug in the whole feature, asserted directly: a move made on the BOARD must
+  // land on the tree's own branch. Spell the SAN by hand anywhere and an ON-book move reads as
+  // off book — the board advances, the list empties, and nothing says why.
+  const E = require(path.join(JS, 'engine.js'));
+  const start = E.start();
+  eq(E.san(start, E.parseUci(start, 'e2e4')), 'e4',
+    'e2e4 resolves to the SAN the tree is keyed by');
+  const s2 = ST_.create(mem());
+  s2.add(tree); s2.openTree(tree.id);
+  s2.play(E.san(start, E.parseUci(start, 'e2e4')));
+  expect(!s2.isOffBook(),
+    'so a move made on the board lands on the tree`s own branch rather than beside it');
+}
+
+// ── 15. The engine is the SHARED engine ─────────────────────────────────────────
+//
+// This screen is the third consumer of one search (the Analysis Board, the puzzle hint panel, and
+// now the explorer). The way that goes wrong is not a crash: it is a screen quietly acquiring its
+// own depth, its own multiPV or its own debounce, which then disagrees with the others for reasons
+// nobody can see. So the numbers are asserted to come from the shared tables and NEVER be literals.
+{
+  const vm = code(read(UI, 'OpeningEngineVM.swift'));
+  const app = code(read(path.join(ROOT, 'web-demo'), 'js/app.js'));
+
+  expect(/LocalEngine\(\)/.test(vm), 'Swift runs the same LocalEngine as every other screen');
+  expect(/AnalysisEngineLimits\.maxDepth/.test(vm) && /AnalysisEngineLimits\.multiPV/.test(vm),
+    'with AnalysisEngineLimits — NOT the Analysis Board`s EngineSettings preset, which is that '
+    + "screen's setting and not this one's");
+  expect(!/EngineSettings/.test(vm), 'and it does not reach for that preset at all');
+  expect(/AnalysisSession\.engineRows\(from:/.test(vm),
+    'the rows come from AnalysisSession.engineRows — static for exactly this reason');
+  expect(/AnalysisEval\.fraction\(parts:/.test(vm) && /AnalysisSession\.evalParts\(from:/.test(vm),
+    'and the rail fraction from the shared parts, so a finished game pins it rather than reading '
+    + 'as a large evaluation');
+  expect(/AnalysisTiming\.analysisDebounceMs/.test(vm), 'the debounce is the shared one');
+  expect(!/SearchLimits\(maxDepth: \d/.test(vm) && !/multiPV: \d/.test(vm),
+    'and NO depth or multiPV is written as a number here');
+
+  expect(/HOST|BiyaEngineHost/.test(app), 'the browser goes through the shared engine host');
+  expect(/BiyaAnalysisMetrics\.ENGINE_LIMITS\.maxDepth/.test(app)
+    && /BiyaAnalysisMetrics\.ENGINE_LIMITS\.multiPV/.test(app),
+    'with the same limits table');
+  expect(/BiyaAnalysisMetrics\.TIMINGS\.analysisDebounce/.test(app),
+    'and the same debounce');
+  expect(/BiyaAnalysis\.engineRows\(/.test(app),
+    'and the same row builder — the twin of AnalysisSession.engineRows');
+
+  // The toggle defaults OFF in both languages. It is the client's own answer, and a screen that
+  // starts searching the moment it opens is a different product.
+  expect(/@Published private\(set\) var engineOn = false/.test(vm),
+    'the Swift toggle starts OFF');
+  expect(/var engineOn = false;/.test(app), 'and so does the browser one');
+
+  // Cancellation is real in both. The Swift has a Task to cancel; the browser cannot un-send a
+  // search, so it invalidates by token and every callback re-checks.
+  expect(/Task\.checkCancellation|token\.isCancelled/.test(vm),
+    'the Swift search is cancellable from the main actor');
+  expect(/\.onDisappear \{ engine\.stop\(\) \}/.test(code(SCREENS_SRC)),
+    'and leaving the explorer stops it — a detached Task is not cancelled by deinit');
+  expect(/\.onChange\(of: store\.path\)/.test(code(SCREENS_SRC)),
+    'and every step of the walk re-schedules it');
+  expect(/token !== engineToken/.test(app),
+    'the browser invalidates by token, and every callback re-checks it');
+
+  // The rail leaves the layout with the engine. A hidden-but-present rail keeps its own width AND
+  // the row's gap, so the board would gain nothing and the row would sit off-centre by half of both.
+  expect(/if engine\.engineOn \{ evalRail\(height: edge\) \}/.test(code(SCREENS_SRC)),
+    'Swift draws the rail only when the engine is on');
+  expect(/'an-eval op-eval' \+ \(engineState\.on \? '' : ' off'\)/.test(OPENINGS_JS),
+    'and the browser toggles `off` on the same class the Analysis Board uses');
+  expect(/\.an-eval\.off \{ display: none; \}/.test(APP_CSS),
+    'which is display:none — never visibility or an opacity');
+
+  // ONE entry point for the width, and both consumers go through it.
+  expect(/OpeningBoard\.edge\(screenWidth: width, engineOn: engine\.engineOn\)/
+    .test(code(SCREENS_SRC)), 'the Swift board edge comes from OpeningBoard.edge');
+  expect(!/AnalysisEval\.railTotal/.test(code(SCREENS_SRC)),
+    'and the screen never subtracts the rail by hand — that is the edge function`s job');
+  eq(MET.boardEdge(390, false), 390, 'engine off, the browser board is full width');
+  eq(MET.boardEdge(390, true), 390 - 25, 'and engine on it gives back exactly the rail');
+  expect(/max\(0, screenWidth - \(engineOn \? AnalysisEval\.railTotal : 0\)\)/.test(CORE_MET),
+    'and the Swift computes it the same way, reading railTotal rather than copying 25');
+
+  // The RN eval-colour bug, NOT reproduced.
+  eq(MET.engineEvalInk('M-3'), MET.PALETTE.errorText,
+    'a BLACK mate is red. The RN getEvalColor tests startsWith("M") before startsWith("M-"), so '
+    + 'M-3 comes back green there — the losing side`s own forced mate painted as an advantage');
+  eq(MET.engineEvalInk('M3'), MET.PALETTE.doneText, 'and a white mate is green');
+  eq(MET.engineEvalInk('-0.7'), MET.PALETTE.errorText, 'a negative eval is red');
+  eq(MET.engineEvalInk('+1.3'), MET.PALETTE.doneText, 'a positive one is green');
+  eq(MET.engineEvalInk(''), MET.PALETTE.muted, 'and nothing at all is muted');
+  expect(/hasPrefix\("M-"\)/.test(CORE_MET) && /hasPrefix\("-"\) \|\| text\.hasPrefix\("M-"\)/
+    .test(CORE_MET), 'and the Swift checks the minus FIRST, which is the whole fix');
+}
+
+// ── 16. The explorer's board is playable, in both languages ─────────────────────
+//
+// It was the app's last DISPLAY board in both languages, on the reasoning that "navigation is the
+// move LIST's job". That was right while the tree was the only thing you could walk. Playing your
+// own move is not a second way to walk the tree — it is the way you LEAVE it.
+{
+  const js = code(OPENINGS_JS);
+  const sw = code(SCREENS_SRC);
+
+  expect(/\.rules\s*=/.test(js) && /\.draggablePieces\s*=\s*true/.test(js),
+    'the browser board is given rules AND told that pieces may be dragged — both, or the component '
+    + 'attaches no pointer handlers at all and every drag is silently swallowed');
+  expect(/addEventListener\('move'/.test(js), 'and it listens for the move the component reports');
+  expect(/setPosition\(/.test(js) && !/setAttribute\(\s*'fen'/.test(js),
+    'the position goes through setPosition, not the `fen` ATTRIBUTE — the attribute path cannot '
+    + 'carry a lastMove, which is why this board has never highlighted one while its Swift twin '
+    + 'always has');
+  expect(/lastMove: store\.lastMove\(\)/.test(js), 'and it passes the last move it finally has');
+  expect(/b\.flipped = /.test(js) && !/setAttribute\(\s*'flipped'/.test(js),
+    'flipped is the PROPERTY: the attribute is truthy for every value but the literal "false", so '
+    + 'flipped="0" would be upside down for White');
+
+  expect(/onDragMove: \{ from, to in drag\(from, to, in: pos\) \}\)/.test(sw),
+    'the Swift board takes a drag as well as a tap — BoardView installs no gesture without it');
+  expect(/onTap: \{ tap\(\$0, in: pos\) \}/.test(sw), 'and a real tap handler');
+  expect(/pos\.legalMoves\(from: from\)\.contains\(where: \{ \$0\.to == to \}\)/.test(sw),
+    'and the DRAG route checks legality ITSELF — BoardView.dragGesture reports whatever two squares '
+    + 'the gesture spanned and knows no rules, where the tap route has already computed targets');
+  expect(/pos\.san\(for: move\)/.test(sw),
+    'a board move becomes SAN through san(for:) — the same function `add` canonicalises with, so '
+    + '`Qxf7+` can never be appended to a path whose tree holds `Qxf7`');
+  expect(/selected = nil\s*\n\s*legalTargets = \[\]/.test(sw),
+    'and the half-finished tap is cleared when the path moves under it: four other controls change '
+    + '`path` without going through commit');
+  expect(/Square\.isBackRank\(to\)/.test(sw),
+    'promotion asks the Core whether it is a back rank rather than reaching into CoachLayout — a '
+    + 'back rank is a fact about chess, not about either screen`s layout');
+  expect(/checkSquare\(pos\)/.test(sw),
+    'and the board shows check: once you can play your own moves you can give it');
+
+  // The SAN resolution, executed rather than read. The mutation harness found this hole by
+  // surviving: nothing exercised the function that turns the component's UCI into the store's SAN.
+  const OPEN = require(path.join(JS, 'openings.js'));
+  const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  eq(OPEN.sanFromUci(START, 'e2e4'), 'e4', 'e2e4 resolves to the SAN the tree is keyed by');
+  eq(OPEN.sanFromUci(START, 'g1f3'), 'Nf3', 'and a knight move too');
+  eq(OPEN.sanFromUci(START, 'e2e5'), null, 'an illegal move resolves to nothing');
+
+  // The off-book card, and the four strings it needed. ZERO new layout keys — it borrows the
+  // form's connectivity-note box, which is why §9's property audit above is untouched.
+  for (const k of ['offBook', 'offBookSub', 'offBookLimit', 'backToTree']) {
+    eq(MET.STRINGS[k], swString(MET_SRC, 'OpeningStrings', k), 'OpeningStrings.' + k);
+  }
+  expect(/store\.isOffBook \{\s*\n?\s*offBookCard/.test(sw),
+    'the Swift explorer draws the off-book card BEFORE the empty-candidates one — off book and a '
+    + 'leaf are different things, and that ambiguity is the bug being fixed');
+  expect(/store\.isOffBook\(\)/.test(js) && /MET\.STRINGS\.offBook/.test(js),
+    'and so does the browser');
+  expect(/store\.backToTree\(\)/.test(sw) && /handlers\.onBackToTree/.test(js),
+    'both give it the one control that gets you out');
+  expect(MET.STRINGS.noMoves !== MET.STRINGS.offBookSub,
+    'and `noMoves` still exists for the genuine on-book leaf — telling those two apart is the '
+    + 'whole point');
 }
 
 // ---- report ------------------------------------------------------------------

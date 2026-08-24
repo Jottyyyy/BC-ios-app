@@ -9,6 +9,424 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
+
+Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag
+interrupt yung user sa position"*. Both, and both go beyond the RN screen. `web-demo/` updated.
+
+**This supersedes the exemption column of the drag entry below.** Both drag rules named this
+screen's board as their exempt arm's one subject. It is playable now, so the app has **no display
+board in either language** — the floors `display >= 1` / `displayOnly >= 1` said "at least one
+exists" about a set that is empty. See *The gate rework* below.
+
+#### Engine evaluation
+
+A toggle (**OFF by default**, the client's own answer), an eval rail beside the board, the three best
+lines below it. **Nothing about an evaluation is computed twice.** The screen mounts the same
+`LocalEngine` and the same `AnalysisSession.engineRows(from:)` — which was made `static`, with a doc
+comment saying why, for exactly this case. Two more seams follow it: `evalParts(from:)` becomes
+static beside it, and `AnalysisEval.fraction(parts:)` lifts the winner branch out of
+`AnalysisVM.refresh()`. That branch is a decision, not a formula — a mate four moves away is 0.95 and
+a mate already on the board is a **full** rail — and a second screen re-deriving it is a second
+screen that gets a finished game wrong. Same three in the browser.
+
+**The panel needed no invented geometry.** `tools/metrics/opening_styles.json` has carried the whole
+engine style block since the tree shipped, because the extractor sweeps the RN StyleSheet whole — all
+twelve keys plus `ENGINE_MOVE_COLORS`, sitting there unused. `selfTestSource` 131 → **167**
+assertions, every one against the extraction.
+
+**The RN `getEvalColor` bug is NOT reproduced.** It tests `startsWith('M')` before `startsWith('M-')`,
+so a black mate `M-3` renders **green** — the losing side's own forced mate painted as an advantage.
+The minus is checked first here, in both languages, asserted by name.
+
+**One rail, two screens.** `AnalysisBoardScreen.evalRail`'s body moved to `EvalRail.swift`; each
+screen keeps a three-line forwarder so `evalRail(height: edge)` survives at the call site and every
+mount assertion still matches character for character. §4d's five *shape* assertions moved with the
+body — and that is the part that could not be skipped: left pointed at the screen they would still
+**pass**, because a forwarder mentions neither `fillHeight` nor `labelInk`. All five would have gone
+quiet at once. §4e stops being two greps for names that must not appear and becomes a positive
+census: the set of files drawing an eval fill must be exactly `EvalRail.swift`.
+
+**And the rail's five mutants were hand-run prose in this file** (*"21/21"*), which held exactly as
+long as nobody moved the code. They are in `swift_layout_mutation_test.js` now, so they travel with
+it. §4d is a **site table** rather than one screen, so the rules that cost the Analysis Board its
+arrows-slide-right bug applied to the new mount on the day it was written.
+
+#### A board you can play on
+
+Tap and drag both end in one `commit`. `drag` re-checks legality itself because
+`BoardView.dragGesture` reports raw squares and knows no rules. Promotion is a `PieceKind?`, not the
+coach's UCI suffix, because this store takes SAN — otherwise `first(where:)` picks whichever of the
+four promotion moves the generator emitted first. `Square.isBackRank` moves to the Core: a back rank
+is a fact about chess, not about Play vs Coach's layout, and this is the second board you can push a
+pawn on. The board shows check now, too.
+
+**Off book is finally a thing the screen can say.** `children(at:)` answers empty both at a leaf and
+for a path that has left the tree, so one card meant two things and Forward was dead either way.
+`OpeningTree.bookDepth(along:)` is the same walk reporting *where it stopped*; `isOffBook`,
+`freePlies`, `atFreeLimit` and `backToTree()` all derive from it. A **transposition stays off book** —
+this tree is keyed by the line you played, which is its whole premise — and that is asserted by name
+rather than left to be discovered. The off-book card costs **zero new layout keys**: it borrows the
+form's connectivity-note box.
+
+`maxFreePlies = 20` caps the wander, and makes an existing comment true again: `position`'s doc
+claimed the walk was bounded by `defaultMaxPlies`, which held only while the UI offered nothing but
+tree moves.
+
+**The browser gains a last-move highlight it never had.** `openings.js` set the `fen` *attribute*,
+which carries no last move, so the two languages have quietly disagreed about a thing on screen since
+the tree shipped. `setPosition(fen, { lastMove })` and a new `opening-store.js` `lastMove()`.
+
+#### The gate rework, and the mutant that earned its keep
+
+Four gates broke; two were mutation anchors. Both floors are replaced by the same three-part proof:
+a **named predicate exercised on fixtures**, an **exact census** (`=== 0`) so the condition is
+falsifiable, and a **mutant that makes a real playable board display-shaped** — the only way that can
+move the census is for the predicate to have matched, so a rotted one lets the mutant survive. That
+is the canary the floor used to be.
+
+The JS mutant is the instructive one: it would not merely have stopped applying, it would have
+**applied and SURVIVED**, because `openings.js` now sets `.rules` and the drag legitimately —
+reporting a dead rule as a live one. Replaced per arm rather than deleted.
+
+**And the harness caught a real hole.** On the first full run, *"a board move is spelled instead of
+resolved"* **survived**. Nothing exercised the function turning the component's UCI into the store's
+SAN — and returning it unresolved makes an **on-book** move read as off book: the board advances, the
+list empties, nothing says why, and it looks exactly like the feature working. That is the single
+highest-risk line in the change, and it was untested until a mutant said so. `166/166` now.
+
+**And one test now drives a drag the way a person does.** Everything above reads *source*, so
+all of it would still pass a screen that switched the drag on and wired it wrongly — the same hole
+`board_component_test.js` was extended to close for the coach, open again for a new screen. It gained
+an Opening Tree section that calls `OPEN.board()`, lets the screen build and configure a real
+`<chess-board>` in its own order, and sends real `pointerdown`/`pointermove`/`pointerup` through it.
+A black pawn arms nothing while White is to move; e2→e4 reaches `onPlay` exactly once as **`e4`**,
+*not* `e2e4`; the move it produced is ON book with its continuations intact; a reply the tree never
+saw goes off book and **Back to tree** returns; an illegal drop reports nothing. 175 → 190.
+
+Suite: **35,087 assertions across 79 suites**, up 369. `replay_opening_tree` 414 → **578** with §13
+(bookDepth) · §14 (the stores' round trip) · §15 (the shared engine) · §16 (the playable board);
+`swift_layout_check` 409 → 432; `web_shell_check` 200 → 206; `swift_layout_mutation` **12 → 22**;
+`puzzle_core_mutation` 161 → **166**; ParityRunner's `opening_tree` floor **97 → 114**.
+
+### 2026-08-24 (added) — Opening Tree: the Lichess and Chess.com download that was only ever drawn
+
+Client: *"sabi ng client ko hindi nag-oopening tree … gumagana ito dito oh [the RN app]"*. Correct.
+Picking **Lichess** or **Chess.com** validated the username and then set `errNetwork` — *"Could not
+reach that site. Check your connection and try again."* — for a download **that had never been
+written**. Only **Paste PGN** worked. `web-demo/` updated.
+
+**The message is why this reached a client.** A missing feature and a missing signal produce the
+same sentence, so the user checks their wifi, tries again, and reports the app. This is the third
+entry in a row with that shape — drag that was never switched on, tap that was never wired — and the
+first where the dead path *apologised* for itself convincingly.
+
+**And the suite had pinned it.** `openings.js`'s selfTest asserted the refusal in as many words:
+`expect(submit(f, 1).error === MET.STRINGS.errNetwork, 'and then says the download is not wired')`.
+346 green expectations, one of them holding the bug in place. **A test that asserts a bug is worse
+than no test, because it makes the bug look decided.** That line is now its own opposite.
+
+**Everything that decides anything is in the parity core; the socket is not.**
+`OpeningDownload.swift` (new, Foundation-only, opens nothing) owns the URLs, the NDJSON parse, the
+archive order, the colour rule, the limits and what a status means. `OpeningDownloader.swift` (new)
+is forty lines of `await` and **the app's only `URLSession`**; `opening-download.js` is both halves
+in the browser and **`web-demo/`'s only `fetch`**. The reason for the split is this checkout: there
+is no Swift compiler and no simulator here, so anything the transport decides on its own is decided
+untested — while every one of those parse decisions is now replayed from Windows *and* run on a Mac.
+
+| | Endpoint | Order |
+|---|---|---|
+| Lichess | `/api/games/user/{u}?pgnInJson=true&max={n}`, `Accept: application/x-ndjson` | newest first, streamed line by line |
+| Chess.com | `/pub/player/{u}/games/archives`, then each month | archives **reversed** — newest month first |
+
+Chess.com's reversal is load-bearing, not tidiness: the walk stops at the ceiling, so the order
+decides *which* games a 100-game tree is built from. Oldest-first builds every user a tree of the
+games they played the month they signed up.
+
+**"90% offline" is the client's own number**, and the docs now say it: *"pwedeng hndi 100 percent
+offline 90 percent lang kasi ito kailangan online pati yung sa videos online din yun"*. Three things
+need the radio — Sign in with Apple, this download, and Videos when they land — and everything else
+still runs in Airplane Mode forever. **Spec §0.1 is honoured, not excepted:** it always drew an
+online half, and this is the first part of it to ship, so `ContentClient` will copy this shape rather
+than replace it.
+
+**Four deviations from the RN implementation, all deliberate.**
+
+1. **An aborted game has no result.** The RN mapping is `winner === 'white' ? '1-0' : winner ===
+   'black' ? '0-1' : '1/2-1/2'`, so a game with no winner — very often the first in a stream —
+   scores as a draw for *both* sides. `OpeningTree.Outcome` already decided the other way for pasted
+   PGN, and two import paths disagreeing about the same game is worse than the bug being fixed.
+2. **The colour comes off the game, not the picker.** `addGamesToTree` treats the White/Black picker
+   as the answer, so an RN tree built as "White" labels every game White — including the ones the
+   user had Black in, whose results then land inverted. The username is known for every online game,
+   so the truth is available and the picker *filters*, exactly as on the paste path.
+3. **Nothing is saved until the download finishes.** The RN screen jumps to the explorer with an
+   empty tree and grows it live, and pays for it with a half-built tree left saved after any
+   failure — indistinguishable from a real one once the banner is gone. The counter still moves.
+4. **Chess.com's PGN goes through `OpeningTree.games(fromPGN:)`**, not the RN regex — that parser is
+   already pinned to the real `PgnImportService`, so the tags Chess.com writes give us the colour
+   match, the result and RAV/NAG handling for free, and agreeing with the paste path is the point.
+
+**A wrong constant went with it.** `OpeningTree.maxGamesLimit` was `2000`, documented as *"the
+download ceiling the RN form offers"* — and the RN form clamps at **1000**, in both of its two
+places (`openingtree.tsx:479` and `:917`). The ParityRunner assertion read that constant back to
+itself, so a wrong number passed under correct prose: the same **EXTRACT, DON'T TRANSCRIBE** failure
+as the annotation badge's flipped sign, one file over. Deleted rather than corrected — the limits
+belong to the download, so `OpeningDownload.premiumMaxGames` is the one copy.
+
+**The privacy sheet has now been narrowed twice**, both times because a real network call landed
+under a claim written before it existed. It said the app *"does not collect, store, or send any
+personal information anywhere"*; this download sends **the username the user typed** to a third
+party. No account server, no analytics, no tracking — all still true, all still said — and both
+exceptions now named, in both languages. The export-compliance `NO` is unchanged and the comment
+explaining it is not: OS-provided TLS with no cryptography of the app's own is still exempt.
+**Open, and no gate here can see it: the App Store Connect privacy answers were filled in for an app
+that sent nothing.**
+
+**One asymmetry between the languages, on purpose.** `opening-download.js` carries a
+`lastCompleteLineEnd`; the Swift does not. Swift gets it from `URLSession.AsyncBytes.lines`, which
+cuts the *byte* stream and so handles the UTF-8 boundaries a String-index version would have to
+re-derive; `ReadableStream` gives the browser bytes and nothing else. Both files say so, so nobody
+"restores" the missing half.
+
+**Concurrency is not incidental here.** The package is `swift-tools-version:6.0` with no language-mode
+override, so strict concurrency applies: a progress callback crossing an isolation boundary would
+have to be `@Sendable`, and a `@Sendable` closure cannot capture the `@State` the counter writes.
+`OpeningDownloader` is therefore `@MainActor` whole, which makes `onProgress` an ordinary
+non-escaping closure needing no annotation — and costs nothing, because every `await` suspends and
+what runs on the main actor is one small parse per line.
+
+Suite: **34,718 assertions across 79 suites**, up 143. `replay_opening_tree` 346 → **414** and gained
+§12; `openings.selfTest` 14 → 21; `opening-download.selfTest` is new at 44; the ParityRunner
+`opening_tree` floor is **raised 60 → 97**. Restoring the client's bug — the online branch refusing
+instead of downloading — now produces three named failures, the third of which is the rule itself:
+*"every errNetwork it sets is inside a catch, not an unwired early return."*
+
+### 2026-08-24 (fixed) — Play vs Coach: the drag was never switched on, in either language
+
+Client, from a phone: *"hndi daw nagana yung drag and drop sa play with coach"*. Correct — and it
+had never worked once. The coach game was the **only playable board in the app** that was never told
+its pieces may be dragged. Tap a piece, tap its square, and everything works perfectly, which is
+exactly why it survived 34,543 green assertions and a round on TestFlight. `web-demo/` updated.
+
+**Two one-line omissions, one per language, and both are silent BY DESIGN.**
+
+- `web-demo/js/coach-play.js` set `b.rules` and never `b.draggablePieces`. The component defaults
+  `_dragEnabled = false` and attaches **no pointer handlers at all** until a screen asks, so there
+  was nothing to fail: no listener, no warning, no console line.
+- `CoachScreens.swift` built its `BoardView` without `onDragMove:`. `BoardView` enforces its own doc
+  comment with `including: onDragMove == nil ? .subviews : .all`, so the gesture is never installed
+  rather than installed and ignored.
+
+**This is the MIRROR of a bug already in this file.** `PuzzleBoardBand` shipped with `selected: nil`,
+`legalTargets: []` and `onTap: { _ in }` — there drag worked and *tap* was dead, and the entry below
+records the user's symptom as "tapping the piece selects it". Same hole, opposite half. So the fix is
+not two lines; it is two lines plus the symmetric rule that makes the pair inexpressible, in the two
+gates that can see a *screen* rather than a component:
+
+| Gate | Rule | Exempt |
+|---|---|---|
+| `web_shell_check.js` §5 | a board given `.rules` is given the drag | a board given neither — `openings.js`, read-only by design |
+| `swift_layout_check.js` §7 | a `BoardView` with a real `selected`/`legalTargets`/`onTap` passes `onDragMove` | one passing `nil`/`[]`/`{ _ in }` — `OpeningTreeScreens` |
+
+**Why they are written off the call and not off a list of screen names.** A name list is a decision
+about the screens that exist; reading `selected`/`legalTargets`/`onTap` (Swift) and `.rules` (JS) is
+a decision about what a *playable board* is, so the next screen is covered the day it is written.
+Both carry floors — five playable web boards, five playable Swift boards, one display board each —
+because a detector that quietly stops matching otherwise reports a clean sweep of nothing. The Swift
+rule's two exemptions, `PlayView`/`PuzzleView`, are the retired macOS demo panels, and they **assert
+their own premise**: exempt only while `AppShell` remains the only thing that constructs them. The
+day `PhoneView` raises one, the exemption fails instead of quietly covering a phone screen.
+
+Each rule also has a mutant on a file *other* than the one the bug was found in — the Swift one
+makes `OpeningTreeScreens`' read-only board playable, the JS one gives `openings.js` a `.rules` — so
+neither can degrade into a check on `coach-play.js` alone. `web_shell_check.js` joined the mutation
+harness's suite list to make that possible; a gate nothing mutates is a gate on trust.
+
+**Tap and drag now end in ONE function on the Swift side too.** `commit(from:to:in:)` is the only
+place `promotionSuffix` is read and the only place `userMove` and `premove` are chosen between. The
+tap path used to evaluate that suffix three times and spell its empty case two different ways —
+harmless with one input route, and exactly the sort of duplication a second route turns into a
+divergence. The browser has always had this shape: one `move` listener that asks the controller
+which of the two it is.
+
+**And `drag` does the one thing `tap` never had to: check legality.** `BoardView.dragGesture` reports
+whatever two squares the gesture spanned and knows nothing about pieces or rules, while by the time a
+second *tap* arrives `legalTargets` has already been computed for the piece in hand. An illegal drop
+is dropped, and the selection ring with it; falling through to `commit` would queue a premove that
+nothing re-checks until the position it was queued for arrives. The browser gets this free — the
+component reads `_targetsFrom` on `pointerdown` and sends the piece home on a drop that is not in it.
+
+**What this deliberately does NOT change.** Swift's drag has no piece following the finger and no
+ring while it travels: `BoardView.dragGesture` is `.onEnded` only, which is how the Analysis Board
+and all five puzzle solvers have always behaved. A live ghost is a change to every board in the app,
+not to this screen, so it is out of scope here. The browser twin does follow the pointer, because the
+component does that itself.
+
+**And one test now drives a drag the way a person does.** Everything above reads *source*, so all of
+it would still pass a screen that switched drag on and wired it wrongly. `board_component_test.js`
+gained a coach section that calls `CPLAY.board()` — the screen's own function, exported for exactly
+this — lets it build and configure a real `<chess-board>` in its own order, and then sends real
+`pointerdown` / `pointermove` / `pointerup` through it. A black pawn arms nothing while White is to
+move; e2→e4 reaches the screen's `onMove` exactly once as `"e2e4"`; the game records it and Black is
+to move; a drag back onto an illegal square reports nothing at all. Nothing in that block is built
+by hand, because *that* is the mistake: this file already drove drags perfectly — through boards it
+had wired itself.
+
+It is the same hole this file was extended to close for the puzzle path, where the entry below puts
+it plainly: *"Two green suites, one dead feature, and nothing anywhere drove a move the way a person
+does."* It was still true of Play vs Coach.
+
+Suite: **34,575 assertions across 78 suites**, up 32. `board_component_test` 164 → 175;
+`swift_layout_check` 309 → 320 invariants and its mutants 10/10 → 12/12; `web_shell_check`
+190 → 197; `coach_screen_test` 123 → 124; `puzzle_core_mutation_test` 159 → **161 mutants, all
+killed**. Deleting the one JS line now produces **seven** failures, the fourth of which is the
+client's report in as many words: *"dropping it reaches the screen's onMove exactly once, got 0."*
+
+### 2026-08-23 (changed) — No engine, no eval rail: the board takes the width back
+
+Client: *"pwede ba kapag nakaoff yung engine remove mo yung evaluation bar hindi na need yun pag
+nakapatay engine … tapos yung space nya kainin na ng chessboard"*. Correct, and the current
+behaviour was worse than "unnecessary": `toggleEngine` already drops the snapshot when it switches
+the engine off, so the rail sat there at a dead 50/50 with **no number on it at all**. It is gone
+now when the engine is, and the board is 25 pt wider for it (362.67 → 389.33 at 390@3x, back to the
+full-bleed edge it had before the rail existed). `web-demo/` updated.
+
+**One entry point decides, and that is the whole design.**
+`AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)` — mirrored by `MET.boardEdge(w, dpr, on)` —
+picks between `sizeBesideRail` and `size`. Both branches still end in the pinned snap-to-8 formula,
+so squares land on whole physical pixels either way.
+
+The reason it is one function rather than a conditional at each call site: **the board band and
+`enginePlan` must agree about how wide the board is.** They are two separate call sites reading the
+same viewport, and if one takes the rail off the width and the other does not, the engine panel is
+budgeted against a board that is not on screen — which shows up as a silently missing engine row and
+nothing else. `swift_layout_check.js` §4d now asserts that neither call site names `size` or
+`sizeBesideRail` directly, that **both** go through `edge`, and that neither hardcodes `engineOn`.
+
+**The rail leaves the layout, not just the eye.** `.an-eval.off` is `display: none`, deliberately not
+`visibility: hidden` or an opacity: a hidden-but-present rail keeps both its own 20 px and
+`.an-board`'s 5 px gap, so the board would gain nothing and the row would sit off-centre by half of
+both — visible on a phone, invisible to every metrics assertion. In SwiftUI the same thing falls out
+of `if vm.autoAnalyze { evalRail(...) }` inside the `HStack`, because a stack applies its spacing
+*between* children and there is only one. Pinned in both languages, with a mutant each.
+
+**The toggle re-fits the bands.** Nothing else called `sizeBands()` on a toggle, so without that one
+line the browser kept the old edge until the next resize — the board would have stayed narrow until
+you rotated the phone. Asserted by slicing the toggle handler and looking for the call, and the
+mutant that removes it is killed.
+
+Suite: **34,543 assertions across 78 suites**. Mutants **21/21**, up from 16 — five new ones:
+rail drawn with the engine off, board width no longer tracking the toggle, `enginePlan` picking a
+branch for itself, the rail hidden with `visibility` instead of `display`, and the toggle that
+forgets to re-fit.
+
+### 2026-08-23 (changed) — The eval bar moved to the side, and the RN source had asked for that all along
+
+Client, with a screenshot of the Analysis Board and the eval bar circled: *"Yung engine bar pwede
+ilagay sa gilid tulad lichess or chesscom"*. So band 2 stops being `VStack{board; bar}` and becomes
+`HStack{rail; board}`: a **20 pt vertical rail on the LEFT**, board-height, White filling from the
+bottom, with the score inside it. The 8 pt horizontal strip under the board is **gone** — one main
+eval bar, not two. `web-demo/` updated.
+
+**This restores the source's own stated intent rather than deviating from it.** `renderEvalBar`
+(`board.tsx:2741`) is dead code — one grep hit, the declaration — and its header comment reads:
+
+    // ══════════════════════════════════════════════
+    // RENDER EVAL BAR (vertical, DroidFish-style)
+    // ══════════════════════════════════════════════
+
+while the style beneath it says `flexDirection: 'row'`. The original author commented *vertical*,
+implemented *horizontal*, and then never rendered it at all. We build the comment.
+
+**Nothing is invented.** Every rail number is a real key in that same abandoned `evalBar*` block, so
+all of it is pinned by `matches(...)` / `same(...)` and resolves in `swift_source_keys.js` with no
+change to that gate: gap 5 (`evalBarContainer.gap`), radius 4 (`evalBarTrack.borderRadius`), label
+inset 2 (`evalBarContainer.paddingVertical`), label size cap 11/800/Menlo (`evalBarText`).
+
+**The width went 32 → 20 after a first look on device.** It shipped at `evalBarText.minWidth` (32),
+and the client's answer was *"panipisan lang ng konti masyado ata makapal"*. 32 was the source's
+minimum for the **label**, so using it sized the rail to its own caption — three quarters of a
+square. The rail is now the source eval component's own **cross-axis thickness**, stood on end:
+an 8 pt track (`evalBarTrack.height`) inside 6 pt of padding each side
+(`evalBarContainer.paddingHorizontal`) = **20 pt**, derived rather than typed. Still nothing
+invented, and it puts `evalBarTrack.height` back to work — it had been retired-but-pinned for
+exactly one round.
+
+**The label is fitted to the rail instead, and that number has to be SHARED.** `labelFontSize` is
+whatever fits four glyphs across the rail, capped at the source's 11: on a 20 pt rail the budget
+binds first, so it draws at 8⅓ pt (4 × 8⅓ × 0.6 = 20.0 exactly). **CSS has no
+`minimumScaleFactor`** — hand the browser 11 px and it would clip `-0.3` inside a 20 px rail while
+SwiftUI quietly shrank it, and the two renderers would disagree on screen with every suite still
+green. Both draw `labelFontSize`; three of the sixteen mutants exist for precisely that hole.
+
+**Three decisions worth stating, because each has a silent failure mode.**
+
+- **The rail is a SIBLING of `ChessBoardBand`, never a wrapper.** `BoardArrows` and
+  `AnalysisAnnotationOverlay` are `.overlay(alignment: .topLeading)` *on the band* and anchor to its
+  frame. Wrap or pad the band instead and every arrow and every badge slides right by 25 pt while
+  the board still looks perfect. Browser twin: `.an-badge` is `inset: 0` against `.an-board-stack`
+  and `paintBadge` measures that stack, so the rail is a sibling there too and the stack is pinned
+  to `--an-board-edge`.
+- **`AnalysisBoard.size` is untouched** — it is pinned to the RN source. The new
+  `sizeBesideRail` narrows its *input* and hands the rest to the same snap-to-8-physical-pixels
+  formula, so squares still land on whole pixels. Subtract then snap; the other order puts a seam
+  between the squares. `enginePlan` had to move to it too, or the panel budgets against a board
+  25 pt wider than the one that draws and silently loses a row.
+- **The side is FIXED — flipping the board does not move the rail**, which is what Lichess and
+  Chess.com do. `EngineScore` is documented "Always White-relative", so no code path connects the
+  flip to the rail, and the gate asserts none is added. With Black at the bottom the white block is
+  still at the bottom: intended, not a bug.
+
+**The label hangs off the leading end** — bottom when White leads, on the white block, in dark ink;
+top when Black leads, on the bare dark track, in light ink. `labelAtBottom` is `fraction >= 0.5`,
+which is *exact* rather than tuned: that is precisely the condition under which the bottom of the
+rail is inside the fill. Asserted as a 21-step sweep over the whole range on the shortest rail the
+app can draw, not as a comment. `Alignment` is not animatable, so the number jumps ends the instant
+the eval crosses zero while the fill keeps animating — same as Lichess, and deliberately not
+"fixed" by cross-fading two `Text`s, which would draw it at both ends mid-transition.
+
+**What it costs and what it buys.** The board loses 25 pt of width (389.33 → 362.67 at 390@3x;
+squares 48.67 → 45.33, i.e. 6.9%). In exchange the board band stops spending 12 pt on the bar and
+its gap, so the engine panel — the band that was actually starving — gains height on every screen:
+a 375×667 SE goes from 4 single-line engine rows to 5, and from 2 wrapped to 3. The §10d floors
+were **raised** to match, and they are met exactly on the SE — a floor that no longer bites is the
+vacuous case the floors exist to prevent.
+
+**Gate rules restated, never weakened.** `board_layout_check.js` §2's *"the eval bar matches the
+board WIDTH"* becomes *"the rail is exactly as tall as the board is wide"* — same invariant, other
+axis. Added with it: the fill is bottom-anchored and animates height, both label ends exist in
+different inks, `.an-board` is a row and never `row-reverse`, the rail is appended before the stack
+and is never a child of it, and `MET.boardSize` is no longer called directly. New
+`swift_layout_check.js` §4d is the SwiftUI twin — the two renderers degrade differently, so neither
+stands in for the other. **16 hand-written mutants, 16 killed**: rail on the right, fill anchored
+top, band back to a column, both labels inked the same, `>= 0.5` back in a view body, either
+renderer's label size wired back to the source 11, and ten more.
+
+**Deleted, in the same change, ~30 lines that were never referenced:** `Graphics.swift`'s
+`struct EvalBar` — a *vertical* eval bar with 14 pt, radius 5, a 0.02/0.98 clamp and `Theme.violet`
+hardcoded in its view body, never once instantiated — plus its only feed (`PlayView.whiteWinPct`,
+which ran a full `ChessAI.evaluate` for nobody), and `app.css`'s `.board-row` / `.eval-bar` /
+`.board-solo`, a third invented eval palette with no JS consumer. Harmless while the real bar was
+horizontal; with a rail beside the board they become the wrong answer sitting next to the right one.
+Both are inverted assertions now, not just deletions. The CSS ones sat **above** the
+`/* ---- Analysis Board` marker, which is exactly why `analysisSection` never saw them — the new
+rule 9 is deliberately outside that slice.
+
+`AnalysisEval.mainHeight` (8) is **load-bearing again** — it is the track inside the rail, and
+`railWidth` is built from it. It spent one round retired-but-pinned (kept only because
+`AnalysisMetricsCheck` is the only thing pinning `styles.evalBarTrack`, the block `railRadius`
+comes from). Keeping it rather than deleting it is what made the 20 pt derivation available at all —
+the argument for not deleting an assertion to make a change fit, paying off one round later.
+
+The one deviation that IS declared rather than derived: the rail is **narrower than
+`evalBarText.minWidth`** (20 < 32). The source value is still asserted, alongside
+`railWidth < 32` and `labelFontSize < evalBarText.fontSize`, so the gap stays visible and an
+accidental drift is still caught — the `deviates()` precedent, spelled out because this one is
+*smaller* than the source rather than larger.
+
+Suite: **34,513 assertions across 78 suites**, up 216.
+
 ### 2026-08-20 (changed) — 1.0.6 (47) shipped: the first build the inverted default actually reaches a tester in
 
 Merged `origin/main` (the build switch moved out of the SwiftPM package into the app target) and shipped

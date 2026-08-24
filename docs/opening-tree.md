@@ -73,19 +73,125 @@ Two things the walk does that look like bugs and are not, both faithful to `addG
 
 | Source | Network | Status |
 |---|---|---|
-| **Paste PGN** | none | live — both Lichess and Chess.com let you download all your games as a PGN |
+| **Paste PGN** | none | live — both sites let you export all your games as a PGN |
 | **My Coach games** | none | declared, not yet wired to `CoachStore` |
-| **Lichess** | needs internet | declared, not wired |
-| **Chess.com** | needs internet | declared, not wired |
-
-The form draws all four and says which need the radio, because a form that hid them would be lying
-about what the feature is. The two online ones refuse with a named message rather than failing
-silently: **the download belongs beside `ContentClient`**, which spec §0.1 makes the only place in
-the app allowed to open a `URLSession`, and a second `fetch` in a click handler is exactly the leak
-that rule exists to prevent.
+| **Lichess** | needs internet | **live** — NDJSON stream, newest games first |
+| **Chess.com** | needs internet | **live** — monthly archives, newest month first |
 
 `OpeningSource.isOnline` is the single source of truth for which is which, in both languages, and
 `replay_opening_tree.js` §7 asserts the two sets are identical.
+
+## The download, and the bug it fixes
+
+The two online sources were **drawn but never wired**. Picking one validated the username and then
+set `errNetwork` — *"Could not reach that site. Check your connection and try again."* The client
+reported it as *"hindi nag-oopening tree"*, and the reason it survived a green suite and TestFlight
+is that **the message it produced was indistinguishable from a real outage**: a user has no way to
+tell a missing feature from a missing signal, so they check their wifi and report the app.
+
+Worse, the suite *pinned* it — `openings.js`'s own selfTest asserted the refusal in as many words
+(*"and then says the download is not wired"*). A test that pins a bug is worse than no test, because
+it makes the bug look decided. That assertion is now the opposite one.
+
+| | Endpoint | Order |
+|---|---|---|
+| Lichess | `GET /api/games/user/{u}?pgnInJson=true&max={n}`, `Accept: application/x-ndjson` | newest first, streamed line by line |
+| Chess.com | `GET /pub/player/{u}/games/archives`, then each month | archives **reversed** — newest month first |
+
+Chess.com's reversal is not cosmetic: the walk stops at the ceiling, so the order decides *which*
+games a 100-game tree is built from. Oldest-first would build every user a tree of the games they
+played when they signed up, which is the opposite of what an opening tree is for.
+
+**The split is the design.** Everything that decides anything — the URLs, the NDJSON parse, the
+colour rule, what a status means, the ceiling — is in `OpeningDownload.swift`, in the parity core,
+where the Windows gate and `ParityRunner` can both reach it. `OpeningDownloader.swift` is forty
+lines of `await` and the app's only `URLSession`; `opening-download.js` is its twin and `web-demo/`'s
+only `fetch`. §12 of the replay fails if a second file in either language opens one.
+
+### Three places this is deliberately not the RN app
+
+1. **An aborted game has no result.** The RN mapping is
+   `winner === 'white' ? '1-0' : winner === 'black' ? '0-1' : '1/2-1/2'`, so a game with no winner —
+   very often the first in a stream — scores as a draw for **both** sides. `OpeningTree.Outcome`
+   already decided the other way for pasted PGN, and two import paths disagreeing about the same
+   game is worse than the bug being fixed. `lichessUnfinishedStatuses` is the list.
+2. **The colour comes off the game, not the picker.** `addGamesToTree` takes the White/Black picker
+   as the answer whenever it is not "both", so an RN tree built as "White" labels every game White —
+   including the ones the user had Black in, whose results then land inverted. The username is known
+   for every online game, so the real colour is read and the picker **filters**, exactly as on the
+   paste path.
+3. **Nothing is saved until the download finishes.** The RN screen jumps to the explorer with an
+   empty tree and grows it live; it pays for that with a half-built tree left saved whenever a
+   download fails, indistinguishable from a real one once the banner is gone. Here a failure leaves
+   the form open with the reason on it and the list exactly as it was. The counter still moves.
+
+### Limits
+
+`OpeningDownload.resolvedMax(isPremium:requested:)`: free is a flat 100, premium clamps the box to
+`1...1000`. **1000, not 2000** — `OpeningTree.maxGamesLimit` used to carry 2000 described as "the
+download ceiling the RN form offers", and the RN form clamps at 1000 in both of its two places
+(`openingtree.tsx:479` and `:917`). The parity check read that constant back to itself, so the wrong
+number was asserted against the right prose. The constant is gone rather than corrected; the limits
+belong to the download.
+
+### Cancellation
+
+Swift cancels the `Task` from `.onDisappear`, so leaving the form stops the download. The browser
+cannot un-send a `fetch` without an `AbortController`, so `app.js` compares the captured form by
+identity on the way out and drops an answer that arrives into a screen the user has left.
+
+## Leaving the book
+
+The board is **playable**. Tap a piece or drag it and the move goes onto the path, whether or not
+any game in the tree contains it — which is what the client asked for: *"pwede mag interrupt yung
+user sa position"*.
+
+That needed a distinction the screen could not previously make. `children(at:)` answers empty both
+at a **leaf** and for a path that has **left the tree**, so one card meant two things and Forward was
+dead either way. `OpeningTree.bookDepth(along:)` is the same walk reporting *where it stopped*:
+`bookDepth == path.count` is on book, anything less is the ply at which you left it. From it the
+stores derive `isOffBook`, `freePlies`, `atFreeLimit` and `backToTree()` — derived, never tracked
+separately, because two definitions of "off book" is two answers.
+
+**A transposition is still off book.** `1.Nf3 c5 2.e4` does not rejoin `1.e4 c5 2.Nf3`, because this
+tree is keyed by the line you played (see *The tree's shape*). `OpeningBook` is the FEN-keyed thing
+that deliberately collapses transpositions. Asserted by name in both gates so it reads as a decision.
+
+**Free play is capped at `maxFreePlies = 20`** (INVENTED — see `PORTING_NOTES.md`). `position` and
+`lastMove` replay the whole path on every SwiftUI `body` evaluation and `path` is `@Published`, so an
+uncapped wander makes every repaint linear in how long you have been exploring — and it degrades
+*smoothly*, which is worse than crashing. It also makes `position`'s own doc comment true again: it
+claimed the walk was bounded by `defaultMaxPlies`, which held only while the UI offered nothing but
+tree moves. At the cap the card says so rather than the board swallowing the drag.
+
+`commit` resolves SAN through `pos.san(for:)` / `E.san` — **the same function the tree canonicalises
+with**. This is the highest-risk line in the feature: return the component's UCI unresolved and an
+*on-book* move reads as off book, the board advances, the list empties, and nothing says why. The
+mutation harness found exactly that hole by surviving; it is asserted directly now.
+
+## Engine evaluation
+
+A toggle (**OFF by default**), an eval rail beside the board, and the engine's three best lines.
+
+Nothing about an evaluation is computed twice. The screen mounts the same `LocalEngine`, the same
+`AnalysisSession.engineRows(from:)` — made `static` for exactly this case — the same
+`evalParts(from:)` and `AnalysisEval.fraction(parts:)`, and the same `EvalRail`. Limits are
+`AnalysisEngineLimits`, **not** the Analysis Board's `EngineSettings` preset: that screen's setting
+is not this one's. §15 of the replay pins every one of those and forbids a depth, a multiPV or a
+debounce written here as a number.
+
+The board's width goes through **one entry point**, `OpeningBoard.edge(screenWidth:engineOn:)`, which
+both the board and the rail read. It deliberately does not route through `AnalysisBoard.edge`: that
+snap-to-8 formula belongs to a board designed around it, and using it here would have narrowed
+today's board on a screen nobody asked to change.
+
+**The panel needed no invented geometry.** `opening_styles.json` has carried the whole engine style
+block since the tree shipped — the extractor sweeps the RN StyleSheet whole — so all twelve keys and
+`ENGINE_MOVE_COLORS` were sitting there unused. `selfTestSource` asserts every value against it.
+
+**One RN bug is deliberately not reproduced:** `getEvalColor` tests `startsWith('M')` before
+`startsWith('M-')`, so a black mate `M-3` renders **green** there — the losing side's own forced mate
+painted as an advantage. The minus is checked first here, in both languages, asserted by name.
 
 ## Key files
 
@@ -93,6 +199,12 @@ that rule exists to prevent.
 |---|---|
 | `Sources/BiyaherongCoachCore/OpeningTree.swift` | **The whole algorithm** — the tree, the inversion, the sort, PGN → games, `Codable` persistence. Foundation-only. |
 | `web-demo/js/opening-tree.js` | The JS twin, and the half that actually runs on Windows. |
+| `Sources/BiyaherongCoachCore/OpeningDownload.swift` | **The wire formats** — URLs, the NDJSON parse, the archive order, the limits, the colour rule. Pure; opens no socket. |
+| `DemoApp/Sources/BiyaherongUI/OpeningDownloader.swift` | The transport. **The app's only `URLSession`.** |
+| `web-demo/js/opening-download.js` | Both of those, in the browser. **`web-demo/`'s only `fetch`.** |
+| `DemoApp/Sources/BiyaherongUI/OpeningEngineVM.swift` | The engine's toggle, debounce, cancellation and stale guard. Owns no maths. |
+| `DemoApp/Sources/BiyaherongUI/EvalRail.swift` | **The one eval rail**, shared with the Analysis Board. `swift_layout_check.js` §4e asserts it is the only file that draws one. |
+| `OpeningTree.bookDepth` · `maxFreePlies` | Where the path leaves the tree, and how far past it you may go. |
 | `DemoApp/Sources/BiyaherongUI/OpeningMetrics.swift` | Every number and colour, mirrored by `web-demo/js/opening-metrics.js`. Includes `pgnMinHeight` — INVENTED (the RN form has no PGN box), taken from `pairing.css`'s `.pgd-modal-area` so the app's two paste-a-blob fields agree. |
 | `tools/metrics/extract_opening_styles.js` → `opening_styles.json` | The AST walk over `openingtree.tsx` that both metrics files are asserted against. **Committed.** |
 | `DemoApp/Sources/BiyaherongUI/OpeningTreeStore.swift` | `openings.json` in Application Support, plus the navigation state. |
@@ -146,5 +258,19 @@ Visually, in `web-demo/index.html` at an iPhone size, with the Subscription pick
 4. Tap a move — the board advances, the strip reads `1. e4`, and the list becomes the replies.
    **Back**, **Reset** and **Forward** (which plays the most-played child) all work; Back and Reset
    are dimmed at the root.
-5. Switch the source to **Lichess**: the note flips to "Needs internet" and Build refuses with a
-   named message rather than hanging.
+5. Switch the source to **Lichess**: the note flips to "Needs internet" and a **Games to fetch**
+   box appears. Type a real Lichess username, tap **Build Tree** — the button reads "Building…",
+   the banner counts games as they stream in, and the explorer opens on the finished tree.
+   A username that does not exist comes back as *"No games found for that username."*, not as a
+   connection error; a genuinely dead connection is the one thing that still says *"Could not reach
+   that site."*
+6. **Chess.com** the same way. It arrives a month at a time rather than a game at a time, so the
+   counter steps rather than ticks.
+7. In the explorer, tap **🔍 Engine: OFF**. It turns ON, the rail appears on the left, the board
+   narrows by 25 pt, and up to three lines appear with an eval, a SAN and a continuation. Toggle it
+   off and the rail is *gone* — not hidden — and the board is full width again.
+8. **Drag a piece to a move no game in the tree played.** It plays, an **Off book** card appears,
+   the move list is empty and Forward is dead. Tap-then-tap does the same. **Back to tree** returns
+   in one step; a single **Back** over the divergence also works.
+9. Keep playing: at 20 free plies the card's wording changes and the board stops accepting moves,
+   rather than swallowing them silently.

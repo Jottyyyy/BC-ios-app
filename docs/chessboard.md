@@ -83,7 +83,7 @@ Horizontal centring is the parent stack's job, which a `VStack` already does.
 |---|---|
 | The five puzzle solvers | `geo.size.width` (full bleed, like `.pz-board`) |
 | Play vs Coach | `geo.size.width` |
-| Analysis Board | `AnalysisBoard.size(screenWidth:pixelRatio:)` — snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. Pinned to the RN source; do not replace it with the plain width. |
+| Analysis Board | `AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)` — the one entry point, and **both** the board band and `enginePlan` must use it. With the engine ON it is `sizeBesideRail`: the screen width **less the 20pt eval rail and its 5pt gap**, then snapped down to a whole multiple of 8 physical pixels so squares land on pixel boundaries. `size(screenWidth:pixelRatio:)` does the snapping and is pinned to the RN source; `sizeBesideRail` only narrows its INPUT. Subtract *then* snap — the other order lands the board on a fractional physical pixel and puts a seam between the squares. With the engine **off** there is no rail, so `edge` returns the plain `size` and the board is full-bleed again. Never call `size` or `sizeBesideRail` from a screen: two call sites picking the branch for themselves is how the board and the engine panel's budget drift apart. |
 | The two macOS demo panels | a constant (480 / 460); they are fixed-size desktop panels |
 
 ---
@@ -145,6 +145,63 @@ Labels carry the *logical* file/rank, so they follow a flip. The two macOS demo 
 
 ---
 
+## Input routes — a playable board takes tap AND drag
+
+**Both renderers ship with drag OFF, and neither says so at runtime.** That is the second rule this
+file exists for, and it has now been broken twice as well — once per language, in mirror image:
+
+| Renderer | Drag is installed only when | Default |
+|---|---|---|
+| `<chess-board>` | `.draggablePieces = true`, or the `draggable-pieces` attribute at any value but `'false'` | `_dragEnabled = false` — no pointer handler is attached at all |
+| `BoardView` | `onDragMove:` is passed | `.gesture(dragGesture, including: onDragMove == nil ? .subviews : .all)` — the gesture is masked out |
+
+Neither failure is observable from the code that gets it wrong. There is no listener to misfire, no
+warning, and **tap-to-move keeps working perfectly** — the board still selects, rings its legal
+targets, plays the move and animates. Both bugs therefore shipped:
+
+- `PuzzleBoardBand` passed `selected: nil`, `legalTargets: []`, `onTap: { _ in }` and `lastMove: nil`.
+  Drag worked; **tap** was dead, with no legal-move dots and no last-move highlight.
+- `CoachScreens.swift` and `coach-play.js` set everything the *tap* route needs and never enabled
+  drag. Tap worked; **drag** was dead. It shipped on 2026-08-12 and was reported from a phone on
+  2026-08-24 — by the client, not by a suite.
+
+So the invariant is symmetric, and it is asserted per-language off the CALL — not off a list of
+screen names, so a screen written tomorrow is covered today:
+
+| Gate | Rule | Exempt |
+|---|---|---|
+| `swift_layout_check.js` §7 | a `BoardView` handed a real `selected` / `legalTargets` / `onTap` must also be handed `onDragMove` | one passing `nil` / `[]` / `{ _ in }` is a **display board** — and the app now has **none**: `OpeningTreeScreens` was the last, until free play. The census is asserted `=== 0` and the exempt arm is proved on fixtures plus a mutant |
+| `web_shell_check.js` §5 | a `<chess-board>` given `.rules` must be given the drag | a board given neither is a display board — and the demo now has **none**, for the same reason. Same three-part proof |
+
+Both carry census floors, because a detector that stops matching otherwise reports a clean sweep of
+nothing. §7's two name-based exemptions — `PlayView` / `PuzzleView`, the fixed-size macOS demo
+panels — assert their own premise: exempt only while `AppShell` is the sole thing that constructs
+them.
+
+### What a drag does and does not do
+
+The two renderers are deliberately **not** equal here, and the difference is the component's, not a
+screen's:
+
+- **The browser follows the pointer.** `_onPointerDown` caches the board rect once, `_onPointerMove`
+  crosses a 4 px threshold before it hijacks the tap, and `_dragFrame` writes one transform per
+  animation frame and repaints exactly the two squares whose hover changed. A legal drop lands where
+  the finger let go (`_justDropped`); an illegal one sends the piece home. Promotion goes home first,
+  because the piece cannot sit under the dialog.
+- **Swift does not.** `BoardView.dragGesture` is `DragGesture(minimumDistance: 4)` with `.onEnded`
+  only: no piece follows the finger, no ring appears mid-travel. Every board in the app behaves this
+  way — Analysis, all five puzzle solvers, and now Play vs Coach — so a live ghost is a change to
+  `BoardView` and to every screen at once, not to one screen.
+
+**A Swift screen's drag handler must check legality itself.** `dragGesture` reports whatever two
+squares the gesture spanned and knows nothing about pieces or rules, whereas the tap route already
+has `legalTargets` computed for the piece in hand by the time the second tap arrives. `AnalysisVM.drag`
+filters `legalMoves(from:)` by destination; `CoachGameScreen.drag` does the same and then funnels
+into the same `commit` the tap route uses. The browser gets this free: `_targetsFrom` runs on
+`pointerdown`, and a drop outside the set never reaches `_commit`.
+
+---
+
 ## Screen chrome that is NOT the board's
 
 `BoardView` stays free of anything screen-specific; each one is an overlay at the call site.
@@ -178,7 +235,8 @@ never had to account for a bar, and now nothing does.
 | `DemoApp/Sources/BiyaherongUI/PuzzleSolverParts.swift` | `PuzzleBoardBand` — the five solvers' call site |
 | `web-demo/js/chess-board.js` | the Web Component |
 | `web-demo/js/puzzle-board.js` | the solver plumbing four puzzle modes share |
-| `tools/qa/swift_layout_check.js` | the SwiftUI layout gate |
+| `tools/qa/swift_layout_check.js` | the SwiftUI layout gate, plus §7 — a playable board takes drag too |
+| `tools/qa/web_shell_check.js` | the browser wiring gate, plus §5 — the same rule for `<chess-board>` |
 | `tools/qa/swift_layout_mutation_test.js` | proof that gate can still fail |
 | `tools/qa/board_layout_check.js` | the CSS half of the same rule, plus §8 — the square-colour extraction pin |
 | `tools/metrics/puzzle_styles.json` | `shared.board` — the extracted square palette, the one source |
@@ -198,6 +256,11 @@ node tools/qa/swift_symbol_check.js    # no arguments
 Visually, in `web-demo/index.html` at an iPhone size: **Puzzles → 🔥 Streak → Start Streak**. The
 tab bar is gone, the board is edge-to-edge with coordinates, and the empty space is *below* the
 hint. Then the same for Daily, Thematic, Turbo and Play vs Coach.
+
+**Drag on every one of them — do not only tap.** Press a piece, move it at least 4 px and release on
+a legal square; the move must play. This is the check no suite can make for you: both gates read
+source, and the component's own pointer tests drive their *own* correct wiring rather than a
+screen's. It is how the Play vs Coach drag went missing for the whole life of that screen.
 
 The squares are **brown** on all of them — `#F0D9B5` / `#B58863`. If any board is blue, something
 is writing a square colour that is not `BoardStyle` or `--board-light`/`--board-dark`, and

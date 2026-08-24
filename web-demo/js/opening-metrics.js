@@ -37,8 +37,46 @@
     doneText: '#4CAF50',
     errorBg: '#1A0808',
     errorBorder: '#5C1010',
-    errorText: '#EF5350'
+    errorText: '#EF5350',
+
+    // engine — extracted from openingtree.tsx. The panel fill is cardDeep, its border hairline,
+    // its prose muted, and the ON state reuses doneBg/doneText; only these two are new.
+    engineToggleBorder: '#2A3F5A',   // engineToggleBtn.borderColor
+    engineDepth: '#4A6080'           // engineDepthChip.color
   };
+
+  /**
+   * One colour per engine line, by rank — ENGINE_MOVE_COLORS in the RN module scope.
+   *
+   * NOT the Analysis Board's arrow table, which carries the same three RGB triples at different
+   * alphas (0.85/0.80/0.80 against this screen's 0.90/0.85/0.85). Two extractions of two screens;
+   * selfTestSource asserts these against opening_styles.json.
+   */
+  var ENGINE_RANK = [
+    'rgba(76,175,80,0.9)',
+    'rgba(68,138,255,0.85)',
+    'rgba(255,152,0,0.85)'
+  ];
+  /** Clamped, so a fourth line from a future multiPV cannot draw undefined. */
+  function engineRankColor(rank) {
+    return ENGINE_RANK[Math.min(Math.max(rank, 0), ENGINE_RANK.length - 1)];
+  }
+
+  /**
+   * The eval column's ink, by sign.
+   *
+   * The RN getEvalColor tests startsWith('M') BEFORE startsWith('M-'), so a black mate 'M-3' comes
+   * back GREEN — the losing side's own forced mate painted as an advantage. That is a latent bug
+   * rather than a decision, and CLAUDE.md says to port the intended behaviour, so the minus is
+   * checked first here. Asserted by name in replay_opening_tree.js.
+   */
+  function engineEvalInk(text) {
+    var t = String(text == null ? '' : text);
+    if (!t) return PALETTE.muted;
+    if (t.indexOf('-') === 0 || t.indexOf('M-') === 0) return PALETTE.errorText;
+    if (t.indexOf('+') === 0 || t.indexOf('M') === 0) return PALETTE.doneText;
+    return PALETTE.muted;
+  }
 
   /* ---- The W/D/L bar — the screen's whole point ---------------------------- */
   //
@@ -153,6 +191,33 @@
     statGap: 4,
     statSize: 12,
     chevronSize: 22,
+    // engine — every value EXTRACTED from openingtree.tsx's StyleSheet, which the extractor has
+    // been sweeping into opening_styles.json since the tree shipped. Nothing here is invented.
+    engineTogglePadV: 8,       // engineToggleBtn.paddingVertical
+    engineTogglePadH: 14,      // engineToggleBtn.paddingHorizontal
+    engineToggleRadius: 10,    // engineToggleBtn.borderRadius
+    engineToggleBorder: 1,     // engineToggleBtn.borderWidth
+    engineToggleTop: 8,        // engineToggleBtn.marginTop
+    engineToggleBottom: 4,     // engineToggleBtn.marginBottom
+    engineToggleTextSize: 13,  // engineToggleBtnText.fontSize
+    engineRadius: 10,          // engineSection.borderRadius
+    engineBorder: 1,           // engineSection.borderWidth
+    enginePadH: 12,            // engineSection.paddingHorizontal
+    enginePadV: 8,             // engineSection.paddingVertical
+    engineGap: 4,              // engineSection.gap
+    engineBottom: 6,           // engineSection.marginBottom
+    engineRowPadV: 3,          // engineLineRow.paddingVertical
+    engineRowGap: 8,           // engineLineRow.gap
+    engineEvalSize: 12,        // engineChipEval.fontSize
+    engineEvalWidth: 42,       // engineChipEval.minWidth
+    engineSanSize: 13,         // engineChipSan.fontSize
+    engineSanWidth: 40,        // engineChipSan.minWidth
+    enginePvSize: 12,          // engineLinePv.fontSize
+    engineTextSize: 13,        // engineLineText.fontSize
+    engineDepthSize: 11,       // engineDepthChip.fontSize
+    engineDepthTop: 2,         // engineDepthChip.marginTop
+    engineStatusPadV: 4,       // engineAnalyzingRow.paddingVertical
+
     noMovesRadius: 12,
     noMovesPad: 20,
     noMovesSize: 14,
@@ -200,6 +265,10 @@
     userLabel: 'Username',
     userPlaceholder: 'your username on that site',
     maxLabel: 'Games to fetch',
+    // What the box opens on. The RN form opens on the same 100 — its free ceiling — so a user who
+    // never touches the field gets the same tree in both apps.
+    maxDefault: '100',
+    maxPlaceholder: 'e.g. 500',
     build: 'Build Tree',
     building: 'Building…',
     // The online path is the ONE networked thing in the app, so it says so rather than failing
@@ -210,6 +279,22 @@
     offlineNote: 'Works offline',
     offlineNoteSub: 'Both Lichess and Chess.com let you download all your games as a PGN file; '
       + 'paste it here and nothing leaves the device.',
+    // engine — the toggle's two labels are the RN screen's, emoji and all.
+    engineOn: '🔍 Engine: ON',
+    engineOff: '🔍 Engine: OFF',
+    engineAnalyzing: 'Analyzing…',
+    // `d:12 · SF` when idle, `d:12…` while still searching — the RN depth chip's two spellings.
+    engineDepth: 'd:{n} · SF',
+    engineDepthBusy: 'd:{n}…',
+    engineMate: '# Checkmate',
+    engineStalemate: '= Stalemate',
+    engineDraw: '= Draw',
+    // off book — the state the old screen could not express. `noMoves` STAYS, for the genuine
+    // on-book leaf: telling those two apart is the whole point.
+    offBook: 'Off book',
+    offBookSub: 'No game in this tree reached here. Play on to explore, or go back to the line.',
+    offBookLimit: 'That is as far as this goes. Go back to the line to keep exploring.',
+    backToTree: 'Back to tree',
     // explorer
     noMoves: 'No games reached this position.',
     back: '← Back',
@@ -416,6 +501,50 @@
     eq(LAYOUT.chevronSize, v('moveChevron', 'fontSize'), 'chevron size');
     eq(PALETTE.chevron, v('moveChevron', 'color'), 'chevron colour');
     eq(LAYOUT.noMovesRadius, v('noMovesBox', 'borderRadius'), 'no-moves radius');
+
+    // engine — the whole panel, asserted against the extraction. These styles have been sitting in
+    // opening_styles.json unused since the tree shipped: the extractor sweeps the RN StyleSheet
+    // whole, so wiring the engine needed no invented geometry at all.
+    eq(LAYOUT.engineTogglePadV, v('engineToggleBtn', 'paddingVertical'), 'engine toggle padV');
+    eq(LAYOUT.engineTogglePadH, v('engineToggleBtn', 'paddingHorizontal'), 'engine toggle padH');
+    eq(LAYOUT.engineToggleRadius, v('engineToggleBtn', 'borderRadius'), 'engine toggle radius');
+    eq(LAYOUT.engineToggleBorder, v('engineToggleBtn', 'borderWidth'), 'engine toggle border');
+    eq(LAYOUT.engineToggleTop, v('engineToggleBtn', 'marginTop'), 'engine toggle top');
+    eq(LAYOUT.engineToggleBottom, v('engineToggleBtn', 'marginBottom'), 'engine toggle bottom');
+    eq(PALETTE.card, v('engineToggleBtn', 'backgroundColor'), 'engine toggle fill');
+    eq(PALETTE.engineToggleBorder, v('engineToggleBtn', 'borderColor'), 'engine toggle border ink');
+    eq(LAYOUT.engineToggleTextSize, v('engineToggleBtnText', 'fontSize'), 'engine toggle text size');
+    eq(PALETTE.muted, v('engineToggleBtnText', 'color'), 'engine toggle text ink');
+    eq(PALETTE.doneBg, v('engineToggleBtnOn', 'backgroundColor'), 'engine toggle ON fill');
+    eq(PALETTE.doneText, v('engineToggleBtnOn', 'borderColor'), 'engine toggle ON border');
+    eq(PALETTE.doneText, v('engineToggleBtnTextOn', 'color'), 'engine toggle ON text');
+    eq(PALETTE.cardDeep, v('engineSection', 'backgroundColor'), 'engine panel fill');
+    eq(PALETTE.hairline, v('engineSection', 'borderColor'), 'engine panel border');
+    eq(LAYOUT.engineRadius, v('engineSection', 'borderRadius'), 'engine panel radius');
+    eq(LAYOUT.engineBorder, v('engineSection', 'borderWidth'), 'engine panel border width');
+    eq(LAYOUT.enginePadH, v('engineSection', 'paddingHorizontal'), 'engine panel padH');
+    eq(LAYOUT.enginePadV, v('engineSection', 'paddingVertical'), 'engine panel padV');
+    eq(LAYOUT.engineGap, v('engineSection', 'gap'), 'engine panel gap');
+    eq(LAYOUT.engineBottom, v('engineSection', 'marginBottom'), 'engine panel bottom');
+    eq(LAYOUT.engineRowPadV, v('engineLineRow', 'paddingVertical'), 'engine row padV');
+    eq(LAYOUT.engineRowGap, v('engineLineRow', 'gap'), 'engine row gap');
+    eq(LAYOUT.engineEvalSize, v('engineChipEval', 'fontSize'), 'engine eval size');
+    eq(LAYOUT.engineEvalWidth, v('engineChipEval', 'minWidth'), 'engine eval width');
+    eq(LAYOUT.engineSanSize, v('engineChipSan', 'fontSize'), 'engine SAN size');
+    eq(LAYOUT.engineSanWidth, v('engineChipSan', 'minWidth'), 'engine SAN width');
+    eq(LAYOUT.enginePvSize, v('engineLinePv', 'fontSize'), 'engine PV size');
+    eq(PALETTE.muted, v('engineLinePv', 'color'), 'engine PV ink');
+    eq(LAYOUT.engineTextSize, v('engineLineText', 'fontSize'), 'engine status size');
+    eq(PALETTE.muted, v('engineLineText', 'color'), 'engine status ink');
+    eq(LAYOUT.engineDepthSize, v('engineDepthChip', 'fontSize'), 'engine depth size');
+    eq(PALETTE.engineDepth, v('engineDepthChip', 'color'), 'engine depth ink');
+    eq(LAYOUT.engineDepthTop, v('engineDepthChip', 'marginTop'), 'engine depth top');
+    eq(LAYOUT.engineStatusPadV, v('engineAnalyzingRow', 'paddingVertical'), 'engine status padV');
+
+    // The rank colours are a module constant, not a style — extracted all the same.
+    var mc = src.openingTree.moduleConstants || {};
+    eq(ENGINE_RANK.join('|'), (mc.ENGINE_MOVE_COLORS || []).join('|'),
+      'the three engine line colours, in rank order');
     eq(LAYOUT.noMovesPad, v('noMovesBox', 'padding'), 'no-moves padding');
     eq(LAYOUT.noMovesSize, v('noMovesText', 'fontSize'), 'no-moves text size');
 
@@ -471,9 +600,41 @@
     };
   }
 
+  /**
+   * The Analysis Board's metrics, resolved LAZILY — the rail's width is theirs, not ours.
+   *
+   * `railTotal` is READ, never copied into LAYOUT: replay §6 requires every LAYOUT key to be a
+   * literal `static let name = <number>` in the Swift, so a copy is the only way to put it there,
+   * and a copy of a derived number is exactly what these gates exist to stop.
+   */
+  function analysisMetrics() {
+    if (global.BiyaAnalysisMetrics) return global.BiyaAnalysisMetrics;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      return require('./analysis-metrics.js');
+    }
+    throw new Error('opening-metrics.js needs analysis-metrics.js — load it first');
+  }
+
+  /**
+   * **The explorer board's edge. The one entry point — nothing else on that screen picks.**
+   *
+   * Twin of `OpeningBoard.edge`. Same contract as the Analysis Board's, and for the same reason:
+   * the board and the rail beside it must agree about how wide the board is.
+   *
+   * Deliberately NOT `MET.boardEdge` from analysis-metrics: that one snaps to whole physical
+   * pixels for a board designed around it, and this explorer has been full-bleed in both languages
+   * since it shipped. The engine defaults OFF, so the engine-off path stays byte-identical to what
+   * is on the client's phone today.
+   */
+  function boardEdge(screenWidth, engineOn) {
+    return Math.max(0, screenWidth - (engineOn ? analysisMetrics().railTotal() : 0));
+  }
+
   global.BiyaOpeningMetrics = {
     PALETTE: PALETTE, LAYOUT: LAYOUT, WDL: WDL, STRINGS: STRINGS, SOURCES: SOURCES,
+    ENGINE_RANK: ENGINE_RANK,
     fill: fill, sourceById: sourceById, isOnlineSource: isOnlineSource,
+    engineRankColor: engineRankColor, engineEvalInk: engineEvalInk, boardEdge: boardEdge,
     selfTest: selfTest, selfTestSource: selfTestSource
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = global.BiyaOpeningMetrics;

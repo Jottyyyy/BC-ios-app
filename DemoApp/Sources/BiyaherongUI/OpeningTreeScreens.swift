@@ -17,6 +17,11 @@ import BiyaherongCoachCore
 /// cannot reset it — the same rule `app.js` follows with `pairingOpenId`.
 struct OpeningTreeRootScreen: View {
     @ObservedObject var store: OpeningTreeStore
+    /// Only the build form reads it, and only for the download ceiling. It is threaded from the
+    /// root rather than reached for globally because that is how `PairingRootScreen` and
+    /// `CoachRootScreen` take it, and one screen inventing its own route to the entitlement is
+    /// how the RN app ended up with three disagreeing copies of `is_premium`.
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
 
     /// Nil until "+ New Tree" is tapped. A separate flag rather than a third case on `openID`,
@@ -26,7 +31,8 @@ struct OpeningTreeRootScreen: View {
     var body: some View {
         Group {
             if building {
-                OpeningTreeBuildScreen(store: store, onDone: { building = false })
+                OpeningTreeBuildScreen(store: store, premium: premium,
+                                       onDone: { building = false })
             } else if store.open != nil {
                 OpeningTreeExplorerScreen(store: store)
             } else {
@@ -186,12 +192,25 @@ struct OpeningTreeBuildScreen: View {
     @ObservedObject var store: OpeningTreeStore
     let onDone: () -> Void
 
+    @ObservedObject var premium: PremiumStore
+
     @State private var name = ""
     @State private var colour: OpeningTree.Colour = .both
     @State private var source: OpeningSource = .pgn
     @State private var pgn = ""
     @State private var username = ""
     @State private var error: String?
+
+    /// The download ceiling, as typed. A `String` rather than an `Int` because the field is a
+    /// text field: an `Int` binding cannot represent "the user has cleared the box", and the RN
+    /// original hit exactly that — it keeps `maxGamesInput` as a string for the same reason.
+    @State private var maxGames = OpeningStrings.maxDefault
+    /// Nil unless a download is running. Holding the `Task` is what makes it cancellable: leaving
+    /// the form tears it down, so a user who backs out mid-fetch is not still pulling 900 games.
+    @State private var download: Task<Void, Never>?
+    @State private var fetched = 0
+
+    private var isDownloading: Bool { download != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,6 +229,8 @@ struct OpeningTreeBuildScreen: View {
                     if source.needsUsername {
                         label(OpeningStrings.userLabel)
                         field($username, placeholder: OpeningStrings.userPlaceholder)
+                        label(OpeningStrings.maxLabel)
+                        field($maxGames, placeholder: OpeningStrings.maxPlaceholder)
                     } else if source == .pgn {
                         label(OpeningStrings.pgnLabel)
                         field($pgn, placeholder: OpeningStrings.pgnPlaceholder,
@@ -217,6 +238,7 @@ struct OpeningTreeBuildScreen: View {
                     }
 
                     connectivityNote
+                    if isDownloading { progressNote }
                     if let error { errorNote(error) }
                     submit
                 }
@@ -225,6 +247,10 @@ struct OpeningTreeBuildScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Leaving the form cancels the download. Without this a user who taps Back mid-fetch keeps
+        // pulling games into a screen that is gone, and the `sink` writes into `@State` that no
+        // longer has a view — silent, but it is a live network request nobody can stop.
+        .onDisappear { download?.cancel(); download = nil }
     }
 
     private func label(_ text: String) -> some View {
@@ -315,6 +341,30 @@ struct OpeningTreeBuildScreen: View {
         .padding(.bottom, OpeningLayout.infoBottom)
     }
 
+    /// The live counter, drawn only while a download is running.
+    ///
+    /// It reuses the connectivity note's box rather than introducing a fourth panel style: this is
+    /// the same slot saying the same kind of thing, and a banner with its own geometry would be a
+    /// set of numbers `opening_styles.json` cannot vouch for.
+    private var progressNote: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(OpeningStrings.fetching)
+                .font(Theme.nunito(OpeningLayout.infoTitleSize, .semiBold))
+                .foregroundStyle(OpeningPalette.gold)
+                .padding(.bottom, OpeningLayout.infoTitleGap)
+            Text(OpeningStrings.fill(OpeningStrings.fetched, ["n": String(fetched)]))
+                .font(Theme.nunito(OpeningLayout.infoSubSize))
+                .foregroundStyle(OpeningPalette.infoText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(OpeningLayout.infoPad)
+        .background(OpeningPalette.infoBg,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.infoBorder, lineWidth: OpeningLayout.infoBorder))
+        .padding(.top, OpeningLayout.infoBottom)
+    }
+
     private func errorNote(_ message: String) -> some View {
         Text(message)
             .font(Theme.nunito(OpeningLayout.infoSubSize, .semiBold))
@@ -331,7 +381,7 @@ struct OpeningTreeBuildScreen: View {
 
     private var submit: some View {
         Button(action: build) {
-            Text(OpeningStrings.build)
+            Text(isDownloading ? OpeningStrings.building : OpeningStrings.build)
                 .font(Theme.nunito(OpeningLayout.submitTextSize, .bold))
                 .foregroundStyle(OpeningPalette.onGold)
                 .frame(maxWidth: .infinity)
@@ -341,48 +391,106 @@ struct OpeningTreeBuildScreen: View {
                                                  style: .continuous))
         }
         .buttonStyle(.plain)
+        // Disabled rather than hidden, and dimmed with the same token the explorer's nav arrows
+        // use. A second tap would start a SECOND download into the same tree and double every
+        // count in it — the sort of bug that reads as "the numbers are wrong", never as "I
+        // double-tapped".
+        .disabled(isDownloading)
+        .opacity(isDownloading ? OpeningLayout.navDisabledOpacity : 1)
         .padding(.top, OpeningLayout.submitTop)
     }
 
-    /// PGN and coach games only.
+    /// The form's one submit, for all four sources.
     ///
-    /// The two online sources are declared and drawn — a form that hides them would be lying about
-    /// what the feature is — but the download itself is not wired here. `ContentClient` is where
-    /// the app's `URLSession` calls are allowed to live (spec §0.1), and putting a second one in a
-    /// SwiftUI button is exactly the leak that rule exists to prevent. Until that lands, picking
-    /// Lichess or Chess.com says so rather than failing silently.
+    /// It used to be PGN-and-coach only: picking Lichess or Chess.com checked the username and
+    /// then set `errNetwork` — *"Could not reach that site. Check your connection and try again."*
+    /// — for a download that had never been written. That is the bug the client reported as *"hindi
+    /// nag-oopening tree"*, and the reason it survived a green suite and TestFlight is that the
+    /// message it produced is indistinguishable from the real thing: the user has no way to tell a
+    /// missing feature from a missing signal, so they check their wifi and report the app.
+    ///
+    /// The two paths differ in exactly one way — one of them has to wait — so the tree-building
+    /// tail is shared rather than written twice.
     private func build() {
+        guard !isDownloading else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { error = OpeningStrings.errNoName; return }
+        error = nil
 
-        var games: [OpeningTree.Game] = []
         switch source {
         case .pgn:
             guard !pgn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 error = OpeningStrings.errNoPgn; return
             }
-            games = OpeningTree.games(fromPGN: pgn,
-                                      userName: nil,
-                                      fallbackIsWhite: colour != .black,
-                                      colour: colour)
+            let games = OpeningTree.games(fromPGN: pgn,
+                                          userName: nil,
+                                          fallbackIsWhite: colour != .black,
+                                          colour: colour)
             guard !games.isEmpty else { error = OpeningStrings.errNoGames; return }
-            // The real check is below, on POSITIONS: `PGN.mainlineTokens` is a tokenizer, not a
-            // validator, so "not a game" comes back as three move tokens and passes this one.
+            // The real check is in `finish`, on POSITIONS: `PGN.mainlineTokens` is a tokenizer, not
+            // a validator, so "not a game" comes back as three move tokens and passes this one.
+            finish(name: trimmed, games: games)
         case .coach:
             error = OpeningStrings.errNoCoachGames
-            return
-        case .lichess, .chesscom:
-            guard !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                error = OpeningStrings.errNoUser; return
-            }
-            error = OpeningStrings.errNetwork
-            return
+        case .lichess:
+            startDownload(site: .lichess, name: trimmed)
+        case .chesscom:
+            startDownload(site: .chesscom, name: trimmed)
         }
+    }
 
+    /// Pull the games, then hand them to the same tail the paste path uses.
+    ///
+    /// The games are accumulated here rather than inserted as they arrive, which is the one place
+    /// this deliberately does **less** than the RN screen. That one jumps to the explorer with an
+    /// empty tree and grows it live, and it pays for the effect with a half-built tree on screen
+    /// whenever a download fails — a saved artefact of a failure, indistinguishable from a real
+    /// tree once the banner is gone. Here nothing is saved until the download finishes, so a
+    /// failure leaves the form open with the reason on it and the list exactly as it was. The
+    /// counter still moves, because that is what the banner is for.
+    private func startDownload(site: OpeningDownload.Site, name treeName: String) {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else { error = OpeningStrings.errNoUser; return }
+
+        let limit = OpeningDownload.resolvedMax(isPremium: premium.isPremium,
+                                                requested: Int(maxGames.trimmingCharacters(
+                                                    in: .whitespacesAndNewlines)) ?? 0)
+        fetched = 0
+
+        download = Task { @MainActor in
+            defer { download = nil }
+            let collected: [OpeningTree.Game]
+            do {
+                collected = try await OpeningDownloader().run(site: site,
+                                                              username: user,
+                                                              colour: colour,
+                                                              limit: limit) { total in
+                    fetched = total
+                }
+            } catch is CancellationError {
+                // The user left the form. Nothing to say and nowhere to say it.
+                return
+            } catch let failure as OpeningDownload.Failure {
+                error = failure.message
+                return
+            } catch {
+                self.error = OpeningStrings.errNetwork
+                return
+            }
+            // A username that exists but has no games in the chosen colour is NOT a network
+            // problem, and telling the user to check their connection would send them to fix the
+            // one thing that is working. It is the same 404-shaped answer, from a 200.
+            guard !collected.isEmpty else { error = OpeningStrings.errUnknownUser; return }
+            finish(name: treeName, games: collected)
+        }
+    }
+
+    /// Build, save, close — the tail both sources share.
+    private func finish(name treeName: String, games: [OpeningTree.Game]) {
         var tree = OpeningTree()
         tree.add(games)
         guard tree.nodeCount > 0 else { error = OpeningStrings.errNoGames; return }
-        store.add(SavedOpeningTree(name: trimmed,
+        store.add(SavedOpeningTree(name: treeName,
                                    colour: colour,
                                    source: source,
                                    username: username,
@@ -397,32 +505,227 @@ struct OpeningTreeBuildScreen: View {
 struct OpeningTreeExplorerScreen: View {
     @ObservedObject var store: OpeningTreeStore
 
+    /// Owned here rather than by the root, so closing the tree destroys it — which is also what
+    /// resets the toggle to OFF on re-entry.
+    @StateObject private var engine = OpeningEngineVM()
+
+    /// A half-finished tap. `@State`, not store state: this is INPUT IN PROGRESS, and a selection
+    /// ring left over from a repaint is exactly the thing that should be cleared by one. The store
+    /// owns navigation; it does not own a square you are still deciding about.
+    @State private var selected: Int?
+    @State private var legalTargets: Set<Int> = []
+
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 OpeningHeader(title: store.open?.name ?? OpeningStrings.title,
                               onBack: { store.closeTree() })
-                board(edge: geo.size.width)
+                board(width: geo.size.width)
+                engineToggle
+                if engine.engineOn { enginePanel }
                 history
                 navRow
                 moves
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
+        // Four other controls move `path` and none goes through `commit` — a candidate row, Back,
+        // Reset and Forward. Without clearing here, a ring left over from a half-finished tap
+        // points at a square in the PREVIOUS position, and the next tap commits from it.
+        .onChange(of: store.path) { _, _ in
+            selected = nil
+            legalTargets = []
+            engine.positionChanged(to: store.position)
+        }
+        // A detached Task is not cancelled by deinit, so leaving has to say so.
+        .onDisappear { engine.stop() }
     }
 
-    private func board(edge: CGFloat) -> some View {
-        ChessBoardBand(edge: edge) { side in
-            BoardView(pieces: store.position.map(piecesFrom) ?? [],
-                      selected: nil,
-                      legalTargets: [],
-                      lastMove: store.lastMove,
-                      flipped: store.open?.colour == .black,
-                      checkSquare: nil,
-                      boardSize: side,
-                      onTap: { _ in })
+    private func board(width: CGFloat) -> some View {
+        let edge = OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)
+        // Bound once, so both handlers capture the ALREADY-REPLAYED position: `store.position`
+        // walks the whole path, and a tap must not pay for it twice.
+        let pos = store.position
+        return HStack(alignment: .top, spacing: AnalysisEval.railGap) {
+            // The rail is a SIBLING of the band, never a wrapper: `ChessBoardBand` is the board box
+            // and anything that adds leading width to it moves everything anchored to its frame.
+            // And it LEAVES the layout with the engine — a hidden-but-present rail would keep its
+            // width and its gap, so the board would gain nothing.
+            if engine.engineOn { evalRail(height: edge) }
+            ChessBoardBand(edge: edge) { side in
+                BoardView(pieces: pos.map(piecesFrom) ?? [],
+                          selected: selected,
+                          legalTargets: legalTargets,
+                          lastMove: store.lastMove,
+                          flipped: store.open?.colour == .black,
+                          checkSquare: checkSquare(pos),
+                          boardSize: side,
+                          onTap: { tap($0, in: pos) },
+                          // Without this, `BoardView` installs NO drag gesture at all — the coach
+                          // bug, verbatim, on the screen that used to be this rule's exemption.
+                          onDragMove: { from, to in drag(from, to, in: pos) })
+            }
         }
+        .frame(maxWidth: .infinity)
         .padding(.bottom, OpeningLayout.boardGap)
+    }
+
+    /// Once you can play your own moves you can give check, and a playable board that never shows
+    /// it is a regression against every other board in the app.
+    private func checkSquare(_ pos: ChessPosition?) -> Int? {
+        guard let pos = pos, pos.isInCheck(pos.sideToMove) else { return nil }
+        return pos.kingSquare(pos.sideToMove)
+    }
+
+    /// Tap a piece, then tap where it goes.
+    private func tap(_ sq: Int, in pos: ChessPosition?) {
+        guard let pos = pos else { return }
+        if let from = selected, legalTargets.contains(sq) {
+            commit(from: from, to: sq, in: pos)
+            return
+        }
+        let moves = pos.legalMoves(from: sq)
+        if moves.isEmpty { selected = nil; legalTargets = []; return }
+        selected = sq
+        legalTargets = Set(moves.map { $0.to })
+    }
+
+    /// The same move by the other route — and the route that has to check legality itself.
+    ///
+    /// `BoardView.dragGesture` reports whatever two squares the gesture spanned and knows nothing
+    /// about pieces or rules. The tap path never has to check, because by the time the second tap
+    /// lands `legalTargets` has already been computed for the piece in hand.
+    private func drag(_ from: Int, _ to: Int, in pos: ChessPosition?) {
+        guard let pos = pos else { return }
+        guard pos.legalMoves(from: from).contains(where: { $0.to == to }) else {
+            selected = nil
+            legalTargets = []
+            return
+        }
+        commit(from: from, to: to, in: pos)
+    }
+
+    /// The ONE place two squares become the store's vocabulary, which is SAN.
+    ///
+    /// `pos.san(for:)` is the same function `OpeningTree.add` canonicalises with, and that is why
+    /// it must not be spelled by hand: a hand-built `Qxf7+` appended to a path whose tree holds
+    /// `Qxf7` reads as OFF BOOK. The board would advance, the move list would empty, and nothing
+    /// anywhere would say why — it would look exactly like the feature working.
+    private func commit(from: Int, to: Int, in pos: ChessPosition) {
+        selected = nil
+        legalTargets = []
+        let promo = promotionKind(from, to, pos)
+        guard let move = pos.legalMoves(from: from)
+            .first(where: { $0.to == to && $0.promotion == promo }) else { return }
+        store.play(pos.san(for: move))
+    }
+
+    /// Auto-queen, like every other Swift board in this app — `BoardView` has no promotion picker.
+    ///
+    /// Carried explicitly rather than left to `first(where:)`, which would otherwise pick whichever
+    /// of the four promotion moves the generator happened to emit first. A `PieceKind?` and not the
+    /// coach's UCI suffix, because this store takes SAN.
+    private func promotionKind(_ from: Int, _ to: Int, _ pos: ChessPosition) -> PieceKind? {
+        guard pos.squares[from]?.kind == .pawn, Square.isBackRank(to) else { return nil }
+        return .queen
+    }
+
+    /// The one rail, from `EvalRail.swift`. A forwarder rather than an inline `EvalRail(...)` so
+    /// `evalRail(height: edge)` reads the same here as on the Analysis Board — which is what
+    /// `swift_layout_check.js` §4d's site table matches on.
+    private func evalRail(height: CGFloat) -> some View {
+        EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)
+    }
+
+    /// `alignSelf: flex-start` in the RN source, so it hugs the left rather than stretching.
+    private var engineToggle: some View {
+        HStack(spacing: 0) {
+            Button { engine.toggle(position: store.position) } label: {
+                Text(engine.engineOn ? OpeningStrings.engineOn : OpeningStrings.engineOff)
+                    .font(Theme.nunito(OpeningLayout.engineToggleTextSize, .semiBold))
+                    .foregroundStyle(engine.engineOn ? OpeningPalette.doneText
+                                                     : OpeningPalette.muted)
+                    .padding(.horizontal, OpeningLayout.engineTogglePadH)
+                    .padding(.vertical, OpeningLayout.engineTogglePadV)
+                    .background(engine.engineOn ? OpeningPalette.doneBg : OpeningPalette.card,
+                                in: RoundedRectangle(cornerRadius: OpeningLayout.engineToggleRadius,
+                                                     style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: OpeningLayout.engineToggleRadius,
+                                              style: .continuous)
+                        .strokeBorder(engine.engineOn ? OpeningPalette.doneText
+                                                      : OpeningPalette.engineToggleBorder,
+                                      lineWidth: OpeningLayout.engineToggleBorder))
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, OpeningLayout.screenPadH)
+        .padding(.top, OpeningLayout.engineToggleTop)
+        .padding(.bottom, OpeningLayout.engineToggleBottom)
+    }
+
+    /// The three best lines, or what is happening instead.
+    ///
+    /// The rows are **not** tappable, and that is a decision rather than an omission: `store.play`
+    /// would append a SAN the tree has no node for, so a control that looks exactly like the
+    /// candidate rows below would silently take you off book. Playing an engine move is what the
+    /// BOARD is for.
+    private var enginePanel: some View {
+        VStack(alignment: .leading, spacing: OpeningLayout.engineGap) {
+            if let status = engineStatus {
+                Text(status)
+                    .font(Theme.nunito(OpeningLayout.engineTextSize))
+                    .foregroundStyle(OpeningPalette.muted)
+                    .padding(.vertical, OpeningLayout.engineStatusPadV)
+            }
+            ForEach(engine.rows, id: \.rank) { engineRow($0) }
+            if !engine.rows.isEmpty {
+                Text(OpeningStrings.fill(engine.analyzing ? OpeningStrings.engineDepthBusy
+                                                          : OpeningStrings.engineDepth,
+                                         ["n": String(engine.rows[0].depth)]))
+                    .font(Theme.nunito(OpeningLayout.engineDepthSize))
+                    .foregroundStyle(OpeningPalette.engineDepth)
+                    .padding(.top, OpeningLayout.engineDepthTop)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, OpeningLayout.enginePadH)
+        .padding(.vertical, OpeningLayout.enginePadV)
+        .background(OpeningPalette.cardDeep,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.engineRadius,
+                                         style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.engineRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.hairline, lineWidth: OpeningLayout.engineBorder))
+        .padding(.horizontal, OpeningLayout.screenPadH)
+        .padding(.bottom, OpeningLayout.engineBottom)
+    }
+
+    /// `Analyzing…` before the first snapshot, the outcome once the game is over, otherwise nil.
+    ///
+    /// The spinner shows only while there is nothing to show — once lines exist the depth chip's
+    /// trailing `…` carries the same information without the panel jumping.
+    private var engineStatus: String? {
+        if !engine.rows.isEmpty { return nil }
+        return engine.analyzing ? OpeningStrings.engineAnalyzing : nil
+    }
+
+    private func engineRow(_ row: EngineRow) -> some View {
+        HStack(spacing: OpeningLayout.engineRowGap) {
+            Text(row.evalText)
+                .font(Theme.nunito(OpeningLayout.engineEvalSize, .bold))
+                .foregroundStyle(OpeningPalette.engineEvalInk(row.evalText))
+                .frame(minWidth: OpeningLayout.engineEvalWidth, alignment: .leading)
+            Text(row.san)
+                .font(Theme.nunito(OpeningLayout.engineSanSize, .bold))
+                .foregroundStyle(OpeningPalette.engineRankColor(row.rank))
+                .frame(minWidth: OpeningLayout.engineSanWidth, alignment: .leading)
+            Text(row.continuation)
+                .font(Theme.nunito(OpeningLayout.enginePvSize))
+                .foregroundStyle(OpeningPalette.muted)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, OpeningLayout.engineRowPadV)
     }
 
     private var history: some View {
@@ -470,7 +773,9 @@ struct OpeningTreeExplorerScreen: View {
 
     private var moves: some View {
         ScrollView {
-            if store.candidates.isEmpty {
+            if store.isOffBook {
+                offBookCard
+            } else if store.candidates.isEmpty {
                 Text(OpeningStrings.noMoves)
                     .font(Theme.nunito(OpeningLayout.noMovesSize))
                     .foregroundStyle(OpeningPalette.muted)
@@ -489,6 +794,36 @@ struct OpeningTreeExplorerScreen: View {
                 .padding(.bottom, OpeningLayout.movesPadBottom)
             }
         }
+    }
+
+    /// The state the old screen could not express.
+    ///
+    /// A NOTE, not an error — you have not done anything wrong by looking at a position your games
+    /// never reached. It borrows the form's connectivity-note box rather than inventing geometry,
+    /// for the reason `progressNote` already states: a panel with its own numbers is a set of
+    /// numbers `opening_styles.json` cannot vouch for. **Zero new layout keys.**
+    private var offBookCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(OpeningStrings.offBook)
+                .font(Theme.nunito(OpeningLayout.infoTitleSize, .semiBold))
+                .foregroundStyle(OpeningPalette.gold)
+                .padding(.bottom, OpeningLayout.infoTitleGap)
+            Text(store.atFreeLimit ? OpeningStrings.offBookLimit : OpeningStrings.offBookSub)
+                .font(Theme.nunito(OpeningLayout.infoSubSize))
+                .foregroundStyle(OpeningPalette.infoText)
+                .lineSpacing(OpeningType.infoSubLeading)
+                .padding(.bottom, OpeningLayout.infoTop)
+            // The one control that gets you out, in the same shape as the nav arrows — leaving the
+            // book was one decision, so returning from it is one too, not N taps of Back.
+            navButton(OpeningStrings.backToTree, enabled: true) { store.backToTree() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(OpeningLayout.infoPad)
+        .background(OpeningPalette.infoBg,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.infoBorder, lineWidth: OpeningLayout.infoBorder))
+        .padding(.horizontal, OpeningLayout.screenPadH)
     }
 
     private func row(for c: OpeningTree.Candidate) -> some View {

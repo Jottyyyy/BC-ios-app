@@ -193,29 +193,15 @@ var BiyaAnalysisBoard = (function () {
    * DEVIATION — the source shows 6. Twelve, because 6 clipped the stronger presets' real output;
    * the default preset's ~6-ply search is topped up by the engine's TT-extended PV instead.
    */
-  var PV_PREVIEW = 12;
+  // Read from the engine module rather than restated, now that the rows are built there and a
+  // second screen draws them. Two copies of this number is two lengths of continuation.
+  var PV_PREVIEW = AN.PV_PREVIEW;
 
   /** One row per engine line: eval · SAN · continuation (board.tsx:2807-2831). */
-  function engineRows(s) {
-    if (!s.snapshot || !s.snapshot.lines) return [];
-    return s.snapshot.lines.map(function (ln, i) {
-      var pv = ln.pv && ln.pv.length ? ln.pv[0] : null;
-      return {
-        rank: i,
-        // 1-based, because "line 0" means nothing to a player. Mirrors EngineRow.rankLabel.
-        rankLabel: String(i + 1),
-        evalText: AN.formatScore(ln.score),
-        san: ln.pvSAN && ln.pvSAN.length ? ln.pvSAN[0] : '',
-        continuation: (ln.pvSAN || []).slice(1, 1 + PV_PREVIEW).join(' '),
-        uci: pv ? E.moveUci(pv) : '',
-        // The WHOLE line, so the panel can walk it on the board and not just play its first move.
-        pvUCI: (ln.pv || []).map(function (m) { return E.moveUci(m); }),
-        from: pv ? pv.from : -1,
-        to: pv ? pv.to : -1,
-        depth: ln.depth
-      };
-    });
-  }
+  // The body moved to `AN.engineRows` when the Opening Tree explorer became the second screen with
+  // an engine panel — the twin of `AnalysisSession.engineRows(from:)`, which is `static` in Swift
+  // for exactly that reason. This stays as the session-shaped wrapper the screen already calls.
+  function engineRows(s) { return AN.engineRows(s.snapshot); }
 
   // ---- the line preview (pure) -------------------------------------------------
   //
@@ -308,21 +294,24 @@ var BiyaAnalysisBoard = (function () {
    * (AnalysisMetrics.swift) and cannot be reached from a Foundation-only Core. So the session
    * publishes the numbers and each platform maps them with the same table.
    */
-  function evalParts(s) {
-    var sc = s.snapshot && s.snapshot.score;
-    if (!sc) return { cp: null, mate: null, winner: null };
-    if (sc.kind === 'cp') return { cp: sc.cp, mate: null, winner: null };
-    if (sc.kind === 'mate') return { cp: null, mate: sc.mate, winner: null };
-    var t = sc.terminal;
-    return { cp: null, mate: null, winner: (t && t.kind === 'checkmate') ? t.winner : null };
-  }
+  // Both bodies moved to `analysis-engine.js` when the Opening Tree explorer became the second
+  // screen with a rail. The winner branch in particular is a DECISION — a delivered mate pins the
+  // bar to a full 1, where a mate four moves away is 0.95 — and a second screen re-deriving it is a
+  // second screen that gets a finished game wrong. These stay as the session-shaped wrappers the
+  // screen already calls.
+  function evalParts(s) { return AN.evalPartsOf(s.snapshot); }
+  function evalFraction(s) { return AN.evalFractionFor(evalParts(s)); }
 
-  /** White's share of the eval bar, 0…1. UI-side mapping of `evalParts`. */
-  function evalFraction(s) {
-    var p = evalParts(s);
-    if (p.winner != null) return p.winner === E.WHITE ? 1 : 0;   // a delivered mate pins the bar
-    if (p.cp == null && p.mate == null) return 0.5;
-    return MET.evalBarFraction(p.cp, p.mate);
+  /**
+   * The rail's score text: `+0.5`, `M4`, `1-0`, `½-½`. Empty until the engine reports.
+   *
+   * `AN.formatScore` is the SAME formatter the engine rows use, so the rail and row 1 cannot
+   * disagree — they are two projections of one `score`, which is also what `evalParts`
+   * destructures. Mirrors EngineScore.displayText / AnalysisVM.evalLabel.
+   */
+  function evalLabel(s) {
+    var sc = s.snapshot && s.snapshot.score;
+    return sc ? AN.formatScore(sc) : '';
   }
 
   /** The notation symbol for the current eval (=, ⩲, +- …). UI-side mapping of `evalParts`. */
@@ -824,6 +813,7 @@ var BiyaAnalysisBoard = (function () {
     eq(evalParts(fake).winner, null, 'and no terminal winner');
     near(evalFraction(fake), 0.53, 'a +30cp eval nudges the bar');
     eq(evalSymbol(fake), '=', '+30cp is still equal');
+    eq(evalLabel(fake), '+0.3', 'and the rail label reads +0.3, from the engine rows own formatter');
 
     // 12b. The line preview — the state machine behind "tap a line to play it out". Mirrors
     //      BiyaherongCoachCore.LinePreview; ParityRunner asserts the same cases on the Swift side.
@@ -902,6 +892,11 @@ var BiyaAnalysisBoard = (function () {
     eq(evalParts(mate).winner, E.BLACK, 'evalParts names the side that delivered mate');
     eq(evalSymbol(mate), null, 'a finished game has no eval symbol');
     near(evalFraction(mate), 0, 'a delivered mate pins the bar to the result');
+    // The rail's label at the two ends that need no special case: a delivered mate fills or empties
+    // the rail completely, and evalLabelAtBottom sends the token to the end that is solid colour.
+    eq(evalLabel(mate), '0-1', 'and the rail label reads the RESULT, not a centipawn score');
+    eq(MET.evalLabelAtBottom(evalFraction(mate)), false, '0-1 hangs off the TOP, on bare track');
+    eq(evalLabel(createSession()), '', 'no snapshot, no label');
 
     // 14. the board's own inputs
     var bd = createSession();
@@ -1290,7 +1285,13 @@ var BiyaAnalysisBoard = (function () {
     if (!root) return;
     var box = root.getBoundingClientRect();
     if (!box.width || !box.height) return;      // detached, or the tab is not rendering
-    var edge = MET.boardSize(box.width, window.devicePixelRatio || 2);
+    // The rail-aware edge: the pinned snap-to-8 formula, fed a width the rail has already been
+    // taken out of. Never MET.boardSize directly, or the board is sized for a screen the rail is
+    // standing in and every band below it is budgeted against a board 37px too wide.
+    // Engine off means no rail, so the board takes that width back. ONE function decides, and
+    // planEngine() below reads the same edge — budget against a different one and the panel is
+    // sized for a board that is not on screen.
+    var edge = MET.boardEdge(box.width, window.devicePixelRatio || 2, session.autoAnalyze);
     var bands = MET.bandLayout(box.height, edge);
     root.style.setProperty('--an-board-edge', bands.board + 'px');
     root.style.setProperty('--an-panels-h', bands.panels + 'px');
@@ -1385,8 +1386,12 @@ var BiyaAnalysisBoard = (function () {
     // `-webkit-line-clamp` needs the count as a bare number, so this one carries no unit. Seeded
     // here at the maximum and narrowed by `planEngine()` once the bands have been measured.
     set('--an-engine-lines', String(B.engineLineLimit));
-    set('--an-eval-h', MET.EVAL_BAR.mainHeight + 'px');
-    set('--an-eval-r', MET.EVAL_BAR.mainRadius + 'px');
+    // The vertical rail. `--an-eval-h` is GONE with the horizontal bar it sized: a property that
+    // is set but nothing reads fails the --an-* audit as a dead metric, in that direction too.
+    set('--an-rail-w', MET.railWidth() + 'px');
+    set('--an-rail-gap', MET.EVAL_BAR.railGap + 'px');
+    set('--an-rail-r', MET.EVAL_BAR.railRadius + 'px');
+    set('--an-rail-pad-v', MET.EVAL_BAR.railPaddingV + 'px');
     set('--an-micro-h', MET.EVAL_BAR.microHeight + 'px');
     set('--an-micro-r', MET.EVAL_BAR.microRadius + 'px');
     set('--an-eval-anim', MET.TIMINGS.evalBarAnimation + 'ms');
@@ -1403,6 +1408,9 @@ var BiyaAnalysisBoard = (function () {
     set('--an-fs-epv', T2.enginePv + 'px'); set('--an-fs-etext', T2.engineText + 'px');
     set('--an-fs-depth', T2.engineDepth + 'px'); set('--an-fs-opening', T2.engineOpening + 'px');
     set('--an-fs-pvply', T2.previewPly + 'px'); set('--an-fs-pvbtn', T2.previewBtn + 'px');
+    // The FITTED size, not the source's 11px: CSS has no minimumScaleFactor, so the browser has to
+    // be handed a size that already fits the rail or it would clip where SwiftUI shrinks.
+    set('--an-fs-rail', MET.evalLabelFontSize() + 'px');
     set('--board-light', MET.BOARD_THEMES[boardTheme].light);
     set('--board-dark', MET.BOARD_THEMES[boardTheme].dark);
     // Review modal — every value from accModalStyles, via the metrics layer.
@@ -1655,8 +1663,18 @@ var BiyaAnalysisBoard = (function () {
   }
 
   function paintEval() {
-    ui.evalFill.style.width = (evalFraction(session) * 100) + '%';
-    ui.microFill.style.width = (evalFraction(session) * 100) + '%';
+    // The rail is only there when the engine is. `display: none` rather than `visibility`, so it
+    // leaves the flex row entirely — a hidden-but-present rail would keep both its width and
+    // `.an-board`'s gap, and the board would gain nothing.
+    ui.evalRail.classList.toggle('off', !session.autoAnalyze);
+    var f = evalFraction(session);
+    // The RAIL fills from the BOTTOM, so it animates its HEIGHT. The engine panel's 3px micro bar
+    // is a DIFFERENT bar — real in the RN source, still horizontal — so it still animates width.
+    ui.evalFill.style.height = (f * 100) + '%';
+    ui.microFill.style.width = (f * 100) + '%';
+    // Which end the label hangs off is the shared pure function, never a second `f >= 0.5` here.
+    ui.evalLabel.textContent = evalLabel(session);
+    ui.evalLabel.className = 'lbl ' + (MET.evalLabelAtBottom(f) ? 'bottom' : 'top');
   }
 
   function paintStatus() {
@@ -2049,9 +2067,12 @@ var BiyaAnalysisBoard = (function () {
     var badge = el('div', 'an-badge');           // the manual-annotation circle, pointer-events:none
     badge.style.display = 'none';
     boardStack.appendChild(badge);
-    boardBand.appendChild(boardStack);
-    var evalBar = el('div', 'an-eval', '<div class="fill"></div>');
+    // The rail is appended BEFORE the board stack: it lives on the LEFT, and it stays there when
+    // the board is flipped. A SIBLING of the stack, never a child — `.an-badge` is `inset: 0`
+    // against the stack and paintBadge measures that stack's width.
+    var evalBar = el('div', 'an-eval', '<div class="fill"></div><div class="lbl bottom"></div>');
     boardBand.appendChild(evalBar);
+    boardBand.appendChild(boardStack);
     root.appendChild(boardBand);
 
     // 3 — the status line, then the toolbar.
@@ -2090,6 +2111,9 @@ var BiyaAnalysisBoard = (function () {
       session.autoAnalyze = !session.autoAnalyze;
       if (!session.autoAnalyze) session.snapshot = null;
       scheduleAnalysis(); paintAll(false);
+      // The rail appears and disappears with it, so the board's width changes. Nothing else calls
+      // sizeBands on a toggle — without this the board keeps the old edge until the next resize.
+      sizeBands();
     });
     var tFlip = tool('an-tool', '🔄', 'Flip the board', function () {
       session.flipped = !session.flipped; paintBoard(false);
@@ -2131,7 +2155,8 @@ var BiyaAnalysisBoard = (function () {
     view.appendChild(root);
 
     ui = {
-      board: board, evalFill: evalBar.querySelector('.fill'),
+      board: board, evalRail: evalBar, evalFill: evalBar.querySelector('.fill'),
+      evalLabel: evalBar.querySelector('.lbl'),
       microFill: micro.querySelector('.fill'),
       status: statusText_, statusLine: statusLine, spinner: spinner, autoplayBar: autoplayBar,
       previewbar: previewBar, engine: engine,
@@ -3372,6 +3397,7 @@ var BiyaAnalysisBoard = (function () {
     statusText: statusText, openingEntry: openingEntry, openingText: openingText,
     arrows: arrows, engineRows: engineRows,
     evalParts: evalParts, evalFraction: evalFraction, evalSymbol: evalSymbol,
+    evalLabel: evalLabel,
     isStale: isStale, wantsAnalysis: wantsAnalysis,
     stripTokens: stripTokens, nagText: nagText, PV_PREVIEW: PV_PREVIEW,
     previewStart: previewStart, previewStepped: previewStepped, previewJumped: previewJumped,

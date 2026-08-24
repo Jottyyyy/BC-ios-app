@@ -402,7 +402,13 @@ struct CoachGameScreen: View {
                           flipped: game.map(CoachGame.isFlipped) ?? false,
                           checkSquare: checkSquare(pos),
                           boardSize: side,
-                          onTap: { tap($0, in: pos) })
+                          onTap: { tap($0, in: pos) },
+                          // Without this, `BoardView` installs NO drag gesture at all — its own
+                          // doc comment says so, and it enforces it with
+                          // `including: onDragMove == nil ? .subviews : .all`. This was the only
+                          // playable board in the app that had never passed it, so the coach
+                          // game was the one screen where a dragged piece did nothing.
+                          onDragMove: { from, to in drag(from, to, in: pos) })
                 if let p = store.controller.premove { premoveChip(p) }
             }
         }
@@ -419,27 +425,56 @@ struct CoachGameScreen: View {
         return pos.kingSquare(pos.sideToMove)
     }
 
-    /// A tap is a move when it is the user's turn and a PREMOVE when the coach is thinking — the
-    /// controller decides which, never the board.
+    /// Tap a piece, then tap where it goes. `pos` is derived from `game`, so a non-nil one is
+    /// already proof there is a game — `commit` re-checks anyway.
     private func tap(_ sq: Int, in pos: ChessPosition?) {
-        guard let g = game, let pos = pos else { return }
+        guard let pos = pos else { return }
         if let from = selected, legalTargets.contains(sq) {
-            let uci = Square.name(from) + Square.name(sq) + promotionSuffix(from, sq, pos)
-            selected = nil
-            legalTargets = []
-            if CoachTurn.canUserMove(g, store.controller) {
-                store.userMove(uci: uci)
-            } else {
-                store.premove(from: Square.name(from), to: Square.name(sq),
-                              promotion: promotionSuffix(from, sq, pos).isEmpty
-                                  ? nil : promotionSuffix(from, sq, pos))
-            }
+            commit(from: from, to: sq, in: pos)
             return
         }
         let moves = pos.legalMoves(from: sq)
         if moves.isEmpty { selected = nil; legalTargets = []; return }
         selected = sq
         legalTargets = Set(moves.map { $0.to })
+    }
+
+    /// The same move by the other route — and the route that has to check legality itself.
+    ///
+    /// `BoardView.dragGesture` reports whatever two squares the gesture spanned; it knows nothing
+    /// about pieces or rules. The tap path never had to check, because by the time the second tap
+    /// arrives `legalTargets` has already been computed for the piece in hand. A drag has no such
+    /// first half, so this is where the rules are consulted.
+    private func drag(_ from: Int, _ to: Int, in pos: ChessPosition?) {
+        guard let pos = pos else { return }
+        guard pos.legalMoves(from: from).contains(where: { $0.to == to }) else {
+            // An illegal drop drops the move, and the ring with it. It must NOT fall through to
+            // `commit`: a premove is not re-checked against the rules until the position it was
+            // queued for arrives, so an impossible one would sit there looking queued.
+            selected = nil
+            legalTargets = []
+            return
+        }
+        commit(from: from, to: to, in: pos)
+    }
+
+    /// The ONE place a from→to becomes a move or a premove: it is a move when it is the user's
+    /// turn and a PREMOVE when the coach is thinking, and the controller decides which — never the
+    /// board, and now never the input route either. Tap and drag both land here, so they cannot
+    /// drift about which of the two it is or how a promotion is spelled.
+    private func commit(from: Int, to: Int, in pos: ChessPosition) {
+        guard let g = game else { return }
+        // Evaluated ONCE. The tap path used to compute it three times and spell the empty case two
+        // different ways.
+        let promo = promotionSuffix(from, to, pos)
+        selected = nil
+        legalTargets = []
+        if CoachTurn.canUserMove(g, store.controller) {
+            store.userMove(uci: Square.name(from) + Square.name(to) + promo)
+        } else {
+            store.premove(from: Square.name(from), to: Square.name(to),
+                          promotion: promo.isEmpty ? nil : promo)
+        }
     }
 
     /// Spec §7 #32: the RN premove always auto-queened. A promotion still defaults to a queen here,

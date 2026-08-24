@@ -28,6 +28,34 @@ var BiyaAnalysisMetrics = (function () {
     var r = pixelRatio || 1;
     return (Math.floor(Math.round(screenWidth * r) / 8) * 8) / r;
   }
+  /**
+   * The board's edge with the eval rail beside it. Mirrors AnalysisBoard.sizeBesideRail.
+   *
+   * `boardSize` above is PINNED to the RN source and does not change; what changes is what it is
+   * asked about. Take the rail and its gap off the width FIRST, then snap. Snapping first and
+   * subtracting after would land the board on a fractional device pixel and put a seam between the
+   * squares, which is the whole reason that formula exists.
+   *
+   * (`EVAL_BAR` is declared further down; this is only ever CALLED after the module body has run.)
+   */
+  /** The rail's width: an 8px track (evalBarTrack.height) inside 6px of padding each side. */
+  function railWidth() { return EVAL_BAR.mainHeight + EVAL_BAR.railPaddingH * 2; }
+  function railTotal() { return railWidth() + EVAL_BAR.railGap; }
+  function boardSizeBesideRail(screenWidth, pixelRatio) {
+    return boardSize(Math.max(0, screenWidth - railTotal()), pixelRatio);
+  }
+  /**
+   * THE Analysis Board's board edge — the one entry point; nothing else on that screen picks.
+   * Mirrors AnalysisBoard.edge.
+   *
+   * The eval rail is only there when the engine is: switching the engine off drops the snapshot,
+   * so the rail would show a dead 50/50 track with no number. It goes, and the board takes the
+   * railTotal back. Both branches end in the same pinned snap-to-8 formula.
+   */
+  function boardEdge(screenWidth, pixelRatio, engineOn) {
+    return engineOn ? boardSizeBesideRail(screenWidth, pixelRatio)
+                    : boardSize(screenWidth, pixelRatio);
+  }
   function squareSize(screenWidth, pixelRatio) { return boardSize(screenWidth, pixelRatio) / 8; }
   var PIECE_RATIO = 0.95;                     // spec 3.1: piece is 95% of a square
   function pieceSize(square) { return square * PIECE_RATIO; }
@@ -257,9 +285,14 @@ var BiyaAnalysisMetrics = (function () {
   /** Nunito's line height — what the rest of the app measures with; the mono face is close enough. */
   var ENGINE_LINE_RATIO = 1.364;
 
-  /** The board band's whole height: the top padding, the board, the gap, and the 8px eval bar. */
+  /**
+   * The board band's whole height: the top padding, the board, and the same padding under it.
+   *
+   * There is no 8px bar in this band any more — the eval rail is BESIDE the board, so it costs the
+   * band WIDTH, not height. The rail is exactly `edge` tall, so it never sets this either.
+   */
   function boardBandHeight(edge) {
-    return BANDS.boardPaddingTop + edge + BANDS.boardPaddingTop + EVAL_BAR.mainHeight;
+    return BANDS.boardPaddingTop * 2 + edge;
   }
   /**
    * Every band above the engine panel, at their real heights — including the status LINE, which
@@ -318,8 +351,61 @@ var BiyaAnalysisMetrics = (function () {
   }
 
   // ---- Eval bar (spec 7.2) ---------------------------------------------------
-  var EVAL_BAR = { mainHeight: 8, mainRadius: 4, microHeight: 3, microRadius: 1, microMarginBottom: 4 };
+  var EVAL_BAR = {
+    // RETIRED: nothing draws the horizontal main bar any more — the main eval bar is the vertical
+    // rail below. `mainHeight` survives as the only pin on the source's `evalBarTrack` block,
+    // which is where `railRadius` comes from. See AnalysisEval's doc comment in the Swift twin.
+    mainHeight: 8, mainRadius: 4,
+    // The per-engine-line micro bar. Real in the source, still drawn, still HORIZONTAL.
+    microHeight: 3, microRadius: 1, microMarginBottom: 4,
+    // The vertical rail. LEFT, FIXED, never mirrored on a flip. Every number is a real key in the
+    // source's own `evalBar*` block — the block `renderEvalBar` (board.tsx:2741) never rendered,
+    // whose header comment reads "RENDER EVAL BAR (vertical, DroidFish-style)" and whose style says
+    // `flexDirection: 'row'`. DEVIATION: we build the comment. See PORTING_NOTES.md.
+    // The rail's WIDTH is the source eval component's own cross-axis thickness, stood on end:
+    // an 8px track inside 6px of padding each side. 20px. It was 32 (evalBarText.minWidth, the
+    // source's minimum for the LABEL) for one round, and the client's answer was "panipisan lang
+    // ng konti masyado ata makapal" — 32 sized the rail to its caption. See railWidth() below.
+    railPaddingH: 6,   // evalBarContainer.paddingHorizontal
+    railGap: 5,        // evalBarContainer.gap
+    railRadius: 4,     // evalBarTrack.borderRadius
+    railPaddingV: 2,   // evalBarContainer.paddingVertical
+    labelGlyphs: 4,    // what the rail is SIZED to hold: +0.5, -0.3, M-3, 1-0, ½-½
+    labelMaxGlyphs: 5  // the widest formatScore output: `+10.5`
+  };
   var EVAL_CLAMP = 500;
+
+  /** White's block, measured from the BOTTOM of the rail. Clamped, so a fraction outside 0..1
+   *  draws a full or an empty rail rather than overflowing the clip. */
+  function evalFillHeight(rail, fraction) {
+    return rail * Math.max(0, Math.min(1, fraction));
+  }
+
+  /**
+   * Which end the score hangs off: the LEADING side's. White ahead -> bottom, Black ahead -> top.
+   * Mirrors AnalysisEval.labelAtBottom.
+   *
+   * Exact, not tuned: `>= 0.5` is precisely the condition under which the BOTTOM of the rail is
+   * inside the white fill, and `< 0.5` precisely the condition under which the TOP is bare track —
+   * so the label always lands on a block of solid colour it was inked for.
+   */
+  function evalLabelAtBottom(fraction) { return fraction >= 0.5; }
+
+  /**
+   * The size the label is actually drawn at: whatever fits labelGlyphs across the rail, capped at
+   * the source's own evalBarText.fontSize. On a 20px rail the four-glyph budget binds first.
+   *
+   * Shared with Swift on purpose. CSS has no minimumScaleFactor, so handing the browser 11px would
+   * clip `-0.3` in a 20px rail while SwiftUI quietly shrank it — the two renderers disagreeing on
+   * screen with every suite still green.
+   */
+  function evalLabelFontSize() {
+    return Math.min(TYPE.evalRail, railWidth() / (EVAL_BAR.labelGlyphs * MONO_ADVANCE_RATIO));
+  }
+  /** How far a FIVE-glyph label may shrink past that: 4/5. */
+  function evalLabelMinScale() {
+    return EVAL_BAR.labelGlyphs / EVAL_BAR.labelMaxGlyphs;
+  }
 
   /** White's share of the bar, 0..1. A mate pins to 0.95 / 0.05 rather than the full end. */
   function evalBarFraction(cp, mate) {
@@ -681,6 +767,9 @@ var BiyaAnalysisMetrics = (function () {
     // The line-preview bar. Its plies read at the move strip's size because it IS a move strip —
     // for a line nobody has played yet. Its two action buttons take the branch-chip size.
     previewPly: 13, previewBtn: 12,
+    // The eval rail's score: evalBarText.fontSize / .fontWeight (800) / Menlo, so it takes the mono
+    // face like the engine rows. NOT a strip size — this one is the source's own number.
+    evalRail: 11,
     // Phase 11 — the annotation picker and the sidebar's own scale.
     annotationPickerTitle: 16, annotationSymbol: 20, annotationLabel: 10, annotationSection: 11
   };
@@ -771,6 +860,63 @@ var BiyaAnalysisMetrics = (function () {
     expect(EVAL_BAR.mainHeight === 8 && EVAL_BAR.microHeight === 3,
       'the MAIN eval bar is 8 and only the per-line micro bar is 3');
 
+    // 7b. The vertical rail. Twin of AnalysisMetricsCheck.swift §6b, assertion for assertion.
+    expectNear(railTotal(), railWidth() + EVAL_BAR.railGap,
+      'the rail costs the board its own width plus the gap');
+    expectNear(railWidth(), EVAL_BAR.mainHeight + EVAL_BAR.railPaddingH * 2,
+      'the rail is an 8px track inside 6px of padding each side, stood on end');
+    expectNear(railWidth(), 20, 'which comes to 20px');
+    // The rail is only there when the ENGINE is, and the board takes the width back when it is not.
+    [375, 390, 430].forEach(function (w) {
+      expectNear(boardEdge(w, 3, true), boardSizeBesideRail(w, 3),
+        'engine ON at ' + w + ' leaves room for the rail');
+      expectNear(boardEdge(w, 3, false), boardSize(w, 3),
+        'engine OFF at ' + w + ' gives the board the FULL width — the rail is not drawn');
+      expect(boardEdge(w, 3, false) > boardEdge(w, 3, true),
+        'so the board is strictly WIDER with the engine off at ' + w);
+      expect(boardEdge(w, 3, false) - boardEdge(w, 3, true) <= railTotal() + 8 / 3 + 1e-9,
+        'and it gains the rail back, to within one snapped pixel step, at ' + w);
+    });
+    expectNear(evalFillHeight(200, 0.5), 100, 'half an eval, half a rail');
+    expectNear(evalFillHeight(200, 0), 0, 'no White share draws nothing');
+    expectNear(evalFillHeight(200, 1), 200, 'a mate delivered fills it');
+    expectNear(evalFillHeight(200, 2), 200, 'a fraction past 1 clamps');
+    expectNear(evalFillHeight(200, -1), 0, 'and one below 0 clamps too');
+    expect(evalLabelAtBottom(1), '1-0 hangs off the BOTTOM, on the white block');
+    expect(evalLabelAtBottom(0.95), 'so does a forced mate for White');
+    expect(evalLabelAtBottom(0.5), 'and a dead-level position, stably');
+    expect(!evalLabelAtBottom(0.49), 'a Black edge hangs off the TOP');
+    expect(!evalLabelAtBottom(0), 'and so does 0-1, on the bare dark track');
+    // LEGIBILITY, as the geometric fact it rests on rather than as a promise. The label's band is
+    // one line of rail type plus its two insets; evalLabelAtBottom is true exactly when that band
+    // at the BOTTOM is inside the white fill, and false exactly when the band at the TOP is bare
+    // track. Swept over the whole range, on the SHORTEST rail the app can draw.
+    var railEdge = boardSizeBesideRail(375, 3);
+    var labelBand = (evalLabelFontSize() * ENGINE_LINE_RATIO + EVAL_BAR.railPaddingV * 2) / railEdge;
+    for (var st = 0; st <= 20; st++) {
+      var fr = st / 20;
+      if (evalLabelAtBottom(fr)) {
+        expect(fr >= labelBand, 'at ' + fr + ' the bottom label sits inside the white fill');
+      } else {
+        expect(1 - fr >= labelBand, 'at ' + fr + ' the top label sits on bare track');
+      }
+    }
+    // THE LABEL FITS BY CONSTRUCTION, at a size BOTH renderers draw — CSS has no
+    // minimumScaleFactor, so an 11px label in a 20px rail would clip here while SwiftUI shrank.
+    expect(EVAL_BAR.labelMaxGlyphs > EVAL_BAR.labelGlyphs,
+      'formatScore can emit one glyph more than the rail is sized for: +10.5');
+    expectNear(evalLabelFontSize(), railWidth() / (EVAL_BAR.labelGlyphs * MONO_ADVANCE_RATIO),
+      'on a 20px rail the four-glyph budget binds, not the source 11px');
+    expect(evalLabelFontSize() <= TYPE.evalRail,
+      'and the source evalBarText.fontSize is the CAP — the label never grows past it');
+    expect(evalLabelFontSize() * EVAL_BAR.labelGlyphs * MONO_ADVANCE_RATIO <= railWidth() + 1e-9,
+      'four glyphs fit ACROSS the rail at that size — the whole point of deriving it');
+    expectNear(evalLabelMinScale(), 0.8, 'and the fifth glyph shrinks 4/5, not clips');
+    expect(railWidth() > EVAL_BAR.mainHeight,
+      'the rail is wider than the track inside it — that is what the padding is for');
+    expect(EVAL_BAR.railRadius === EVAL_BAR.mainRadius,
+      'both bars round by the source\'s one evalBarTrack.borderRadius');
+
     // 8. Eval graph: y is flipped so +500 is at the top.
     var top = graphPoint(500, null, 0, 2, 100, 52);
     var bot = graphPoint(-500, null, 1, 2, 100, 52);
@@ -842,9 +988,23 @@ var BiyaAnalysisMetrics = (function () {
     var se = bandLayout(667, boardSize(375, 3));
     expect(se.board > 0 && se.board <= boardSize(375, 3), 'a 375x667 SE caps the board but keeps it');
     expect(se.panels < BANDS.panelsMaxHeight, 'and the PANELS band is what gave way, not the board');
-    // The board fills the width it is given, to within one snapped pixel step.
+    // The rail-aware edge is height-independent for exactly the same reason.
     [375, 390, 430].forEach(function (w) {
-      expect(w - boardSize(w, 3) < 8 / 3 + 1e-9, 'the board is edge-to-edge at ' + w + ' (snap only)');
+      var re = boardSizeBesideRail(w, 3);
+      [500, 667, 844, 932, 1200].forEach(function (h) {
+        expect(boardSizeBesideRail(w, 3) === re,
+          'boardSizeBesideRail(' + w + ') ignores a ' + h + 'px viewport');
+      });
+    });
+    // RESTATED, not relaxed. The old rule was "the board fills the width, to within one snapped
+    // pixel step". The board no longer has the width to itself, so the thing that must be
+    // edge-to-edge is the ROW: rail + gap + board.
+    [375, 390, 430].forEach(function (w) {
+      var re = boardSizeBesideRail(w, 3);
+      expect(railTotal() + re <= w, 'rail + gap + board never overflows the screen at ' + w);
+      expect(w - (railTotal() + re) < 8 / 3 + 1e-9,
+        'and they fill it, to within the snap, at ' + w);
+      expect(re < boardSize(w, 3), 'the rail really did narrow the board at ' + w);
     });
 
     // 10c. NO band varies with the opening book any more.
@@ -874,8 +1034,11 @@ var BiyaAnalysisMetrics = (function () {
     // Driven through the SHIPPED functions, not a local copy of the arithmetic. The copy that used
     // to live here omitted the status LINE and the board band's own chrome while adding the book
     // strip, and the two errors nearly cancelled; it reported budgets that were never real.
-    [[375, 667, 4, 2], [390, 844, 5, 5], [430, 932, 5, 5]].forEach(function (d) {
-      var edge = boardSize(d[0], 3);
+    // The SE floors were RAISED from (4, 2) when the eval bar moved beside the board: the band
+    // stopped spending 12px on the bar and its gap, and the engine panel is the band that gets it.
+    // Leaving them at (4, 2) would be leaving a floor that no longer bites.
+    [[375, 667, 5, 3], [390, 844, 5, 5], [430, 932, 5, 5]].forEach(function (d) {
+      var edge = boardSizeBesideRail(d[0], 3);
       var available = engineAvailable(d[1], edge, false);
       expect(available > 0, 'there is room for an engine panel at ' + d[0] + 'x' + d[1]);
       expect(engineRowsThatFit(available, 1) >= d[2],
@@ -885,7 +1048,7 @@ var BiyaAnalysisMetrics = (function () {
         'and at least ' + d[3] + ' WRAPPED rows (got '
         + engineRowsThatFit(available, BANDS.engineLineLimit) + ')');
     });
-    var seAvailable = engineAvailable(667, boardSize(375, 3), false);
+    var seAvailable = engineAvailable(667, boardSizeBesideRail(375, 3), false);
     expect(engineRowsThatFit(seAvailable, 1) >= ENGINE_LIMITS.multiPV,
       'even a 375x667 SE shows every line the DEFAULT preset produces');
     expect(BANDS.engineMaxRows >= ENGINE_LIMITS.multiPV,
@@ -1520,10 +1683,28 @@ var BiyaAnalysisMetrics = (function () {
     pin(LD, 'actionBtn', 'backgroundColor', LIBRARY.actionBg);
 
     // The eval bars — the case prose got ambiguous.
-    same('evalBarTrack', 'height', EVAL_BAR.mainHeight, 'MAIN eval bar height');
+    same('evalBarTrack', 'height', EVAL_BAR.mainHeight, 'MAIN eval bar height (retired)');
     same('evalBarTrack', 'borderRadius', EVAL_BAR.mainRadius);
     same('engineEvalBarTrack', 'height', EVAL_BAR.microHeight, 'MICRO eval bar height');
     same('engineEvalBarTrack', 'borderRadius', EVAL_BAR.microRadius);
+    // The vertical rail — five numbers and three strings, one source block, nothing invented.
+    same('evalBarTrack', 'borderRadius', EVAL_BAR.railRadius, 'the rail corner');
+    same('evalBarContainer', 'paddingHorizontal', EVAL_BAR.railPaddingH, 'the rail padding');
+    // DECLARED, not dropped: the rail was evalBarText.minWidth (32) for one round and the client
+    // asked for it thinner. The source value is still asserted so the gap stays visible.
+    expect(S.evalBarText.minWidth === 32, 'the source still reserves 32 for the eval text');
+    expect(railWidth() < 32, 'and we deliberately draw a NARROWER rail, at the client request');
+    same('evalBarText', 'fontSize', TYPE.evalRail, 'the rail label size');
+    same('evalBarContainer', 'gap', EVAL_BAR.railGap, 'the rail-to-board gap');
+    same('evalBarContainer', 'paddingVertical', EVAL_BAR.railPaddingV, 'the label inset');
+    same('evalBarText', 'fontWeight', '800', 'the rail label is 800');
+    same('evalBarText', 'fontFamily', 'Menlo', 'and mono, like the engine rows');
+    // THE DEVIATION, declared rather than smuggled. renderEvalBar (board.tsx:2741) is commented
+    // "RENDER EVAL BAR (vertical, DroidFish-style)" and then built horizontally — and never
+    // rendered at all. We build the comment. If this ever reads 'column' the source changed its
+    // mind and this whole block should be revisited.
+    same('evalBarContainer', 'flexDirection', 'row',
+      'the source eval bar really is horizontal, its comment notwithstanding');
 
     // Module constants
     var c = src.moduleConstants;
@@ -1554,6 +1735,8 @@ var BiyaAnalysisMetrics = (function () {
 
   return {
     boardSize: boardSize, squareSize: squareSize, pieceSize: pieceSize, PIECE_RATIO: PIECE_RATIO,
+    boardSizeBesideRail: boardSizeBesideRail, boardEdge: boardEdge,
+    railTotal: railTotal, railWidth: railWidth,
     visual: visual, squareCenter: squareCenter, isLightSquare: isLightSquare,
     PALETTE: PALETTE, BOARD_THEMES: BOARD_THEMES, DEFAULT_BOARD_THEME: DEFAULT_BOARD_THEME,
     HIGHLIGHT: HIGHLIGHT, squareFill: squareFill,
@@ -1568,6 +1751,8 @@ var BiyaAnalysisMetrics = (function () {
     boardBandHeight: boardBandHeight, fixedWithoutEngine: fixedWithoutEngine,
     autoplayBandHeight: autoplayBandHeight, engineAvailable: engineAvailable,
     EVAL_BAR: EVAL_BAR, EVAL_CLAMP: EVAL_CLAMP, evalBarFraction: evalBarFraction,
+    evalFillHeight: evalFillHeight, evalLabelAtBottom: evalLabelAtBottom,
+    evalLabelFontSize: evalLabelFontSize, evalLabelMinScale: evalLabelMinScale,
     GRAPH: GRAPH, graphPoint: graphPoint,
     CLASSIFICATIONS: CLASSIFICATIONS, CLASSIFICATION_ORDER: CLASSIFICATION_ORDER,
     MOVE_ANNOTATIONS: MOVE_ANNOTATIONS, POSITION_ANNOTATIONS: POSITION_ANNOTATIONS,

@@ -101,7 +101,7 @@ public struct OpeningTree: Equatable, Sendable, Codable {
     /// One row of the candidate list — a flattened `Node` plus the move that reaches it.
     ///
     /// It does NOT carry `children`, only whether there are any: the list is rebuilt on every
-    /// navigation step and copying whole subtrees into it would make a 2,000-game tree crawl.
+    /// navigation step and copying whole subtrees into it would make a 1,000-game tree crawl.
     public struct Candidate: Equatable, Sendable {
         public let san: String
         public let count: Int
@@ -143,14 +143,35 @@ public struct OpeningTree: Equatable, Sendable, Codable {
     /// How deep a game is walked into the tree.
     ///
     /// INVENTED — the RN screen has no cap and walks every ply of every game. That is a memory
-    /// hazard at its own 2,000-game download limit (a 120-ply game contributes 120 nested
+    /// hazard at its own 1,000-game download limit (a 120-ply game contributes 120 nested
     /// dictionaries) and it is not what an opening tree is for: past move 20 the counts are 1 and
     /// the branch is a game record, not a repertoire. 40 plies is 20 full moves. Recorded in
     /// PORTING_NOTES.
     public static let defaultMaxPlies = 40
 
-    /// The download ceiling the RN form offers, kept so the two agree.
-    public static let maxGamesLimit = 2000
+    /// How many plies of **free play** may hang off the tree before the board stops accepting moves.
+    ///
+    /// INVENTED — openingtree.com has no such limit and neither does the RN screen, because in
+    /// neither can you move a piece at all. It is not defensiveness: `OpeningTreeStore.position`
+    /// and `.lastMove` each replay the whole path on every SwiftUI `body` evaluation, and `path` is
+    /// `@Published`, so an uncapped walk makes every repaint linear in how long the user has been
+    /// wandering. That degrades *smoothly*, which is worse than crashing — a screen that gets
+    /// vaguely sluggish over minutes with nothing pointing at why.
+    ///
+    /// It also makes an existing comment true again: `position`'s own doc said *"the walk is
+    /// bounded by `defaultMaxPlies`, so it is 40 `makeMove`s at worst"*, which held only while the
+    /// UI offered nothing but the tree's own moves.
+    ///
+    /// Deliberately **not** a reuse of `defaultMaxPlies`. That one bounds how much of a GAME is
+    /// worth recording; this bounds how far a USER may wander. One constant serving two meanings is
+    /// how `maxGamesLimit` came to be 2000. Recorded in PORTING_NOTES.
+    public static let maxFreePlies = 20
+
+    // The download ceiling used to live here as `maxGamesLimit = 2000`, described as "the download
+    // ceiling the RN form offers". The RN form ceiling is **1000** — `Math.min(…, 1000)` at
+    // openingtree.tsx:479 and again at :917 — so the constant was wrong and the parity check that
+    // read it asserted the wrong number against the right prose. It is gone rather than corrected:
+    // the limits belong to the download, so `OpeningDownload.premiumMaxGames` is the one copy.
 
     // MARK: - State
 
@@ -211,7 +232,7 @@ public struct OpeningTree: Equatable, Sendable, Codable {
 
     /// The recursive half. `removeValue` rather than a subscript read so the node being mutated is
     /// uniquely referenced and its subtree is not copied on every increment — the difference
-    /// between linear and quadratic on a 2,000-game import.
+    /// between linear and quadratic on a 1,000-game import.
     private static func insert(_ steps: ArraySlice<(san: String, moverIsWhite: Bool)>,
                                into children: inout [String: Node],
                                game: Game) {
@@ -243,6 +264,30 @@ public struct OpeningTree: Equatable, Sendable, Codable {
             level = next.children
         }
         return level
+    }
+
+    /// How many **leading** plies of `path` still exist in the tree.
+    ///
+    /// `children(at:)` answers `[:]` both at a leaf and for a path that has left the tree, which is
+    /// why the explorer could not tell *"your games stop here"* from *"you played something none of
+    /// them did"* — one empty card, two meanings, and Forward dead either way. This is the same
+    /// walk, reporting **where it stopped** instead of what it found. `bookDepth == path.count` is
+    /// on book; anything less is the ply at which the user left it.
+    ///
+    /// **A transposition is still off book, and that is the tree's premise rather than a gap.**
+    /// `1.Nf3 c5 2.e4` does not rejoin `1.e4 c5 2.Nf3`, because this tree is keyed by the *line you
+    /// played* (see the type's own doc comment). `OpeningBook` is the FEN-keyed thing that
+    /// deliberately collapses transpositions; merging them here would make the candidate counts
+    /// describe a different move order than the history strip above them shows.
+    public func bookDepth(along path: [String]) -> Int {
+        var level = root
+        var depth = 0
+        for san in path {
+            guard let next = level[san] else { return depth }
+            depth += 1
+            level = next.children
+        }
+        return depth
     }
 
     /// The node `path` ends on, or nil if the path leaves the tree.

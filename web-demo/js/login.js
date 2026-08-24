@@ -273,11 +273,14 @@ var BiyaLogin = (function () {
       + 'Hindi na ito maibabalik.\n\nHindi kasama ang subscription mo. Hindi ito makakansela at '
       + 'hindi mawawala — pamahalaan ito sa Settings > Apple Account > Subscriptions.',
     privacyTitle: 'Privacy',
-    privacyBody: 'Biyaherong Coach works offline. It does not collect, store, or send any personal '
-      + 'information anywhere — there is no account server and no analytics.\n\n'
-      + 'Signing in goes through Apple, so the first sign-in needs internet. Nothing else does: '
-      + 'your puzzles, ratings, games and settings live on this device only.\n\n'
-      + 'Walang datos na inilalabas. Lahat ay nasa device mo lang.',
+    privacyBody: 'Biyaherong Coach works offline. There is no account server and no analytics, '
+      + 'and nothing about you is collected or tracked.\n\n'
+      + 'Two things need internet, and only when you ask for them: signing in goes through Apple, '
+      + 'and building an Opening Tree sends the username you type to Lichess or Chess.com so your '
+      + 'games can be downloaded. Everything else — your puzzles, ratings, games and settings — '
+      + 'stays on this device.\n\n'
+      + 'Walang account server at walang analytics. Kailangan lang ng internet kapag nag-sign in '
+      + 'ka o kumukuha ng laro mula sa Lichess o Chess.com.',
     termsTitle: 'Terms',
     termsBody: 'Biyaherong Coach is for learning and enjoying chess. Play fair, be kind, and have '
       + 'fun.\n\nThe app is provided as-is for practice and study. Chess piece artwork is licensed '

@@ -135,7 +135,7 @@ may not have — the same reasoning that commits `eco.tsv`.
 | # | Band | Height |
 |---|---|---|
 | 1 | Header — `←` · Analysis Board · `☰` | fixed |
-| 2 | Board + arrows, then the **8pt** eval bar directly under it | **fixed — a square derived from the WIDTH** |
+| 2 | The **20pt** vertical eval rail *(engine on only)*, then board + arrows beside it | **fixed — a square derived from the WIDTH, less the rail when it is there** |
 | 3a | Status line — its own row here, not the source's shared one | fixed |
 | 3b | Toolbar — 📂 · ✏️ · 💡 · 🔄 · ▶ · `⏮ ◀ ▶ ⏭` | fixed |
 | 4 | Autoplay speed bar — only while autoplaying | fixed |
@@ -154,8 +154,32 @@ changes height.
 
 Two things reading the source corrected:
 
-- **The RN render has no eval bar at all** — `renderEvalBar:2741` is dead code. The 8pt bar under the
-  board is the spec's addition; the **3pt** one is real and belongs to the *engine panel*.
+- **The RN render has no eval bar at all** — `renderEvalBar:2741` is declared and never called (one
+  grep hit, the declaration). The **3pt** one is real and belongs to the *engine panel*.
+
+  Read the dead function and it says more than "dead". Its header comment is
+  `RENDER EVAL BAR (vertical, DroidFish-style)` — and the style underneath is
+  `evalBarContainer { flexDirection: 'row' }` with `evalBarWhite` animated on **width**. The author
+  commented *vertical*, implemented *horizontal*, and shipped neither. When the client asked for the
+  bar "sa gilid tulad lichess or chesscom", the answer was already in the source — so band 2 is an
+  `HStack{rail; board}` now, and every rail number comes from that same abandoned `evalBar*` block.
+  The rail is **20pt**: the eval container's own cross-axis thickness (an 8pt `evalBarTrack` inside
+  6pt of `paddingHorizontal` each side), stood on end. It shipped at 32 — `evalBarText.minWidth`,
+  the minimum for the *label* — and the client asked for it thinner; sizing a bar to its own caption
+  was the mistake. The label is fitted to the rail instead (`AnalysisEval.labelFontSize`), at a size
+  **both** renderers draw, because CSS has no `minimumScaleFactor` and would clip where SwiftUI
+  shrinks.
+
+  **The rail is only there when the engine is.** `toggleEngine` drops the snapshot when it switches
+  the engine off, so the rail would sit at a dead 50/50 with no number on it — the client's word was
+  *"hindi na need yun pag nakapatay engine … yung space nya kainin na ng chessboard"*. One function,
+  `AnalysisBoard.edge(screenWidth:pixelRatio:engineOn:)` (browser: `MET.boardEdge`), picks the edge,
+  and **both** the board band and `enginePlan` call it. Two call sites picking for themselves is how
+  the panel ends up budgeted against a board that is not on screen — a silently missing engine row.
+  In the browser the rail is `display: none`, never `visibility`, so it leaves the flex row and takes
+  `.an-board`'s gap with it; the engine toggle calls `sizeBands()` because nothing else would.
+  Full reasoning, and what is deliberately *not* taken from it, in
+  [`../PORTING_NOTES.md`](../PORTING_NOTES.md).
 - **The opening name lives in the engine panel's info row** (`board.tsx:2836-2841`), beside the depth
   chip — not in the status bar.
 
@@ -752,6 +776,7 @@ so "the same size as the notation" is true by construction.
 | `engineText` | 9 | **13** = `stripMove` |
 | opening name (`engineOpening`) | 9 | **12** = `altChip` |
 | depth chip `d:6` (`engineDepth`) | 8 | **11** — a chip as large as the moves would out-shout them |
+| eval rail `+0.5` (`evalRail`) | 11 | **8⅓** — `evalBarText.fontSize` is the CAP; on a 20pt rail the four-glyph budget binds first |
 
 The source assertions are **not deleted, they are inverted** — the ⩲/⩱ precedent. `deviates(key, prop,
 ours, source, why)` asserts that the RN source still holds its value *and* that ours differs in the

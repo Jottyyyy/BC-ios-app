@@ -34,6 +34,8 @@ final class AnalysisVM: ObservableObject {
     @Published private(set) var openingText: String?
     @Published private(set) var evalFraction: CGFloat = 0.5
     @Published private(set) var evalSymbol: String?
+    /// The eval rail's score text: `+0.5`, `M4`, `1-0`, `½-½`. Empty until the engine reports.
+    @Published private(set) var evalLabel = ""
     @Published private(set) var depth = 0
     @Published private(set) var analyzing = false
     @Published private(set) var lastMove: Move?
@@ -179,16 +181,21 @@ final class AnalysisVM: ObservableObject {
 
         // The one place the UI maps the session's raw score parts through the metrics tables.
         let parts = session.evalParts
-        if let winner = parts.winner {
-            evalFraction = winner == .white ? 1 : 0
-            evalSymbol = nil
-        } else if parts.cp == nil, parts.mate == nil {
-            evalFraction = AnalysisEval.fraction(cp: nil, mate: nil)
-            evalSymbol = nil
-        } else {
-            evalFraction = AnalysisEval.fraction(cp: parts.cp, mate: parts.mate)
-            evalSymbol = AnalysisTables.evalSymbol(cp: parts.cp, mate: parts.mate)
-        }
+        // The fraction moved to `AnalysisEval.fraction(parts:)` when the Opening Tree explorer grew
+        // an engine — the winner-means-full-rail branch is a decision, and a second screen
+        // re-deriving it is a second screen that will get a finished game wrong.
+        evalFraction = AnalysisEval.fraction(parts: parts)
+        // The SYMBOL stays here: it is the Analysis Board's own ⩲/± annotation, and it is absent
+        // both for a finished game and for no evaluation at all.
+        evalSymbol = parts.winner == nil && !(parts.cp == nil && parts.mate == nil)
+            ? AnalysisTables.evalSymbol(cp: parts.cp, mate: parts.mate)
+            : nil
+        // ONE formatter. `EngineScore.displayText` is what the engine rows' eval column already
+        // uses, so `+1.3` in the rail and `+1.3` in row 1 cannot disagree — they are two
+        // projections of the same `score`, which is also what `evalParts` above destructures. A
+        // previewed line does not change it: like the strip and the rows, the rail describes the
+        // real cursor.
+        evalLabel = session.snapshot?.score?.displayText ?? ""
     }
 
     private func rebuildPieces() {

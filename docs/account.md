@@ -90,15 +90,25 @@ A loud failure in the rare workflow beats a silent one in the daily workflow.
 | `ios-testflight` | no | skipped | granted |
 | **`ios-appstore`** | **sed into `project.yml` before `xcodegen`** | real Apple sheet | real StoreKit |
 
-## The thing that changed about "100% offline"
+## The thing that changed about "100% offline" — twice
 
-The app is still offline — it makes no network call of its own, and `replay_login.js` /
-`replay_premium.js` both fail the build on a `URLSession` or an extra URL. But Apple's servers answer
-the sign-in, so **the first launch needs a connection**. The in-app privacy sheet was reworded from
-"works 100% offline" to say so, in both languages.
+**First:** Apple's servers answer the sign-in, so **the first launch needs a connection**. The
+in-app privacy sheet was reworded from "works 100% offline" to say so, in both languages.
 
-The export-compliance `NO` in `ios/project.yml` is unaffected: `AuthenticationServices` is a second
-Apple framework over OS-provided TLS, the same reasoning already written there for StoreKit.
+**Then (2026-08-24):** the Opening Tree's Lichess/Chess.com download shipped, and the app makes a
+network call of its own for the first time. The sheet's replacement wording — the app *"does not
+collect, store, or send any personal information anywhere"* — became false in the most literal way
+available: the download **sends the username the user typed** to a third party. It is narrowed
+again rather than dropped. No account server, no analytics, no tracking; two named exceptions.
+
+The claim is now **~90% offline**, which is the client's own number. `replay_login.js` and
+`replay_premium.js` still fail the build on a `URLSession` in the login or premium features, and
+`replay_opening_tree.js` §12 fails it if any file besides `OpeningDownloader.swift` opens one.
+
+The export-compliance `NO` in `ios/project.yml` is unaffected by either change: both are
+OS-provided TLS with no cryptography of the app's own, so the standard-encryption exemption applies.
+**What is NOT settled is the App Store Connect privacy answers** — they were filled in for an app
+that sent nothing, and nothing in this repo can check them. See `PORTING_NOTES.md`.
 
 ## Key files
 

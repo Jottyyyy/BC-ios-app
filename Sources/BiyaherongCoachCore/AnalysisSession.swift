@@ -399,7 +399,15 @@ public final class AnalysisSession {
         return out
     }
 
-    public var evalParts: EvalParts {
+    public var evalParts: EvalParts { AnalysisSession.evalParts(from: snapshot) }
+
+    /// The same parts, from a snapshot alone.
+    ///
+    /// Static for exactly the reason `engineRows(from:)` above is: a second screen with an engine
+    /// and no `AnalysisSession` needs them, and the Opening Tree explorer is now one. Splitting a
+    /// four-case switch across two files is four chances for the terminal case — the one that
+    /// decides whether a finished game reads as ±0.00 or as a win — to be spelled differently.
+    public static func evalParts(from snapshot: AnalysisSnapshot?) -> EvalParts {
         guard let score = snapshot?.score else { return EvalParts(cp: nil, mate: nil, winner: nil) }
         switch score {
         case .cp(let c): return EvalParts(cp: c, mate: nil, winner: nil)

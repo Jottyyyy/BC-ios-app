@@ -99,20 +99,31 @@ targets:
         # above earned applies — after `xcodegen generate`, confirm the archive really contains
         # Biyaherong.app/PrivacyInfo.xcprivacy. No gate on Windows can see it.
         GENERATE_INFOPLIST_FILE: YES
-        # The app makes no network calls of its own. TWO Apple frameworks talk to Apple on its
-        # behalf — StoreKit for the subscription, which reads the device's own transaction cache,
-        # and AuthenticationServices for Sign in with Apple. Both use OS-provided TLS, which is
-        # EXEMPT, so `NO` remains the correct declaration and stops App Store Connect halting every
-        # upload on the manual export-compliance question.
+        # The app now makes network calls of its own, and `NO` is STILL correct — read on before
+        # changing it.
         #
-        # AuthenticationServices is the newer of the two and it does change one thing that is NOT
-        # an export question: the first sign-in needs a connection, so the app is no longer usable
-        # from a cold install with no network. "Offline after sign-in" is the honest claim, and the
-        # in-app privacy sheet was reworded to say exactly that.
+        # Two Apple frameworks talk to Apple on the app's behalf: StoreKit for the subscription,
+        # which reads the device's own transaction cache, and AuthenticationServices for Sign in
+        # with Apple. Both use OS-provided TLS.
         #
-        # `tools/qa/replay_premium.js` and `replay_login.js` both fail the build gate on any
-        # URLSession or extra URL — in the new login file too — so this claim stays a test rather
-        # than a comment.
+        # The app's OWN traffic is the Opening Tree's game download — `URLSession` over https to
+        # lichess.org and api.chess.com, in `BiyaherongUI/OpeningDownloader.swift`. That is also
+        # OS-provided TLS with no cryptography of the app's own: no bundled algorithm, no custom
+        # protocol, no key material. It falls under the same standard-encryption exemption, so the
+        # declaration does not change. What changed is only the SENTENCE that used to justify it —
+        # "the app makes no network calls of its own" — which was true when it was written.
+        #
+        # The two things that ARE affected and are not export questions:
+        #   • The app is not usable from a cold install with no network (the first sign-in needs
+        #     one), and the Opening Tree's two online sources need one every time. "90% offline"
+        #     is the honest claim; the in-app privacy sheet names both exceptions.
+        #   • The download sends the USERNAME the user types to a third party. Check the App Store
+        #     Connect privacy answers reflect that before the next submission — no gate here can.
+        #
+        # `tools/qa/replay_premium.js` and `replay_login.js` still fail the build gate on any
+        # URLSession or extra URL in the premium and login features, and
+        # `replay_opening_tree.js` §12 fails it if any file other than OpeningDownloader.swift
+        # opens one. The claim stays a test rather than a comment.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_CFBundleDisplayName: Biyaherong
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

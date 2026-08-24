@@ -107,6 +107,134 @@ const MUTANTS = [
     to: 'if true {',
     why: 'the Puzzle Hub drawn unconditionally over Home, i.e. as a tab again',
   },
+  {
+    id: 'coach_board_loses_its_drag',
+    file: 'CoachScreens.swift',
+    from: '                          onDragMove: { from, to in drag(from, to, in: pos) })',
+    to: '                          coordinates: true)',
+    why: 'the coach game board back to tap-only — the shipped bug verbatim. `BoardView` installs '
+      + 'no drag gesture at all without `onDragMove`, so every drag is silently swallowed while '
+      + 'the board still selects, highlights and plays on a tap',
+  },
+  {
+    // Replaces `display_board_becomes_playable`, whose anchor is gone: the Opening Tree board is
+    // PLAYABLE now — free play is the feature — so there is no read-only board left for that mutant
+    // to make playable. A mutant whose `from:` no longer matches never applies, which reads as a
+    // pass and proves nothing, so it is re-pointed rather than deleted.
+    //
+    // Same site, opposite half: the NEW board must be seen by rule 7 on a screen that is not the
+    // one the drag bug was found on.
+    id: 'opening_tree_board_loses_its_drag',
+    file: 'OpeningTreeScreens.swift',
+    from: '                          onDragMove: { from, to in drag(from, to, in: pos) })',
+    to: '                          coordinates: true)',
+    why: 'the explorer board back to tap-only — the coach bug verbatim, on the screen that WAS '
+      + "this rule's exemption until free play was added",
+  },
+  {
+    // THE EXEMPT ARM. It used to be proved by the app simply containing a display board; it has
+    // none, so rule 7 states the census exactly (`display === 0`) and this makes a real playable
+    // board display-shaped. The only way that can raise `display` to 1 is for the display predicate
+    // to have MATCHED it — so a predicate rotted into matching nothing lets this mutant SURVIVE,
+    // which is precisely the failure the old `display >= 1` floor existed to catch.
+    //
+    // Never compiled — the checker only greps — so the duplicated arguments do not matter.
+    id: 'playable_board_becomes_display_shaped',
+    file: 'PuzzleSolverParts.swift',
+    from: 'BoardView(pieces: engine.pieces,',
+    to: 'BoardView(pieces: engine.pieces, selected: nil, legalTargets: [], onTap: { _ in },',
+    why: 'a playable board reclassified as a display board — rule 7 must NOTICE, or its exemption '
+      + 'has become something reachable by accident',
+  },
+
+  // ---- the eval rail's SHAPE -------------------------------------------------
+  //
+  // These five were hand-run and recorded as prose in CHANGELOG.md ("21/21 mutants"), which held
+  // exactly as long as nobody moved the code. The rail's body has just moved out of
+  // `AnalysisBoardScreen.swift` into `EvalRail.swift` so two screens can share one — and a hand-run
+  // mutant does not follow a file. Left as prose, the five assertions guarding the rail's geometry
+  // would have gone quiet the moment the forwarder replaced the body, and every suite would have
+  // stayed green while the rail could be rewritten backwards.
+  //
+  // A gate nothing mutates is a gate on trust. Mechanised here, they move with the file.
+  // ---- the SECOND rail's mount ------------------------------------------------
+  //
+  // §4d became a site table when the Opening Tree explorer grew an engine. A table with one row
+  // that happens to pass is not a table, so each rule is mutated on the NEW site — the one that
+  // was written after the rules, and the one that would have shipped unpinned.
+  {
+    id: 'opening_rail_drawn_with_engine_off',
+    file: 'OpeningTreeScreens.swift',
+    from: 'if engine.engineOn { evalRail(height: edge) }',
+    to: 'evalRail(height: edge)',
+    why: 'the explorer rail drawn unconditionally — with the engine off it sits at a dead 50/50 '
+      + 'with no number on it, and the board never takes the width back',
+  },
+  {
+    id: 'opening_board_ignores_the_toggle',
+    file: 'OpeningTreeScreens.swift',
+    from: 'OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)',
+    to: 'OpeningBoard.edge(screenWidth: width, engineOn: true)',
+    why: 'the explorer board budgeted for a rail that may not be there — 25pt of dead space on '
+      + 'the right whenever the engine is off',
+  },
+  {
+    id: 'opening_board_subtracts_the_rail_by_hand',
+    file: 'OpeningTreeScreens.swift',
+    from: 'let edge = OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)',
+    to: 'let edge = width - AnalysisEval.railTotal',
+    why: 'the one entry point bypassed — the board and the rail then read two different widths, '
+      + 'which is the failure the CHANGELOG records for the Analysis Board',
+  },
+  {
+    id: 'second_eval_rail_in_the_module',
+    file: 'OpeningTreeScreens.swift',
+    from: 'EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)',
+    to: 'Rectangle().frame(height: AnalysisEval.fillHeight(rail: height, fraction: 0.5))',
+    why: 'a screen drawing its own eval fill instead of the shared rail — §4e`s census must see a '
+      + 'second drawer, or two rails drift on the fill anchor and the label ink',
+  },
+  {
+    id: 'rail_fill_anchored_at_the_top',
+    file: 'EvalRail.swift',
+    from: '.overlay(alignment: .bottom)',
+    to: '.overlay(alignment: .top)',
+    why: 'the eval fill growing DOWN from the ceiling — every evaluation in the app is then '
+      + 'backwards while every number behind it stays right, which is the only symptom there is',
+  },
+  {
+    id: 'rail_fill_height_by_hand',
+    file: 'EvalRail.swift',
+    from: 'AnalysisEval.fillHeight(rail: height, fraction: fraction)',
+    to: 'height * fraction',
+    why: 'the fill height as arithmetic in a view body rather than the pure function — it drops '
+      + "the 0…1 clamp, so a mate's 0.95 and a corrupt fraction both draw past the rail",
+  },
+  {
+    id: 'rail_label_at_the_source_size',
+    file: 'EvalRail.swift',
+    from: 'AnalysisType.mono(AnalysisEval.labelFontSize,',
+    to: 'AnalysisType.mono(AnalysisType.evalRail,',
+    why: 'the label at the SOURCE size instead of the size derived to fit the rail — SwiftUI '
+      + 'shrinks it silently via minimumScaleFactor while the browser, which has no such thing, '
+      + 'clips. The two renderers disagree on screen with every metrics assertion still green',
+  },
+  {
+    id: 'rail_label_ink_inlined',
+    file: 'EvalRail.swift',
+    from: 'AnalysisEval.labelInk(fraction: fraction)',
+    to: 'AnalysisPalette.textPrimary',
+    why: 'the label ink decided in the view rather than in the metrics layer — it is a second copy '
+      + 'of the >= 0.5 rule and drifts from the JS twin, which reads the shared one',
+  },
+  {
+    id: 'rail_fill_not_clipped',
+    file: 'EvalRail.swift',
+    from: '.clipShape(RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous))',
+    to: '.padding(0)',
+    why: 'the fill unclipped — at a full-height eval it spills past the rail`s rounded corners, '
+      + 'which looks like a rendering artefact rather than a missing modifier',
+  },
 ];
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'swift-layout-mut-'));
