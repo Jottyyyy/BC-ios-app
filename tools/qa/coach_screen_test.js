@@ -38,6 +38,9 @@ function makeNode(tag, ns) {
     tagName: String(tag).toUpperCase(), ns: ns || null,
     children: [], parentNode: null, attrs: {}, _text: '',
     value: '', type: '', disabled: false, scrollTop: 0, flipped: false, rules: null,
+    // The component's REAL default (chess-board.js:186). Left `undefined`, a screen that never
+    // enables drag would be indistinguishable from one that does — which is the whole bug.
+    draggablePieces: false,
     style: {
       _props: {},
       setProperty(k, v) { this._props[k] = v; },
@@ -117,6 +120,18 @@ function walk(node, out) {
 const byClass = (root, cls) => walk(root).filter(n => n.classList.contains(cls));
 const textOf = (root, cls) => byClass(root, cls).map(n => n.textContent);
 const first = (root, cls) => byClass(root, cls)[0];
+
+/**
+ * Is drag on, by either spelling the real component honours?
+ *
+ * `chess-board.js` reads the PROPERTY at connect time and the ATTRIBUTE by any value except the
+ * literal `'false'` (lines 204 and 219). Asserting only the property would fail `puzzle-board.js`,
+ * which is correct and uses the attribute — so this mirrors the component rather than picking a
+ * favourite spelling.
+ */
+const dragEnabled = (b) => b.draggablePieces === true
+  || (b.getAttribute('draggable-pieces') !== undefined
+      && b.getAttribute('draggable-pieces') !== 'false');
 
 // ---- The sandbox -------------------------------------------------------------------------------
 
@@ -346,6 +361,13 @@ function run() {
        'the adapter answers with the real legal moves for the side to move');
     eq(board.rules.legalMovesFrom(GAME.liveFen(g), 1).length, 0,
        'and none for the side that is not');
+    // Drag is the SIXTH thing the component leaves off until it is asked for, and the last one to
+    // be found: tap-to-move works without it, so the coach game shipped a board you could tap and
+    // not drag — past this suite, past the headless mock, and past a round on a real phone.
+    // `BoardView` defaults the same way on the Swift side; `swift_layout_check.js` rule 7 is the
+    // other half of this assertion.
+    expect(dragEnabled(board),
+           'the board is told its pieces may be DRAGGED, or only tapping ever works');
 
     // The move arrives as the component's own event, carrying its own UCI. Assigning `.onmove`
     // would never fire, and `detail.from + detail.to` would be arithmetic. A fresh game, because

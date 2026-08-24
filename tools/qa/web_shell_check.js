@@ -178,6 +178,52 @@ const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
     + 'set resize — one of them is falling through to the UA default of resize: both');
 }
 
+// ── 5. A board a piece can be picked up on can be DRAGGED ───────────────────────
+//
+// The same shape as the three bugs above: correct on disk, dead in the browser. `<chess-board>`
+// wants TWO things before a piece will move — `.rules`, which says where it may go, and drag,
+// which is OFF until a screen asks for it (`_dragEnabled = false`, chess-board.js:186). Set the
+// first and forget the second and you get a board that selects, highlights legal targets and plays
+// a move on a tap while ignoring every drag, with nothing anywhere to say so. That is what
+// `coach-play.js` shipped, through 34,000 green assertions and a round on a real phone.
+//
+// So the implication IS the rule: rules ⇒ drag. `openings.js` builds a board and deliberately gives
+// it no rules — "navigation is the move LIST's job, so a tap on the board would be a second,
+// silently different way to walk the tree" — and is exempt by that same test. `swift_layout_check.js`
+// rule 7 is this rule's Swift half, written off `onTap`/`onDragMove` because SwiftUI has no
+// `.rules`.
+{
+  /** JS with comments removed, so a property NAMED in prose never counts as a property SET. */
+  const stripJs = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+
+  const playable = [], displayOnly = [];
+  for (const f of fs.readdirSync(JS_DIR).filter((x) => x.endsWith('.js'))) {
+    const s = stripJs(fs.readFileSync(path.join(JS_DIR, f), 'utf8'));
+    if (!/createElement\(\s*['"]chess-board['"]\s*\)/.test(s)) continue;
+    if (!/\.rules\s*=/.test(s)) { displayOnly.push(f); continue; }
+    playable.push(f);
+    // Both spellings the component honours: the property, or the attribute at any value but the
+    // literal 'false' (chess-board.js:204/219). puzzle-board.js and puzzle-solver.js use the
+    // attribute and are correct, so a check that demanded the property would fail working code.
+    const attr = s.match(/setAttribute\(\s*['"]draggable-pieces['"]\s*,\s*(['"])([^'"]*)\1\s*\)/);
+    const on = /\.draggablePieces\s*=\s*true/.test(s) || (attr !== null && attr[2] !== 'false');
+    expect(on,
+      `web-demo/js/${f} gives its board \`.rules\` but never turns drag on. A piece can be picked `
+      + 'up and tapped to its square, and dragging it does nothing at all. Set '
+      + '`.draggablePieces = true` (or the `draggable-pieces` attribute), or take `.rules` away '
+      + 'and mean it — a board with neither is a display board, which is fine and is what '
+      + 'openings.js is.');
+  }
+  // Floors: the census when this was written is five playable boards and one display board. A
+  // regex that stops matching would otherwise report a clean sweep of nothing.
+  expect(playable.length >= 5,
+    `only ${playable.length} board-building screen(s) matched (${playable.join(', ') || 'none'}) — `
+    + 'the detector has stopped finding them, so this rule now passes without reading anything');
+  expect(displayOnly.length >= 1,
+    'no rules-free board found — the exempt arm is untested, which is how a deliberately read-only '
+    + 'board would start being told it must accept drags');
+}
+
 // ---- report ------------------------------------------------------------------
 const result = {
   passed,
