@@ -140,6 +140,59 @@ Swift cancels the `Task` from `.onDisappear`, so leaving the form stops the down
 cannot un-send a `fetch` without an `AbortController`, so `app.js` compares the captured form by
 identity on the way out and drops an answer that arrives into a screen the user has left.
 
+## Leaving the book
+
+The board is **playable**. Tap a piece or drag it and the move goes onto the path, whether or not
+any game in the tree contains it — which is what the client asked for: *"pwede mag interrupt yung
+user sa position"*.
+
+That needed a distinction the screen could not previously make. `children(at:)` answers empty both
+at a **leaf** and for a path that has **left the tree**, so one card meant two things and Forward was
+dead either way. `OpeningTree.bookDepth(along:)` is the same walk reporting *where it stopped*:
+`bookDepth == path.count` is on book, anything less is the ply at which you left it. From it the
+stores derive `isOffBook`, `freePlies`, `atFreeLimit` and `backToTree()` — derived, never tracked
+separately, because two definitions of "off book" is two answers.
+
+**A transposition is still off book.** `1.Nf3 c5 2.e4` does not rejoin `1.e4 c5 2.Nf3`, because this
+tree is keyed by the line you played (see *The tree's shape*). `OpeningBook` is the FEN-keyed thing
+that deliberately collapses transpositions. Asserted by name in both gates so it reads as a decision.
+
+**Free play is capped at `maxFreePlies = 20`** (INVENTED — see `PORTING_NOTES.md`). `position` and
+`lastMove` replay the whole path on every SwiftUI `body` evaluation and `path` is `@Published`, so an
+uncapped wander makes every repaint linear in how long you have been exploring — and it degrades
+*smoothly*, which is worse than crashing. It also makes `position`'s own doc comment true again: it
+claimed the walk was bounded by `defaultMaxPlies`, which held only while the UI offered nothing but
+tree moves. At the cap the card says so rather than the board swallowing the drag.
+
+`commit` resolves SAN through `pos.san(for:)` / `E.san` — **the same function the tree canonicalises
+with**. This is the highest-risk line in the feature: return the component's UCI unresolved and an
+*on-book* move reads as off book, the board advances, the list empties, and nothing says why. The
+mutation harness found exactly that hole by surviving; it is asserted directly now.
+
+## Engine evaluation
+
+A toggle (**OFF by default**), an eval rail beside the board, and the engine's three best lines.
+
+Nothing about an evaluation is computed twice. The screen mounts the same `LocalEngine`, the same
+`AnalysisSession.engineRows(from:)` — made `static` for exactly this case — the same
+`evalParts(from:)` and `AnalysisEval.fraction(parts:)`, and the same `EvalRail`. Limits are
+`AnalysisEngineLimits`, **not** the Analysis Board's `EngineSettings` preset: that screen's setting
+is not this one's. §15 of the replay pins every one of those and forbids a depth, a multiPV or a
+debounce written here as a number.
+
+The board's width goes through **one entry point**, `OpeningBoard.edge(screenWidth:engineOn:)`, which
+both the board and the rail read. It deliberately does not route through `AnalysisBoard.edge`: that
+snap-to-8 formula belongs to a board designed around it, and using it here would have narrowed
+today's board on a screen nobody asked to change.
+
+**The panel needed no invented geometry.** `opening_styles.json` has carried the whole engine style
+block since the tree shipped — the extractor sweeps the RN StyleSheet whole — so all twelve keys and
+`ENGINE_MOVE_COLORS` were sitting there unused. `selfTestSource` asserts every value against it.
+
+**One RN bug is deliberately not reproduced:** `getEvalColor` tests `startsWith('M')` before
+`startsWith('M-')`, so a black mate `M-3` renders **green** there — the losing side's own forced mate
+painted as an advantage. The minus is checked first here, in both languages, asserted by name.
+
 ## Key files
 
 | File | Role |
@@ -149,6 +202,9 @@ identity on the way out and drops an answer that arrives into a screen the user 
 | `Sources/BiyaherongCoachCore/OpeningDownload.swift` | **The wire formats** — URLs, the NDJSON parse, the archive order, the limits, the colour rule. Pure; opens no socket. |
 | `DemoApp/Sources/BiyaherongUI/OpeningDownloader.swift` | The transport. **The app's only `URLSession`.** |
 | `web-demo/js/opening-download.js` | Both of those, in the browser. **`web-demo/`'s only `fetch`.** |
+| `DemoApp/Sources/BiyaherongUI/OpeningEngineVM.swift` | The engine's toggle, debounce, cancellation and stale guard. Owns no maths. |
+| `DemoApp/Sources/BiyaherongUI/EvalRail.swift` | **The one eval rail**, shared with the Analysis Board. `swift_layout_check.js` §4e asserts it is the only file that draws one. |
+| `OpeningTree.bookDepth` · `maxFreePlies` | Where the path leaves the tree, and how far past it you may go. |
 | `DemoApp/Sources/BiyaherongUI/OpeningMetrics.swift` | Every number and colour, mirrored by `web-demo/js/opening-metrics.js`. Includes `pgnMinHeight` — INVENTED (the RN form has no PGN box), taken from `pairing.css`'s `.pgd-modal-area` so the app's two paste-a-blob fields agree. |
 | `tools/metrics/extract_opening_styles.js` → `opening_styles.json` | The AST walk over `openingtree.tsx` that both metrics files are asserted against. **Committed.** |
 | `DemoApp/Sources/BiyaherongUI/OpeningTreeStore.swift` | `openings.json` in Application Support, plus the navigation state. |
@@ -210,3 +266,11 @@ Visually, in `web-demo/index.html` at an iPhone size, with the Subscription pick
    that site."*
 6. **Chess.com** the same way. It arrives a month at a time rather than a game at a time, so the
    counter steps rather than ticks.
+7. In the explorer, tap **🔍 Engine: OFF**. It turns ON, the rail appears on the left, the board
+   narrows by 25 pt, and up to three lines appear with an eval, a SAN and a continuation. Toggle it
+   off and the rail is *gone* — not hidden — and the board is full width again.
+8. **Drag a piece to a move no game in the tree played.** It plays, an **Off book** card appears,
+   the move list is empty and Forward is dead. Tap-then-tap does the same. **Back to tree** returns
+   in one step; a single **Back** over the divergence also works.
+9. Keep playing: at 20 free plies the card's wording changes and the board stops accepting moves,
+   rather than swallowing them silently.

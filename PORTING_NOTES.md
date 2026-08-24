@@ -2104,6 +2104,75 @@ count rather than a golden-case count.
   `ROOT/../BYAHERONG-COACH-FRONTEND` resolves inside `.claude/worktrees/`. This extractor takes a
   `FRONTEND_ROOT` override, as `tools/oracle` takes `LARAVEL_ROOT`; the other four still do not.
 
+### The explorer's engine and its playable board (2026-08-24)
+
+Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag
+interrupt yung user sa position"*. Both go **beyond** the RN screen, and both are recorded here
+because neither is a port.
+
+**INVENTED: the eval rail.** `openingtree.tsx` has the engine toggle and the three lines but **no
+bar at all** — the rail lives in its sibling `board.tsx`. Rather than invent geometry, the explorer
+reuses the Analysis Board's already-extracted `AnalysisEval.*` and its `.an-eval` CSS, and the body
+was lifted into a shared `EvalRail` so there is one rail in the module rather than two. Its height
+comes from `OpeningBoard.edge(screenWidth:engineOn:)`, a new one-entry-point function that
+deliberately does **not** route through `AnalysisBoard.edge`: that snap-to-8 formula is pinned to
+`DragDropChessBoard.tsx` and would have narrowed today's full-bleed board by 0.67 pt at 3× on a
+screen nobody asked to change.
+
+**INVENTED: `OpeningTree.maxFreePlies = 20`.** openingtree.com has no such limit and neither does
+the RN screen, because in neither can you move a piece. It is not defensiveness: `position` and
+`lastMove` replay the whole path on every SwiftUI `body` evaluation and `path` is `@Published`. It
+also makes an existing comment true again — `position`'s doc claimed the walk was bounded by
+`defaultMaxPlies`, which held only while the UI offered nothing but the tree's own moves.
+Deliberately a second constant: `defaultMaxPlies` bounds how much of a GAME is worth recording, this
+bounds how far a USER may wander, and one constant serving two meanings is how `maxGamesLimit` came
+to be 2000.
+
+**DEVIATION: the RN `getEvalColor` bug is not reproduced.** It tests `startsWith('M')` before
+`startsWith('M-')` (`openingtree.tsx:600-605`, and the identical code at `board.tsx:940`), so a black
+mate `M-3` returns green — the losing side's own forced mate painted as an advantage. `CLAUDE.md`
+says to port the intended behaviour; the minus is checked first, in both languages, asserted by name.
+
+**DEVIATION: the board is playable, and the RN one is locked.** `openingtree.tsx:950-965` passes
+`disabled={true}`, `dragEnabled={false}` and no-op handlers. The old port matched it, on the stated
+reasoning that navigation is the move LIST's job. That was right while the tree was the only thing
+you could walk; playing your own move is the way you LEAVE it.
+
+**DECISION: a transposition stays off book.** `bookDepth` walks SAN keys, so `1.Nf3 c5 2.e4` does not
+rejoin `1.e4 c5 2.Nf3`. Detecting it would need a second, position-keyed index over the whole tree —
+built per render or persisted, i.e. a document-format change — and the candidate counts it produced
+would describe a different move order than the history strip above them shows. Asserted by name in
+both gates so it reads as a decision rather than a gap.
+
+**MOVED: `Square.isBackRank`.** `CoachLayout.lastRankWhite/lastRankBlack` existed because Play vs
+Coach was the only board you could push a pawn on. The explorer is the second. A back rank is a fact
+about chess rather than about either screen's layout, so it is in the Core; the alternative was a
+second copy.
+
+#### The gate rework, and why the floors had to change
+
+Both drag rules floored on *"at least one display board exists"* and this screen was the last one in
+each language. A floor over an empty set says nothing, so the exempt arm is now proved three ways
+instead: the predicate is a **named function exercised on fixtures**, the census is stated **exactly**
+(`display === 0` / `displayOnly === 0`) so it is falsifiable, and each rule gains a **mutant that
+makes a real playable board display-shaped** — the only way that can move the census is for the
+predicate to have matched, so a rotted predicate lets the mutant survive. That is precisely the
+canary the floor used to be.
+
+Two mutants had to be re-pointed. The JS one is the instructive failure: it would not merely have
+stopped applying, it would have **applied and SURVIVED**, because `openings.js` now sets `.rules` and
+the drag legitimately — reporting a dead rule as a live one.
+
+**And the harness earned its keep.** On the first full run after the board became playable,
+*"a board move is spelled instead of resolved"* **survived**: nothing exercised the function turning
+the component's UCI into the store's SAN. Returning the UCI unresolved makes an on-book move read as
+off book — the board advances, the list empties, nothing says why, and it looks exactly like the
+feature working. It is asserted directly now, in both `openings.selfTest` and replay §16.
+
+Finally, the rail's own five mutants were **hand-run prose in `CHANGELOG.md`** (*"21/21"*), which
+held exactly as long as nobody moved the code. Extracting the rail moved it. They are in
+`swift_layout_mutation_test.js` now, so they travel with the file.
+
 ### The one networked path — declared, not wired, then WIRED (2026-08-24)
 
 `OpeningSource` has four cases and `isOnline` is the single source of truth for which two need the

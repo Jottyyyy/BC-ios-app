@@ -40,6 +40,18 @@ public enum Square {
     public static func make(file: Int, rank: Int) -> Int { rank * 8 + file }
     public static func file(_ sq: Int) -> Int { sq & 7 }
     public static func rank(_ sq: Int) -> Int { sq >> 3 }
+
+    /// Rank 1 or rank 8 — where a pawn promotes, whichever side it belongs to.
+    ///
+    /// Here rather than as a pair of screen constants. `CoachLayout` carried `lastRankWhite = 7`
+    /// and `lastRankBlack = 0` because Play vs Coach was the only board you could push a pawn on;
+    /// the Opening Tree explorer is the second, and a back rank is a fact about chess rather than
+    /// about either screen's layout. The alternative was a second copy, which is the failure this
+    /// codebase keeps writing gates against.
+    public static func isBackRank(_ sq: Int) -> Bool {
+        let r = rank(sq)
+        return r == 0 || r == 7
+    }
     public static func name(_ sq: Int) -> String {
         let f = Character(UnicodeScalar(UInt8(97 + file(sq))))
         return "\(f)\(rank(sq) + 1)"

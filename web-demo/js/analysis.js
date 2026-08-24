@@ -193,29 +193,15 @@ var BiyaAnalysisBoard = (function () {
    * DEVIATION — the source shows 6. Twelve, because 6 clipped the stronger presets' real output;
    * the default preset's ~6-ply search is topped up by the engine's TT-extended PV instead.
    */
-  var PV_PREVIEW = 12;
+  // Read from the engine module rather than restated, now that the rows are built there and a
+  // second screen draws them. Two copies of this number is two lengths of continuation.
+  var PV_PREVIEW = AN.PV_PREVIEW;
 
   /** One row per engine line: eval · SAN · continuation (board.tsx:2807-2831). */
-  function engineRows(s) {
-    if (!s.snapshot || !s.snapshot.lines) return [];
-    return s.snapshot.lines.map(function (ln, i) {
-      var pv = ln.pv && ln.pv.length ? ln.pv[0] : null;
-      return {
-        rank: i,
-        // 1-based, because "line 0" means nothing to a player. Mirrors EngineRow.rankLabel.
-        rankLabel: String(i + 1),
-        evalText: AN.formatScore(ln.score),
-        san: ln.pvSAN && ln.pvSAN.length ? ln.pvSAN[0] : '',
-        continuation: (ln.pvSAN || []).slice(1, 1 + PV_PREVIEW).join(' '),
-        uci: pv ? E.moveUci(pv) : '',
-        // The WHOLE line, so the panel can walk it on the board and not just play its first move.
-        pvUCI: (ln.pv || []).map(function (m) { return E.moveUci(m); }),
-        from: pv ? pv.from : -1,
-        to: pv ? pv.to : -1,
-        depth: ln.depth
-      };
-    });
-  }
+  // The body moved to `AN.engineRows` when the Opening Tree explorer became the second screen with
+  // an engine panel — the twin of `AnalysisSession.engineRows(from:)`, which is `static` in Swift
+  // for exactly that reason. This stays as the session-shaped wrapper the screen already calls.
+  function engineRows(s) { return AN.engineRows(s.snapshot); }
 
   // ---- the line preview (pure) -------------------------------------------------
   //
@@ -308,22 +294,13 @@ var BiyaAnalysisBoard = (function () {
    * (AnalysisMetrics.swift) and cannot be reached from a Foundation-only Core. So the session
    * publishes the numbers and each platform maps them with the same table.
    */
-  function evalParts(s) {
-    var sc = s.snapshot && s.snapshot.score;
-    if (!sc) return { cp: null, mate: null, winner: null };
-    if (sc.kind === 'cp') return { cp: sc.cp, mate: null, winner: null };
-    if (sc.kind === 'mate') return { cp: null, mate: sc.mate, winner: null };
-    var t = sc.terminal;
-    return { cp: null, mate: null, winner: (t && t.kind === 'checkmate') ? t.winner : null };
-  }
-
-  /** White's share of the eval bar, 0…1. UI-side mapping of `evalParts`. */
-  function evalFraction(s) {
-    var p = evalParts(s);
-    if (p.winner != null) return p.winner === E.WHITE ? 1 : 0;   // a delivered mate pins the bar
-    if (p.cp == null && p.mate == null) return 0.5;
-    return MET.evalBarFraction(p.cp, p.mate);
-  }
+  // Both bodies moved to `analysis-engine.js` when the Opening Tree explorer became the second
+  // screen with a rail. The winner branch in particular is a DECISION — a delivered mate pins the
+  // bar to a full 1, where a mate four moves away is 0.95 — and a second screen re-deriving it is a
+  // second screen that gets a finished game wrong. These stay as the session-shaped wrappers the
+  // screen already calls.
+  function evalParts(s) { return AN.evalPartsOf(s.snapshot); }
+  function evalFraction(s) { return AN.evalFractionFor(evalParts(s)); }
 
   /**
    * The rail's score text: `+0.5`, `M4`, `1-0`, `½-½`. Empty until the engine reports.

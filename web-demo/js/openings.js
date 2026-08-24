@@ -29,12 +29,44 @@ var BiyaOpenings = (function () {
     throw new Error('openings.js needs opening-download.js — load it first');
   }
 
+  /** The Analysis Board's metrics — the eval rail's width, colours and timing are theirs. */
+  function analysisMetrics() {
+    if (typeof BiyaAnalysisMetrics !== 'undefined') return BiyaAnalysisMetrics;
+    if (isNode) return require('./analysis-metrics.js');
+    throw new Error('openings.js needs analysis-metrics.js — load it first');
+  }
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
     return n;
   }
+
+  /* ---- the engine's state, set by the router --------------------------------
+   *
+   * Pushed in rather than owned here, the way `BiyaHome.setPremium` does it: `app.js` runs the
+   * search and owns its token, this file draws the answer. Keeping the loop out of the renderer is
+   * what lets `openings.js` still be `require`d headlessly by `js_goldens.js`, where there is no
+   * Worker and no DOM.
+   *
+   * `on` is FALSE by default — the client's own answer. This screen is a repertoire browser first,
+   * and a search firing on every step of a fast walk is not what it is for.
+   */
+  var engineState = { on: false, rows: [], analyzing: false, snapshot: null };
+  function setEngine(next) {
+    engineState = {
+      on: !!(next && next.on),
+      rows: (next && next.rows) || [],
+      analyzing: !!(next && next.analyzing),
+      // The whole snapshot, not just the rows: the RAIL needs the position's own score, which is
+      // `snapshot.score` — terminal-first, so a finished game pins the rail rather than reading as
+      // a large evaluation. Row 1's eval and the rail's label are two projections of that one
+      // score and cannot be allowed to disagree.
+      snapshot: (next && next.snapshot) || null
+    };
+  }
+  function engineOn() { return engineState.on; }
 
   /**
    * Push every metric onto the root, so the stylesheet holds no number of its own.
@@ -65,6 +97,35 @@ var BiyaOpenings = (function () {
     // The load pill's fill is `rgba(253,176,34,0.15)` in the source: the gold at 15%, composed
     // from the same token rather than restated as a fourth spelling of it.
     colour('loadFill', 'color-mix(in srgb, ' + P.gold + ' 15%, transparent)');
+
+    applyRailVars(node);
+  }
+
+  /**
+   * The eval rail's own custom properties, from the ANALYSIS metrics.
+   *
+   * The explorer reuses `.an-eval` verbatim — one rail, one stylesheet block, which is what
+   * `swift_layout_check.js` §4e's "only ONE vertical eval bar" means in the browser. That block
+   * reads `--an-*`, and those are set by `analysis.js` on the ANALYSIS root, which this screen is
+   * not inside. So they are set here too, from the same table, never restated as numbers.
+   *
+   * `--an-board-edge` is deliberately NOT among them: the rail's height is this screen's board
+   * edge, and `.op-eval` overrides it with `--op-boardEdge`. Setting the analysis one here would
+   * give the rail the other screen's height.
+   */
+  function applyRailVars(node) {
+    var A = analysisMetrics();
+    function set(k, v) { node.style.setProperty(k, v); }
+    set('--an-rail-w', A.railWidth() + 'px');
+    set('--an-rail-r', A.EVAL_BAR.railRadius + 'px');
+    set('--an-rail-pad-v', A.EVAL_BAR.railPaddingV + 'px');
+    set('--an-rail-gap', A.EVAL_BAR.railGap + 'px');
+    set('--an-eval-anim', A.TIMINGS.evalBarAnimation + 'ms');
+    set('--an-fs-rail', A.evalLabelFontSize() + 'px');
+    set('--an-eval-track', A.PALETTE.evalTrack);
+    set('--an-eval-fill', A.PALETTE.evalFill);
+    set('--an-on-gold', A.PALETTE.onGold);
+    set('--an-text', A.PALETTE.textPrimary);
   }
 
   /* ---- shared chrome ------------------------------------------------------- */
@@ -241,14 +302,23 @@ var BiyaOpenings = (function () {
     root.appendChild(header(open ? open.name : MET.STRINGS.title, handlers.onClose));
 
     var boardWrap = el('div', 'op-board');
-    var board = document.createElement('chess-board');
-    board.setAttribute('fen', store.fen());
-    board.setAttribute('coordinates', '');
-    // Read-only: navigation is the move LIST's job, so a tap on the board would be a second,
-    // silently different way to walk the tree.
-    if (open && open.colour === 'black') board.setAttribute('flipped', '');
+    var board = explorerBoard(store, handlers.onPlay);
+    // The rail, LEFT of the board and a sibling of it — never a wrapper. It is the SAME rail the
+    // Analysis Board draws: same `.an-eval` class, same `.fill`/`.lbl` children, same
+    // `.an-eval.off { display: none }`. Only where its height comes from is this screen's.
+    var rail = el('div', 'an-eval op-eval' + (engineState.on ? '' : ' off'));
+    var fill = el('div', 'fill');
+    var lbl = el('div', 'lbl');
+    rail.appendChild(fill);
+    rail.appendChild(lbl);
+    boardWrap.appendChild(rail);
     boardWrap.appendChild(board);
     root.appendChild(boardWrap);
+    paintEval(fill, lbl);
+    sizeExplorer(root, view);
+
+    root.appendChild(engineToggle(handlers.onEngineToggle));
+    root.appendChild(enginePanel());
 
     root.appendChild(el('div', 'op-history', store.historyText()));
 
@@ -259,7 +329,19 @@ var BiyaOpenings = (function () {
     root.appendChild(nav);
 
     var moves = store.candidates();
-    if (!moves.length) {
+    if (store.isOffBook()) {
+      // A NOTE, not an error — you have not done anything wrong by looking at a position your
+      // games never reached. It borrows the form's connectivity-note box rather than inventing
+      // geometry: zero new layout keys, so §9's property audit stays green untouched.
+      var chip = el('div', 'op-offbook');
+      chip.appendChild(el('div', 'op-offbook-title', MET.STRINGS.offBook));
+      chip.appendChild(el('div', 'op-offbook-sub',
+        store.atFreeLimit() ? MET.STRINGS.offBookLimit : MET.STRINGS.offBookSub));
+      var out = el('button', 'op-navbtn', MET.STRINGS.backToTree);
+      out.onclick = handlers.onBackToTree;
+      chip.appendChild(out);
+      root.appendChild(chip);
+    } else if (!moves.length) {
       root.appendChild(el('div', 'op-nomoves', MET.STRINGS.noMoves));
     } else {
       var list = el('div', 'op-moves');
@@ -268,6 +350,159 @@ var BiyaOpenings = (function () {
     }
 
     view.appendChild(root);
+  }
+
+  /** The chess engine, resolved lazily — `engine.js` sets a global under a script tag. */
+  function E() {
+    if (typeof Engine !== 'undefined') return Engine;
+    if (isNode) return require('./engine.js');
+    throw new Error('openings.js needs engine.js — load it first');
+  }
+
+  /** What the component needs before a piece can be picked up. Same shape as coach-play.js's. */
+  function rulesAdapter() {
+    return {
+      legalMovesFrom: function (fen, sq) {
+        var e = E(), pos = e.fromFEN(fen);
+        if (!pos) return [];
+        return e.legalMovesFrom(pos, sq).map(function (m) {
+          return { to: m.to, promotion: m.promotion };
+        });
+      }
+    };
+  }
+
+  /**
+   * A board move as the STORE's vocabulary, which is SAN.
+   *
+   * The component reports UCI; the path is SAN. Resolving it through `E.san` — the same function
+   * `opening-tree.js` canonicalises with — is what makes a board move land on the tree's own
+   * branch. Spell it by hand and `Qxf7+` goes onto a path whose tree holds `Qxf7`: the board
+   * advances, the move list empties, an ON-book move reads as off book, and nothing says why. It
+   * would look exactly like the feature working.
+   *
+   * Null when it does not resolve; the caller drops it.
+   */
+  function sanFromUci(fen, uci) {
+    var e = E(), pos = e.fromFEN(fen);
+    if (!pos) return null;
+    var m = e.parseUci(pos, uci);
+    return m ? e.san(pos, m) : null;
+  }
+
+  /**
+   * The explorer's board.
+   *
+   * Exported for the same reason `coach-play.js` exports its own: `board_component_test.js` must
+   * drive a real pointer through the SCREEN's wiring, in the screen's own order, rather than
+   * through a board the test configured itself — which is exactly how the coach drag shipped dead
+   * through 34,000 green assertions.
+   *
+   * It used to be read-only, on the reasoning that "navigation is the move LIST's job, so a tap on
+   * the board would be a second, silently different way to walk the tree". That was right while the
+   * tree was the only thing you could walk. Playing your own move is not a second way to walk the
+   * tree — it is the way you LEAVE it, which is what the client asked for.
+   */
+  function explorerBoard(store, onPlay) {
+    var open = store.open();
+    var b = document.createElement('chess-board');
+    b.setAttribute('coordinates', '');
+    // `setPosition`, not the `fen` ATTRIBUTE: the attribute carries no last move, which is why this
+    // board has never highlighted one while its Swift twin always has.
+    if (b.setPosition) b.setPosition(store.fen(), { animate: false, lastMove: store.lastMove() });
+    // The PROPERTY. `flipped` is attribute-truthy for every value but the literal 'false', so
+    // `flipped="0"` would be upside down for White.
+    b.flipped = !!(open && open.colour === 'black');
+    b.rules = rulesAdapter();
+    // Both, or the drag is dead: the component attaches NO pointer handlers until a screen asks.
+    b.draggablePieces = true;
+    b.addEventListener('move', function (ev) {
+      var d = ev && ev.detail;
+      if (!d) return;
+      var san = sanFromUci(store.fen(), d.uci);
+      if (san) onPlay(san);
+    });
+    return b;
+  }
+
+  /**
+   * The board's width, through the ONE entry point.
+   *
+   * Both the board and the rail read `--op-boardEdge`, so they cannot disagree about how wide the
+   * board is — the failure the Analysis Board's own `edge` function exists to prevent. Measured
+   * from the view rather than assumed: the phone frame is a real element with a real width.
+   */
+  function sizeExplorer(root, view) {
+    var box = view.getBoundingClientRect ? view.getBoundingClientRect() : { width: 0 };
+    var w = box.width || view.clientWidth || 0;
+    if (!w) return;
+    root.style.setProperty('--op-boardEdge', MET.boardEdge(w, engineState.on) + 'px');
+  }
+
+  /**
+   * The rail's fill and label.
+   *
+   * `MET` here is the OPENING metrics; the fraction and the label placement are the ANALYSIS ones,
+   * because it is the analysis rail. `evalFractionFor` carries the branch a bare fraction cannot:
+   * a delivered mate pins the rail to a full 1, where a mate four moves away is 0.95.
+   */
+  function paintEval(fill, lbl) {
+    var A = analysisMetrics();
+    var AN = isNode ? require('./analysis-engine.js') : BiyaAnalysis;
+    var snap = engineState.snapshot;
+    var f = snap ? AN.evalFractionFor(AN.evalPartsOf(snap)) : A.evalBarFraction(null, null);
+    fill.style.height = (f * 100) + '%';
+    lbl.className = 'lbl ' + (A.evalLabelAtBottom(f) ? 'bottom' : 'top');
+    // ONE formatter, the same one the rows' eval column uses — the rail and row 1 are two
+    // projections of the same score and cannot disagree.
+    lbl.textContent = snap && snap.score ? AN.formatScore(snap.score) : '';
+  }
+
+  /** `alignSelf: flex-start` in the RN source, so it hugs the left rather than stretching. */
+  function engineToggle(onToggle) {
+    var wrap = el('div', 'op-engine-toggle-row');
+    var b = el('button', 'op-engine-toggle' + (engineState.on ? ' on' : ''),
+      engineState.on ? MET.STRINGS.engineOn : MET.STRINGS.engineOff);
+    b.onclick = onToggle;
+    wrap.appendChild(b);
+    return wrap;
+  }
+
+  /**
+   * The three best lines, or what is happening instead.
+   *
+   * The rows are NOT clickable, and that is a decision rather than an omission: `store.play` would
+   * append a SAN the tree has no node for, so a control that looks exactly like the candidate rows
+   * below would silently take you off book. Playing an engine move is what the BOARD is for.
+   */
+  function enginePanel() {
+    var panel = el('div', 'op-engine' + (engineState.on ? '' : ' off'));
+    if (!engineState.on) return panel;
+
+    // The spinner shows only while there is nothing to show — once lines exist the depth chip's
+    // trailing `…` carries the same information without the panel jumping.
+    if (!engineState.rows.length) {
+      if (engineState.analyzing) {
+        panel.appendChild(el('div', 'op-engine-status', MET.STRINGS.engineAnalyzing));
+      }
+      return panel;
+    }
+
+    engineState.rows.forEach(function (row) {
+      var line = el('div', 'op-erow');
+      var ev = el('div', 'op-eeval', row.evalText);
+      ev.style.color = MET.engineEvalInk(row.evalText);
+      line.appendChild(ev);
+      var san = el('div', 'op-esan', row.san);
+      san.style.color = MET.engineRankColor(row.rank);
+      line.appendChild(san);
+      line.appendChild(el('div', 'op-epv', row.continuation));
+      panel.appendChild(line);
+    });
+    panel.appendChild(el('div', 'op-edepth',
+      MET.fill(engineState.analyzing ? MET.STRINGS.engineDepthBusy : MET.STRINGS.engineDepth,
+               { n: engineState.rows[0].depth })));
+    return panel;
   }
 
   function navBtn(text, enabled, onTap) {
@@ -439,6 +674,20 @@ var BiyaOpenings = (function () {
     d.username = 'someone';
     expect(submitGames(d, [], 5).error === MET.STRINGS.errUnknownUser,
       'no games back is a username problem, NOT a connection one');
+    // THE highest-risk line in the interactive board, exercised directly.
+    //
+    // The component reports UCI and the store's path is SAN. Return the UCI unresolved and the
+    // board still advances, the move list empties, an ON-book move reads as off book, and nothing
+    // anywhere says why — it looks exactly like the feature working. There is no other symptom, so
+    // this is the assertion that has to exist.
+    var startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    expect(sanFromUci(startFen, 'e2e4') === 'e4',
+      'a board move resolves to the SAN the tree is keyed by, not the UCI the component reports — '
+      + 'got ' + JSON.stringify(sanFromUci(startFen, 'e2e4')));
+    expect(sanFromUci(startFen, 'g1f3') === 'Nf3', 'and a knight move too');
+    expect(sanFromUci(startFen, 'e2e5') === null, 'an illegal move resolves to nothing');
+    expect(sanFromUci('not a fen', 'e2e4') === null, 'and so does an unreadable position');
+
     var built = submitGames(d, [{ sanMoves: ['e4', 'c5'], userIsWhite: true, outcome: '1-0' }], 5);
     expect(!built.error && built.tree.gameCount === 1, 'and real games build a tree');
     expect(built.tree.source === 'lichess' && built.tree.username === 'someone',
@@ -470,6 +719,10 @@ var BiyaOpenings = (function () {
     submitGames: submitGames,
     emptyForm: emptyForm,
     applyMetrics: applyMetrics,
+    board: explorerBoard,
+    sanFromUci: sanFromUci,
+    setEngine: setEngine,
+    engineOn: engineOn,
     selfTest: selfTest
   };
 })();

@@ -58,6 +58,20 @@ function stripComments(s) {
 }
 const code = new Map([...src].map(([f, s]) => [f, stripComments(s)]));
 
+/**
+ * The files that DRAW, i.e. everything except the runnable metrics self-checks.
+ *
+ * `*MetricsCheck.swift` are `swift run`-able assertion harnesses that live in this directory
+ * because they need the internal types. They legitimately name every metric in the module —
+ * `fillHeight`, `labelInk`, the retired `mainHeight` — because naming them is their job. A census
+ * of "who draws an eval fill" that counts them reports two rails and always will.
+ */
+const views = new Map([...code].filter(([f]) => !/MetricsCheck\.swift$/.test(f)));
+expect(views.size >= code.size - 8 && views.size < code.size,
+  `the self-check filter kept ${views.size} of ${code.size} files — it has stopped matching the `
+  + '*MetricsCheck.swift naming, so either checks are being audited as views or views are being '
+  + 'skipped as checks');
+
 /** Line number of the first match, for a message a human can jump to. */
 function lineOf(file, re) {
   const lines = src.get(file).split('\n');
@@ -253,39 +267,70 @@ function lineOf(file, re) {
 //
 // This is `board_layout_check.js` §2d's Swift twin. The two renderers degrade differently, so
 // neither stands in for the other.
+//
+// A TABLE, not one screen. The Opening Tree explorer grew a rail of its own when the client asked
+// for an engine there, and every failure below is per MOUNT — the arrows sliding by the rail's
+// width, the board not taking the space back — so a second site needs the same rules on the day it
+// is written, not the day someone remembers to copy them.
 {
-  const s = code.get('AnalysisBoardScreen.swift');
-  expect(s !== undefined, 'AnalysisBoardScreen.swift is missing');
-  if (s) {
-    const i = s.indexOf('private func boardBand(');
-    expect(i >= 0, 'AnalysisBoardScreen still has a boardBand(width:)');
+  const RAIL_SITES = [
+    { file: 'AnalysisBoardScreen.swift', member: 'private func boardBand(',
+      edgeFn: 'AnalysisBoard.edge', flag: 'vm.autoAnalyze', edgeCalls: 2, overlays: true },
+    { file: 'OpeningTreeScreens.swift', member: 'private func board(width:',
+      edgeFn: 'OpeningBoard.edge', flag: 'engine.engineOn', edgeCalls: 1, overlays: false },
+  ];
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  for (const site of RAIL_SITES) {
+    const s = code.get(site.file);
+    expect(s !== undefined, `${site.file} is missing`);
+    if (!s) continue;
+    const i = s.indexOf(site.member);
+    expect(i >= 0, `${site.file} still has ${site.member}…)`);
     if (i >= 0) {
-      // To the next member, not a fixed window — the band body is long and a short guess would
+      // To the next member, not a fixed window — a band body is long and a short guess would
       // fail a correct file, which is the mistake §4c already documents.
       const rest = s.slice(i + 1);
       const end = rest.search(/\n {4}(private )?(var|func) /);
       const band = end < 0 ? rest : rest.slice(0, end);
       expect(/HStack\(alignment: \.top, spacing: AnalysisEval\.railGap\)/.test(band),
-        'boardBand must be an HStack, top-aligned, spaced by AnalysisEval.railGap. A default '
-        + '`.center` alignment drifts the moment the two children stop being the same height, and '
-        + 'a literal spacing is a number in a view body.');
+        `${site.file} — the band must be an HStack, top-aligned, spaced by AnalysisEval.railGap. A `
+        + 'default `.center` alignment drifts the moment the two children stop being the same '
+        + 'height, and a literal spacing is a number in a view body.');
       expect(band.indexOf('evalRail(') >= 0
         && band.indexOf('evalRail(') < band.indexOf('ChessBoardBand('),
-        'the rail comes FIRST — it is on the LEFT, and it stays there when the board is flipped');
+        `${site.file} — the rail comes FIRST: it is on the LEFT and stays there when the board flips`);
       expect(!/evalRail\([^)]*flip/.test(band),
-        'and nothing about the rail depends on the flip: the side is FIXED, like Lichess');
-      expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
-        'the arrow and badge overlays stay attached to ChessBoardBand, not to the HStack — the '
-        + 'band IS the board box and every offset is measured from its frame');
-      expect(/AnalysisBoard\.edge\(screenWidth:[\s\S]{0,120}?engineOn: vm\.autoAnalyze\)/.test(band),
-        'the edge comes from AnalysisBoard.edge(..., engineOn: vm.autoAnalyze) — the one function '
-        + 'that decides whether the rail is costing the board any width');
+        `${site.file} — nothing about the rail depends on the flip; the side is FIXED, like Lichess`);
+      if (site.overlays) {
+        expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
+          `${site.file} — the arrow and badge overlays stay attached to ChessBoardBand, not to the `
+          + 'HStack: the band IS the board box and every offset is measured from its frame');
+      }
+      expect(new RegExp(esc(site.edgeFn) + '\\(screenWidth:[\\s\\S]{0,120}?engineOn: '
+                        + esc(site.flag) + '\\)').test(band),
+        `${site.file} — the edge comes from ${site.edgeFn}(…, engineOn: ${site.flag}), the one `
+        + 'function that decides whether the rail is costing the board any width');
       // The rail is only there when the engine is. Draw it unconditionally and it sits at a dead
-      // 50/50 with no number on it the moment toggleEngine drops the snapshot.
-      expect(/if vm\.autoAnalyze \{ evalRail\(height: edge\) \}/.test(band),
-        'and the rail itself is conditional on vm.autoAnalyze — engine off, no rail, and the board '
+      // 50/50 with no number on it the moment the toggle drops the snapshot.
+      expect(new RegExp('if ' + esc(site.flag) + ' \\{ evalRail\\(height: edge\\) \\}').test(band),
+        `${site.file} — the rail is conditional on ${site.flag}: engine off, no rail, and the board `
         + 'takes the width back');
     }
+    expect((s.match(new RegExp(esc(site.edgeFn) + '\\(screenWidth:', 'g')) || []).length
+           >= site.edgeCalls,
+      `${site.file} — every consumer of the edge goes through ${site.edgeFn}; there should be at `
+      + `least ${site.edgeCalls}`);
+    expect(!new RegExp(esc(site.edgeFn) + '\\([^)]*engineOn: (true|false)').test(s),
+      `${site.file} — nobody hardcodes engineOn; it is ${site.flag}, or the board stops tracking `
+      + 'the toggle it is supposed to follow');
+  }
+  expect(RAIL_SITES.length >= 2,
+    'the rail-site table has fewer than two entries — a screen with an eval rail has stopped being '
+    + 'checked, which is how the second one would have shipped unpinned');
+
+  {
+    const s = code.get('AnalysisBoardScreen.swift') || '';
     // RESTATED for the one entry point. This used to ban AnalysisBoard.size outright; the full
     // width is now CORRECT when the engine is off, so what has to be banned is a call site picking
     // the branch for itself. enginePlan and the band must be handed the same engineOn, or the
@@ -305,9 +350,40 @@ function lineOf(file, re) {
     expect(!/func evalBar\(width:/.test(s),
       'the full-width horizontal eval bar is gone — there is one main eval bar and it is the rail');
     expect(/func evalRail\(height:/.test(s), 'and the rail replaced it');
-    expect(!/AnalysisEval\.mainHeight/.test(s),
-      'nothing in a view draws AnalysisEval.mainHeight any more — it survives only as the pin on '
-      + "the source's evalBarTrack.height (see AnalysisEval's doc comment)");
+  }
+
+  {
+    const s = code.get('OpeningTreeScreens.swift') || '';
+    // The same one-entry-point rule, stated for the screen it is easiest to break on: this board
+    // was full-bleed `geo.size.width` until the rail arrived, so subtracting 25 by hand is the
+    // obvious wrong move and would leave the rail's height and the board's width free to disagree.
+    expect(!/AnalysisEval\.railTotal/.test(s),
+      'OpeningTreeScreens does its own arithmetic on railTotal — that is OpeningBoard.edge`s job, '
+      + 'and it is the only thing both the board and the rail read');
+    expect(!/geo\.size\.width - /.test(s),
+      'and it does not subtract from the viewport width inline either');
+    expect(/func evalRail\(height:/.test(s),
+      'it forwards to the shared rail rather than naming EvalRail at the call site — which is what '
+      + 'keeps `evalRail(height: edge)` matchable by the site table above');
+  }
+}
+
+// ---- 4d-shape. the rail's GEOMETRY, asserted once, where the one rail lives ------
+//
+// These assertions used to read `AnalysisBoardScreen.swift`, back when that screen owned the only
+// rail body in the app. The Opening Tree explorer has an engine now, so the body moved to
+// `EvalRail.swift` and each screen keeps a three-line forwarder.
+//
+// Moving them is not optional bookkeeping. Left pointed at the screen they would still PASS — the
+// forwarder is three lines that mention neither `fillHeight` nor `labelInk`, so every one of these
+// would go quiet at once and the rail could be rewritten backwards under a green suite. Half of
+// the twenty-one rail mutants the CHANGELOG records are exactly these.
+{
+  const s = code.get('EvalRail.swift');
+  expect(s !== undefined,
+    'EvalRail.swift is missing — the rail body has to live somewhere both screens can reach');
+  if (s) {
+    expect(/struct EvalRail: View/.test(s), 'and it is a view, not a helper that returns numbers');
     // The label's placement and its ink are DECISIONS, made once, in the metrics layer.
     expect(/AnalysisEval\.labelAlignment\(fraction:/.test(s)
       && /AnalysisEval\.labelInk\(fraction:/.test(s),
@@ -315,6 +391,12 @@ function lineOf(file, re) {
       + 'in a view body is a second copy of the rule and would drift from the JS twin');
     expect(/AnalysisEval\.fillHeight\(rail:/.test(s) && !/height: height \*/.test(s),
       'and the fill height is the pure function, not arithmetic in a view body');
+    // The fill grows UP from the floor. Flip this and every evaluation in the app is backwards
+    // while every number behind it stays right — there is no other symptom.
+    expect(/\.overlay\(alignment: \.bottom\)/.test(s),
+      'the fill is anchored at the BOTTOM, so White grows upward');
+    expect(/\.clipShape\(RoundedRectangle/.test(s),
+      'and the fill is clipped to the rail, or a full-height eval spills past the rounding');
     // The label is drawn at the size that FITS the rail, which is the same number the browser is
     // handed. Draw `AnalysisType.evalRail` (the source's 11) here instead and SwiftUI shrinks it
     // silently via minimumScaleFactor while the browser — which has no such thing — clips. The two
@@ -326,6 +408,12 @@ function lineOf(file, re) {
       'and never AnalysisType.evalRail directly: that is the CAP inside labelFontSize, not a size '
       + 'to draw at');
   }
+  // Applies to every view, not just the rail's: the horizontal bar is retired everywhere.
+  for (const [file, text] of views) {
+    expect(!/AnalysisEval\.mainHeight/.test(text),
+      `${file} draws AnalysisEval.mainHeight — the retired horizontal bar. It survives only as the `
+      + "pin on the source's evalBarTrack.height (see AnalysisEval's doc comment)");
+  }
 }
 
 // ---- 4e. there is only ONE vertical eval bar in the module ----------------------
@@ -335,10 +423,30 @@ function lineOf(file, re) {
 // was harmless while the Analysis Board's bar was horizontal. With a real rail beside the board it
 // is the wrong answer sitting next to the right one, and the first thing anyone looking for "the
 // vertical eval bar" would find. Inverted rather than deleted.
+//
+// This rule used to be two greps for names that must NOT appear. That was enough while one screen
+// drew the only rail: "the second one" could only arrive as a resurrected `EvalBar`. Two screens
+// draw one now, so the rule has to be POSITIVE — the failure it guards against is a screen quietly
+// growing a rail of its own, which no ban on an old name can see.
 {
+  const drawers = [...views]
+    .filter(([, t]) => /AnalysisEval\.fillHeight\(rail:/.test(t)).map(([f]) => f);
+  expect(drawers.join(',') === 'EvalRail.swift',
+    `${drawers.length} file(s) draw an eval fill (${drawers.join(', ') || 'none'}) — there is ONE `
+    + 'rail in this module and it is EvalRail.swift. A screen drawing its own is how the fill '
+    + 'anchor and the label ink come to disagree between two rails nobody diffs.');
+  const inkers = [...views]
+    .filter(([, t]) => /AnalysisEval\.labelInk\(/.test(t)).map(([f]) => f);
+  expect(inkers.join(',') === 'EvalRail.swift',
+    `and only it inks the label (found: ${inkers.join(', ') || 'none'})`);
+  // Both floors: a census that matched nothing would pass both lines above by accident.
+  expect(drawers.length === 1 && inkers.length === 1,
+    'the census found no rail at all — the regexes have stopped matching, so this rule is passing '
+    + 'without reading anything');
+
+  // The two original bans, kept. They name a real historical mistake and cost nothing.
   expect(!/struct EvalBar\b/.test(code.get('Graphics.swift') || ''),
-    'Graphics.swift declares no second EvalBar — AnalysisBoardScreen.evalRail is the only eval bar '
-    + 'in the app, and the hardcoded one was never instantiated');
+    'Graphics.swift declares no second EvalBar — the hardcoded one was never instantiated');
   expect(!/whiteWinPct/.test(code.get('PlayView.swift') || ''),
     'and its only feed is gone with it — whiteCentipawns ran a full ChessAI.evaluate for nobody');
 }
@@ -408,10 +516,22 @@ function lineOf(file, re) {
 //
 // "Playable" is read off the CALL rather than from a list of screen names, so a new screen is
 // covered the day it is written. A board handed a real `selected`, real `legalTargets` and a real
-// `onTap` is one a piece can be picked up on; `OpeningTreeScreens` passes `nil`, `[]` and
-// `{ _ in }` and is exempt by that test — which is also exactly what its browser twin does, and
-// for the reason `openings.js` states: navigation is the move LIST's job, so a board that accepted
-// input would be a second, silently different way to walk the tree.
+// `onTap` is one a piece can be picked up on; a board handed `nil`, `[]` and `{ _ in }` cannot pick
+// anything up, so there is nothing to drag and the rule exempts it.
+//
+// **That exemption now has no subject.** `OpeningTreeScreens` was the app's last display board, and
+// its board became playable when the explorer learned to let you leave the saved line and play your
+// own move. A floor of "at least one display board exists" is a floor over an empty set, and says
+// nothing at all. So the arm is proved three other ways, which together are strictly stronger than
+// the observation it replaces:
+//
+//   1. the predicate is a NAMED function, exercised directly on fixtures below;
+//   2. the census is asserted EXACTLY (`display === 0`), so any board that becomes display-shaped
+//      trips it — the condition is falsifiable rather than vacuous;
+//   3. `playable_board_becomes_display_shaped` in the mutation test makes a real playable board
+//      display-shaped. The only way that can raise the census is for the predicate to have MATCHED
+//      it, so a predicate rotted into matching nothing lets that mutant survive — which is exactly
+//      the canary the old floor was.
 {
   // The two macOS demo panels. Named with the reason rather than skipped in silence: they are the
   // pre-port desktop sample, reached only by `AppShell`, kept alive as a board harness. The
@@ -432,6 +552,34 @@ function lineOf(file, re) {
     return { args: s.slice(at + 'BoardView('.length, i - 1), end: i };
   }
 
+  /**
+   * Playable or display, read off the CALL's argument text.
+   *
+   * A NAMED function rather than three inline regexes, so the exempt arm can be exercised
+   * DIRECTLY — see the fixtures below. It used to be proved by the app happening to contain a
+   * display board, and the app has none left.
+   */
+  function classify(args) {
+    // A display board: nothing selected, no targets, and a tap handler that throws its square
+    // away. Nothing can be picked up, so there is nothing to drag.
+    return (/selected:\s*nil/.test(args) && /legalTargets:\s*\[\]/.test(args)
+            && /onTap:\s*\{\s*_\s+in\s*\}/.test(args)) ? 'display' : 'playing';
+  }
+
+  // Both arms, on fixtures. This is the assertion that keeps the exemption REACHABLE now that
+  // nothing in the app is exempt by it — a predicate rotted into never returning 'display' would
+  // start demanding a drag from a board nothing can be picked up on, and no real file would say so.
+  expect(classify('pieces: p, selected: nil, legalTargets: [], lastMove: m, onTap: { _ in }')
+    === 'display',
+    'the display triple is no longer recognised — the rule would start demanding a drag from a '
+    + 'board nothing can be picked up on, which is an exemption that cannot be reached');
+  expect(classify('pieces: p, selected: sel, legalTargets: t, onTap: { tap($0, in: pos) }')
+    === 'playing', 'and a real selection is still playable');
+  expect(classify('pieces: p, selected: nil, legalTargets: t, onTap: { tap($0, in: pos) }')
+    === 'playing', 'a board with real targets is playable even with nothing selected yet');
+  expect(classify('pieces: p, selected: nil, legalTargets: [], onTap: { _ in }, onDragMove: d')
+    === 'display', 'and the triple is what decides it, not the presence of a drag handler');
+
   let playing = 0, display = 0, exempt = 0;
   for (const [file, s] of code) {
     if (file === 'BoardView.swift') continue;              // the definition site
@@ -439,10 +587,7 @@ function lineOf(file, re) {
     while ((call = boardViewCall(s, cursor)) !== null) {
       cursor = call.end;
       const a = call.args;
-      // A display board: nothing selected, no targets, and a tap handler that throws its square
-      // away. Nothing can be picked up, so there is nothing to drag.
-      if (/selected:\s*nil/.test(a) && /legalTargets:\s*\[\]/.test(a)
-          && /onTap:\s*\{\s*_\s+in\s*\}/.test(a)) { display++; passed++; continue; }
+      if (classify(a) === 'display') { display++; passed++; continue; }
       playing++;
       if (DESKTOP_SAMPLES.has(file)) { exempt++; passed++; continue; }
       expect(/onDragMove:/.test(a),
@@ -454,14 +599,20 @@ function lineOf(file, re) {
     }
   }
 
-  // Floors, so the rule cannot pass by matching nothing. Five playable boards, one display board
-  // and two exemptions — the exact census at the time this was written.
-  expect(playing >= 5,
+  // Floors, so the rule cannot pass by matching nothing.
+  expect(playing >= 6,
     `only ${playing} playable BoardView call(s) found — the argument slicer has stopped matching, `
     + 'so this rule is now passing without reading anything');
-  expect(display >= 1,
-    'no display-only BoardView found — the exemption arm is untested, which is how a read-only '
-    + 'board would start being forced to accept drags');
+  // The census, stated EXACTLY where it used to be floored. `display >= 1` said "at least one
+  // display board exists"; there are none, and a floor of zero says nothing. `=== 0` is what makes
+  // the exempt arm falsifiable — and it is what the mutation test's
+  // `playable_board_becomes_display_shaped` moves off zero.
+  expect(display === 0,
+    `${display} display-only BoardView call(s) found; this app has none — OpeningTreeScreens was `
+    + 'the last, and its board is playable now that you can leave the saved line and play your own '
+    + 'move. If you have added a genuinely read-only board, change this number and say so in '
+    + 'CHANGELOG.md: it is the census, not a floor, and it is what proves the exempt arm can still '
+    + 'be reached.');
   expect(exempt === DESKTOP_SAMPLES.size,
     `${exempt} of ${DESKTOP_SAMPLES.size} desktop-sample boards matched — an entry in `
     + 'DESKTOP_SAMPLES that no longer names a playable board is an exemption with nothing under it');
