@@ -121,8 +121,8 @@ can see a screen rather than a component:
 
 | Gate | Rule |
 |---|---|
-| `web_shell_check.js` §5 | a board given `.rules` must be given the drag; a board given neither is a display board and is exempt (`openings.js`) |
-| `swift_layout_check.js` §7 | a `BoardView` with a real `selected`/`legalTargets`/`onTap` must pass `onDragMove`; one passing `nil`/`[]`/`{ _ in }` is exempt (`OpeningTreeScreens`) |
+| `web_shell_check.js` §5 | a board given `.rules` must be given the drag; a board given neither is a display board and is exempt — **no board is, since the Opening Tree explorer became playable**, so the census is asserted `=== 0` and the arm is proved on fixtures plus a mutant |
+| `swift_layout_check.js` §7 | a `BoardView` with a real `selected`/`legalTargets`/`onTap` must pass `onDragMove`; one passing `nil`/`[]`/`{ _ in }` is exempt — **nothing is any more**, same reworking |
 
 Both are read off the call rather than a list of screen names, so the next screen is covered the day
 it is written, and each has a mutant on a file *other* than the one the bug was found in.

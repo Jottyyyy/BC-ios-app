@@ -170,8 +170,8 @@ screen names, so a screen written tomorrow is covered today:
 
 | Gate | Rule | Exempt |
 |---|---|---|
-| `swift_layout_check.js` §7 | a `BoardView` handed a real `selected` / `legalTargets` / `onTap` must also be handed `onDragMove` | one passing `nil` / `[]` / `{ _ in }` is a **display board** — `OpeningTreeScreens` |
-| `web_shell_check.js` §5 | a `<chess-board>` given `.rules` must be given the drag | a board given neither is a display board — `openings.js`, and it states the reason: navigation is the move LIST's job |
+| `swift_layout_check.js` §7 | a `BoardView` handed a real `selected` / `legalTargets` / `onTap` must also be handed `onDragMove` | one passing `nil` / `[]` / `{ _ in }` is a **display board** — and the app now has **none**: `OpeningTreeScreens` was the last, until free play. The census is asserted `=== 0` and the exempt arm is proved on fixtures plus a mutant |
+| `web_shell_check.js` §5 | a `<chess-board>` given `.rules` must be given the drag | a board given neither is a display board — and the demo now has **none**, for the same reason. Same three-part proof |
 
 Both carry census floors, because a detector that stops matching otherwise reports a clean sweep of
 nothing. §7's two name-based exemptions — `PlayView` / `PuzzleView`, the fixed-size macOS demo

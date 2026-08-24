@@ -9,6 +9,97 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
+
+Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag
+interrupt yung user sa position"*. Both, and both go beyond the RN screen. `web-demo/` updated.
+
+**This supersedes the exemption column of the drag entry below.** Both drag rules named this
+screen's board as their exempt arm's one subject. It is playable now, so the app has **no display
+board in either language** — the floors `display >= 1` / `displayOnly >= 1` said "at least one
+exists" about a set that is empty. See *The gate rework* below.
+
+#### Engine evaluation
+
+A toggle (**OFF by default**, the client's own answer), an eval rail beside the board, the three best
+lines below it. **Nothing about an evaluation is computed twice.** The screen mounts the same
+`LocalEngine` and the same `AnalysisSession.engineRows(from:)` — which was made `static`, with a doc
+comment saying why, for exactly this case. Two more seams follow it: `evalParts(from:)` becomes
+static beside it, and `AnalysisEval.fraction(parts:)` lifts the winner branch out of
+`AnalysisVM.refresh()`. That branch is a decision, not a formula — a mate four moves away is 0.95 and
+a mate already on the board is a **full** rail — and a second screen re-deriving it is a second
+screen that gets a finished game wrong. Same three in the browser.
+
+**The panel needed no invented geometry.** `tools/metrics/opening_styles.json` has carried the whole
+engine style block since the tree shipped, because the extractor sweeps the RN StyleSheet whole — all
+twelve keys plus `ENGINE_MOVE_COLORS`, sitting there unused. `selfTestSource` 131 → **167**
+assertions, every one against the extraction.
+
+**The RN `getEvalColor` bug is NOT reproduced.** It tests `startsWith('M')` before `startsWith('M-')`,
+so a black mate `M-3` renders **green** — the losing side's own forced mate painted as an advantage.
+The minus is checked first here, in both languages, asserted by name.
+
+**One rail, two screens.** `AnalysisBoardScreen.evalRail`'s body moved to `EvalRail.swift`; each
+screen keeps a three-line forwarder so `evalRail(height: edge)` survives at the call site and every
+mount assertion still matches character for character. §4d's five *shape* assertions moved with the
+body — and that is the part that could not be skipped: left pointed at the screen they would still
+**pass**, because a forwarder mentions neither `fillHeight` nor `labelInk`. All five would have gone
+quiet at once. §4e stops being two greps for names that must not appear and becomes a positive
+census: the set of files drawing an eval fill must be exactly `EvalRail.swift`.
+
+**And the rail's five mutants were hand-run prose in this file** (*"21/21"*), which held exactly as
+long as nobody moved the code. They are in `swift_layout_mutation_test.js` now, so they travel with
+it. §4d is a **site table** rather than one screen, so the rules that cost the Analysis Board its
+arrows-slide-right bug applied to the new mount on the day it was written.
+
+#### A board you can play on
+
+Tap and drag both end in one `commit`. `drag` re-checks legality itself because
+`BoardView.dragGesture` reports raw squares and knows no rules. Promotion is a `PieceKind?`, not the
+coach's UCI suffix, because this store takes SAN — otherwise `first(where:)` picks whichever of the
+four promotion moves the generator emitted first. `Square.isBackRank` moves to the Core: a back rank
+is a fact about chess, not about Play vs Coach's layout, and this is the second board you can push a
+pawn on. The board shows check now, too.
+
+**Off book is finally a thing the screen can say.** `children(at:)` answers empty both at a leaf and
+for a path that has left the tree, so one card meant two things and Forward was dead either way.
+`OpeningTree.bookDepth(along:)` is the same walk reporting *where it stopped*; `isOffBook`,
+`freePlies`, `atFreeLimit` and `backToTree()` all derive from it. A **transposition stays off book** —
+this tree is keyed by the line you played, which is its whole premise — and that is asserted by name
+rather than left to be discovered. The off-book card costs **zero new layout keys**: it borrows the
+form's connectivity-note box.
+
+`maxFreePlies = 20` caps the wander, and makes an existing comment true again: `position`'s doc
+claimed the walk was bounded by `defaultMaxPlies`, which held only while the UI offered nothing but
+tree moves.
+
+**The browser gains a last-move highlight it never had.** `openings.js` set the `fen` *attribute*,
+which carries no last move, so the two languages have quietly disagreed about a thing on screen since
+the tree shipped. `setPosition(fen, { lastMove })` and a new `opening-store.js` `lastMove()`.
+
+#### The gate rework, and the mutant that earned its keep
+
+Four gates broke; two were mutation anchors. Both floors are replaced by the same three-part proof:
+a **named predicate exercised on fixtures**, an **exact census** (`=== 0`) so the condition is
+falsifiable, and a **mutant that makes a real playable board display-shaped** — the only way that can
+move the census is for the predicate to have matched, so a rotted one lets the mutant survive. That
+is the canary the floor used to be.
+
+The JS mutant is the instructive one: it would not merely have stopped applying, it would have
+**applied and SURVIVED**, because `openings.js` now sets `.rules` and the drag legitimately —
+reporting a dead rule as a live one. Replaced per arm rather than deleted.
+
+**And the harness caught a real hole.** On the first full run, *"a board move is spelled instead of
+resolved"* **survived**. Nothing exercised the function turning the component's UCI into the store's
+SAN — and returning it unresolved makes an **on-book** move read as off book: the board advances, the
+list empties, nothing says why, and it looks exactly like the feature working. That is the single
+highest-risk line in the change, and it was untested until a mutant said so. `166/166` now.
+
+Suite: **35,072 assertions across 79 suites**, up 354. `replay_opening_tree` 414 → **578** with §13
+(bookDepth) · §14 (the stores' round trip) · §15 (the shared engine) · §16 (the playable board);
+`swift_layout_check` 409 → 432; `web_shell_check` 200 → 206; `swift_layout_mutation` **12 → 22**;
+`puzzle_core_mutation` 161 → **166**; ParityRunner's `opening_tree` floor **97 → 114**.
+
 ### 2026-08-24 (added) — Opening Tree: the Lichess and Chess.com download that was only ever drawn
 
 Client: *"sabi ng client ko hindi nag-oopening tree … gumagana ito dito oh [the RN app]"*. Correct.
