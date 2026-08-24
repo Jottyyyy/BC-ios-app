@@ -107,6 +107,26 @@ const MUTANTS = [
     to: 'if true {',
     why: 'the Puzzle Hub drawn unconditionally over Home, i.e. as a tab again',
   },
+  {
+    id: 'coach_board_loses_its_drag',
+    file: 'CoachScreens.swift',
+    from: '                          onDragMove: { from, to in drag(from, to, in: pos) })',
+    to: '                          coordinates: true)',
+    why: 'the coach game board back to tap-only — the shipped bug verbatim. `BoardView` installs '
+      + 'no drag gesture at all without `onDragMove`, so every drag is silently swallowed while '
+      + 'the board still selects, highlights and plays on a tap',
+  },
+  {
+    // Rule 7 EXEMPTS display boards, and an exemption that cannot stop applying is a hole of its
+    // own. This makes the Opening Tree board playable by tap; it must then be required to accept a
+    // drag as well. Never compiled — the checker only greps — so `step` need not exist.
+    id: 'display_board_becomes_playable',
+    file: 'OpeningTreeScreens.swift',
+    from: '                      onTap: { _ in })',
+    to: '                      onTap: { sq in store.step(sq) })',
+    why: 'a read-only board handed a real tap handler and no drag — rule 7 has to stop exempting '
+      + 'it the moment it stops being a display board',
+  },
 ];
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'swift-layout-mut-'));

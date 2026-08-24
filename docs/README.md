@@ -25,8 +25,10 @@ Feature- and subsystem-level documentation for this repo.
   language from one 24×24 geometry, replacing the `←`/`☰` characters that fell back to whatever face
   the platform had, and closing the gap where Swift drew a chevron while the browser drew an arrow.
 - [`chessboard.md`](chessboard.md) — the one board renderer per language, the sizing rule every screen
-  obeys (a fixed square from the WIDTH — never `min(w, h)`), coordinates, and the gate that fails when
-  either is reinvented. **Read this before touching any screen that shows a board.**
+  obeys (a fixed square from the WIDTH — never `min(w, h)`), the **input-routes** rule (a board that
+  can be played by tap can be played by drag — both renderers ship with drag OFF and neither says so),
+  coordinates, and the gates that fail when any of them is reinvented. **Read this before touching any
+  screen that shows a board.**
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
 - [`subscription.md`](subscription.md) — one monthly plan with a 7-day trial, verified **on-device by

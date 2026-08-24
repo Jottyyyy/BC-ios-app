@@ -392,6 +392,95 @@ function lineOf(file, re) {
     'PhoneView.swift — and its back button closes it to Home.');
 }
 
+// ---- 7. a board that can be played by TAP can be played by DRAG ---------------
+//
+// The Play vs Coach game shipped with a dead drag. `BoardView` installs no drag gesture unless
+// `onDragMove` is supplied — `including: onDragMove == nil ? .subviews : .all`, which is real
+// enforcement and not a comment — so a screen that simply never passes the argument gets a board
+// that looks and feels completely alive and silently ignores every drag. Tap-to-move still works,
+// which is exactly why it survived a green suite and a TestFlight round: nothing about the screen
+// looks wrong until you try to drag a piece, and nothing anywhere drove a drag through a screen.
+//
+// This is the MIRROR of the bug the CHANGELOG records against `PuzzleBoardBand`, which shipped
+// with `selected: nil`, `legalTargets: []` and `onTap: { _ in }` — there drag worked and TAP was
+// dead. Same hole, opposite half. So the rule is symmetric: a board playable by one route must be
+// playable by the other.
+//
+// "Playable" is read off the CALL rather than from a list of screen names, so a new screen is
+// covered the day it is written. A board handed a real `selected`, real `legalTargets` and a real
+// `onTap` is one a piece can be picked up on; `OpeningTreeScreens` passes `nil`, `[]` and
+// `{ _ in }` and is exempt by that test — which is also exactly what its browser twin does, and
+// for the reason `openings.js` states: navigation is the move LIST's job, so a board that accepted
+// input would be a second, silently different way to walk the tree.
+{
+  // The two macOS demo panels. Named with the reason rather than skipped in silence: they are the
+  // pre-port desktop sample, reached only by `AppShell`, kept alive as a board harness. The
+  // premise of the exemption is asserted below, so they cannot quietly become phone screens and
+  // stay exempt.
+  const DESKTOP_SAMPLES = new Set(['PlayView.swift', 'PuzzleView.swift']);
+
+  /** The balanced argument text of the `BoardView(` call at or after `from`, and where it ends. */
+  function boardViewCall(s, from) {
+    const at = s.indexOf('BoardView(', from);
+    if (at < 0) return null;
+    let i = at + 'BoardView('.length, depth = 1;
+    while (i < s.length && depth > 0) {
+      if (s[i] === '(') depth++;
+      else if (s[i] === ')') depth--;
+      i++;
+    }
+    return { args: s.slice(at + 'BoardView('.length, i - 1), end: i };
+  }
+
+  let playing = 0, display = 0, exempt = 0;
+  for (const [file, s] of code) {
+    if (file === 'BoardView.swift') continue;              // the definition site
+    let cursor = 0, call;
+    while ((call = boardViewCall(s, cursor)) !== null) {
+      cursor = call.end;
+      const a = call.args;
+      // A display board: nothing selected, no targets, and a tap handler that throws its square
+      // away. Nothing can be picked up, so there is nothing to drag.
+      if (/selected:\s*nil/.test(a) && /legalTargets:\s*\[\]/.test(a)
+          && /onTap:\s*\{\s*_\s+in\s*\}/.test(a)) { display++; passed++; continue; }
+      playing++;
+      if (DESKTOP_SAMPLES.has(file)) { exempt++; passed++; continue; }
+      expect(/onDragMove:/.test(a),
+        `${file}:${lineOf(file, /BoardView\(/)} — a board that can be played by TAP but not by `
+        + 'DRAG. `BoardView` installs no drag gesture at all unless `onDragMove:` is passed, so '
+        + 'the omission is invisible: the board looks alive and swallows every drag. Pass '
+        + '`onDragMove:`, or make it a display board (`selected: nil`, `legalTargets: []`, '
+        + '`onTap: { _ in }`) and mean it.');
+    }
+  }
+
+  // Floors, so the rule cannot pass by matching nothing. Five playable boards, one display board
+  // and two exemptions — the exact census at the time this was written.
+  expect(playing >= 5,
+    `only ${playing} playable BoardView call(s) found — the argument slicer has stopped matching, `
+    + 'so this rule is now passing without reading anything');
+  expect(display >= 1,
+    'no display-only BoardView found — the exemption arm is untested, which is how a read-only '
+    + 'board would start being forced to accept drags');
+  expect(exempt === DESKTOP_SAMPLES.size,
+    `${exempt} of ${DESKTOP_SAMPLES.size} desktop-sample boards matched — an entry in `
+    + 'DESKTOP_SAMPLES that no longer names a playable board is an exemption with nothing under it');
+
+  // The premise, asserted rather than trusted: these two are built by the macOS demo shell and by
+  // nothing else. The day PhoneView raises one it is a phone screen, and the exemption is wrong.
+  for (const f of DESKTOP_SAMPLES) {
+    const type = f.replace(/\.swift$/, '');
+    // `includes` rather than a RegExp: a construction is spelled `PlayView()` exactly, and no
+    // other type in this tree ends in that name, so a word boundary would buy nothing.
+    const builders = [...code]
+      .filter(([n, s]) => n !== f && s.includes(type + '()')).map(([n]) => n);
+    expect(builders.length > 0 && builders.every((n) => n === 'AppShell.swift'),
+      `${type} is constructed from ${builders.join(', ') || 'nowhere'} — it is exempt from rule 7 `
+      + 'only while it is the macOS demo shell\'s board harness. Give its board an `onDragMove:` '
+      + 'and drop it from DESKTOP_SAMPLES.');
+  }
+}
+
 const result = {
   passed,
   failures,

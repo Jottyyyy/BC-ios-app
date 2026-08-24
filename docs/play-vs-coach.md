@@ -80,10 +80,10 @@ walker only understood `const f = () =>`, not `function f()` — so `renderConst
 and the stylesheet reached for hand-typed pixels. `findNamedFunctions` now handles both forms and
 the generator **folds** the extracted signed terms into six constants.
 
-### 2. The `<chess-board>` contract fails silently, five ways
+### 2. The `<chess-board>` contract fails silently, six ways
 
-Every one of these was wrong in the first version of the game screen, with a green test suite,
-because a fake DOM node accepts anything:
+The first five were all wrong at once in the first version of the game screen, with a green test
+suite, because a fake DOM node accepts anything:
 
 | Wrong | Right | What the user sees |
 |---|---|---|
@@ -92,9 +92,55 @@ because a fake DOM node accepts anything:
 | `setAttribute('flipped','0')` | `b.flipped = false` | Attribute-truthy: the board is upside down. |
 | `highlightLastMove('e2','e4')` | numeric square indexes | No last-move highlight, ever. |
 | no `b.rules` | `b.rules = rulesAdapter()` | No piece can be picked up at all. |
+| no `b.draggablePieces` | `b.draggablePieces = true` | Tap-to-move works; **every drag does nothing.** |
 
 The mock in `tools/qa/coach_screen_test.js` now *enforces* this contract — it throws on algebraic
-squares and emits the component's real event detail — and five mutants keep it enforcing.
+squares, it emits the component's real event detail, and it carries the component's real
+`draggablePieces: false` default so a screen that never sets it is distinguishable from one that
+does — and the `coach play:` mutants in `puzzle_core_mutation_test.js` keep it enforcing.
+
+**The sixth outlived the other five, and the reason is worth keeping.** The client reported it from
+a phone: *"hindi daw nagana yung drag and drop sa play with coach."* Drag is OFF until a screen
+asks for it — `_dragEnabled = false` in the component, and in SwiftUI a `BoardView` with no
+`onDragMove` installs no drag gesture at all (`including: onDragMove == nil ? .subviews : .all`).
+Neither language warns, and **tap-to-move keeps working**, so the board selects, rings its legal
+targets, plays the move and answers with a coach reply. Nothing looks broken until you try to drag.
+
+And no suite in the repo drove a drag through a **screen**. `coach_screen_test.js` builds this one
+against a stub board; `board_component_test.js` drove real pointer drags through the real component,
+wired correctly *by the test itself*. Two green suites, one dead route. That gap is closed as well:
+`board()` is exported, and `board_component_test.js` now lets it build and configure a real
+`<chess-board>` in its own order and then sends real `pointerdown` / `pointermove` / `pointerup`
+through it — e2→e4 must reach `onMove` once as `"e2e4"`, a black pawn must arm nothing while White
+is to move, and an illegal drop must report nothing.
+
+This is the exact mirror of the `PuzzleBoardBand` bug the CHANGELOG records, which shipped
+`selected: nil`, `legalTargets: []`, `onTap: { _ in }`: there drag worked and *tap* was dead. Same
+hole, opposite half — so both gates are now written as one symmetric rule, in the two places that
+can see a screen rather than a component:
+
+| Gate | Rule |
+|---|---|
+| `web_shell_check.js` §5 | a board given `.rules` must be given the drag; a board given neither is a display board and is exempt (`openings.js`) |
+| `swift_layout_check.js` §7 | a `BoardView` with a real `selected`/`legalTargets`/`onTap` must pass `onDragMove`; one passing `nil`/`[]`/`{ _ in }` is exempt (`OpeningTreeScreens`) |
+
+Both are read off the call rather than a list of screen names, so the next screen is covered the day
+it is written, and each has a mutant on a file *other* than the one the bug was found in.
+
+**Both input routes end in one function, per language.** `coach-play.js` has always funnelled the
+component's `move` event through a single listener that asks the controller whether this is a move
+or a premove. Swift now matches: `tap` and `drag` both call `commit(from:to:in:)`, which is the only
+place `promotionSuffix` is read and the only place `userMove` / `premove` is chosen between. Before
+that, the tap path evaluated `promotionSuffix` three times and spelled the empty case two different
+ways — harmless, and exactly the kind of duplication a second input route turns into a divergence.
+
+One thing the drag route must do that the tap route never had to: **check legality itself.**
+`BoardView.dragGesture` reports whatever two squares the gesture spanned, and knows nothing about
+pieces or rules — while by the time a second *tap* arrives, `legalTargets` has already been computed
+for the piece in hand. An illegal drop is dropped, and the selection ring with it; falling through
+to `commit` would queue a premove that is not re-checked against the rules until the position it was
+queued for arrives. The browser gets this for free: the component computes `_targetsFrom` on
+`pointerdown` and sends the piece home on a drop that is not in it.
 
 ### 3. One counter is the whole concurrency story
 
@@ -193,9 +239,12 @@ through `PlayView`, which is the board harness, not a phone screen.
 
 ```bash
 node tools/qa/coach_screen_test.js        # the three screens in a headless DOM + the app.js wiring audit
+node tools/qa/board_component_test.js     # a real pointer DRAG through the screen's own board element
 node tools/qa/replay_coach.js             # the Swift, against the JS that has actually executed
+node tools/qa/web_shell_check.js          # §5 — a board given `.rules` is given the drag
+node tools/qa/swift_layout_check.js       # §7 — the same rule for `BoardView`
 node tools/qa/js_goldens.js               # everything, including all eight coach suites
-node tools/qa/puzzle_core_mutation_test.js   # 147/147, twenty-five of them Play vs Coach
+node tools/qa/puzzle_core_mutation_test.js   # 161/161, thirty-six of them Play vs Coach
 node tools/metrics/gen_coach_book.js      # re-emit CoachBookData.swift from the JS book
 node tools/metrics/extract_coach_styles.js && node tools/metrics/gen_coach_metrics.js
 ```
@@ -203,6 +252,10 @@ node tools/metrics/extract_coach_styles.js && node tools/metrics/gen_coach_metri
 In the browser: open `web-demo/index.html` and pick **Play**, or the **Play vs Coach** tile on Home.
 Choose a coach → choose a colour → play. Leaving mid-game and returning offers **Continue**; the
 draft is per level and kept 7 days.
+
+**Play at least one move by DRAGGING, not tapping** — press a piece, move it and release on a legal
+square. Tap-to-move working proves nothing about the drag; that is the whole lesson of §2 above.
+On a device, the same for the Swift screen.
 
 > **That caveat came true, exactly as written.** It used to read: *"the wiring has not been
 > exercised in a real browser … `auditAppWiring()` reads `app.js` as source instead … that catches a

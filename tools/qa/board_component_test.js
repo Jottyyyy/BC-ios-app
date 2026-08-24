@@ -834,6 +834,91 @@ function selfTest() {
     }
   }
 
+  // ---- the COACH path, end to end ------------------------------------------------------------
+  //
+  // pointer -> the SCREEN's own board element -> coach-play's rules adapter -> its `move` listener
+  // -> the caller's `onMove` -> the game record.
+  //
+  // The Play vs Coach board shipped with DRAG DEAD for the whole life of the screen: `board()` set
+  // `.rules` and never `.draggablePieces`, the component attaches no pointer handler until it is
+  // asked to, and tap-to-move covered for it perfectly. It was reported from a phone, not by a
+  // suite — `coach_screen_test.js` builds that screen against a STUB board, and this file only ever
+  // drove a board it had wired correctly itself. Neither could see it.
+  //
+  // Two source gates now assert the wiring (`web_shell_check.js` §5, `swift_layout_check.js` §7).
+  // This is the behavioural half, and it deliberately builds NOTHING by hand: `CPLAY.board()` makes
+  // the element, sets its own properties in its own order, and installs its own listener.
+  {
+    var CPLAY = require(path.join(ROOT, 'web-demo', 'js', 'coach-play.js'));
+    var CGAME = require(path.join(ROOT, 'web-demo', 'js', 'coach-game.js'));
+    var CTURN = require(path.join(ROOT, 'web-demo', 'js', 'coach-turn.js'));
+
+    var coachBoard = null;
+    var savedDoc2 = global.document;
+    // Only `chess-board` has to be real. Everything else `board()` creates is the wrap div and,
+    // when there is a premove, the chip — and this controller has neither.
+    global.document = {
+      createElement: function (tag) {
+        if (tag !== 'chess-board') {
+          return { className: '', textContent: '', children: [], onclick: null,
+                   appendChild: function (c) { this.children.push(c); return c; },
+                   remove: function () {} };
+        }
+        coachBoard = new Board();
+        return coachBoard;
+      },
+    };
+    try {
+      var cgame = CGAME.newGame(3, 'w');        // the user is White, and it is White to move
+      var cctl = CTURN.create();
+      var uciSeen = [];
+      CPLAY.board(cgame, cctl, { onMove: function (u) { uciSeen.push(u); } });
+      check(coachBoard !== null, 'the coach screen builds a real <chess-board>');
+
+      // `board()` sets its properties BEFORE the element is appended, so `_attachDrag` cannot run
+      // yet and `connectedCallback` has to do it. That ordering is the screen's, not this test's,
+      // and it is the reason the property path needs asserting separately from the attribute one.
+      check(coachBoard.draggablePieces === true, 'and tells it that pieces may be dragged');
+      check(coachBoard._dragHandlers === null, 'the handlers cannot be attached before connection');
+      coachBoard.connectedCallback();
+      coachBoard._boardEl._rect = { left: 0, top: 0, width: SIZE, height: SIZE };
+      check(coachBoard._dragHandlers !== null,
+        'so connecting attaches them — a board with none silently swallows every drag');
+      coachBoard.setPosition(CGAME.liveFen(cgame), { animate: false });
+
+      // The coach's pieces are not draggable, and the SCREEN's own adapter is what enforces it.
+      pointer(coachBoard, 'pointerdown', E7);
+      check(coachBoard._drag === null,
+        'pointerdown on a black pawn with White to move arms nothing');
+
+      // The user's own pawn, dragged two squares and released on a legal one.
+      pointer(coachBoard, 'pointerdown', E2);
+      check(!!coachBoard._drag && coachBoard._drag.from === E2, 'pointerdown on e2 arms a drag');
+      pointer(coachBoard, 'pointermove', E4);
+      pointer(coachBoard, 'pointerup', E4);
+      check(uciSeen.length === 1,
+        'dropping it reaches the screen`s onMove exactly once, got ' + uciSeen.length);
+      check(uciSeen[0] === 'e2e4',
+        'as the UCI string e2e4, not a sum of square indexes: got ' + uciSeen[0]);
+
+      // The last link: the record the rest of the screen reads.
+      var crec = uciSeen.length ? CGAME.record(cgame, uciSeen[0]) : null;
+      check(crec !== null, 'and the game accepts the move it produced');
+      check(CGAME.liveFen(cgame).indexOf(' b ') > 0, 'leaving Black to move');
+
+      // A drop that is not a legal target must produce nothing at all — the piece goes home and no
+      // move is reported. Without this, "one move fired" above would also pass a board that fires
+      // on every release.
+      var before = uciSeen.length;
+      pointer(coachBoard, 'pointerdown', E4);
+      pointer(coachBoard, 'pointermove', E2);
+      pointer(coachBoard, 'pointerup', E2);
+      check(uciSeen.length === before, 'a drag backwards onto an illegal square reports nothing');
+    } finally {
+      if (savedDoc2 === undefined) delete global.document; else global.document = savedDoc2;
+    }
+  }
+
   return report();
 }
 

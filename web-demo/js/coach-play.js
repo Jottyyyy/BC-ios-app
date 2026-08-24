@@ -145,9 +145,10 @@ var BiyaCoachPlay = (function () {
   /**
    * The live board.
    *
-   * Five things here are the component's contract rather than this screen's choice, and every one
-   * of them fails SILENTLY if it is got wrong — which is how all five were wrong in the first
-   * version of this function, with a green headless suite:
+   * SIX things here are the component's contract rather than this screen's choice, and every one
+   * of them fails SILENTLY if it is got wrong — which is how the first five were all wrong at once
+   * in the first version of this function, with a green headless suite, and how the sixth then
+   * shipped anyway:
    *
    *   - moves arrive as a `'move'` CustomEvent, not an `onmove` property. A handler assigned to
    *     `.onmove` is simply never called.
@@ -159,6 +160,9 @@ var BiyaCoachPlay = (function () {
    *     squares the record stores highlight nothing.
    *   - without `.rules` the board can find no legal target, so no piece is ever selectable and no
    *     move can be made at all.
+   *   - `draggablePieces` defaults to FALSE, so a board that is never told otherwise installs no
+   *     pointer handlers at all. Tap-to-move still works, which is exactly why this one went
+   *     unnoticed the longest: the board looks and feels alive, and only the drag is dead.
    */
   function board(game, ctl, cb) {
     var wrap = el('div', 'cgp-board-wrap');
@@ -171,6 +175,11 @@ var BiyaCoachPlay = (function () {
       else b.highlightLastMove(null, null);
     }
     b.rules = rulesAdapter();
+    // `.rules` says WHICH squares a piece may travel to; this says it may be DRAGGED to one. Both
+    // are needed and both are off until asked for. The PROPERTY, not the attribute, for the same
+    // reason `flipped` is one: `draggable-pieces="false"` is the only attribute value that means
+    // off, so every other spelling of "no" silently means yes.
+    b.draggablePieces = true;
     b.flipped = GAME.isFlipped(game);
     // The board reports a move; whether it is a move or a premove is the controller's call, not the
     // board's.
@@ -530,6 +539,10 @@ var BiyaCoachPlay = (function () {
     reviewModal: reviewModal, ACCENT_ALPHA_BYTE: ACCENT_ALPHA_BYTE,
     movePairs: movePairs, activeIndex: activeIndex,
     statusLine: statusLine, resultTitle: resultTitle,
+    // Exported for `board_component_test.js`, which drives THIS function's board element with real
+    // pointer events. A test that rebuilt the wiring by hand is precisely what let a dead drag
+    // ship: the board it drove was correct, and the screen's was not.
+    board: board,
     selfTest: selfTest,
   };
 })();

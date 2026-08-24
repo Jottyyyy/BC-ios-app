@@ -9,6 +9,87 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-24 (fixed) — Play vs Coach: the drag was never switched on, in either language
+
+Client, from a phone: *"hndi daw nagana yung drag and drop sa play with coach"*. Correct — and it
+had never worked once. The coach game was the **only playable board in the app** that was never told
+its pieces may be dragged. Tap a piece, tap its square, and everything works perfectly, which is
+exactly why it survived 34,543 green assertions and a round on TestFlight. `web-demo/` updated.
+
+**Two one-line omissions, one per language, and both are silent BY DESIGN.**
+
+- `web-demo/js/coach-play.js` set `b.rules` and never `b.draggablePieces`. The component defaults
+  `_dragEnabled = false` and attaches **no pointer handlers at all** until a screen asks, so there
+  was nothing to fail: no listener, no warning, no console line.
+- `CoachScreens.swift` built its `BoardView` without `onDragMove:`. `BoardView` enforces its own doc
+  comment with `including: onDragMove == nil ? .subviews : .all`, so the gesture is never installed
+  rather than installed and ignored.
+
+**This is the MIRROR of a bug already in this file.** `PuzzleBoardBand` shipped with `selected: nil`,
+`legalTargets: []` and `onTap: { _ in }` — there drag worked and *tap* was dead, and the entry below
+records the user's symptom as "tapping the piece selects it". Same hole, opposite half. So the fix is
+not two lines; it is two lines plus the symmetric rule that makes the pair inexpressible, in the two
+gates that can see a *screen* rather than a component:
+
+| Gate | Rule | Exempt |
+|---|---|---|
+| `web_shell_check.js` §5 | a board given `.rules` is given the drag | a board given neither — `openings.js`, read-only by design |
+| `swift_layout_check.js` §7 | a `BoardView` with a real `selected`/`legalTargets`/`onTap` passes `onDragMove` | one passing `nil`/`[]`/`{ _ in }` — `OpeningTreeScreens` |
+
+**Why they are written off the call and not off a list of screen names.** A name list is a decision
+about the screens that exist; reading `selected`/`legalTargets`/`onTap` (Swift) and `.rules` (JS) is
+a decision about what a *playable board* is, so the next screen is covered the day it is written.
+Both carry floors — five playable web boards, five playable Swift boards, one display board each —
+because a detector that quietly stops matching otherwise reports a clean sweep of nothing. The Swift
+rule's two exemptions, `PlayView`/`PuzzleView`, are the retired macOS demo panels, and they **assert
+their own premise**: exempt only while `AppShell` remains the only thing that constructs them. The
+day `PhoneView` raises one, the exemption fails instead of quietly covering a phone screen.
+
+Each rule also has a mutant on a file *other* than the one the bug was found in — the Swift one
+makes `OpeningTreeScreens`' read-only board playable, the JS one gives `openings.js` a `.rules` — so
+neither can degrade into a check on `coach-play.js` alone. `web_shell_check.js` joined the mutation
+harness's suite list to make that possible; a gate nothing mutates is a gate on trust.
+
+**Tap and drag now end in ONE function on the Swift side too.** `commit(from:to:in:)` is the only
+place `promotionSuffix` is read and the only place `userMove` and `premove` are chosen between. The
+tap path used to evaluate that suffix three times and spell its empty case two different ways —
+harmless with one input route, and exactly the sort of duplication a second route turns into a
+divergence. The browser has always had this shape: one `move` listener that asks the controller
+which of the two it is.
+
+**And `drag` does the one thing `tap` never had to: check legality.** `BoardView.dragGesture` reports
+whatever two squares the gesture spanned and knows nothing about pieces or rules, while by the time a
+second *tap* arrives `legalTargets` has already been computed for the piece in hand. An illegal drop
+is dropped, and the selection ring with it; falling through to `commit` would queue a premove that
+nothing re-checks until the position it was queued for arrives. The browser gets this free — the
+component reads `_targetsFrom` on `pointerdown` and sends the piece home on a drop that is not in it.
+
+**What this deliberately does NOT change.** Swift's drag has no piece following the finger and no
+ring while it travels: `BoardView.dragGesture` is `.onEnded` only, which is how the Analysis Board
+and all five puzzle solvers have always behaved. A live ghost is a change to every board in the app,
+not to this screen, so it is out of scope here. The browser twin does follow the pointer, because the
+component does that itself.
+
+**And one test now drives a drag the way a person does.** Everything above reads *source*, so all of
+it would still pass a screen that switched drag on and wired it wrongly. `board_component_test.js`
+gained a coach section that calls `CPLAY.board()` — the screen's own function, exported for exactly
+this — lets it build and configure a real `<chess-board>` in its own order, and then sends real
+`pointerdown` / `pointermove` / `pointerup` through it. A black pawn arms nothing while White is to
+move; e2→e4 reaches the screen's `onMove` exactly once as `"e2e4"`; the game records it and Black is
+to move; a drag back onto an illegal square reports nothing at all. Nothing in that block is built
+by hand, because *that* is the mistake: this file already drove drags perfectly — through boards it
+had wired itself.
+
+It is the same hole this file was extended to close for the puzzle path, where the entry below puts
+it plainly: *"Two green suites, one dead feature, and nothing anywhere drove a move the way a person
+does."* It was still true of Play vs Coach.
+
+Suite: **34,575 assertions across 78 suites**, up 32. `board_component_test` 164 → 175;
+`swift_layout_check` 309 → 320 invariants and its mutants 10/10 → 12/12; `web_shell_check`
+190 → 197; `coach_screen_test` 123 → 124; `puzzle_core_mutation_test` 159 → **161 mutants, all
+killed**. Deleting the one JS line now produces **seven** failures, the fourth of which is the
+client's report in as many words: *"dropping it reaches the screen's onMove exactly once, got 0."*
+
 ### 2026-08-23 (changed) — No engine, no eval rail: the board takes the width back
 
 Client: *"pwede ba kapag nakaoff yung engine remove mo yung evaluation bar hindi na need yun pag

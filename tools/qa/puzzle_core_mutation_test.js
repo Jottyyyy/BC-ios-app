@@ -195,6 +195,18 @@ const MUTANTS = [
   ['coach play: no rules adapter', 'coach-play.js',
    'b.rules = rulesAdapter();', 'b.rules = null;',
    'without rules no square is selectable and no move can be made at all'],
+  // The other half of that pair, and the one that actually shipped: `.rules` says where a piece
+  // may GO, `draggablePieces` says it may be DRAGGED there, and both are off until asked for.
+  // Removing this leaves tap-to-move working, so nothing about the screen looks wrong.
+  ['coach play: pieces cannot be dragged', 'coach-play.js',
+   '    b.draggablePieces = true;\n', '',
+   'the drag is dead while every tap still works, so the screen looks entirely alive'],
+  // And the generalised rule, proved on a DIFFERENT file: any screen that gives a board rules and
+  // forgets the drag must fail, not just the one where it was found.
+  ['openings: a read-only board gains rules but not drag', 'openings.js',
+   "    board.setAttribute('coordinates', '');",
+   "    board.setAttribute('coordinates', '');\n    board.rules = {};",
+   'web_shell_check rule 5 has to fire for ANY screen that does this, not only coach-play.js'],
   ['coach play: last move highlighted in algebraic', 'coach-play.js',
    'b.highlightLastMove(E.sqIndex(shown.from), E.sqIndex(shown.to));',
    'b.highlightLastMove(shown.from, shown.to);',
@@ -726,6 +738,9 @@ const RUN_ALL = [
   "   .selfTestSource(require('./tools/metrics/coach_styles.json')),",
   " require('./web-demo/js/coach-review.js').selfTest(),",
   " require('./tools/qa/coach_screen_test.js').run(),",
+  // Not a puzzle suite, but it is the only place the `rules ⇒ drag` rule for web boards lives, and
+  // two mutants below exist to prove that rule bites. A gate nothing mutates is a gate on trust.
+  " require('./tools/qa/web_shell_check.js').selfTest(),",
   " require('./tools/qa/replay_coach.js').run()];",
   "const bad=s.filter(x=>!x.ok);",
   "if(bad.length){bad.forEach(b=>console.log(b.summary));process.exit(1);}",
@@ -743,6 +758,7 @@ const FILES = ['puzzle-session.js', 'puzzle-store.js', 'puzzle-serving.js',
                'PuzzleStreakScreens.swift', 'PuzzleTurboScreens.swift',
                'PuzzleThematicScreens.swift', 'PuzzleHubStore.swift',
                'coach-play.js', 'coach-select.js', 'coach-turn.js', 'coach-game.js',
+               'openings.js',
                'app.js', 'coach-review.js',
                'CoachEngine.swift', 'CoachGame.swift', 'CoachTurn.swift',
                'CoachBook.swift', 'CoachBookData.swift', 'CoachReview.swift',
