@@ -297,6 +297,42 @@ sitting in `web-demo/js/` and was right to.
 toolchain, no Xcode on this checkout. The gates cover what can be covered without one; `swift build`
 on a Mac is still the first real test.
 
+### 2026-08-24 (changed) — 1.0.6 (48) shipped: the Opening Tree merge, compiled on a Mac for the first time
+
+Pulled `origin/main` (19 commits — the Opening Tree's Lichess/Chess.com download, engine evaluation
+and playable explorer board, the vertical eval rail, and drag-and-drop for Play vs Coach) and shipped
+the result as **1.0.6 (48)** — delivery UUID `0b9d3dfa-849b-489b-8d15-5070f09c025d`, VERIFY SUCCEEDED
+before the upload, `com.apple.developer.applesignin` read back out of the archive *and* out of the
+signed `.ipa`.
+
+**The merge did not compile, and only a Mac could say so.** `OpeningTreeBuildScreen` declared
+`onDone` before `premium`, so its memberwise init was `(store:onDone:premium:)` while
+`OpeningTreeRootScreen` called `(store:premium:onDone:)` — *"argument 'onDone' must precede argument
+'premium'"*. That whole screen was authored on the Windows checkout, where there is no Swift
+compiler and `swift_lint`/`swift_symbol_check` cannot see argument order. Members reordered so the
+init matches the call site; both packages now build clean. This is the fourth time a merge from
+`origin/main` has arrived non-compiling — assume it, build before shipping.
+
+**Still a TEST build, deliberately, exactly as 47 was.** Read back out of the effective build
+settings rather than assumed: `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is empty on the app target's
+Release config, so `#if BIYA_APPSTORE` in `ios/App/BiyaherongApp.swift` is false and
+`BiyaherongBuild.isTestBuild` stays `true` — no login screen at launch, no paywall, every daily cap
+lifted. **This build must not be submitted to App Review**; use codemagic's `ios-appstore`, which
+rewrites the flag and refuses to build if it did not arrive.
+
+**`ParityRunner` and `js_goldens` could not run on this Mac.** `../BYAHERONG-COACH-LARAVEL` is
+cloned here now, but it has no `app/Services/ChessEngine.php`, so `generate_goldens.php` skipped the
+`san_parse` + `pgn_tokens` goldens and both gates hard-fail on the missing file. Every other golden
+regenerated. What did run is green: `swift build` on both packages, `swift_lint` (135 files),
+`swift_symbol_check` (3654 refs / 157 types), `swift_enum_payload_check` (26 cases / 124 files),
+`replay_opening_tree` (578) and `replay_puzzle_vm` (117).
+
+**The commits are still local.** `git push` returns 403 — *"Permission to Jottyyyy/BC-ios-app.git
+denied to fush-toj"* — and that is the only github.com credential in this Mac's keychain. Fetch
+works, write does not. Needs Write access on the account, or a different token in the keychain.
+
+`web-demo/` not updated — a release plus a Swift-only compile fix.
+
 ### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
 
 Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag
