@@ -8,7 +8,7 @@ import BiyaherongCoachCore
 /// the JS twin by `tools/qa/replay_opening_tree.js`. What is left here is ten lines of IO.
 ///
 /// A **file**, not `UserDefaults`, unlike the coach draft and the login session. A tree built from
-/// the RN form's 2,000-game ceiling is megabytes of JSON; `UserDefaults` is a plist loaded whole at
+/// the download's 1,000-game ceiling is megabytes of JSON; `UserDefaults` is a plist loaded whole at
 /// launch and is the wrong place for it. Same reasoning as `pairing.json` and the analysis library.
 
 /// One saved tree: the statistics, plus what it was built from.

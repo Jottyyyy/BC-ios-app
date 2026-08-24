@@ -1,9 +1,15 @@
 # Biyaherong Chess Coach — Offline iOS/iPadOS Rebuild
 
-Native, **100% offline** rebuild of Biyaherong Chess Coach (was Laravel 12 + React/Inertia +
+Native, **~90% offline** rebuild of Biyaherong Chess Coach (was Laravel 12 + React/Inertia +
 Sanctum mobile API) as a universal iPhone/iPad app in Swift. Product direction: the boss's July 2026
 proposal ("goes fully offline"). Ground truth for every ported algorithm: the Laravel backend at
 `../BYAHERONG-COACH-LARAVEL`.
+
+Three things need internet — **Sign in with Apple**, the **Opening Tree**'s Lichess/Chess.com game
+download, and **Tutorial Videos** when they land. Everything else — the Puzzle Hub, the Analysis
+Board, the Pairing Manager and Play vs Coach — runs in Airplane Mode forever. All networking lives
+in one file per language (`DemoApp/Sources/BiyaherongUI/OpeningDownloader.swift` and
+`web-demo/js/opening-download.js`), and the gate fails if a second one appears.
 
 > Governance: `PORTING_NOTES.md` records every resolved decision and deviation. §0 of the migration
 > brief (the proposal) governs product; the appendices are the reference for algorithms/constants.

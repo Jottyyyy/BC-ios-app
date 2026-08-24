@@ -206,6 +206,10 @@ enum OpeningStrings {
     static let userLabel = "Username"
     static let userPlaceholder = "your username on that site"
     static let maxLabel = "Games to fetch"
+    /// What the box opens on. The RN form opens on the same 100 — its free ceiling — so a user who
+    /// never touches the field gets the same tree in both apps.
+    static let maxDefault = "100"
+    static let maxPlaceholder = "e.g. 500"
     static let build = "Build Tree"
     static let building = "Building…"
 

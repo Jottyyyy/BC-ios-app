@@ -45,7 +45,6 @@
 
   /* ---- constants (mirrored in Swift) --------------------------------------- */
   var DEFAULT_MAX_PLIES = 40;   // INVENTED — see the Swift, and PORTING_NOTES
-  var MAX_GAMES_LIMIT = 2000;   // the RN form's own download ceiling
 
   var OUTCOMES = { whiteWin: '1-0', blackWin: '0-1', draw: '1/2-1/2' };
 
@@ -366,7 +365,7 @@
     expect(addGame(t8, { sanMoves: long, userIsWhite: true, outcome: null }, 6) === 6,
       'the cap truncates the walk');
     expect(depth(t8) === 6, 'and the tree is exactly that deep');
-    expect(DEFAULT_MAX_PLIES === 40 && MAX_GAMES_LIMIT === 2000, 'the two constants');
+    expect(DEFAULT_MAX_PLIES === 40, 'the ply cap');
 
     // 9. PGN -> games, including who the owner was
     var pgn = '[White "Alice"]\n[Black "Bob"]\n[Result "0-1"]\n\n1. e4 e5 2. Nf3 0-1\n\n'
@@ -414,7 +413,6 @@
 
   global.BiyaOpeningTree = {
     DEFAULT_MAX_PLIES: DEFAULT_MAX_PLIES,
-    MAX_GAMES_LIMIT: MAX_GAMES_LIMIT,
     OUTCOMES: OUTCOMES,
     COLOURS: COLOURS,
     parseOutcome: parseOutcome,

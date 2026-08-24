@@ -144,8 +144,11 @@ const ST = require(path.join(JS, 'opening-store.js'));
   expect(block !== null, 'OpeningTree is a type in the Core');
   const m = /static let defaultMaxPlies = (\d+)/.exec(code(CORE_SRC));
   eq(OT.DEFAULT_MAX_PLIES, m ? Number(m[1]) : null, 'defaultMaxPlies');
-  const g = /static let maxGamesLimit = (\d+)/.exec(code(CORE_SRC));
-  eq(OT.MAX_GAMES_LIMIT, g ? Number(g[1]) : null, 'maxGamesLimit');
+  // `maxGamesLimit` used to be checked here and is deliberately gone from both languages — it was
+  // a transcription of the RN ceiling that got the number wrong (2000 for a form that clamps at
+  // 1000) and this assertion read it back to itself. The ceiling lives in `OpeningDownload` now
+  // and §12 checks it against the RN source's real value.
+  expect(OT.MAX_GAMES_LIMIT === undefined, 'the JS twin has dropped its copy of the ceiling too');
   expect(OT.DEFAULT_MAX_PLIES > 0 && OT.DEFAULT_MAX_PLIES % 2 === 0,
     'the ply cap is a whole number of full moves');
 }
@@ -329,8 +332,8 @@ const ST = require(path.join(JS, 'opening-store.js'));
 
 // ── 10. Load order ──────────────────────────────────────────────────────────────
 {
-  const order = ['js/opening-tree.js', 'js/opening-metrics.js', 'js/opening-store.js',
-                 'js/openings.js'];
+  const order = ['js/opening-tree.js', 'js/opening-metrics.js', 'js/opening-download.js',
+                 'js/opening-store.js', 'js/openings.js'];
   let last = -1;
   for (const f of order) {
     const at = INDEX.indexOf('src="' + f + '"');
@@ -365,6 +368,198 @@ const ST = require(path.join(JS, 'opening-store.js'));
   const literals = body.match(/:\s*-?\d+(\.\d+)?px/g) || [];
   expect(literals.length === 0,
     `openings.js writes ${literals.length} pixel literal(s): ${literals.join(', ')}`);
+}
+
+// ── 12. The download ────────────────────────────────────────────────────────────
+//
+// The client's bug: picking Lichess or Chess.com validated the username and then set
+// `errNetwork` — "Could not reach that site. Check your connection and try again." — for a
+// download that had never been written. It survived 346 green expectations because §7 below
+// asserted only that the two sources were MARKED online, and the JS selfTest asserted the refusal
+// itself ("and then says the download is not wired"). A test that pins the bug is worse than no
+// test: it makes the bug look decided.
+//
+// So this section checks the thing that actually broke — that picking an online source starts a
+// download — and then that the two languages agree about what that download IS.
+{
+  const DOWN_SRC = read(CORE, 'OpeningDownload.swift');
+  const DOWN_CODE = code(DOWN_SRC);
+  const LOADER_SRC = read(UI, 'OpeningDownloader.swift');
+  const DL = require(path.join(JS, 'opening-download.js'));
+
+  // -- the regression guard, first. Both languages, both sources. --------------
+  for (const site of ['lichess', 'chesscom']) {
+    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site},`)
+      .test(code(SCREENS_SRC)), `picking ${site} starts a download in Swift, not an apology`);
+  }
+  // `errNetwork` may still be SET — a download really can fail — but only from a `catch`. Set
+  // anywhere else it is the old refusal wearing the new code's clothes, which is exactly how this
+  // bug would come back: someone adds an early return for a case they have not wired yet.
+  {
+    const screens = code(SCREENS_SRC);
+    const uses = [];
+    let at = screens.indexOf('errNetwork');
+    while (at >= 0) { uses.push(at); at = screens.indexOf('errNetwork', at + 1); }
+    expect(uses.length > 0, 'the Swift form can still report a real outage');
+    for (const i of uses) {
+      expect(/\bcatch\b[^{]*\{[^{}]*$/.test(screens.slice(Math.max(0, i - 240), i)),
+        'and every errNetwork it sets is inside a catch, not an unwired early return');
+    }
+  }
+  expect(/return \{\s*\n?\s*download: \{/.test(code(OPENINGS_JS)),
+    'the JS submit returns a download PLAN for an online source');
+  expect(!/isOnlineSource\(form\.source\)[\s\S]{0,200}errNetwork/.test(code(OPENINGS_JS)),
+    'and no longer returns errNetwork for one');
+
+  // -- the limits ---------------------------------------------------------------
+  const num = (name) => {
+    const m = new RegExp(`static let ${name} = (\\d+)`).exec(DOWN_CODE);
+    return m ? Number(m[1]) : null;
+  };
+  eq(DL.FREE_MAX_GAMES, num('freeMaxGames'), 'freeMaxGames');
+  eq(DL.PREMIUM_MAX_GAMES, num('premiumMaxGames'), 'premiumMaxGames');
+  eq(DL.MIN_MAX_GAMES, num('minMaxGames'), 'minMaxGames');
+  // The constant this feature was built on top of a transcription error: `OpeningTree` carried
+  // `maxGamesLimit = 2000` described as "the download ceiling the RN form offers", and the parity
+  // check read that constant back to itself. The RN form's ceiling is 1000, twice over —
+  // `Math.min(…, 1000)` at openingtree.tsx:479 and :917.
+  eq(DL.PREMIUM_MAX_GAMES, 1000, 'the RN form ceiling, which is 1000 and was written as 2000');
+  expect(!/maxGamesLimit/.test(CORE_CODE), 'and the wrong constant is gone rather than corrected');
+
+  // `resolvedMax` is the one piece of arithmetic here, so it is replayed rather than read.
+  eq(DL.resolvedMax(false, 900), DL.FREE_MAX_GAMES, 'free ignores the box');
+  eq(DL.resolvedMax(true, 900), 900, 'premium gets what it asks for');
+  eq(DL.resolvedMax(true, 99999), DL.PREMIUM_MAX_GAMES, 'and is clamped at the ceiling');
+  eq(DL.resolvedMax(true, 0), DL.MIN_MAX_GAMES, 'an empty box is one game, not none');
+  expect(/guard isPremium else \{ return freeMaxGames \}/.test(DOWN_CODE),
+    'and the Swift takes the same two branches');
+  expect(/min\(max\(requested, minMaxGames\), premiumMaxGames\)/.test(DOWN_CODE),
+    'in the same order — clamp low, then high');
+
+  // -- the endpoints ------------------------------------------------------------
+  //
+  // Compared as SUBSTRINGS of the Swift literal rather than by reconstructing its interpolation:
+  // the point is that neither language can quietly change host, path or query.
+  const lich = DL.lichessGamesURL('bob', 7);
+  eq(lich, 'https://lichess.org/api/games/user/bob?pgnInJson=true&max=7', 'the lichess URL');
+  expect(DOWN_SRC.includes('https://lichess.org/api/games/user/'),
+    'and the Swift builds the same host and path');
+  expect(DOWN_SRC.includes('?pgnInJson=true&max='),
+    'with the same query — pgnInJson is what puts `moves` on each line');
+  const cc = DL.chesscomArchivesURL('bob');
+  eq(cc, 'https://api.chess.com/pub/player/bob/games/archives', 'the chess.com archives URL');
+  expect(DOWN_SRC.includes('https://api.chess.com/pub/player/')
+    && DOWN_SRC.includes('/games/archives'), 'and the Swift builds that one too');
+  const accept = /static let lichessAccept = "([^"]+)"/.exec(DOWN_SRC);
+  eq(DL.LICHESS_ACCEPT, accept ? accept[1] : null, 'the NDJSON Accept header');
+
+  // A username must not be able to escape its path segment. `CharacterSet.urlPathAllowed` would
+  // let `/` through, which is why the Swift spells `encodeURIComponent`'s set out by hand.
+  eq(DL.lichessGamesURL('a/b', 1),
+    'https://lichess.org/api/games/user/a%2Fb?pgnInJson=true&max=1',
+    'a slash in a username is escaped');
+  const allowed = /charactersIn:\s*\n?\s*"([^"]+)"\)/.exec(DOWN_SRC);
+  expect(allowed !== null, 'the Swift names its allowed set');
+  if (allowed) {
+    for (const ch of ['/', ':', '@', '+', '&', '?', '#', ' ']) {
+      expect(!allowed[1].includes(ch),
+        `and it does NOT permit ${JSON.stringify(ch)}, which would change the endpoint`);
+    }
+  }
+
+  // -- what a status means ------------------------------------------------------
+  eq(DL.failureForStatus(404), 'unknownUser', '404 is a username the site does not have');
+  eq(DL.failureForStatus(500), 'network', 'and anything else is worth retrying');
+  expect(/code == 404 \? \.unknownUser : \.network/.test(DOWN_CODE),
+    'the Swift makes the same one-case distinction');
+  expect(/\(200\.\.\.299\)\.contains\(code\)/.test(DOWN_CODE), 'and accepts the same 2xx range');
+  expect(DL.isSuccess(200) && DL.isSuccess(299) && !DL.isSuccess(300) && !DL.isSuccess(199),
+    'as does the JS');
+  const failCases = /enum Failure[^{]*\{\s*case (\w+)\s*\n\s*case (\w+)/.exec(DOWN_SRC);
+  expect(failCases !== null, 'Failure has exactly two cases in Swift');
+  if (failCases) {
+    eq(Object.keys(DL.FAILURES).join(','), `${failCases[1]},${failCases[2]}`, 'and the JS agrees');
+  }
+  const siteCases = /enum Site[^{]*\{\s*case ([\w, ]+)\n/.exec(DOWN_SRC);
+  eq(Object.keys(DL.SITES).join(','),
+    siteCases ? siteCases[1].split(',').map((s) => s.trim()).join(',') : null, 'the site ids');
+
+  // -- the aborted-game deviation ----------------------------------------------
+  //
+  // The RN mapping scores a game with no winner as a DRAW, so an aborted game — very often the
+  // first in a stream — becomes half a point for both sides. `OpeningTree.Outcome` already
+  // decided the other way for pasted PGN, and two import paths disagreeing about one game is
+  // worse than the bug being fixed. Both languages must carry the same status list.
+  const statuses = /lichessUnfinishedStatuses: Set<String> =\s*\n?\s*\[([^\]]+)\]/.exec(DOWN_SRC);
+  expect(statuses !== null, 'Swift lists the unfinished statuses');
+  if (statuses) {
+    const swift = statuses[1].split(',').map((s) => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    eq(DL.LICHESS_UNFINISHED.join(','), swift.join(','), 'the unfinished statuses, in order');
+    expect(swift.includes('aborted'), 'and "aborted" is one of them — the whole point');
+  }
+  expect(DL.lichessOutcome({ winner: 'white' }) === '1-0'
+    && DL.lichessOutcome({ winner: 'black' }) === '0-1'
+    && DL.lichessOutcome({ status: 'draw' }) === '1/2-1/2'
+    && DL.lichessOutcome({ status: 'aborted' }) === null,
+    'and the JS mapping is winner / draw / no-result');
+  expect(/case "white": return \.whiteWin/.test(DOWN_CODE)
+    && /case "black": return \.blackWin/.test(DOWN_CODE)
+    && /contains\(status\) \? nil : \.draw/.test(DOWN_CODE),
+    'as is the Swift one');
+
+  // -- the colour rule ----------------------------------------------------------
+  //
+  // The online path reads the colour off the GAME and lets the picker filter, where the RN screen
+  // takes the picker as the answer and mislabels every game the user had the other colour in.
+  expect(/if let w = name\("white"\), w\.caseInsensitiveCompare\(wanted\) == \.orderedSame/
+    .test(DOWN_CODE), 'Swift matches the username case-insensitively against White');
+  eq(DL.lichessUserIsWhite({ players: { white: { user: { name: 'Bob' } } } }, 'bob', false), true,
+    'and so does the JS');
+  eq(DL.lichessUserIsWhite({ players: { black: { user: { name: 'Bob' } } } }, 'bob', true), false,
+    'Black too');
+  eq(DL.lichessUserIsWhite({}, 'bob', true), true, 'an unmatched game falls back to the picker');
+  expect(/colour\.accepts\(isWhite: game\.userIsWhite\)/.test(DOWN_CODE),
+    'and the picker FILTERS in Swift, exactly as it does on the paste path');
+
+  // -- the ceiling, and the archive order ---------------------------------------
+  eq(DL.trim([1, 2, 3], 0, 2).length, 2, 'a chunk is trimmed to the room left');
+  eq(DL.trim([1, 2, 3], 2, 2).length, 0, 'and nothing survives once the ceiling is reached');
+  expect(/let room = limit - have/.test(DOWN_CODE) && /Array\(games\.prefix\(room\)\)/.test(DOWN_CODE),
+    'the Swift trims the same way');
+  eq(DL.chesscomArchives({ archives: ['2024/01', '2024/02'] })[0], '2024/02',
+    'archives come back NEWEST first');
+  expect(/\.reversed\(\)/.test(DOWN_CODE),
+    'and the Swift reverses too — oldest-first would build every tree from the user’s first month');
+
+  // -- the transport is in ONE file ---------------------------------------------
+  //
+  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and
+  // VideoPlayer". Neither exists yet and this download reached the client first, so
+  // OpeningDownloader is that rule's first inhabitant — and it stays the ONLY one.
+  expect(!/URLSession|URLRequest/.test(DOWN_CODE),
+    'the parity core opens no socket — it only describes the request');
+  expect(/URLSession/.test(LOADER_SRC), 'OpeningDownloader is where the transport lives');
+  const uiFiles = fs.readdirSync(UI).filter((f) => f.endsWith('.swift'));
+  const networked = uiFiles.filter((f) =>
+    /URLSession|URLRequest/.test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
+  eq(networked.join(','), 'OpeningDownloader.swift',
+    'and it is the ONLY file in BiyaherongUI that does');
+  expect(uiFiles.length > 20, `swept ${uiFiles.length} UI files — the sweep is not vacuous`);
+
+  // Same rule in the browser: one file with `fetch`, and it is the twin.
+  const jsFiles = fs.readdirSync(JS).filter((f) => f.endsWith('.js'));
+  const fetching = jsFiles.filter((f) =>
+    /\bfetch\(|XMLHttpRequest/.test(code(fs.readFileSync(path.join(JS, f), 'utf8'))));
+  eq(fetching.join(','), 'opening-download.js', 'exactly one web-demo file fetches');
+  expect(jsFiles.length > 20, `swept ${jsFiles.length} JS files — the sweep is not vacuous`);
+
+  // -- and cancellation is real -------------------------------------------------
+  expect(/\.onDisappear \{ download\?\.cancel\(\)/.test(code(SCREENS_SRC)),
+    'leaving the Swift form cancels the download');
+  expect(/Task\.checkCancellation\(\)/.test(code(LOADER_SRC)),
+    'and the loader checks for it inside both loops');
+  expect(/openingForm !== form/.test(code(read(path.join(ROOT, 'web-demo'), 'js/app.js'))),
+    'and the browser drops a download that resolves into a screen the user has left');
 }
 
 // ---- report ------------------------------------------------------------------

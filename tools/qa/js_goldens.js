@@ -49,6 +49,7 @@ var WSHELL = require(path.join(__dirname, 'web_shell_check.js'));
 var TGATE = require(path.join(__dirname, 'trial_gate_check.js'));
 var OTREE = require(path.join(JS, 'opening-tree.js'));
 var OMET = require(path.join(JS, 'opening-metrics.js'));
+var ODOWN = require(path.join(JS, 'opening-download.js'));
 var OSTORE = require(path.join(JS, 'opening-store.js'));
 var OSCREENS = require(path.join(JS, 'openings.js'));
 var ROTREE = require(path.join(__dirname, 'replay_opening_tree.js'));
@@ -169,6 +170,7 @@ record('opening-tree.selfTest', OTREE.selfTest());
 record('opening-metrics.selfTest', OMET.selfTest());
 record('opening-metrics vs RN source',
   OMET.selfTestSource(require(path.join(ROOT, 'tools', 'metrics', 'opening_styles.json'))));
+record('opening-download.selfTest', ODOWN.selfTest());
 record('opening-store.selfTest', OSTORE.selfTest());
 record('openings.selfTest', OSCREENS.selfTest());
 record('swift opening tree vs JS', ROTREE.selfTest());

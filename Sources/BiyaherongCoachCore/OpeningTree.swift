@@ -101,7 +101,7 @@ public struct OpeningTree: Equatable, Sendable, Codable {
     /// One row of the candidate list — a flattened `Node` plus the move that reaches it.
     ///
     /// It does NOT carry `children`, only whether there are any: the list is rebuilt on every
-    /// navigation step and copying whole subtrees into it would make a 2,000-game tree crawl.
+    /// navigation step and copying whole subtrees into it would make a 1,000-game tree crawl.
     public struct Candidate: Equatable, Sendable {
         public let san: String
         public let count: Int
@@ -143,14 +143,17 @@ public struct OpeningTree: Equatable, Sendable, Codable {
     /// How deep a game is walked into the tree.
     ///
     /// INVENTED — the RN screen has no cap and walks every ply of every game. That is a memory
-    /// hazard at its own 2,000-game download limit (a 120-ply game contributes 120 nested
+    /// hazard at its own 1,000-game download limit (a 120-ply game contributes 120 nested
     /// dictionaries) and it is not what an opening tree is for: past move 20 the counts are 1 and
     /// the branch is a game record, not a repertoire. 40 plies is 20 full moves. Recorded in
     /// PORTING_NOTES.
     public static let defaultMaxPlies = 40
 
-    /// The download ceiling the RN form offers, kept so the two agree.
-    public static let maxGamesLimit = 2000
+    // The download ceiling used to live here as `maxGamesLimit = 2000`, described as "the download
+    // ceiling the RN form offers". The RN form ceiling is **1000** — `Math.min(…, 1000)` at
+    // openingtree.tsx:479 and again at :917 — so the constant was wrong and the parity check that
+    // read it asserted the wrong number against the right prose. It is gone rather than corrected:
+    // the limits belong to the download, so `OpeningDownload.premiumMaxGames` is the one copy.
 
     // MARK: - State
 
@@ -211,7 +214,7 @@ public struct OpeningTree: Equatable, Sendable, Codable {
 
     /// The recursive half. `removeValue` rather than a subscript read so the node being mutated is
     /// uniquely referenced and its subtree is not copied on every increment — the difference
-    /// between linear and quadratic on a 2,000-game import.
+    /// between linear and quadratic on a 1,000-game import.
     private static func insert(_ steps: ArraySlice<(san: String, moverIsWhite: Bool)>,
                                into children: inout [String: Node],
                                game: Game) {

@@ -3143,7 +3143,6 @@ do {
                        maxPlies: 6) == 6, "the cap truncates the walk")
     h.check(capped.depth == 6, "and the tree is exactly that deep")
     h.check(OT.defaultMaxPlies == 40, "the default cap is 20 full moves")
-    h.check(OT.maxGamesLimit == 2000, "and the download ceiling matches the RN form's")
 
     // ---- paths off the tree --------------------------------------------------
     h.check(sorted.node(at: ["Zz9"]) == nil, "an unknown path has no node")
@@ -3207,6 +3206,130 @@ do {
     }
     // Deterministic bytes, so "did this change?" is answerable in the store and in a diff.
     h.check(round.encodedJSON() == round.encodedJSON(), "encoding is byte-stable")
+
+    // ---- the download ---------------------------------------------------------
+    //
+    // The client reported the Opening Tree as broken because picking Lichess or Chess.com set
+    // `errNetwork` — "check your connection" — for a download nobody had written. These run the
+    // parse half on a Mac; `replay_opening_tree.js` §12 is the half that runs on Windows.
+    typealias DL = OpeningDownload
+
+    // Limits. The RN form clamps at 1000 in both of its two places, and this app carried 2000.
+    h.check(DL.premiumMaxGames == 1000, "the premium ceiling is the RN form's real 1000")
+    h.check(DL.freeMaxGames == 100, "and the free one is 100")
+    h.check(DL.resolvedMax(isPremium: false, requested: 900) == 100, "free ignores the box")
+    h.check(DL.resolvedMax(isPremium: true, requested: 900) == 900, "premium gets what it asks")
+    h.check(DL.resolvedMax(isPremium: true, requested: 99_999) == 1000, "up to the ceiling")
+    h.check(DL.resolvedMax(isPremium: true, requested: 0) == 1, "an empty box is one game")
+
+    // Endpoints. A username must not be able to escape its path segment.
+    h.check(DL.lichessGamesURL(username: "bob", maxGames: 7)
+            == "https://lichess.org/api/games/user/bob?pgnInJson=true&max=7", "the lichess URL")
+    h.check(DL.lichessGamesURL(username: "a/b", maxGames: 1)
+            == "https://lichess.org/api/games/user/a%2Fb?pgnInJson=true&max=1",
+            "a slash in a username is escaped, not passed through")
+    h.check(DL.chesscomArchivesURL(username: "bob")
+            == "https://api.chess.com/pub/player/bob/games/archives", "the chess.com URL")
+    h.check(DL.encodeComponent("a b") == "a%20b", "a space is escaped")
+    h.check(DL.encodeComponent("Aa9-_.!~*'()") == "Aa9-_.!~*'()",
+            "and encodeURIComponent's unreserved set is left alone")
+
+    // What a status means. Exactly one code is worth a different sentence.
+    h.check(DL.failure(forStatus: 404) == .unknownUser, "404 is a username the site lacks")
+    h.check(DL.failure(forStatus: 500) == .network, "500 is worth retrying")
+    h.check(DL.isSuccess(status: 200) && DL.isSuccess(status: 299), "2xx is success")
+    h.check(!DL.isSuccess(status: 300) && !DL.isSuccess(status: 199), "and nothing either side")
+
+    // One NDJSON line.
+    //
+    // The fixtures are SERIALISED rather than written as string literals. A hand-escaped JSON blob
+    // is unreadable, and a `"""` block full of braces is worse than unreadable here — it defeats
+    // `swift_lint.js`, whose bracket balancer treats `"""` as an empty string followed by a live
+    // one and then reports the JSON's own braces as unbalanced code.
+    func ndjson(_ object: [String: Any]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
+    func player(_ white: String, _ black: String) -> [String: Any] {
+        ["white": ["user": ["name": white]], "black": ["user": ["name": black]]]
+    }
+
+    let line = ndjson(["moves": "e4 c5 Nf3", "winner": "white", "status": "mate",
+                       "players": player("Alice", "Bob")])
+    let parsed = DL.game(fromLichessLine: line, username: "alice", fallbackIsWhite: true)
+    h.check(parsed?.sanMoves == ["e4", "c5", "Nf3"], "a line's moves parse")
+    h.check(parsed?.userIsWhite == true, "the username matches White case-insensitively")
+    h.check(parsed?.outcome == .whiteWin, "and winner:white is 1-0")
+    h.check(DL.game(fromLichessLine: line, username: "BOB", fallbackIsWhite: true)?.userIsWhite
+            == false, "the same game reads from Black's side")
+    h.check(DL.game(fromLichessLine: line, username: "carol", fallbackIsWhite: false)?.userIsWhite
+            == false, "an unmatched username falls back to the picker")
+    h.check(DL.game(fromLichessLine: "", username: "a", fallbackIsWhite: true) == nil,
+            "a blank line is not a game")
+    h.check(DL.game(fromLichessLine: "not json", username: "a", fallbackIsWhite: true) == nil,
+            "nor is broken JSON — one bad line must not lose the stream")
+    h.check(DL.game(fromLichessLine: ndjson(["winner": "white"]), username: "a",
+                    fallbackIsWhite: true) == nil, "nor is a line with no moves")
+
+    // The aborted-game deviation: the RN mapping scores every winner-less game as a draw.
+    h.check(DL.game(fromLichessLine: ndjson(["moves": "e4", "status": "aborted"]),
+                    username: "a", fallbackIsWhite: true)?.outcome == nil,
+            "an ABORTED game has no result — the RN code scores it as a draw")
+    h.check(DL.game(fromLichessLine: ndjson(["moves": "e4 e5", "status": "draw"]),
+                    username: "a", fallbackIsWhite: true)?.outcome == .draw,
+            "while a real draw still is one")
+    h.check(DL.lichessUnfinishedStatuses.contains("aborted"), "and aborted is on the list")
+
+    // A whole body, and the colour filter the RN screen does not apply. The blank line between the
+    // two is deliberate — a real stream carries them, and they must not become a third game.
+    let body = ndjson(["moves": "e4 c5", "winner": "white", "status": "mate",
+                       "players": player("Alice", "Bob")])
+        + "\n\n"
+        + ndjson(["moves": "d4 Nf6", "winner": "black", "status": "resign",
+                  "players": player("Bob", "Alice")])
+    h.check(DL.games(fromLichessNDJSON: body, username: "alice", colour: .both).count == 2,
+            "both games come back for 'both'")
+    let whiteOnly = DL.games(fromLichessNDJSON: body, username: "alice", colour: .white)
+    h.check(whiteOnly.count == 1 && whiteOnly.first?.userIsWhite == true,
+            "and only the White one for 'white' — read off the GAME, not assumed from the form")
+    let blackOnly = DL.games(fromLichessNDJSON: body, username: "alice", colour: .black)
+    h.check(blackOnly.count == 1 && blackOnly.first?.outcome == .blackWin,
+            "the Black one keeps the result she actually got")
+
+    // Chess.com: archives newest first, and the PGN goes through the pinned parser.
+    func json(_ object: Any) -> Data {
+        (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+    }
+    let archiveJSON = json(["archives": ["u/2024/01", "u/2024/02"]])
+    h.check(DL.chesscomArchives(fromJSON: archiveJSON) == ["u/2024/02", "u/2024/01"],
+            "archives are reversed to newest-first — oldest-first builds every tree from month one")
+    h.check(DL.chesscomArchives(fromJSON: json([:] as [String: Any])).isEmpty,
+            "a shapeless body is none")
+    let pgnA = "[White \"Alice\"]\n[Black \"Bob\"]\n[Result \"1-0\"]\n\n1. e4 c5 1-0"
+    let pgnB = "[White \"Bob\"]\n[Black \"Alice\"]\n[Result \"1-0\"]\n\n1. d4 Nf6 1-0"
+    let monthJSON = json(["games": [["pgn": pgnA], ["pgn": pgnB]]])
+    let month = DL.games(fromChesscomArchiveJSON: monthJSON, username: "Alice", colour: .both)
+    h.check(month.count == 2, "both games in a month")
+    h.check(month.first?.userIsWhite == false, "newest first — Alice had Black in the later game")
+    h.check(DL.games(fromChesscomArchiveJSON: monthJSON, username: "Alice", colour: .white).count
+            == 1, "the colour filter reaches the archive path too")
+
+    // The ceiling, which both sites overshoot for different reasons.
+    let three = [OT.Game(sanMoves: ["e4"], userIsWhite: true, outcome: nil),
+                 OT.Game(sanMoves: ["d4"], userIsWhite: true, outcome: nil),
+                 OT.Game(sanMoves: ["c4"], userIsWhite: true, outcome: nil)]
+    h.check(DL.trim(three, have: 0, limit: 2).count == 2, "a chunk is trimmed to the room left")
+    h.check(DL.trim(three, have: 2, limit: 2).isEmpty, "and nothing survives a full tree")
+    h.check(DL.trim(three, have: 0, limit: 9).count == 3, "an under-full chunk passes whole")
+
+    // A downloaded game and a pasted one of the same game must build the same tree.
+    var fromWire = OT()
+    fromWire.add(DL.games(fromLichessNDJSON: body, username: "alice", colour: .both))
+    var fromPaste = OT()
+    fromPaste.add([OT.Game(sanMoves: ["e4", "c5"], userIsWhite: true, outcome: .whiteWin),
+                   OT.Game(sanMoves: ["d4", "Nf6"], userIsWhite: false, outcome: .blackWin)])
+    h.check(fromWire == fromPaste, "a downloaded tree equals the pasted tree of the same games")
 }
 
 // MARK: - Done
@@ -3225,7 +3348,10 @@ h.requireMinCounts([
     // No golden file: the source is TypeScript, not a Laravel controller, so there is no PHP
     // oracle. The differential partner is web-demo/js/opening-tree.js, compared source-to-source
     // by tools/qa/replay_opening_tree.js.
-    "opening_tree": 60,
+    // 60 -> 97: the download's parse half (limits, endpoints, NDJSON, archives, the ceiling and
+    // the aborted-game deviation) now runs here too. RAISED, never lowered — one assertion was
+    // deleted with the wrong `maxGamesLimit` constant and 38 were added.
+    "opening_tree": 97,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,

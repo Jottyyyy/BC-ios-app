@@ -17,6 +17,11 @@ import BiyaherongCoachCore
 /// cannot reset it — the same rule `app.js` follows with `pairingOpenId`.
 struct OpeningTreeRootScreen: View {
     @ObservedObject var store: OpeningTreeStore
+    /// Only the build form reads it, and only for the download ceiling. It is threaded from the
+    /// root rather than reached for globally because that is how `PairingRootScreen` and
+    /// `CoachRootScreen` take it, and one screen inventing its own route to the entitlement is
+    /// how the RN app ended up with three disagreeing copies of `is_premium`.
+    @ObservedObject var premium: PremiumStore
     let onExit: () -> Void
 
     /// Nil until "+ New Tree" is tapped. A separate flag rather than a third case on `openID`,
@@ -26,7 +31,8 @@ struct OpeningTreeRootScreen: View {
     var body: some View {
         Group {
             if building {
-                OpeningTreeBuildScreen(store: store, onDone: { building = false })
+                OpeningTreeBuildScreen(store: store, premium: premium,
+                                       onDone: { building = false })
             } else if store.open != nil {
                 OpeningTreeExplorerScreen(store: store)
             } else {
@@ -186,12 +192,25 @@ struct OpeningTreeBuildScreen: View {
     @ObservedObject var store: OpeningTreeStore
     let onDone: () -> Void
 
+    @ObservedObject var premium: PremiumStore
+
     @State private var name = ""
     @State private var colour: OpeningTree.Colour = .both
     @State private var source: OpeningSource = .pgn
     @State private var pgn = ""
     @State private var username = ""
     @State private var error: String?
+
+    /// The download ceiling, as typed. A `String` rather than an `Int` because the field is a
+    /// text field: an `Int` binding cannot represent "the user has cleared the box", and the RN
+    /// original hit exactly that — it keeps `maxGamesInput` as a string for the same reason.
+    @State private var maxGames = OpeningStrings.maxDefault
+    /// Nil unless a download is running. Holding the `Task` is what makes it cancellable: leaving
+    /// the form tears it down, so a user who backs out mid-fetch is not still pulling 900 games.
+    @State private var download: Task<Void, Never>?
+    @State private var fetched = 0
+
+    private var isDownloading: Bool { download != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,6 +229,8 @@ struct OpeningTreeBuildScreen: View {
                     if source.needsUsername {
                         label(OpeningStrings.userLabel)
                         field($username, placeholder: OpeningStrings.userPlaceholder)
+                        label(OpeningStrings.maxLabel)
+                        field($maxGames, placeholder: OpeningStrings.maxPlaceholder)
                     } else if source == .pgn {
                         label(OpeningStrings.pgnLabel)
                         field($pgn, placeholder: OpeningStrings.pgnPlaceholder,
@@ -217,6 +238,7 @@ struct OpeningTreeBuildScreen: View {
                     }
 
                     connectivityNote
+                    if isDownloading { progressNote }
                     if let error { errorNote(error) }
                     submit
                 }
@@ -225,6 +247,10 @@ struct OpeningTreeBuildScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Leaving the form cancels the download. Without this a user who taps Back mid-fetch keeps
+        // pulling games into a screen that is gone, and the `sink` writes into `@State` that no
+        // longer has a view — silent, but it is a live network request nobody can stop.
+        .onDisappear { download?.cancel(); download = nil }
     }
 
     private func label(_ text: String) -> some View {
@@ -315,6 +341,30 @@ struct OpeningTreeBuildScreen: View {
         .padding(.bottom, OpeningLayout.infoBottom)
     }
 
+    /// The live counter, drawn only while a download is running.
+    ///
+    /// It reuses the connectivity note's box rather than introducing a fourth panel style: this is
+    /// the same slot saying the same kind of thing, and a banner with its own geometry would be a
+    /// set of numbers `opening_styles.json` cannot vouch for.
+    private var progressNote: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(OpeningStrings.fetching)
+                .font(Theme.nunito(OpeningLayout.infoTitleSize, .semiBold))
+                .foregroundStyle(OpeningPalette.gold)
+                .padding(.bottom, OpeningLayout.infoTitleGap)
+            Text(OpeningStrings.fill(OpeningStrings.fetched, ["n": String(fetched)]))
+                .font(Theme.nunito(OpeningLayout.infoSubSize))
+                .foregroundStyle(OpeningPalette.infoText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(OpeningLayout.infoPad)
+        .background(OpeningPalette.infoBg,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.infoBorder, lineWidth: OpeningLayout.infoBorder))
+        .padding(.top, OpeningLayout.infoBottom)
+    }
+
     private func errorNote(_ message: String) -> some View {
         Text(message)
             .font(Theme.nunito(OpeningLayout.infoSubSize, .semiBold))
@@ -331,7 +381,7 @@ struct OpeningTreeBuildScreen: View {
 
     private var submit: some View {
         Button(action: build) {
-            Text(OpeningStrings.build)
+            Text(isDownloading ? OpeningStrings.building : OpeningStrings.build)
                 .font(Theme.nunito(OpeningLayout.submitTextSize, .bold))
                 .foregroundStyle(OpeningPalette.onGold)
                 .frame(maxWidth: .infinity)
@@ -341,48 +391,106 @@ struct OpeningTreeBuildScreen: View {
                                                  style: .continuous))
         }
         .buttonStyle(.plain)
+        // Disabled rather than hidden, and dimmed with the same token the explorer's nav arrows
+        // use. A second tap would start a SECOND download into the same tree and double every
+        // count in it — the sort of bug that reads as "the numbers are wrong", never as "I
+        // double-tapped".
+        .disabled(isDownloading)
+        .opacity(isDownloading ? OpeningLayout.navDisabledOpacity : 1)
         .padding(.top, OpeningLayout.submitTop)
     }
 
-    /// PGN and coach games only.
+    /// The form's one submit, for all four sources.
     ///
-    /// The two online sources are declared and drawn — a form that hides them would be lying about
-    /// what the feature is — but the download itself is not wired here. `ContentClient` is where
-    /// the app's `URLSession` calls are allowed to live (spec §0.1), and putting a second one in a
-    /// SwiftUI button is exactly the leak that rule exists to prevent. Until that lands, picking
-    /// Lichess or Chess.com says so rather than failing silently.
+    /// It used to be PGN-and-coach only: picking Lichess or Chess.com checked the username and
+    /// then set `errNetwork` — *"Could not reach that site. Check your connection and try again."*
+    /// — for a download that had never been written. That is the bug the client reported as *"hindi
+    /// nag-oopening tree"*, and the reason it survived a green suite and TestFlight is that the
+    /// message it produced is indistinguishable from the real thing: the user has no way to tell a
+    /// missing feature from a missing signal, so they check their wifi and report the app.
+    ///
+    /// The two paths differ in exactly one way — one of them has to wait — so the tree-building
+    /// tail is shared rather than written twice.
     private func build() {
+        guard !isDownloading else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { error = OpeningStrings.errNoName; return }
+        error = nil
 
-        var games: [OpeningTree.Game] = []
         switch source {
         case .pgn:
             guard !pgn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 error = OpeningStrings.errNoPgn; return
             }
-            games = OpeningTree.games(fromPGN: pgn,
-                                      userName: nil,
-                                      fallbackIsWhite: colour != .black,
-                                      colour: colour)
+            let games = OpeningTree.games(fromPGN: pgn,
+                                          userName: nil,
+                                          fallbackIsWhite: colour != .black,
+                                          colour: colour)
             guard !games.isEmpty else { error = OpeningStrings.errNoGames; return }
-            // The real check is below, on POSITIONS: `PGN.mainlineTokens` is a tokenizer, not a
-            // validator, so "not a game" comes back as three move tokens and passes this one.
+            // The real check is in `finish`, on POSITIONS: `PGN.mainlineTokens` is a tokenizer, not
+            // a validator, so "not a game" comes back as three move tokens and passes this one.
+            finish(name: trimmed, games: games)
         case .coach:
             error = OpeningStrings.errNoCoachGames
-            return
-        case .lichess, .chesscom:
-            guard !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                error = OpeningStrings.errNoUser; return
-            }
-            error = OpeningStrings.errNetwork
-            return
+        case .lichess:
+            startDownload(site: .lichess, name: trimmed)
+        case .chesscom:
+            startDownload(site: .chesscom, name: trimmed)
         }
+    }
 
+    /// Pull the games, then hand them to the same tail the paste path uses.
+    ///
+    /// The games are accumulated here rather than inserted as they arrive, which is the one place
+    /// this deliberately does **less** than the RN screen. That one jumps to the explorer with an
+    /// empty tree and grows it live, and it pays for the effect with a half-built tree on screen
+    /// whenever a download fails — a saved artefact of a failure, indistinguishable from a real
+    /// tree once the banner is gone. Here nothing is saved until the download finishes, so a
+    /// failure leaves the form open with the reason on it and the list exactly as it was. The
+    /// counter still moves, because that is what the banner is for.
+    private func startDownload(site: OpeningDownload.Site, name treeName: String) {
+        let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else { error = OpeningStrings.errNoUser; return }
+
+        let limit = OpeningDownload.resolvedMax(isPremium: premium.isPremium,
+                                                requested: Int(maxGames.trimmingCharacters(
+                                                    in: .whitespacesAndNewlines)) ?? 0)
+        fetched = 0
+
+        download = Task { @MainActor in
+            defer { download = nil }
+            let collected: [OpeningTree.Game]
+            do {
+                collected = try await OpeningDownloader().run(site: site,
+                                                              username: user,
+                                                              colour: colour,
+                                                              limit: limit) { total in
+                    fetched = total
+                }
+            } catch is CancellationError {
+                // The user left the form. Nothing to say and nowhere to say it.
+                return
+            } catch let failure as OpeningDownload.Failure {
+                error = failure.message
+                return
+            } catch {
+                self.error = OpeningStrings.errNetwork
+                return
+            }
+            // A username that exists but has no games in the chosen colour is NOT a network
+            // problem, and telling the user to check their connection would send them to fix the
+            // one thing that is working. It is the same 404-shaped answer, from a 200.
+            guard !collected.isEmpty else { error = OpeningStrings.errUnknownUser; return }
+            finish(name: treeName, games: collected)
+        }
+    }
+
+    /// Build, save, close — the tail both sources share.
+    private func finish(name treeName: String, games: [OpeningTree.Game]) {
         var tree = OpeningTree()
         tree.add(games)
         guard tree.nodeCount > 0 else { error = OpeningStrings.errNoGames; return }
-        store.add(SavedOpeningTree(name: trimmed,
+        store.add(SavedOpeningTree(name: treeName,
                                    colour: colour,
                                    source: source,
                                    username: username,

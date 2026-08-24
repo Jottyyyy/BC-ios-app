@@ -9,6 +9,99 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-24 (added) — Opening Tree: the Lichess and Chess.com download that was only ever drawn
+
+Client: *"sabi ng client ko hindi nag-oopening tree … gumagana ito dito oh [the RN app]"*. Correct.
+Picking **Lichess** or **Chess.com** validated the username and then set `errNetwork` — *"Could not
+reach that site. Check your connection and try again."* — for a download **that had never been
+written**. Only **Paste PGN** worked. `web-demo/` updated.
+
+**The message is why this reached a client.** A missing feature and a missing signal produce the
+same sentence, so the user checks their wifi, tries again, and reports the app. This is the third
+entry in a row with that shape — drag that was never switched on, tap that was never wired — and the
+first where the dead path *apologised* for itself convincingly.
+
+**And the suite had pinned it.** `openings.js`'s selfTest asserted the refusal in as many words:
+`expect(submit(f, 1).error === MET.STRINGS.errNetwork, 'and then says the download is not wired')`.
+346 green expectations, one of them holding the bug in place. **A test that asserts a bug is worse
+than no test, because it makes the bug look decided.** That line is now its own opposite.
+
+**Everything that decides anything is in the parity core; the socket is not.**
+`OpeningDownload.swift` (new, Foundation-only, opens nothing) owns the URLs, the NDJSON parse, the
+archive order, the colour rule, the limits and what a status means. `OpeningDownloader.swift` (new)
+is forty lines of `await` and **the app's only `URLSession`**; `opening-download.js` is both halves
+in the browser and **`web-demo/`'s only `fetch`**. The reason for the split is this checkout: there
+is no Swift compiler and no simulator here, so anything the transport decides on its own is decided
+untested — while every one of those parse decisions is now replayed from Windows *and* run on a Mac.
+
+| | Endpoint | Order |
+|---|---|---|
+| Lichess | `/api/games/user/{u}?pgnInJson=true&max={n}`, `Accept: application/x-ndjson` | newest first, streamed line by line |
+| Chess.com | `/pub/player/{u}/games/archives`, then each month | archives **reversed** — newest month first |
+
+Chess.com's reversal is load-bearing, not tidiness: the walk stops at the ceiling, so the order
+decides *which* games a 100-game tree is built from. Oldest-first builds every user a tree of the
+games they played the month they signed up.
+
+**"90% offline" is the client's own number**, and the docs now say it: *"pwedeng hndi 100 percent
+offline 90 percent lang kasi ito kailangan online pati yung sa videos online din yun"*. Three things
+need the radio — Sign in with Apple, this download, and Videos when they land — and everything else
+still runs in Airplane Mode forever. **Spec §0.1 is honoured, not excepted:** it always drew an
+online half, and this is the first part of it to ship, so `ContentClient` will copy this shape rather
+than replace it.
+
+**Four deviations from the RN implementation, all deliberate.**
+
+1. **An aborted game has no result.** The RN mapping is `winner === 'white' ? '1-0' : winner ===
+   'black' ? '0-1' : '1/2-1/2'`, so a game with no winner — very often the first in a stream —
+   scores as a draw for *both* sides. `OpeningTree.Outcome` already decided the other way for pasted
+   PGN, and two import paths disagreeing about the same game is worse than the bug being fixed.
+2. **The colour comes off the game, not the picker.** `addGamesToTree` treats the White/Black picker
+   as the answer, so an RN tree built as "White" labels every game White — including the ones the
+   user had Black in, whose results then land inverted. The username is known for every online game,
+   so the truth is available and the picker *filters*, exactly as on the paste path.
+3. **Nothing is saved until the download finishes.** The RN screen jumps to the explorer with an
+   empty tree and grows it live, and pays for it with a half-built tree left saved after any
+   failure — indistinguishable from a real one once the banner is gone. The counter still moves.
+4. **Chess.com's PGN goes through `OpeningTree.games(fromPGN:)`**, not the RN regex — that parser is
+   already pinned to the real `PgnImportService`, so the tags Chess.com writes give us the colour
+   match, the result and RAV/NAG handling for free, and agreeing with the paste path is the point.
+
+**A wrong constant went with it.** `OpeningTree.maxGamesLimit` was `2000`, documented as *"the
+download ceiling the RN form offers"* — and the RN form clamps at **1000**, in both of its two
+places (`openingtree.tsx:479` and `:917`). The ParityRunner assertion read that constant back to
+itself, so a wrong number passed under correct prose: the same **EXTRACT, DON'T TRANSCRIBE** failure
+as the annotation badge's flipped sign, one file over. Deleted rather than corrected — the limits
+belong to the download, so `OpeningDownload.premiumMaxGames` is the one copy.
+
+**The privacy sheet has now been narrowed twice**, both times because a real network call landed
+under a claim written before it existed. It said the app *"does not collect, store, or send any
+personal information anywhere"*; this download sends **the username the user typed** to a third
+party. No account server, no analytics, no tracking — all still true, all still said — and both
+exceptions now named, in both languages. The export-compliance `NO` is unchanged and the comment
+explaining it is not: OS-provided TLS with no cryptography of the app's own is still exempt.
+**Open, and no gate here can see it: the App Store Connect privacy answers were filled in for an app
+that sent nothing.**
+
+**One asymmetry between the languages, on purpose.** `opening-download.js` carries a
+`lastCompleteLineEnd`; the Swift does not. Swift gets it from `URLSession.AsyncBytes.lines`, which
+cuts the *byte* stream and so handles the UTF-8 boundaries a String-index version would have to
+re-derive; `ReadableStream` gives the browser bytes and nothing else. Both files say so, so nobody
+"restores" the missing half.
+
+**Concurrency is not incidental here.** The package is `swift-tools-version:6.0` with no language-mode
+override, so strict concurrency applies: a progress callback crossing an isolation boundary would
+have to be `@Sendable`, and a `@Sendable` closure cannot capture the `@State` the counter writes.
+`OpeningDownloader` is therefore `@MainActor` whole, which makes `onProgress` an ordinary
+non-escaping closure needing no annotation — and costs nothing, because every `await` suspends and
+what runs on the main actor is one small parse per line.
+
+Suite: **34,718 assertions across 79 suites**, up 143. `replay_opening_tree` 346 → **414** and gained
+§12; `openings.selfTest` 14 → 21; `opening-download.selfTest` is new at 44; the ParityRunner
+`opening_tree` floor is **raised 60 → 97**. Restoring the client's bug — the online branch refusing
+instead of downloading — now produces three named failures, the third of which is the rule itself:
+*"every errNetwork it sets is inside a catch, not an unwired early return."*
+
 ### 2026-08-24 (fixed) — Play vs Coach: the drag was never switched on, in either language
 
 Client, from a phone: *"hndi daw nagana yung drag and drop sa play with coach"*. Correct — and it

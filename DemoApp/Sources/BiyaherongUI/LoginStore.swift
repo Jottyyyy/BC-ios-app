@@ -9,9 +9,14 @@ import BiyaherongCoachCore
 /// ## The Apple sign-in is SIMULATED
 ///
 /// `signIn(_:)` writes the provider and publishes. There is no `AuthenticationServices` call, no
-/// `URLSession`, and no network of any kind — which is deliberate twice over: it is what was asked
-/// for, and it keeps the "100% offline" claim in `ios/project.yml:69-71` (and the export-compliance
-/// `NO` that rests on it) true.
+/// `URLSession`, and no network of any kind — which is deliberate, and `replay_login.js` fails the
+/// build on any of the three appearing here.
+///
+/// It no longer keeps a "100% offline" claim true for the whole app: the Opening Tree's download
+/// makes the app **~90% offline**, and the export-compliance `NO` in `ios/project.yml` now rests on
+/// the standard-encryption exemption rather than on there being no network at all. What this file's
+/// silence still buys is narrower and still worth having — **the login screen itself reaches
+/// nothing**, so nothing is sent before a user has agreed to anything.
 ///
 /// Everything a real Sign in with Apple needs is behind this one method. Replacing it means calling
 /// `ASAuthorizationController` in the view's button action, then calling `signIn(_:)` on success —
