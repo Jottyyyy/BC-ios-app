@@ -919,6 +919,111 @@ function selfTest() {
     }
   }
 
+  // ---- the Opening Tree explorer, driven the same way ------------------------------------
+  //
+  // The explorer board was the demo's last READ-ONLY board until the client asked to be able to
+  // step in at a position and play their own move. Everything else that checks it reads SOURCE, so
+  // all of it would still pass a screen that switched the drag on and wired it wrongly — which is
+  // the hole this file was extended to close for the coach, and it is open again for a new screen.
+  //
+  // The assertion that matters is the SAN one. The component reports UCI and the store's path is
+  // SAN, so a screen that forwards the raw UCI still advances the board — and every on-book move
+  // then reads as off book, with nothing anywhere to say why. `puzzle_core_mutation_test.js` found
+  // exactly that by surviving.
+  {
+    var OPEN = require(path.join(ROOT, 'web-demo', 'js', 'openings.js'));
+    var OSTORE = require(path.join(ROOT, 'web-demo', 'js', 'opening-store.js'));
+    var OTREE = require(path.join(ROOT, 'web-demo', 'js', 'opening-tree.js'));
+
+    var opBoard = null;
+    var savedDoc3 = global.document;
+    global.document = {
+      createElement: function (tag) {
+        if (tag !== 'chess-board') {
+          return { className: '', textContent: '', children: [], onclick: null,
+                   appendChild: function (c) { this.children.push(c); return c; },
+                   remove: function () {} };
+        }
+        opBoard = new Board();
+        return opBoard;
+      },
+    };
+    try {
+      function memStore() {
+        var map = {};
+        return { getItem: function (k) {
+                   return Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null; },
+                 setItem: function (k, v) { map[k] = String(v); },
+                 removeItem: function (k) { delete map[k]; } };
+      }
+      var ostore = OSTORE.create(memStore());
+      var otree = OSTORE.build({
+        games: [{ sanMoves: ['e4', 'c5', 'Nf3'], userIsWhite: true,
+                  outcome: OTREE.OUTCOMES.whiteWin }],
+        name: 'Sicilian', colour: 'both', source: 'pgn', username: '', nowMs: 1 });
+      ostore.add(otree);
+      ostore.openTree(otree.id);
+
+      var played = [];
+      OPEN.board(ostore, function (san) { played.push(san); });
+      check(opBoard !== null, 'the explorer screen builds a real <chess-board>');
+      check(opBoard.draggablePieces === true,
+        'and tells it that pieces may be dragged — it was a display board until free play');
+      check(opBoard._dragHandlers === null, 'the handlers cannot be attached before connection');
+      opBoard.connectedCallback();
+      opBoard._boardEl._rect = { left: 0, top: 0, width: SIZE, height: SIZE };
+      check(opBoard._dragHandlers !== null, 'so connecting attaches them');
+      opBoard.setPosition(ostore.fen(), { animate: false });
+
+      // White to move at the root: a black pawn arms nothing. The SCREEN's own rules adapter is
+      // what enforces that, so this is testing the wiring rather than the component.
+      pointer(opBoard, 'pointerdown', E7);
+      check(opBoard._drag === null, 'pointerdown on a black pawn with White to move arms nothing');
+
+      pointer(opBoard, 'pointerdown', E2);
+      check(!!opBoard._drag && opBoard._drag.from === E2, 'pointerdown on e2 arms a drag');
+      pointer(opBoard, 'pointermove', E4);
+      pointer(opBoard, 'pointerup', E4);
+      check(played.length === 1,
+        'dropping it reaches the screen`s onPlay exactly once, got ' + played.length);
+      // THE assertion. `'e4'`, not `'e2e4'` — the store's path is SAN, and the whole off-book
+      // model reads as broken if a UCI ever lands on it.
+      check(played[0] === 'e4',
+        'as the SAN the tree is keyed by, NOT the component`s UCI: got ' + played[0]);
+
+      // The move it produced is on book, which is the point of resolving it properly.
+      ostore.play(played[0]);
+      check(ostore.isOffBook() === false, 'and the move it produced is ON book');
+      check(ostore.candidates().length > 0, 'with the tree`s continuations still there');
+
+      // Now leave the book by playing something no game contains, and come back.
+      opBoard.setPosition(ostore.fen(), { animate: false });
+      var beforeOff = played.length;
+      pointer(opBoard, 'pointerdown', E7);
+      pointer(opBoard, 'pointermove', E5);
+      pointer(opBoard, 'pointerup', E5);
+      check(played.length === beforeOff + 1, 'a reply the tree never saw still plays');
+      ostore.play(played[played.length - 1]);
+      check(ostore.isOffBook(), 'and it is off book');
+      check(ostore.candidates().length === 0 && !ostore.canStepForward(),
+        'with no candidates and Forward dead');
+      ostore.backToTree();
+      check(!ostore.isOffBook() && ostore.path().join(' ') === 'e4',
+        'and Back to tree returns in one step');
+
+      // A drop that is not a legal target reports nothing at all — without this, "one move fired"
+      // above would also pass a board that fires on every release.
+      opBoard.setPosition(ostore.fen(), { animate: false });
+      var beforeBad = played.length;
+      pointer(opBoard, 'pointerdown', E4);
+      pointer(opBoard, 'pointermove', E2);
+      pointer(opBoard, 'pointerup', E2);
+      check(played.length === beforeBad, 'a drag onto an illegal square reports nothing');
+    } finally {
+      if (savedDoc3 === undefined) delete global.document; else global.document = savedDoc3;
+    }
+  }
+
   return report();
 }
 

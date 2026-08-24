@@ -95,7 +95,16 @@ SAN — and returning it unresolved makes an **on-book** move read as off book: 
 list empties, nothing says why, and it looks exactly like the feature working. That is the single
 highest-risk line in the change, and it was untested until a mutant said so. `166/166` now.
 
-Suite: **35,072 assertions across 79 suites**, up 354. `replay_opening_tree` 414 → **578** with §13
+**And one test now drives a drag the way a person does.** Everything above reads *source*, so
+all of it would still pass a screen that switched the drag on and wired it wrongly — the same hole
+`board_component_test.js` was extended to close for the coach, open again for a new screen. It gained
+an Opening Tree section that calls `OPEN.board()`, lets the screen build and configure a real
+`<chess-board>` in its own order, and sends real `pointerdown`/`pointermove`/`pointerup` through it.
+A black pawn arms nothing while White is to move; e2→e4 reaches `onPlay` exactly once as **`e4`**,
+*not* `e2e4`; the move it produced is ON book with its continuations intact; a reply the tree never
+saw goes off book and **Back to tree** returns; an illegal drop reports nothing. 175 → 190.
+
+Suite: **35,087 assertions across 79 suites**, up 369. `replay_opening_tree` 414 → **578** with §13
 (bookDepth) · §14 (the stores' round trip) · §15 (the shared engine) · §16 (the playable board);
 `swift_layout_check` 409 → 432; `web_shell_check` 200 → 206; `swift_layout_mutation` **12 → 22**;
 `puzzle_core_mutation` 161 → **166**; ParityRunner's `opening_tree` floor **97 → 114**.
