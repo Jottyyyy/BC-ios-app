@@ -58,6 +58,20 @@ function stripComments(s) {
 }
 const code = new Map([...src].map(([f, s]) => [f, stripComments(s)]));
 
+/**
+ * The files that DRAW, i.e. everything except the runnable metrics self-checks.
+ *
+ * `*MetricsCheck.swift` are `swift run`-able assertion harnesses that live in this directory
+ * because they need the internal types. They legitimately name every metric in the module —
+ * `fillHeight`, `labelInk`, the retired `mainHeight` — because naming them is their job. A census
+ * of "who draws an eval fill" that counts them reports two rails and always will.
+ */
+const views = new Map([...code].filter(([f]) => !/MetricsCheck\.swift$/.test(f)));
+expect(views.size >= code.size - 8 && views.size < code.size,
+  `the self-check filter kept ${views.size} of ${code.size} files — it has stopped matching the `
+  + '*MetricsCheck.swift naming, so either checks are being audited as views or views are being '
+  + 'skipped as checks');
+
 /** Line number of the first match, for a message a human can jump to. */
 function lineOf(file, re) {
   const lines = src.get(file).split('\n');
@@ -305,9 +319,25 @@ function lineOf(file, re) {
     expect(!/func evalBar\(width:/.test(s),
       'the full-width horizontal eval bar is gone — there is one main eval bar and it is the rail');
     expect(/func evalRail\(height:/.test(s), 'and the rail replaced it');
-    expect(!/AnalysisEval\.mainHeight/.test(s),
-      'nothing in a view draws AnalysisEval.mainHeight any more — it survives only as the pin on '
-      + "the source's evalBarTrack.height (see AnalysisEval's doc comment)");
+  }
+}
+
+// ---- 4d-shape. the rail's GEOMETRY, asserted once, where the one rail lives ------
+//
+// These assertions used to read `AnalysisBoardScreen.swift`, back when that screen owned the only
+// rail body in the app. The Opening Tree explorer has an engine now, so the body moved to
+// `EvalRail.swift` and each screen keeps a three-line forwarder.
+//
+// Moving them is not optional bookkeeping. Left pointed at the screen they would still PASS — the
+// forwarder is three lines that mention neither `fillHeight` nor `labelInk`, so every one of these
+// would go quiet at once and the rail could be rewritten backwards under a green suite. Half of
+// the twenty-one rail mutants the CHANGELOG records are exactly these.
+{
+  const s = code.get('EvalRail.swift');
+  expect(s !== undefined,
+    'EvalRail.swift is missing — the rail body has to live somewhere both screens can reach');
+  if (s) {
+    expect(/struct EvalRail: View/.test(s), 'and it is a view, not a helper that returns numbers');
     // The label's placement and its ink are DECISIONS, made once, in the metrics layer.
     expect(/AnalysisEval\.labelAlignment\(fraction:/.test(s)
       && /AnalysisEval\.labelInk\(fraction:/.test(s),
@@ -315,6 +345,12 @@ function lineOf(file, re) {
       + 'in a view body is a second copy of the rule and would drift from the JS twin');
     expect(/AnalysisEval\.fillHeight\(rail:/.test(s) && !/height: height \*/.test(s),
       'and the fill height is the pure function, not arithmetic in a view body');
+    // The fill grows UP from the floor. Flip this and every evaluation in the app is backwards
+    // while every number behind it stays right — there is no other symptom.
+    expect(/\.overlay\(alignment: \.bottom\)/.test(s),
+      'the fill is anchored at the BOTTOM, so White grows upward');
+    expect(/\.clipShape\(RoundedRectangle/.test(s),
+      'and the fill is clipped to the rail, or a full-height eval spills past the rounding');
     // The label is drawn at the size that FITS the rail, which is the same number the browser is
     // handed. Draw `AnalysisType.evalRail` (the source's 11) here instead and SwiftUI shrinks it
     // silently via minimumScaleFactor while the browser — which has no such thing — clips. The two
@@ -326,6 +362,12 @@ function lineOf(file, re) {
       'and never AnalysisType.evalRail directly: that is the CAP inside labelFontSize, not a size '
       + 'to draw at');
   }
+  // Applies to every view, not just the rail's: the horizontal bar is retired everywhere.
+  for (const [file, text] of views) {
+    expect(!/AnalysisEval\.mainHeight/.test(text),
+      `${file} draws AnalysisEval.mainHeight — the retired horizontal bar. It survives only as the `
+      + "pin on the source's evalBarTrack.height (see AnalysisEval's doc comment)");
+  }
 }
 
 // ---- 4e. there is only ONE vertical eval bar in the module ----------------------
@@ -335,10 +377,30 @@ function lineOf(file, re) {
 // was harmless while the Analysis Board's bar was horizontal. With a real rail beside the board it
 // is the wrong answer sitting next to the right one, and the first thing anyone looking for "the
 // vertical eval bar" would find. Inverted rather than deleted.
+//
+// This rule used to be two greps for names that must NOT appear. That was enough while one screen
+// drew the only rail: "the second one" could only arrive as a resurrected `EvalBar`. Two screens
+// draw one now, so the rule has to be POSITIVE — the failure it guards against is a screen quietly
+// growing a rail of its own, which no ban on an old name can see.
 {
+  const drawers = [...views]
+    .filter(([, t]) => /AnalysisEval\.fillHeight\(rail:/.test(t)).map(([f]) => f);
+  expect(drawers.join(',') === 'EvalRail.swift',
+    `${drawers.length} file(s) draw an eval fill (${drawers.join(', ') || 'none'}) — there is ONE `
+    + 'rail in this module and it is EvalRail.swift. A screen drawing its own is how the fill '
+    + 'anchor and the label ink come to disagree between two rails nobody diffs.');
+  const inkers = [...views]
+    .filter(([, t]) => /AnalysisEval\.labelInk\(/.test(t)).map(([f]) => f);
+  expect(inkers.join(',') === 'EvalRail.swift',
+    `and only it inks the label (found: ${inkers.join(', ') || 'none'})`);
+  // Both floors: a census that matched nothing would pass both lines above by accident.
+  expect(drawers.length === 1 && inkers.length === 1,
+    'the census found no rail at all — the regexes have stopped matching, so this rule is passing '
+    + 'without reading anything');
+
+  // The two original bans, kept. They name a real historical mistake and cost nothing.
   expect(!/struct EvalBar\b/.test(code.get('Graphics.swift') || ''),
-    'Graphics.swift declares no second EvalBar — AnalysisBoardScreen.evalRail is the only eval bar '
-    + 'in the app, and the hardcoded one was never instantiated');
+    'Graphics.swift declares no second EvalBar — the hardcoded one was never instantiated');
   expect(!/whiteWinPct/.test(code.get('PlayView.swift') || ''),
     'and its only feed is gone with it — whiteCentipawns ran a full ChessAI.evaluate for nobody');
 }

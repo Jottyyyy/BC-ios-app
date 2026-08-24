@@ -233,29 +233,15 @@ struct AnalysisBoardScreen: View {
     /// `Alignment` is not animatable, so the number JUMPS ends the instant the eval crosses zero
     /// while the fill keeps animating. That is what Lichess does. Do not "fix" it by cross-fading
     /// two `Text`s — that draws the number at both ends mid-transition and reads as a bug.
+    /// The rail's SHAPE moved to `EvalRail.swift` when the Opening Tree explorer grew an engine of
+    /// its own — one rail, two screens, which is what §4e's "only ONE vertical eval bar" means now
+    /// that there is more than one place to draw it.
+    ///
+    /// This forwarder stays rather than naming `EvalRail(...)` at the call site, and that is not
+    /// ceremony: it keeps `evalRail(height: edge)` in `boardBand`, so every mount assertion and
+    /// every mount mutant written against this screen still matches character for character.
     private func evalRail(height: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous)
-            .fill(AnalysisPalette.evalTrack)
-            .frame(width: AnalysisEval.railWidth, height: height)
-            .overlay(alignment: .bottom) {
-                RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous)
-                    .fill(AnalysisPalette.evalFill)
-                    .frame(width: AnalysisEval.railWidth,
-                           height: AnalysisEval.fillHeight(rail: height,
-                                                           fraction: vm.evalFraction))
-            }
-            .overlay(alignment: AnalysisEval.labelAlignment(fraction: vm.evalFraction)) {
-                Text(vm.evalLabel)
-                    .font(AnalysisType.mono(AnalysisEval.labelFontSize, AnalysisType.evalRailWeight))
-                    .foregroundStyle(AnalysisEval.labelInk(fraction: vm.evalFraction))
-                    .lineLimit(AnalysisLayout.singleLine)
-                    // The rail is SIZED for four glyphs, which is every label a real game
-                    // produces. `+10.5` is the fifth, and shrinks 4/5 rather than clipping.
-                    .minimumScaleFactor(AnalysisEval.labelMinScale)
-                    .padding(.vertical, AnalysisEval.railPaddingV)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous))
-            .animation(.easeInOut(duration: AnalysisEval.animationSeconds), value: vm.evalFraction)
+        EvalRail(height: height, fraction: vm.evalFraction, label: vm.evalLabel)
     }
 
     /// `UIScreen.main.scale` is iOS-only and deprecated; the environment value works on both

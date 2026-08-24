@@ -127,6 +127,58 @@ const MUTANTS = [
     why: 'a read-only board handed a real tap handler and no drag — rule 7 has to stop exempting '
       + 'it the moment it stops being a display board',
   },
+
+  // ---- the eval rail's SHAPE -------------------------------------------------
+  //
+  // These five were hand-run and recorded as prose in CHANGELOG.md ("21/21 mutants"), which held
+  // exactly as long as nobody moved the code. The rail's body has just moved out of
+  // `AnalysisBoardScreen.swift` into `EvalRail.swift` so two screens can share one — and a hand-run
+  // mutant does not follow a file. Left as prose, the five assertions guarding the rail's geometry
+  // would have gone quiet the moment the forwarder replaced the body, and every suite would have
+  // stayed green while the rail could be rewritten backwards.
+  //
+  // A gate nothing mutates is a gate on trust. Mechanised here, they move with the file.
+  {
+    id: 'rail_fill_anchored_at_the_top',
+    file: 'EvalRail.swift',
+    from: '.overlay(alignment: .bottom)',
+    to: '.overlay(alignment: .top)',
+    why: 'the eval fill growing DOWN from the ceiling — every evaluation in the app is then '
+      + 'backwards while every number behind it stays right, which is the only symptom there is',
+  },
+  {
+    id: 'rail_fill_height_by_hand',
+    file: 'EvalRail.swift',
+    from: 'AnalysisEval.fillHeight(rail: height, fraction: fraction)',
+    to: 'height * fraction',
+    why: 'the fill height as arithmetic in a view body rather than the pure function — it drops '
+      + "the 0…1 clamp, so a mate's 0.95 and a corrupt fraction both draw past the rail",
+  },
+  {
+    id: 'rail_label_at_the_source_size',
+    file: 'EvalRail.swift',
+    from: 'AnalysisType.mono(AnalysisEval.labelFontSize,',
+    to: 'AnalysisType.mono(AnalysisType.evalRail,',
+    why: 'the label at the SOURCE size instead of the size derived to fit the rail — SwiftUI '
+      + 'shrinks it silently via minimumScaleFactor while the browser, which has no such thing, '
+      + 'clips. The two renderers disagree on screen with every metrics assertion still green',
+  },
+  {
+    id: 'rail_label_ink_inlined',
+    file: 'EvalRail.swift',
+    from: 'AnalysisEval.labelInk(fraction: fraction)',
+    to: 'AnalysisPalette.textPrimary',
+    why: 'the label ink decided in the view rather than in the metrics layer — it is a second copy '
+      + 'of the >= 0.5 rule and drifts from the JS twin, which reads the shared one',
+  },
+  {
+    id: 'rail_fill_not_clipped',
+    file: 'EvalRail.swift',
+    from: '.clipShape(RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous))',
+    to: '.padding(0)',
+    why: 'the fill unclipped — at a full-height eval it spills past the rail`s rounded corners, '
+      + 'which looks like a rendering artefact rather than a missing modifier',
+  },
 ];
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'swift-layout-mut-'));
