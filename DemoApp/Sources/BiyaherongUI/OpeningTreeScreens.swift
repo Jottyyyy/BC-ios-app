@@ -190,9 +190,10 @@ struct OpeningTreeListScreen: View {
 
 struct OpeningTreeBuildScreen: View {
     @ObservedObject var store: OpeningTreeStore
-    let onDone: () -> Void
-
     @ObservedObject var premium: PremiumStore
+    // Declared after `premium` so the memberwise init matches the call site's trailing-callback
+    // order; the other way round it is a compile error, not a style preference.
+    let onDone: () -> Void
 
     @State private var name = ""
     @State private var colour: OpeningTree.Colour = .both
