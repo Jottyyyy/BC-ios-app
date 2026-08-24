@@ -321,6 +321,14 @@ enum OpeningStrings {
     static let engineStalemate = "= Stalemate"
     static let engineDraw = "= Draw"
 
+    // off book — the state the old screen could not express. `noMoves` STAYS, for the genuine
+    // on-book leaf: telling those two apart is the whole point.
+    static let offBook = "Off book"
+    static let offBookSub = "No game in this tree reached here. Play on to explore, "
+        + "or go back to the line."
+    static let offBookLimit = "That is as far as this goes. Go back to the line to keep exploring."
+    static let backToTree = "Back to tree"
+
     // explorer
     static let noMoves = "No games reached this position."
     static let back = "← Back"

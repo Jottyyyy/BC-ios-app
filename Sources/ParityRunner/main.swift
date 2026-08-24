@@ -3166,6 +3166,13 @@ do {
     h.check(book.bookDepth(along: ["Nf3", "c5", "e4"]) == 0,
             "1.Nf3 c5 2.e4 transposes into 1.e4 c5 2.Nf3 and is STILL off book — the tree is keyed "
             + "by the line you played, which is why OpeningBook exists and keys by FEN")
+    // The back rank, now a Core fact rather than two Play-vs-Coach layout constants — the explorer
+    // is the second board you can push a pawn on.
+    h.check(Square.isBackRank(Square.index("a1") ?? -1), "rank 1 is a back rank")
+    h.check(Square.isBackRank(Square.index("h8") ?? -1), "and so is rank 8")
+    h.check(!Square.isBackRank(Square.index("e4") ?? -1), "the middle of the board is not")
+    h.check(!Square.isBackRank(Square.index("d7") ?? -1), "nor is the rank a pawn promotes FROM")
+
     h.check(OT.maxFreePlies == 20, "twenty plies of free play hang off the tree")
     h.check(OT.maxFreePlies < OT.defaultMaxPlies, "fewer than the tree itself is deep")
     h.check(OT.maxFreePlies % 2 == 0, "and a whole number of full moves")
@@ -3376,8 +3383,9 @@ h.requireMinCounts([
     // by tools/qa/replay_opening_tree.js.
     // 60 -> 97: the download's parse half (limits, endpoints, NDJSON, archives, the ceiling and
     // the aborted-game deviation). 97 -> 110: `bookDepth` and `maxFreePlies` — the off-book model
-    // an interactive board needs, including the transposition decision. RAISED, never lowered.
-    "opening_tree": 110,
+    // an interactive board needs, including the transposition decision. 110 -> 114: Square.isBackRank,
+    // which the explorer`s promotion asks instead of reaching into CoachLayout. RAISED, never lowered.
+    "opening_tree": 114,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,

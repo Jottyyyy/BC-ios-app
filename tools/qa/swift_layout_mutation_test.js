@@ -117,15 +117,34 @@ const MUTANTS = [
       + 'the board still selects, highlights and plays on a tap',
   },
   {
-    // Rule 7 EXEMPTS display boards, and an exemption that cannot stop applying is a hole of its
-    // own. This makes the Opening Tree board playable by tap; it must then be required to accept a
-    // drag as well. Never compiled — the checker only greps — so `step` need not exist.
-    id: 'display_board_becomes_playable',
+    // Replaces `display_board_becomes_playable`, whose anchor is gone: the Opening Tree board is
+    // PLAYABLE now — free play is the feature — so there is no read-only board left for that mutant
+    // to make playable. A mutant whose `from:` no longer matches never applies, which reads as a
+    // pass and proves nothing, so it is re-pointed rather than deleted.
+    //
+    // Same site, opposite half: the NEW board must be seen by rule 7 on a screen that is not the
+    // one the drag bug was found on.
+    id: 'opening_tree_board_loses_its_drag',
     file: 'OpeningTreeScreens.swift',
-    from: '                      onTap: { _ in })',
-    to: '                      onTap: { sq in store.step(sq) })',
-    why: 'a read-only board handed a real tap handler and no drag — rule 7 has to stop exempting '
-      + 'it the moment it stops being a display board',
+    from: '                          onDragMove: { from, to in drag(from, to, in: pos) })',
+    to: '                          coordinates: true)',
+    why: 'the explorer board back to tap-only — the coach bug verbatim, on the screen that WAS '
+      + "this rule's exemption until free play was added",
+  },
+  {
+    // THE EXEMPT ARM. It used to be proved by the app simply containing a display board; it has
+    // none, so rule 7 states the census exactly (`display === 0`) and this makes a real playable
+    // board display-shaped. The only way that can raise `display` to 1 is for the display predicate
+    // to have MATCHED it — so a predicate rotted into matching nothing lets this mutant SURVIVE,
+    // which is precisely the failure the old `display >= 1` floor existed to catch.
+    //
+    // Never compiled — the checker only greps — so the duplicated arguments do not matter.
+    id: 'playable_board_becomes_display_shaped',
+    file: 'PuzzleSolverParts.swift',
+    from: 'BoardView(pieces: engine.pieces,',
+    to: 'BoardView(pieces: engine.pieces, selected: nil, legalTargets: [], onTap: { _ in },',
+    why: 'a playable board reclassified as a display board — rule 7 must NOTICE, or its exemption '
+      + 'has become something reachable by accident',
   },
 
   // ---- the eval rail's SHAPE -------------------------------------------------

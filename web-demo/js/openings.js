@@ -302,12 +302,7 @@ var BiyaOpenings = (function () {
     root.appendChild(header(open ? open.name : MET.STRINGS.title, handlers.onClose));
 
     var boardWrap = el('div', 'op-board');
-    var board = document.createElement('chess-board');
-    board.setAttribute('fen', store.fen());
-    board.setAttribute('coordinates', '');
-    // Read-only: navigation is the move LIST's job, so a tap on the board would be a second,
-    // silently different way to walk the tree.
-    if (open && open.colour === 'black') board.setAttribute('flipped', '');
+    var board = explorerBoard(store, handlers.onPlay);
     // The rail, LEFT of the board and a sibling of it — never a wrapper. It is the SAME rail the
     // Analysis Board draws: same `.an-eval` class, same `.fill`/`.lbl` children, same
     // `.an-eval.off { display: none }`. Only where its height comes from is this screen's.
@@ -334,7 +329,19 @@ var BiyaOpenings = (function () {
     root.appendChild(nav);
 
     var moves = store.candidates();
-    if (!moves.length) {
+    if (store.isOffBook()) {
+      // A NOTE, not an error — you have not done anything wrong by looking at a position your
+      // games never reached. It borrows the form's connectivity-note box rather than inventing
+      // geometry: zero new layout keys, so §9's property audit stays green untouched.
+      var chip = el('div', 'op-offbook');
+      chip.appendChild(el('div', 'op-offbook-title', MET.STRINGS.offBook));
+      chip.appendChild(el('div', 'op-offbook-sub',
+        store.atFreeLimit() ? MET.STRINGS.offBookLimit : MET.STRINGS.offBookSub));
+      var out = el('button', 'op-navbtn', MET.STRINGS.backToTree);
+      out.onclick = handlers.onBackToTree;
+      chip.appendChild(out);
+      root.appendChild(chip);
+    } else if (!moves.length) {
       root.appendChild(el('div', 'op-nomoves', MET.STRINGS.noMoves));
     } else {
       var list = el('div', 'op-moves');
@@ -343,6 +350,79 @@ var BiyaOpenings = (function () {
     }
 
     view.appendChild(root);
+  }
+
+  /** The chess engine, resolved lazily — `engine.js` sets a global under a script tag. */
+  function E() {
+    if (typeof Engine !== 'undefined') return Engine;
+    if (isNode) return require('./engine.js');
+    throw new Error('openings.js needs engine.js — load it first');
+  }
+
+  /** What the component needs before a piece can be picked up. Same shape as coach-play.js's. */
+  function rulesAdapter() {
+    return {
+      legalMovesFrom: function (fen, sq) {
+        var e = E(), pos = e.fromFEN(fen);
+        if (!pos) return [];
+        return e.legalMovesFrom(pos, sq).map(function (m) {
+          return { to: m.to, promotion: m.promotion };
+        });
+      }
+    };
+  }
+
+  /**
+   * A board move as the STORE's vocabulary, which is SAN.
+   *
+   * The component reports UCI; the path is SAN. Resolving it through `E.san` — the same function
+   * `opening-tree.js` canonicalises with — is what makes a board move land on the tree's own
+   * branch. Spell it by hand and `Qxf7+` goes onto a path whose tree holds `Qxf7`: the board
+   * advances, the move list empties, an ON-book move reads as off book, and nothing says why. It
+   * would look exactly like the feature working.
+   *
+   * Null when it does not resolve; the caller drops it.
+   */
+  function sanFromUci(fen, uci) {
+    var e = E(), pos = e.fromFEN(fen);
+    if (!pos) return null;
+    var m = e.parseUci(pos, uci);
+    return m ? e.san(pos, m) : null;
+  }
+
+  /**
+   * The explorer's board.
+   *
+   * Exported for the same reason `coach-play.js` exports its own: `board_component_test.js` must
+   * drive a real pointer through the SCREEN's wiring, in the screen's own order, rather than
+   * through a board the test configured itself — which is exactly how the coach drag shipped dead
+   * through 34,000 green assertions.
+   *
+   * It used to be read-only, on the reasoning that "navigation is the move LIST's job, so a tap on
+   * the board would be a second, silently different way to walk the tree". That was right while the
+   * tree was the only thing you could walk. Playing your own move is not a second way to walk the
+   * tree — it is the way you LEAVE it, which is what the client asked for.
+   */
+  function explorerBoard(store, onPlay) {
+    var open = store.open();
+    var b = document.createElement('chess-board');
+    b.setAttribute('coordinates', '');
+    // `setPosition`, not the `fen` ATTRIBUTE: the attribute carries no last move, which is why this
+    // board has never highlighted one while its Swift twin always has.
+    if (b.setPosition) b.setPosition(store.fen(), { animate: false, lastMove: store.lastMove() });
+    // The PROPERTY. `flipped` is attribute-truthy for every value but the literal 'false', so
+    // `flipped="0"` would be upside down for White.
+    b.flipped = !!(open && open.colour === 'black');
+    b.rules = rulesAdapter();
+    // Both, or the drag is dead: the component attaches NO pointer handlers until a screen asks.
+    b.draggablePieces = true;
+    b.addEventListener('move', function (ev) {
+      var d = ev && ev.detail;
+      if (!d) return;
+      var san = sanFromUci(store.fen(), d.uci);
+      if (san) onPlay(san);
+    });
+    return b;
   }
 
   /**
@@ -594,6 +674,20 @@ var BiyaOpenings = (function () {
     d.username = 'someone';
     expect(submitGames(d, [], 5).error === MET.STRINGS.errUnknownUser,
       'no games back is a username problem, NOT a connection one');
+    // THE highest-risk line in the interactive board, exercised directly.
+    //
+    // The component reports UCI and the store's path is SAN. Return the UCI unresolved and the
+    // board still advances, the move list empties, an ON-book move reads as off book, and nothing
+    // anywhere says why — it looks exactly like the feature working. There is no other symptom, so
+    // this is the assertion that has to exist.
+    var startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    expect(sanFromUci(startFen, 'e2e4') === 'e4',
+      'a board move resolves to the SAN the tree is keyed by, not the UCI the component reports — '
+      + 'got ' + JSON.stringify(sanFromUci(startFen, 'e2e4')));
+    expect(sanFromUci(startFen, 'g1f3') === 'Nf3', 'and a knight move too');
+    expect(sanFromUci(startFen, 'e2e5') === null, 'an illegal move resolves to nothing');
+    expect(sanFromUci('not a fen', 'e2e4') === null, 'and so does an unreadable position');
+
     var built = submitGames(d, [{ sanMoves: ['e4', 'c5'], userIsWhite: true, outcome: '1-0' }], 5);
     expect(!built.error && built.tree.gameCount === 1, 'and real games build a tree');
     expect(built.tree.source === 'lichess' && built.tree.username === 'someone',
@@ -625,6 +719,8 @@ var BiyaOpenings = (function () {
     submitGames: submitGames,
     emptyForm: emptyForm,
     applyMetrics: applyMetrics,
+    board: explorerBoard,
+    sanFromUci: sanFromUci,
     setEngine: setEngine,
     engineOn: engineOn,
     selfTest: selfTest

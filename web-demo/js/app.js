@@ -617,6 +617,7 @@
                              snapshot: engineSnapshot });
     BiyaOpenings.render(view, store, openingForm, openingMode, {
       onEngineToggle: openingsEngineToggle,
+      onBackToTree: function () { store.backToTree(); openingsEngineSchedule(); render(); },
       onExit: function () { current = 'home'; render(); },
       onBuild: function () { openingForm = BiyaOpenings.emptyForm(); openingsGo('form'); },
       onCancel: function () { openingsGo('list'); },

@@ -516,10 +516,22 @@ function lineOf(file, re) {
 //
 // "Playable" is read off the CALL rather than from a list of screen names, so a new screen is
 // covered the day it is written. A board handed a real `selected`, real `legalTargets` and a real
-// `onTap` is one a piece can be picked up on; `OpeningTreeScreens` passes `nil`, `[]` and
-// `{ _ in }` and is exempt by that test — which is also exactly what its browser twin does, and
-// for the reason `openings.js` states: navigation is the move LIST's job, so a board that accepted
-// input would be a second, silently different way to walk the tree.
+// `onTap` is one a piece can be picked up on; a board handed `nil`, `[]` and `{ _ in }` cannot pick
+// anything up, so there is nothing to drag and the rule exempts it.
+//
+// **That exemption now has no subject.** `OpeningTreeScreens` was the app's last display board, and
+// its board became playable when the explorer learned to let you leave the saved line and play your
+// own move. A floor of "at least one display board exists" is a floor over an empty set, and says
+// nothing at all. So the arm is proved three other ways, which together are strictly stronger than
+// the observation it replaces:
+//
+//   1. the predicate is a NAMED function, exercised directly on fixtures below;
+//   2. the census is asserted EXACTLY (`display === 0`), so any board that becomes display-shaped
+//      trips it — the condition is falsifiable rather than vacuous;
+//   3. `playable_board_becomes_display_shaped` in the mutation test makes a real playable board
+//      display-shaped. The only way that can raise the census is for the predicate to have MATCHED
+//      it, so a predicate rotted into matching nothing lets that mutant survive — which is exactly
+//      the canary the old floor was.
 {
   // The two macOS demo panels. Named with the reason rather than skipped in silence: they are the
   // pre-port desktop sample, reached only by `AppShell`, kept alive as a board harness. The
@@ -540,6 +552,34 @@ function lineOf(file, re) {
     return { args: s.slice(at + 'BoardView('.length, i - 1), end: i };
   }
 
+  /**
+   * Playable or display, read off the CALL's argument text.
+   *
+   * A NAMED function rather than three inline regexes, so the exempt arm can be exercised
+   * DIRECTLY — see the fixtures below. It used to be proved by the app happening to contain a
+   * display board, and the app has none left.
+   */
+  function classify(args) {
+    // A display board: nothing selected, no targets, and a tap handler that throws its square
+    // away. Nothing can be picked up, so there is nothing to drag.
+    return (/selected:\s*nil/.test(args) && /legalTargets:\s*\[\]/.test(args)
+            && /onTap:\s*\{\s*_\s+in\s*\}/.test(args)) ? 'display' : 'playing';
+  }
+
+  // Both arms, on fixtures. This is the assertion that keeps the exemption REACHABLE now that
+  // nothing in the app is exempt by it — a predicate rotted into never returning 'display' would
+  // start demanding a drag from a board nothing can be picked up on, and no real file would say so.
+  expect(classify('pieces: p, selected: nil, legalTargets: [], lastMove: m, onTap: { _ in }')
+    === 'display',
+    'the display triple is no longer recognised — the rule would start demanding a drag from a '
+    + 'board nothing can be picked up on, which is an exemption that cannot be reached');
+  expect(classify('pieces: p, selected: sel, legalTargets: t, onTap: { tap($0, in: pos) }')
+    === 'playing', 'and a real selection is still playable');
+  expect(classify('pieces: p, selected: nil, legalTargets: t, onTap: { tap($0, in: pos) }')
+    === 'playing', 'a board with real targets is playable even with nothing selected yet');
+  expect(classify('pieces: p, selected: nil, legalTargets: [], onTap: { _ in }, onDragMove: d')
+    === 'display', 'and the triple is what decides it, not the presence of a drag handler');
+
   let playing = 0, display = 0, exempt = 0;
   for (const [file, s] of code) {
     if (file === 'BoardView.swift') continue;              // the definition site
@@ -547,10 +587,7 @@ function lineOf(file, re) {
     while ((call = boardViewCall(s, cursor)) !== null) {
       cursor = call.end;
       const a = call.args;
-      // A display board: nothing selected, no targets, and a tap handler that throws its square
-      // away. Nothing can be picked up, so there is nothing to drag.
-      if (/selected:\s*nil/.test(a) && /legalTargets:\s*\[\]/.test(a)
-          && /onTap:\s*\{\s*_\s+in\s*\}/.test(a)) { display++; passed++; continue; }
+      if (classify(a) === 'display') { display++; passed++; continue; }
       playing++;
       if (DESKTOP_SAMPLES.has(file)) { exempt++; passed++; continue; }
       expect(/onDragMove:/.test(a),
@@ -562,14 +599,20 @@ function lineOf(file, re) {
     }
   }
 
-  // Floors, so the rule cannot pass by matching nothing. Five playable boards, one display board
-  // and two exemptions — the exact census at the time this was written.
-  expect(playing >= 5,
+  // Floors, so the rule cannot pass by matching nothing.
+  expect(playing >= 6,
     `only ${playing} playable BoardView call(s) found — the argument slicer has stopped matching, `
     + 'so this rule is now passing without reading anything');
-  expect(display >= 1,
-    'no display-only BoardView found — the exemption arm is untested, which is how a read-only '
-    + 'board would start being forced to accept drags');
+  // The census, stated EXACTLY where it used to be floored. `display >= 1` said "at least one
+  // display board exists"; there are none, and a floor of zero says nothing. `=== 0` is what makes
+  // the exempt arm falsifiable — and it is what the mutation test's
+  // `playable_board_becomes_display_shaped` moves off zero.
+  expect(display === 0,
+    `${display} display-only BoardView call(s) found; this app has none — OpeningTreeScreens was `
+    + 'the last, and its board is playable now that you can leave the saved line and play your own '
+    + 'move. If you have added a genuinely read-only board, change this number and say so in '
+    + 'CHANGELOG.md: it is the census, not a floor, and it is what proves the exempt arm can still '
+    + 'be reached.');
   expect(exempt === DESKTOP_SAMPLES.size,
     `${exempt} of ${DESKTOP_SAMPLES.size} desktop-sample boards matched — an entry in `
     + 'DESKTOP_SAMPLES that no longer names a playable board is an exemption with nothing under it');

@@ -201,12 +201,40 @@ const MUTANTS = [
   ['coach play: pieces cannot be dragged', 'coach-play.js',
    '    b.draggablePieces = true;\n', '',
    'the drag is dead while every tap still works, so the screen looks entirely alive'],
-  // And the generalised rule, proved on a DIFFERENT file: any screen that gives a board rules and
-  // forgets the drag must fail, not just the one where it was found.
-  ['openings: a read-only board gains rules but not drag', 'openings.js',
-   "    board.setAttribute('coordinates', '');",
-   "    board.setAttribute('coordinates', '');\n    board.rules = {};",
-   'web_shell_check rule 5 has to fire for ANY screen that does this, not only coach-play.js'],
+  // Replaces 'openings: a read-only board gains rules but not drag'. It is doubly dead now: its
+  // anchor moved when the explorer board was rebuilt for free play, and — worse — injecting
+  // `.rules` proves nothing any more, because openings.js sets `.rules` AND the drag legitimately.
+  // It would have APPLIED and SURVIVED while looking like it had run. Two replace it, one per arm.
+  ['openings: the explorer board loses its drag', 'openings.js',
+   '    b.draggablePieces = true;\n',
+   '',
+   'rule 5 must fire for ANY screen that gives a board rules and forgets the drag, not only '
+   + "coach-play.js — and this is the screen that used to be the rule's own exemption"],
+  ['web shell: the rules detector stops discriminating', 'analysis.js',
+   '    board.rules = rulesAdapter;',
+   '    board.rulesAdapter = rulesAdapter;',
+   'a playable board reclassified as a display board. With the census asserted exactly (=== 0), '
+   + 'rule 5 must notice, or its exempt arm has become reachable by accident — which is the '
+   + 'failure the old `displayOnly >= 1` floor existed to catch'],
+
+  // The feature's own. The first is the highest-risk line in the whole change.
+  ['openings: a board move is spelled instead of resolved', 'openings.js',
+   '    return m ? e.san(pos, m) : null;',
+   '    return uci;',
+   'the path is SAN, so a UCI on it is off book FOREVER — and the board still advances, so nothing '
+   + 'about the screen looks wrong'],
+  ['opening tree: bookDepth miscounts the divergence', 'opening-tree.js',
+   '      if (!next) return depth;',
+   '      if (!next) return depth + 1;',
+   'off book by one ply reads as on book, so Back to tree lands one move past the line'],
+  ['opening store: back to tree keeps a free ply', 'opening-store.js',
+   'path = path.slice(0, api.bookDepth());',
+   'path = path.slice(0, api.bookDepth() + 1);',
+   'the one control that gets you out leaves you off book'],
+  ['opening store: free play is uncapped', 'opening-store.js',
+   'if (api.freePlies() >= OT.MAX_FREE_PLIES) return false;',
+   'if (false) return false;',
+   'the path grows without limit and every repaint replays all of it, twice'],
   ['coach play: last move highlighted in algebraic', 'coach-play.js',
    'b.highlightLastMove(E.sqIndex(shown.from), E.sqIndex(shown.to));',
    'b.highlightLastMove(shown.from, shown.to);',
@@ -727,6 +755,11 @@ const RUN_ALL = [
   " require('./web-demo/js/pairing-store.js').selfTest(),",
   " require('./tools/qa/pairing_screen_test.js').run(),",
   " require('./tools/qa/replay_pairing.js').run(),",
+  // A gate nothing mutates is a gate on trust — the reason web_shell_check joined this list.
+  " require('./web-demo/js/opening-tree.js').selfTest(),",
+  " require('./web-demo/js/opening-store.js').selfTest(),",
+  " require('./web-demo/js/openings.js').selfTest(),",
+  " require('./tools/qa/replay_opening_tree.js').selfTest(),",
   " require('./web-demo/js/coach-engine.js').selfTest(),",
   " require('./web-demo/js/coach-book.js').selfTest(),",
   " require('./web-demo/js/coach-game.js').selfTest(),",
@@ -751,6 +784,8 @@ const FILES = ['puzzle-session.js', 'puzzle-store.js', 'puzzle-serving.js',
                'puzzle-progress.js', 'streak-engine.js', 'puzzle-metrics.js',
                'turbo-run.js', 'puzzle-streak.js', 'puzzle-turbo.js',
                'puzzle-solver.js', 'chess-board.js', 'puzzle-board.js',
+               // the Opening Tree, whose gates joined this harness when its board became playable
+               'analysis.js', 'opening-tree.js', 'opening-store.js',
                'pairing-engine.js', 'pairing-store.js', 'pairing-list.js',
                'pairing-create.js', 'pairing-detail.js', 'PairingDocument.swift',
                'PairingScreens.swift', 'PairingDetailScreens.swift',

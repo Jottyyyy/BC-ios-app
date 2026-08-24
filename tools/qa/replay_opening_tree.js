@@ -766,6 +766,71 @@ const ST = require(path.join(JS, 'opening-store.js'));
     .test(CORE_MET), 'and the Swift checks the minus FIRST, which is the whole fix');
 }
 
+// ── 16. The explorer's board is playable, in both languages ─────────────────────
+//
+// It was the app's last DISPLAY board in both languages, on the reasoning that "navigation is the
+// move LIST's job". That was right while the tree was the only thing you could walk. Playing your
+// own move is not a second way to walk the tree — it is the way you LEAVE it.
+{
+  const js = code(OPENINGS_JS);
+  const sw = code(SCREENS_SRC);
+
+  expect(/\.rules\s*=/.test(js) && /\.draggablePieces\s*=\s*true/.test(js),
+    'the browser board is given rules AND told that pieces may be dragged — both, or the component '
+    + 'attaches no pointer handlers at all and every drag is silently swallowed');
+  expect(/addEventListener\('move'/.test(js), 'and it listens for the move the component reports');
+  expect(/setPosition\(/.test(js) && !/setAttribute\(\s*'fen'/.test(js),
+    'the position goes through setPosition, not the `fen` ATTRIBUTE — the attribute path cannot '
+    + 'carry a lastMove, which is why this board has never highlighted one while its Swift twin '
+    + 'always has');
+  expect(/lastMove: store\.lastMove\(\)/.test(js), 'and it passes the last move it finally has');
+  expect(/b\.flipped = /.test(js) && !/setAttribute\(\s*'flipped'/.test(js),
+    'flipped is the PROPERTY: the attribute is truthy for every value but the literal "false", so '
+    + 'flipped="0" would be upside down for White');
+
+  expect(/onDragMove: \{ from, to in drag\(from, to, in: pos\) \}\)/.test(sw),
+    'the Swift board takes a drag as well as a tap — BoardView installs no gesture without it');
+  expect(/onTap: \{ tap\(\$0, in: pos\) \}/.test(sw), 'and a real tap handler');
+  expect(/pos\.legalMoves\(from: from\)\.contains\(where: \{ \$0\.to == to \}\)/.test(sw),
+    'and the DRAG route checks legality ITSELF — BoardView.dragGesture reports whatever two squares '
+    + 'the gesture spanned and knows no rules, where the tap route has already computed targets');
+  expect(/pos\.san\(for: move\)/.test(sw),
+    'a board move becomes SAN through san(for:) — the same function `add` canonicalises with, so '
+    + '`Qxf7+` can never be appended to a path whose tree holds `Qxf7`');
+  expect(/selected = nil\s*\n\s*legalTargets = \[\]/.test(sw),
+    'and the half-finished tap is cleared when the path moves under it: four other controls change '
+    + '`path` without going through commit');
+  expect(/Square\.isBackRank\(to\)/.test(sw),
+    'promotion asks the Core whether it is a back rank rather than reaching into CoachLayout — a '
+    + 'back rank is a fact about chess, not about either screen`s layout');
+  expect(/checkSquare\(pos\)/.test(sw),
+    'and the board shows check: once you can play your own moves you can give it');
+
+  // The SAN resolution, executed rather than read. The mutation harness found this hole by
+  // surviving: nothing exercised the function that turns the component's UCI into the store's SAN.
+  const OPEN = require(path.join(JS, 'openings.js'));
+  const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  eq(OPEN.sanFromUci(START, 'e2e4'), 'e4', 'e2e4 resolves to the SAN the tree is keyed by');
+  eq(OPEN.sanFromUci(START, 'g1f3'), 'Nf3', 'and a knight move too');
+  eq(OPEN.sanFromUci(START, 'e2e5'), null, 'an illegal move resolves to nothing');
+
+  // The off-book card, and the four strings it needed. ZERO new layout keys — it borrows the
+  // form's connectivity-note box, which is why §9's property audit above is untouched.
+  for (const k of ['offBook', 'offBookSub', 'offBookLimit', 'backToTree']) {
+    eq(MET.STRINGS[k], swString(MET_SRC, 'OpeningStrings', k), 'OpeningStrings.' + k);
+  }
+  expect(/store\.isOffBook \{\s*\n?\s*offBookCard/.test(sw),
+    'the Swift explorer draws the off-book card BEFORE the empty-candidates one — off book and a '
+    + 'leaf are different things, and that ambiguity is the bug being fixed');
+  expect(/store\.isOffBook\(\)/.test(js) && /MET\.STRINGS\.offBook/.test(js),
+    'and so does the browser');
+  expect(/store\.backToTree\(\)/.test(sw) && /handlers\.onBackToTree/.test(js),
+    'both give it the one control that gets you out');
+  expect(MET.STRINGS.noMoves !== MET.STRINGS.offBookSub,
+    'and `noMoves` still exists for the genuine on-book leaf — telling those two apart is the '
+    + 'whole point');
+}
+
 // ---- report ------------------------------------------------------------------
 const result = {
   passed,

@@ -509,6 +509,12 @@ struct OpeningTreeExplorerScreen: View {
     /// resets the toggle to OFF on re-entry.
     @StateObject private var engine = OpeningEngineVM()
 
+    /// A half-finished tap. `@State`, not store state: this is INPUT IN PROGRESS, and a selection
+    /// ring left over from a repaint is exactly the thing that should be cleared by one. The store
+    /// owns navigation; it does not own a square you are still deciding about.
+    @State private var selected: Int?
+    @State private var legalTargets: Set<Int> = []
+
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
@@ -523,13 +529,23 @@ struct OpeningTreeExplorerScreen: View {
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
-        .onChange(of: store.path) { _, _ in engine.positionChanged(to: store.position) }
+        // Four other controls move `path` and none goes through `commit` — a candidate row, Back,
+        // Reset and Forward. Without clearing here, a ring left over from a half-finished tap
+        // points at a square in the PREVIOUS position, and the next tap commits from it.
+        .onChange(of: store.path) { _, _ in
+            selected = nil
+            legalTargets = []
+            engine.positionChanged(to: store.position)
+        }
         // A detached Task is not cancelled by deinit, so leaving has to say so.
         .onDisappear { engine.stop() }
     }
 
     private func board(width: CGFloat) -> some View {
         let edge = OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)
+        // Bound once, so both handlers capture the ALREADY-REPLAYED position: `store.position`
+        // walks the whole path, and a tap must not pay for it twice.
+        let pos = store.position
         return HStack(alignment: .top, spacing: AnalysisEval.railGap) {
             // The rail is a SIBLING of the band, never a wrapper: `ChessBoardBand` is the board box
             // and anything that adds leading width to it moves everything anchored to its frame.
@@ -537,18 +553,81 @@ struct OpeningTreeExplorerScreen: View {
             // width and its gap, so the board would gain nothing.
             if engine.engineOn { evalRail(height: edge) }
             ChessBoardBand(edge: edge) { side in
-                BoardView(pieces: store.position.map(piecesFrom) ?? [],
-                          selected: nil,
-                          legalTargets: [],
+                BoardView(pieces: pos.map(piecesFrom) ?? [],
+                          selected: selected,
+                          legalTargets: legalTargets,
                           lastMove: store.lastMove,
                           flipped: store.open?.colour == .black,
-                          checkSquare: nil,
+                          checkSquare: checkSquare(pos),
                           boardSize: side,
-                          onTap: { _ in })
+                          onTap: { tap($0, in: pos) },
+                          // Without this, `BoardView` installs NO drag gesture at all — the coach
+                          // bug, verbatim, on the screen that used to be this rule's exemption.
+                          onDragMove: { from, to in drag(from, to, in: pos) })
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, OpeningLayout.boardGap)
+    }
+
+    /// Once you can play your own moves you can give check, and a playable board that never shows
+    /// it is a regression against every other board in the app.
+    private func checkSquare(_ pos: ChessPosition?) -> Int? {
+        guard let pos = pos, pos.isInCheck(pos.sideToMove) else { return nil }
+        return pos.kingSquare(pos.sideToMove)
+    }
+
+    /// Tap a piece, then tap where it goes.
+    private func tap(_ sq: Int, in pos: ChessPosition?) {
+        guard let pos = pos else { return }
+        if let from = selected, legalTargets.contains(sq) {
+            commit(from: from, to: sq, in: pos)
+            return
+        }
+        let moves = pos.legalMoves(from: sq)
+        if moves.isEmpty { selected = nil; legalTargets = []; return }
+        selected = sq
+        legalTargets = Set(moves.map { $0.to })
+    }
+
+    /// The same move by the other route — and the route that has to check legality itself.
+    ///
+    /// `BoardView.dragGesture` reports whatever two squares the gesture spanned and knows nothing
+    /// about pieces or rules. The tap path never has to check, because by the time the second tap
+    /// lands `legalTargets` has already been computed for the piece in hand.
+    private func drag(_ from: Int, _ to: Int, in pos: ChessPosition?) {
+        guard let pos = pos else { return }
+        guard pos.legalMoves(from: from).contains(where: { $0.to == to }) else {
+            selected = nil
+            legalTargets = []
+            return
+        }
+        commit(from: from, to: to, in: pos)
+    }
+
+    /// The ONE place two squares become the store's vocabulary, which is SAN.
+    ///
+    /// `pos.san(for:)` is the same function `OpeningTree.add` canonicalises with, and that is why
+    /// it must not be spelled by hand: a hand-built `Qxf7+` appended to a path whose tree holds
+    /// `Qxf7` reads as OFF BOOK. The board would advance, the move list would empty, and nothing
+    /// anywhere would say why — it would look exactly like the feature working.
+    private func commit(from: Int, to: Int, in pos: ChessPosition) {
+        selected = nil
+        legalTargets = []
+        let promo = promotionKind(from, to, pos)
+        guard let move = pos.legalMoves(from: from)
+            .first(where: { $0.to == to && $0.promotion == promo }) else { return }
+        store.play(pos.san(for: move))
+    }
+
+    /// Auto-queen, like every other Swift board in this app — `BoardView` has no promotion picker.
+    ///
+    /// Carried explicitly rather than left to `first(where:)`, which would otherwise pick whichever
+    /// of the four promotion moves the generator happened to emit first. A `PieceKind?` and not the
+    /// coach's UCI suffix, because this store takes SAN.
+    private func promotionKind(_ from: Int, _ to: Int, _ pos: ChessPosition) -> PieceKind? {
+        guard pos.squares[from]?.kind == .pawn, Square.isBackRank(to) else { return nil }
+        return .queen
     }
 
     /// The one rail, from `EvalRail.swift`. A forwarder rather than an inline `EvalRail(...)` so
@@ -694,7 +773,9 @@ struct OpeningTreeExplorerScreen: View {
 
     private var moves: some View {
         ScrollView {
-            if store.candidates.isEmpty {
+            if store.isOffBook {
+                offBookCard
+            } else if store.candidates.isEmpty {
                 Text(OpeningStrings.noMoves)
                     .font(Theme.nunito(OpeningLayout.noMovesSize))
                     .foregroundStyle(OpeningPalette.muted)
@@ -713,6 +794,36 @@ struct OpeningTreeExplorerScreen: View {
                 .padding(.bottom, OpeningLayout.movesPadBottom)
             }
         }
+    }
+
+    /// The state the old screen could not express.
+    ///
+    /// A NOTE, not an error — you have not done anything wrong by looking at a position your games
+    /// never reached. It borrows the form's connectivity-note box rather than inventing geometry,
+    /// for the reason `progressNote` already states: a panel with its own numbers is a set of
+    /// numbers `opening_styles.json` cannot vouch for. **Zero new layout keys.**
+    private var offBookCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(OpeningStrings.offBook)
+                .font(Theme.nunito(OpeningLayout.infoTitleSize, .semiBold))
+                .foregroundStyle(OpeningPalette.gold)
+                .padding(.bottom, OpeningLayout.infoTitleGap)
+            Text(store.atFreeLimit ? OpeningStrings.offBookLimit : OpeningStrings.offBookSub)
+                .font(Theme.nunito(OpeningLayout.infoSubSize))
+                .foregroundStyle(OpeningPalette.infoText)
+                .lineSpacing(OpeningType.infoSubLeading)
+                .padding(.bottom, OpeningLayout.infoTop)
+            // The one control that gets you out, in the same shape as the nav arrows — leaving the
+            // book was one decision, so returning from it is one too, not N taps of Back.
+            navButton(OpeningStrings.backToTree, enabled: true) { store.backToTree() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(OpeningLayout.infoPad)
+        .background(OpeningPalette.infoBg,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.infoRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.infoBorder, lineWidth: OpeningLayout.infoBorder))
+        .padding(.horizontal, OpeningLayout.screenPadH)
     }
 
     private func row(for c: OpeningTree.Candidate) -> some View {

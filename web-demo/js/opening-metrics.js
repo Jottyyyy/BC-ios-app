@@ -289,6 +289,12 @@
     engineMate: '# Checkmate',
     engineStalemate: '= Stalemate',
     engineDraw: '= Draw',
+    // off book — the state the old screen could not express. `noMoves` STAYS, for the genuine
+    // on-book leaf: telling those two apart is the whole point.
+    offBook: 'Off book',
+    offBookSub: 'No game in this tree reached here. Play on to explore, or go back to the line.',
+    offBookLimit: 'That is as far as this goes. Go back to the line to keep exploring.',
+    backToTree: 'Back to tree',
     // explorer
     noMoves: 'No games reached this position.',
     back: '← Back',

@@ -187,41 +187,77 @@ const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
 // a move on a tap while ignoring every drag, with nothing anywhere to say so. That is what
 // `coach-play.js` shipped, through 34,000 green assertions and a round on a real phone.
 //
-// So the implication IS the rule: rules ⇒ drag. `openings.js` builds a board and deliberately gives
-// it no rules — "navigation is the move LIST's job, so a tap on the board would be a second,
-// silently different way to walk the tree" — and is exempt by that same test. `swift_layout_check.js`
-// rule 7 is this rule's Swift half, written off `onTap`/`onDragMove` because SwiftUI has no
-// `.rules`.
+// So the implication IS the rule: rules ⇒ drag. A board with NEITHER is a display board, and the
+// rule exempts it. `swift_layout_check.js` rule 7 is this rule's Swift half, written off
+// `onTap`/`onDragMove` because SwiftUI has no `.rules`.
+//
+// **That exemption now has no subject.** `openings.js` was the demo's last rules-free board, and
+// its explorer board became playable when the client asked to be able to step in at a position and
+// play their own move. A floor of "at least one exists" over an empty set says nothing, so the arm
+// is proved three other ways instead — a NAMED reader exercised on fixtures, an EXACT census, and a
+// mutant that makes a real playable board display-shaped. See rule 7's header for the full
+// reasoning; the two halves are deliberately identical.
 {
   /** JS with comments removed, so a property NAMED in prose never counts as a property SET. */
   const stripJs = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
 
-  const playable = [], displayOnly = [];
-  for (const f of fs.readdirSync(JS_DIR).filter((x) => x.endsWith('.js'))) {
-    const s = stripJs(fs.readFileSync(path.join(JS_DIR, f), 'utf8'));
-    if (!/createElement\(\s*['"]chess-board['"]\s*\)/.test(s)) continue;
-    if (!/\.rules\s*=/.test(s)) { displayOnly.push(f); continue; }
-    playable.push(f);
+  /**
+   * Does this source BUILD a board, give it `.rules`, and turn drag on?
+   *
+   * A NAMED function so the arms can be exercised on fixtures — the demo has no rules-free board
+   * left to prove them on.
+   */
+  function readBoard(s) {
     // Both spellings the component honours: the property, or the attribute at any value but the
     // literal 'false' (chess-board.js:204/219). puzzle-board.js and puzzle-solver.js use the
     // attribute and are correct, so a check that demanded the property would fail working code.
     const attr = s.match(/setAttribute\(\s*['"]draggable-pieces['"]\s*,\s*(['"])([^'"]*)\1\s*\)/);
-    const on = /\.draggablePieces\s*=\s*true/.test(s) || (attr !== null && attr[2] !== 'false');
-    expect(on,
+    return {
+      isBoard: /createElement\(\s*['"]chess-board['"]\s*\)/.test(s),
+      hasRules: /\.rules\s*=/.test(s),
+      dragOn: /\.draggablePieces\s*=\s*true/.test(s) || (attr !== null && attr[2] !== 'false'),
+    };
+  }
+
+  // Both arms, on fixtures. This is what keeps the exemption REACHABLE now that nothing in the
+  // demo is exempt by it.
+  expect(readBoard("var b = document.createElement('chess-board');").isBoard,
+    'a board is still recognised at all');
+  expect(!readBoard("var b = document.createElement('chess-board');").hasRules,
+    'a board with no .rules is a DISPLAY board and stays exempt — this is the arm with no subject');
+  expect(readBoard('b.rules = a; b.draggablePieces = true;').dragOn, 'the property spelling');
+  expect(readBoard("b.setAttribute('draggable-pieces', '');").dragOn, 'the attribute spelling');
+  expect(!readBoard("b.setAttribute('draggable-pieces', 'false');").dragOn,
+    "and 'false' is the one attribute value that means off");
+  expect(!readBoard(stripJs('// b.rules = adapter();')).hasRules,
+    'a `.rules` NAMED in prose is not a `.rules` SET — the strip is what lets this rule be read in '
+    + 'files that document the bug at length');
+
+  const playable = [], displayOnly = [];
+  for (const f of fs.readdirSync(JS_DIR).filter((x) => x.endsWith('.js'))) {
+    const s = stripJs(fs.readFileSync(path.join(JS_DIR, f), 'utf8'));
+    const b = readBoard(s);
+    if (!b.isBoard) continue;
+    if (!b.hasRules) { displayOnly.push(f); continue; }
+    playable.push(f);
+    expect(b.dragOn,
       `web-demo/js/${f} gives its board \`.rules\` but never turns drag on. A piece can be picked `
       + 'up and tapped to its square, and dragging it does nothing at all. Set '
       + '`.draggablePieces = true` (or the `draggable-pieces` attribute), or take `.rules` away '
-      + 'and mean it — a board with neither is a display board, which is fine and is what '
-      + 'openings.js is.');
+      + 'and mean it — a board with neither is a display board, which is fine.');
   }
-  // Floors: the census when this was written is five playable boards and one display board. A
-  // regex that stops matching would otherwise report a clean sweep of nothing.
-  expect(playable.length >= 5,
+  // A floor, so a regex that stops matching cannot report a clean sweep of nothing.
+  expect(playable.length >= 6,
     `only ${playable.length} board-building screen(s) matched (${playable.join(', ') || 'none'}) — `
     + 'the detector has stopped finding them, so this rule now passes without reading anything');
-  expect(displayOnly.length >= 1,
-    'no rules-free board found — the exempt arm is untested, which is how a deliberately read-only '
-    + 'board would start being told it must accept drags');
+  // The census, stated EXACTLY where it used to be floored — and what the mutation harness's
+  // 'the rules detector stops discriminating' moves off zero.
+  expect(displayOnly.length === 0,
+    `${displayOnly.length} rules-free board(s) found (${displayOnly.join(', ') || 'none'}); this `
+    + 'demo has none. openings.js was the last one and its explorer board is playable now that you '
+    + 'can leave the saved line and play your own move. If you add a deliberately read-only board, '
+    + 'change this number and say so in CHANGELOG.md — it is the census, and it is what makes "a '
+    + 'board with neither is exempt" falsifiable.');
 }
 
 // ---- report ------------------------------------------------------------------
