@@ -505,32 +505,148 @@ struct OpeningTreeBuildScreen: View {
 struct OpeningTreeExplorerScreen: View {
     @ObservedObject var store: OpeningTreeStore
 
+    /// Owned here rather than by the root, so closing the tree destroys it — which is also what
+    /// resets the toggle to OFF on re-entry.
+    @StateObject private var engine = OpeningEngineVM()
+
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 OpeningHeader(title: store.open?.name ?? OpeningStrings.title,
                               onBack: { store.closeTree() })
-                board(edge: geo.size.width)
+                board(width: geo.size.width)
+                engineToggle
+                if engine.engineOn { enginePanel }
                 history
                 navRow
                 moves
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
+        .onChange(of: store.path) { _, _ in engine.positionChanged(to: store.position) }
+        // A detached Task is not cancelled by deinit, so leaving has to say so.
+        .onDisappear { engine.stop() }
     }
 
-    private func board(edge: CGFloat) -> some View {
-        ChessBoardBand(edge: edge) { side in
-            BoardView(pieces: store.position.map(piecesFrom) ?? [],
-                      selected: nil,
-                      legalTargets: [],
-                      lastMove: store.lastMove,
-                      flipped: store.open?.colour == .black,
-                      checkSquare: nil,
-                      boardSize: side,
-                      onTap: { _ in })
+    private func board(width: CGFloat) -> some View {
+        let edge = OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)
+        return HStack(alignment: .top, spacing: AnalysisEval.railGap) {
+            // The rail is a SIBLING of the band, never a wrapper: `ChessBoardBand` is the board box
+            // and anything that adds leading width to it moves everything anchored to its frame.
+            // And it LEAVES the layout with the engine — a hidden-but-present rail would keep its
+            // width and its gap, so the board would gain nothing.
+            if engine.engineOn { evalRail(height: edge) }
+            ChessBoardBand(edge: edge) { side in
+                BoardView(pieces: store.position.map(piecesFrom) ?? [],
+                          selected: nil,
+                          legalTargets: [],
+                          lastMove: store.lastMove,
+                          flipped: store.open?.colour == .black,
+                          checkSquare: nil,
+                          boardSize: side,
+                          onTap: { _ in })
+            }
         }
+        .frame(maxWidth: .infinity)
         .padding(.bottom, OpeningLayout.boardGap)
+    }
+
+    /// The one rail, from `EvalRail.swift`. A forwarder rather than an inline `EvalRail(...)` so
+    /// `evalRail(height: edge)` reads the same here as on the Analysis Board — which is what
+    /// `swift_layout_check.js` §4d's site table matches on.
+    private func evalRail(height: CGFloat) -> some View {
+        EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)
+    }
+
+    /// `alignSelf: flex-start` in the RN source, so it hugs the left rather than stretching.
+    private var engineToggle: some View {
+        HStack(spacing: 0) {
+            Button { engine.toggle(position: store.position) } label: {
+                Text(engine.engineOn ? OpeningStrings.engineOn : OpeningStrings.engineOff)
+                    .font(Theme.nunito(OpeningLayout.engineToggleTextSize, .semiBold))
+                    .foregroundStyle(engine.engineOn ? OpeningPalette.doneText
+                                                     : OpeningPalette.muted)
+                    .padding(.horizontal, OpeningLayout.engineTogglePadH)
+                    .padding(.vertical, OpeningLayout.engineTogglePadV)
+                    .background(engine.engineOn ? OpeningPalette.doneBg : OpeningPalette.card,
+                                in: RoundedRectangle(cornerRadius: OpeningLayout.engineToggleRadius,
+                                                     style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: OpeningLayout.engineToggleRadius,
+                                              style: .continuous)
+                        .strokeBorder(engine.engineOn ? OpeningPalette.doneText
+                                                      : OpeningPalette.engineToggleBorder,
+                                      lineWidth: OpeningLayout.engineToggleBorder))
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, OpeningLayout.screenPadH)
+        .padding(.top, OpeningLayout.engineToggleTop)
+        .padding(.bottom, OpeningLayout.engineToggleBottom)
+    }
+
+    /// The three best lines, or what is happening instead.
+    ///
+    /// The rows are **not** tappable, and that is a decision rather than an omission: `store.play`
+    /// would append a SAN the tree has no node for, so a control that looks exactly like the
+    /// candidate rows below would silently take you off book. Playing an engine move is what the
+    /// BOARD is for.
+    private var enginePanel: some View {
+        VStack(alignment: .leading, spacing: OpeningLayout.engineGap) {
+            if let status = engineStatus {
+                Text(status)
+                    .font(Theme.nunito(OpeningLayout.engineTextSize))
+                    .foregroundStyle(OpeningPalette.muted)
+                    .padding(.vertical, OpeningLayout.engineStatusPadV)
+            }
+            ForEach(engine.rows, id: \.rank) { engineRow($0) }
+            if !engine.rows.isEmpty {
+                Text(OpeningStrings.fill(engine.analyzing ? OpeningStrings.engineDepthBusy
+                                                          : OpeningStrings.engineDepth,
+                                         ["n": String(engine.rows[0].depth)]))
+                    .font(Theme.nunito(OpeningLayout.engineDepthSize))
+                    .foregroundStyle(OpeningPalette.engineDepth)
+                    .padding(.top, OpeningLayout.engineDepthTop)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, OpeningLayout.enginePadH)
+        .padding(.vertical, OpeningLayout.enginePadV)
+        .background(OpeningPalette.cardDeep,
+                    in: RoundedRectangle(cornerRadius: OpeningLayout.engineRadius,
+                                         style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: OpeningLayout.engineRadius, style: .continuous)
+            .strokeBorder(OpeningPalette.hairline, lineWidth: OpeningLayout.engineBorder))
+        .padding(.horizontal, OpeningLayout.screenPadH)
+        .padding(.bottom, OpeningLayout.engineBottom)
+    }
+
+    /// `Analyzing…` before the first snapshot, the outcome once the game is over, otherwise nil.
+    ///
+    /// The spinner shows only while there is nothing to show — once lines exist the depth chip's
+    /// trailing `…` carries the same information without the panel jumping.
+    private var engineStatus: String? {
+        if !engine.rows.isEmpty { return nil }
+        return engine.analyzing ? OpeningStrings.engineAnalyzing : nil
+    }
+
+    private func engineRow(_ row: EngineRow) -> some View {
+        HStack(spacing: OpeningLayout.engineRowGap) {
+            Text(row.evalText)
+                .font(Theme.nunito(OpeningLayout.engineEvalSize, .bold))
+                .foregroundStyle(OpeningPalette.engineEvalInk(row.evalText))
+                .frame(minWidth: OpeningLayout.engineEvalWidth, alignment: .leading)
+            Text(row.san)
+                .font(Theme.nunito(OpeningLayout.engineSanSize, .bold))
+                .foregroundStyle(OpeningPalette.engineRankColor(row.rank))
+                .frame(minWidth: OpeningLayout.engineSanWidth, alignment: .leading)
+            Text(row.continuation)
+                .font(Theme.nunito(OpeningLayout.enginePvSize))
+                .foregroundStyle(OpeningPalette.muted)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, OpeningLayout.engineRowPadV)
     }
 
     private var history: some View {

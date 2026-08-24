@@ -267,39 +267,70 @@ function lineOf(file, re) {
 //
 // This is `board_layout_check.js` §2d's Swift twin. The two renderers degrade differently, so
 // neither stands in for the other.
+//
+// A TABLE, not one screen. The Opening Tree explorer grew a rail of its own when the client asked
+// for an engine there, and every failure below is per MOUNT — the arrows sliding by the rail's
+// width, the board not taking the space back — so a second site needs the same rules on the day it
+// is written, not the day someone remembers to copy them.
 {
-  const s = code.get('AnalysisBoardScreen.swift');
-  expect(s !== undefined, 'AnalysisBoardScreen.swift is missing');
-  if (s) {
-    const i = s.indexOf('private func boardBand(');
-    expect(i >= 0, 'AnalysisBoardScreen still has a boardBand(width:)');
+  const RAIL_SITES = [
+    { file: 'AnalysisBoardScreen.swift', member: 'private func boardBand(',
+      edgeFn: 'AnalysisBoard.edge', flag: 'vm.autoAnalyze', edgeCalls: 2, overlays: true },
+    { file: 'OpeningTreeScreens.swift', member: 'private func board(width:',
+      edgeFn: 'OpeningBoard.edge', flag: 'engine.engineOn', edgeCalls: 1, overlays: false },
+  ];
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  for (const site of RAIL_SITES) {
+    const s = code.get(site.file);
+    expect(s !== undefined, `${site.file} is missing`);
+    if (!s) continue;
+    const i = s.indexOf(site.member);
+    expect(i >= 0, `${site.file} still has ${site.member}…)`);
     if (i >= 0) {
-      // To the next member, not a fixed window — the band body is long and a short guess would
+      // To the next member, not a fixed window — a band body is long and a short guess would
       // fail a correct file, which is the mistake §4c already documents.
       const rest = s.slice(i + 1);
       const end = rest.search(/\n {4}(private )?(var|func) /);
       const band = end < 0 ? rest : rest.slice(0, end);
       expect(/HStack\(alignment: \.top, spacing: AnalysisEval\.railGap\)/.test(band),
-        'boardBand must be an HStack, top-aligned, spaced by AnalysisEval.railGap. A default '
-        + '`.center` alignment drifts the moment the two children stop being the same height, and '
-        + 'a literal spacing is a number in a view body.');
+        `${site.file} — the band must be an HStack, top-aligned, spaced by AnalysisEval.railGap. A `
+        + 'default `.center` alignment drifts the moment the two children stop being the same '
+        + 'height, and a literal spacing is a number in a view body.');
       expect(band.indexOf('evalRail(') >= 0
         && band.indexOf('evalRail(') < band.indexOf('ChessBoardBand('),
-        'the rail comes FIRST — it is on the LEFT, and it stays there when the board is flipped');
+        `${site.file} — the rail comes FIRST: it is on the LEFT and stays there when the board flips`);
       expect(!/evalRail\([^)]*flip/.test(band),
-        'and nothing about the rail depends on the flip: the side is FIXED, like Lichess');
-      expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
-        'the arrow and badge overlays stay attached to ChessBoardBand, not to the HStack — the '
-        + 'band IS the board box and every offset is measured from its frame');
-      expect(/AnalysisBoard\.edge\(screenWidth:[\s\S]{0,120}?engineOn: vm\.autoAnalyze\)/.test(band),
-        'the edge comes from AnalysisBoard.edge(..., engineOn: vm.autoAnalyze) — the one function '
-        + 'that decides whether the rail is costing the board any width');
+        `${site.file} — nothing about the rail depends on the flip; the side is FIXED, like Lichess`);
+      if (site.overlays) {
+        expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
+          `${site.file} — the arrow and badge overlays stay attached to ChessBoardBand, not to the `
+          + 'HStack: the band IS the board box and every offset is measured from its frame');
+      }
+      expect(new RegExp(esc(site.edgeFn) + '\\(screenWidth:[\\s\\S]{0,120}?engineOn: '
+                        + esc(site.flag) + '\\)').test(band),
+        `${site.file} — the edge comes from ${site.edgeFn}(…, engineOn: ${site.flag}), the one `
+        + 'function that decides whether the rail is costing the board any width');
       // The rail is only there when the engine is. Draw it unconditionally and it sits at a dead
-      // 50/50 with no number on it the moment toggleEngine drops the snapshot.
-      expect(/if vm\.autoAnalyze \{ evalRail\(height: edge\) \}/.test(band),
-        'and the rail itself is conditional on vm.autoAnalyze — engine off, no rail, and the board '
+      // 50/50 with no number on it the moment the toggle drops the snapshot.
+      expect(new RegExp('if ' + esc(site.flag) + ' \\{ evalRail\\(height: edge\\) \\}').test(band),
+        `${site.file} — the rail is conditional on ${site.flag}: engine off, no rail, and the board `
         + 'takes the width back');
     }
+    expect((s.match(new RegExp(esc(site.edgeFn) + '\\(screenWidth:', 'g')) || []).length
+           >= site.edgeCalls,
+      `${site.file} — every consumer of the edge goes through ${site.edgeFn}; there should be at `
+      + `least ${site.edgeCalls}`);
+    expect(!new RegExp(esc(site.edgeFn) + '\\([^)]*engineOn: (true|false)').test(s),
+      `${site.file} — nobody hardcodes engineOn; it is ${site.flag}, or the board stops tracking `
+      + 'the toggle it is supposed to follow');
+  }
+  expect(RAIL_SITES.length >= 2,
+    'the rail-site table has fewer than two entries — a screen with an eval rail has stopped being '
+    + 'checked, which is how the second one would have shipped unpinned');
+
+  {
+    const s = code.get('AnalysisBoardScreen.swift') || '';
     // RESTATED for the one entry point. This used to ban AnalysisBoard.size outright; the full
     // width is now CORRECT when the engine is off, so what has to be banned is a call site picking
     // the branch for itself. enginePlan and the band must be handed the same engineOn, or the
@@ -319,6 +350,21 @@ function lineOf(file, re) {
     expect(!/func evalBar\(width:/.test(s),
       'the full-width horizontal eval bar is gone — there is one main eval bar and it is the rail');
     expect(/func evalRail\(height:/.test(s), 'and the rail replaced it');
+  }
+
+  {
+    const s = code.get('OpeningTreeScreens.swift') || '';
+    // The same one-entry-point rule, stated for the screen it is easiest to break on: this board
+    // was full-bleed `geo.size.width` until the rail arrived, so subtracting 25 by hand is the
+    // obvious wrong move and would leave the rail's height and the board's width free to disagree.
+    expect(!/AnalysisEval\.railTotal/.test(s),
+      'OpeningTreeScreens does its own arithmetic on railTotal — that is OpeningBoard.edge`s job, '
+      + 'and it is the only thing both the board and the rail read');
+    expect(!/geo\.size\.width - /.test(s),
+      'and it does not subtract from the viewport width inline either');
+    expect(/func evalRail\(height:/.test(s),
+      'it forwards to the shared rail rather than naming EvalRail at the call site — which is what '
+      + 'keeps `evalRail(height: edge)` matchable by the site table above');
   }
 }
 

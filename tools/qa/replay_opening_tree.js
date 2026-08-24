@@ -134,6 +134,9 @@ const OPENINGS_JS = read(JS, 'openings.js');
  *  this file silently skipped ten assertions on a source that was correct. */
 const CORE_CODE = code(CORE_SRC);
 
+/** OpeningMetrics.swift, comment-stripped — §15 reads OpeningBoard.edge and engineEvalInk. */
+const CORE_MET = code(MET_SRC);
+
 const OT = require(path.join(JS, 'opening-tree.js'));
 const MET = require(path.join(JS, 'opening-metrics.js'));
 const ST = require(path.join(JS, 'opening-store.js'));
@@ -313,8 +316,31 @@ const ST = require(path.join(JS, 'opening-store.js'));
   const set = new Set();
   for (const k of Object.keys(MET.LAYOUT)) set.add('--op-' + k);
   for (const k of Object.keys(MET.PALETTE)) set.add('--opc-' + k);
-  ['--op-barHeight', '--op-barRadius', '--opc-win', '--opc-draw', '--opc-loss', '--opc-loadFill']
+  ['--op-barHeight', '--op-barRadius', '--opc-win', '--opc-draw', '--opc-loss', '--opc-loadFill',
+    // MEASURED, not tabled. The explorer's board edge depends on the viewport and on whether the
+    // engine is on, so it cannot be a `LAYOUT` key — §6 requires every one of those to be a literal
+    // `static let name = <number>` in the Swift. `sizeExplorer` sets it through `MET.boardEdge`,
+    // which is the one entry point both the board and the rail read.
+    '--op-boardEdge']
     .forEach((k) => set.add(k));
+  // …and it really is set, through the one function. A property listed here but never written is
+  // an exemption with nothing under it.
+  expect(/root\.style\.setProperty\('--op-boardEdge', MET\.boardEdge\(/.test(OPENINGS_JS),
+    'openings.js sets --op-boardEdge through MET.boardEdge — not by hand, and not from two places');
+
+  // The rail's own properties come from the ANALYSIS table, because it is the analysis rail. They
+  // are set on this screen's root too, since `analysis.js` sets them on a root this screen is not
+  // inside — so they are excluded from the audit above rather than duplicated into MET.LAYOUT.
+  for (const k of ['--an-rail-w', '--an-rail-r', '--an-rail-pad-v', '--an-rail-gap',
+                   '--an-eval-anim', '--an-fs-rail', '--an-eval-track', '--an-eval-fill',
+                   '--an-on-gold', '--an-text']) {
+    expect(OPENINGS_JS.includes("set('" + k + "'"),
+      `openings.js sets ${k} — the rail is drawn by .an-eval, whose properties analysis.js sets on `
+      + 'a root this screen is never inside');
+  }
+  expect(!/setProperty\('--an-board-edge'/.test(OPENINGS_JS),
+    'and NOT --an-board-edge: the rail is as tall as THIS screen`s board, which is --op-boardEdge; '
+    + 'setting the analysis one would give it the other screen`s height');
 
   for (const name of readProps) {
     expect(set.has(name), `app.css reads ${name} but openings.js never sets it`);
@@ -657,6 +683,87 @@ const ST = require(path.join(JS, 'opening-store.js'));
   s2.play(E.san(start, E.parseUci(start, 'e2e4')));
   expect(!s2.isOffBook(),
     'so a move made on the board lands on the tree`s own branch rather than beside it');
+}
+
+// ── 15. The engine is the SHARED engine ─────────────────────────────────────────
+//
+// This screen is the third consumer of one search (the Analysis Board, the puzzle hint panel, and
+// now the explorer). The way that goes wrong is not a crash: it is a screen quietly acquiring its
+// own depth, its own multiPV or its own debounce, which then disagrees with the others for reasons
+// nobody can see. So the numbers are asserted to come from the shared tables and NEVER be literals.
+{
+  const vm = code(read(UI, 'OpeningEngineVM.swift'));
+  const app = code(read(path.join(ROOT, 'web-demo'), 'js/app.js'));
+
+  expect(/LocalEngine\(\)/.test(vm), 'Swift runs the same LocalEngine as every other screen');
+  expect(/AnalysisEngineLimits\.maxDepth/.test(vm) && /AnalysisEngineLimits\.multiPV/.test(vm),
+    'with AnalysisEngineLimits — NOT the Analysis Board`s EngineSettings preset, which is that '
+    + "screen's setting and not this one's");
+  expect(!/EngineSettings/.test(vm), 'and it does not reach for that preset at all');
+  expect(/AnalysisSession\.engineRows\(from:/.test(vm),
+    'the rows come from AnalysisSession.engineRows — static for exactly this reason');
+  expect(/AnalysisEval\.fraction\(parts:/.test(vm) && /AnalysisSession\.evalParts\(from:/.test(vm),
+    'and the rail fraction from the shared parts, so a finished game pins it rather than reading '
+    + 'as a large evaluation');
+  expect(/AnalysisTiming\.analysisDebounceMs/.test(vm), 'the debounce is the shared one');
+  expect(!/SearchLimits\(maxDepth: \d/.test(vm) && !/multiPV: \d/.test(vm),
+    'and NO depth or multiPV is written as a number here');
+
+  expect(/HOST|BiyaEngineHost/.test(app), 'the browser goes through the shared engine host');
+  expect(/BiyaAnalysisMetrics\.ENGINE_LIMITS\.maxDepth/.test(app)
+    && /BiyaAnalysisMetrics\.ENGINE_LIMITS\.multiPV/.test(app),
+    'with the same limits table');
+  expect(/BiyaAnalysisMetrics\.TIMINGS\.analysisDebounce/.test(app),
+    'and the same debounce');
+  expect(/BiyaAnalysis\.engineRows\(/.test(app),
+    'and the same row builder — the twin of AnalysisSession.engineRows');
+
+  // The toggle defaults OFF in both languages. It is the client's own answer, and a screen that
+  // starts searching the moment it opens is a different product.
+  expect(/@Published private\(set\) var engineOn = false/.test(vm),
+    'the Swift toggle starts OFF');
+  expect(/var engineOn = false;/.test(app), 'and so does the browser one');
+
+  // Cancellation is real in both. The Swift has a Task to cancel; the browser cannot un-send a
+  // search, so it invalidates by token and every callback re-checks.
+  expect(/Task\.checkCancellation|token\.isCancelled/.test(vm),
+    'the Swift search is cancellable from the main actor');
+  expect(/\.onDisappear \{ engine\.stop\(\) \}/.test(code(SCREENS_SRC)),
+    'and leaving the explorer stops it — a detached Task is not cancelled by deinit');
+  expect(/\.onChange\(of: store\.path\)/.test(code(SCREENS_SRC)),
+    'and every step of the walk re-schedules it');
+  expect(/token !== engineToken/.test(app),
+    'the browser invalidates by token, and every callback re-checks it');
+
+  // The rail leaves the layout with the engine. A hidden-but-present rail keeps its own width AND
+  // the row's gap, so the board would gain nothing and the row would sit off-centre by half of both.
+  expect(/if engine\.engineOn \{ evalRail\(height: edge\) \}/.test(code(SCREENS_SRC)),
+    'Swift draws the rail only when the engine is on');
+  expect(/'an-eval op-eval' \+ \(engineState\.on \? '' : ' off'\)/.test(OPENINGS_JS),
+    'and the browser toggles `off` on the same class the Analysis Board uses');
+  expect(/\.an-eval\.off \{ display: none; \}/.test(APP_CSS),
+    'which is display:none — never visibility or an opacity');
+
+  // ONE entry point for the width, and both consumers go through it.
+  expect(/OpeningBoard\.edge\(screenWidth: width, engineOn: engine\.engineOn\)/
+    .test(code(SCREENS_SRC)), 'the Swift board edge comes from OpeningBoard.edge');
+  expect(!/AnalysisEval\.railTotal/.test(code(SCREENS_SRC)),
+    'and the screen never subtracts the rail by hand — that is the edge function`s job');
+  eq(MET.boardEdge(390, false), 390, 'engine off, the browser board is full width');
+  eq(MET.boardEdge(390, true), 390 - 25, 'and engine on it gives back exactly the rail');
+  expect(/max\(0, screenWidth - \(engineOn \? AnalysisEval\.railTotal : 0\)\)/.test(CORE_MET),
+    'and the Swift computes it the same way, reading railTotal rather than copying 25');
+
+  // The RN eval-colour bug, NOT reproduced.
+  eq(MET.engineEvalInk('M-3'), MET.PALETTE.errorText,
+    'a BLACK mate is red. The RN getEvalColor tests startsWith("M") before startsWith("M-"), so '
+    + 'M-3 comes back green there — the losing side`s own forced mate painted as an advantage');
+  eq(MET.engineEvalInk('M3'), MET.PALETTE.doneText, 'and a white mate is green');
+  eq(MET.engineEvalInk('-0.7'), MET.PALETTE.errorText, 'a negative eval is red');
+  eq(MET.engineEvalInk('+1.3'), MET.PALETTE.doneText, 'a positive one is green');
+  eq(MET.engineEvalInk(''), MET.PALETTE.muted, 'and nothing at all is muted');
+  expect(/hasPrefix\("M-"\)/.test(CORE_MET) && /hasPrefix\("-"\) \|\| text\.hasPrefix\("M-"\)/
+    .test(CORE_MET), 'and the Swift checks the minus FIRST, which is the whole fix');
 }
 
 // ---- report ------------------------------------------------------------------

@@ -2974,8 +2974,66 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .op-submit:active { opacity: .85; }
 
 /* explorer */
-.op-board { flex: none; margin-bottom: var(--op-boardGap); }
-.op-board chess-board { width: 100%; --board-radius: 0; }
+/* A ROW, so the eval rail is a sibling of the board rather than a wrapper around it: anything that
+   adds leading width to the board's own box moves everything anchored to that box. Same reason the
+   Swift band is an HStack with the rail as a peer of ChessBoardBand. */
+.op-board {
+  flex: none; margin-bottom: var(--op-boardGap);
+  display: flex; flex-direction: row; align-items: flex-start; justify-content: center;
+  gap: var(--an-rail-gap);
+}
+.op-board chess-board { width: var(--op-boardEdge); --board-radius: 0; }
+/* The SAME rail the Analysis Board draws — `.an-eval` and its `.fill`/`.lbl` children, including
+   `.an-eval.off { display: none }`, which is what makes the board take the width back rather than
+   sit beside an invisible 25px. Only the HEIGHT is this screen's, because only the board edge is.
+   Must stay AFTER `.an-eval` in this sheet: same specificity, later wins. */
+.op-eval { height: var(--op-boardEdge); }
+
+/* engine — every number a var, all of them extracted from openingtree.tsx's StyleSheet */
+.op-engine-toggle-row {
+  flex: none; display: flex; justify-content: flex-start;
+  margin: var(--op-engineToggleTop) var(--op-screenPadH) var(--op-engineToggleBottom);
+}
+.op-engine-toggle {
+  background: var(--opc-card); color: var(--opc-muted);
+  border: var(--op-engineToggleBorder) solid var(--opc-engineToggleBorder);
+  border-radius: var(--op-engineToggleRadius);
+  padding: var(--op-engineTogglePadV) var(--op-engineTogglePadH);
+  font: 600 var(--op-engineToggleTextSize)/1 inherit;
+  cursor: pointer;
+}
+.op-engine-toggle.on {
+  background: var(--opc-doneBg); color: var(--opc-doneText);
+  border-color: var(--opc-doneText);
+}
+.op-engine {
+  flex: none; display: flex; flex-direction: column; gap: var(--op-engineGap);
+  background: var(--opc-cardDeep);
+  border: var(--op-engineBorder) solid var(--opc-hairline);
+  border-radius: var(--op-engineRadius);
+  padding: var(--op-enginePadV) var(--op-enginePadH);
+  margin: 0 var(--op-screenPadH) var(--op-engineBottom);
+}
+.op-engine.off { display: none; }
+.op-engine-status {
+  color: var(--opc-muted); font-size: var(--op-engineTextSize);
+  padding-block: var(--op-engineStatusPadV);
+}
+.op-erow {
+  display: flex; flex-direction: row; align-items: center;
+  gap: var(--op-engineRowGap); padding-block: var(--op-engineRowPadV);
+}
+.op-eeval { flex: none; min-width: var(--op-engineEvalWidth); font: 700 var(--op-engineEvalSize)/1 inherit; }
+.op-esan { flex: none; min-width: var(--op-engineSanWidth); font: 700 var(--op-engineSanSize)/1 inherit; }
+.op-epv {
+  flex: 1; min-width: 0; color: var(--opc-muted);
+  font-size: var(--op-enginePvSize);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.op-edepth {
+  color: var(--opc-engineDepth); font-size: var(--op-engineDepthSize);
+  margin-top: var(--op-engineDepthTop);
+}
 .op-history {
   flex: none; background: var(--opc-cardDeep); color: var(--opc-gold);
   border-radius: var(--op-historyRadius);

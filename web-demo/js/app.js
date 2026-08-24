@@ -455,6 +455,102 @@
 
   function openingsGo(mode) { openingMode = mode; current = 'openings'; render(); }
 
+  /* ---- the explorer's engine ------------------------------------------------ *
+   *
+   * The loop lives here rather than in `openings.js` for the same reason the download's does:
+   * `openings.js` is `require`d headlessly by `js_goldens.js`, where there is no Worker and no DOM.
+   * The router runs the search and owns the token; the screen draws the answer.
+   *
+   * OFF by default — the client's own answer. `engineToken` is a monotonic integer, the same cancel
+   * primitive `analysis.js` uses: every callback re-checks it, so an abandoned search cannot paint. */
+  var engineOn = false;
+  var engineToken = 0;
+  var engineRows = [];
+  var engineSnapshot = null;
+  var engineBusy = false;
+  var engineDebounce = null;
+  var engineFen = null;
+
+  function openingsEngineReset() {
+    engineOn = false;
+    engineToken += 1;
+    engineRows = [];
+    engineSnapshot = null;
+    engineBusy = false;
+    engineFen = null;
+    if (engineDebounce) { clearTimeout(engineDebounce); engineDebounce = null; }
+  }
+
+  function openingsEngineToggle() {
+    engineOn = !engineOn;
+    // Dropping the rows is what makes the rail LEAVE the layout rather than sit at a dead 50/50
+    // with no number on it — the bug the Analysis Board's own toggle was fixed for.
+    if (!engineOn) {
+      engineToken += 1; engineRows = []; engineSnapshot = null;
+      engineBusy = false; engineFen = null;
+    }
+    openingsEngineSchedule();
+    render();
+  }
+
+  /**
+   * Cancel whatever is running, then start the debounce again.
+   *
+   * Walking the tree fast therefore searches nothing: each step bumps the token — every callback
+   * re-checks it, and the engine polls `shouldCancel` every 2048 nodes — and restarts the wait.
+   * Only a pause actually costs a search.
+   */
+  function openingsEngineSchedule() {
+    if (engineDebounce) { clearTimeout(engineDebounce); engineDebounce = null; }
+    engineToken += 1;
+    if (!engineOn) return;
+    var store = BiyaOpeningStore.shared();
+    if (!store.open()) return;
+    var token = engineToken;
+    engineDebounce = setTimeout(function () {
+      engineDebounce = null;
+      openingsEngineRun(token);
+    }, BiyaAnalysisMetrics.TIMINGS.analysisDebounce);
+  }
+
+  function openingsEngineRun(token) {
+    if (token !== engineToken) return;
+    var store = BiyaOpeningStore.shared();
+    var fen = store.fen();
+    var pos = Engine.fromFEN(fen);
+    if (!pos) return;
+    engineFen = fen;
+    engineBusy = true;
+    engineRows = [];
+    engineSnapshot = null;
+    renderIfOpenings();
+    // The SAME contract the Analysis Board and the puzzle hint panel use, so all three share one
+    // worker and one budget. The limits are ENGINE_LIMITS, not the Analysis Board's preset — that
+    // screen's setting is not this one's.
+    BiyaEngineHost.analyzeProgressive(pos, {
+      maxDepth: BiyaAnalysisMetrics.ENGINE_LIMITS.maxDepth,
+      multiPV: BiyaAnalysisMetrics.ENGINE_LIMITS.multiPV,
+      deadlineMs: BiyaAnalysisMetrics.TIMINGS.engineDeadline,
+      shouldCancel: function () { return token !== engineToken; },
+      onDepth: function (snap) {
+        if (token !== engineToken) return;
+        engineRows = BiyaAnalysis.engineRows(snap);
+        engineSnapshot = snap;
+        renderIfOpenings();
+      }
+    }).then(function (snap) {
+      if (token !== engineToken) return;
+      engineBusy = false;
+      if (snap) { engineRows = BiyaAnalysis.engineRows(snap); engineSnapshot = snap; }
+      renderIfOpenings();
+    });
+  }
+
+  /** A depth hop must not repaint a screen the user has left. */
+  function renderIfOpenings() {
+    if (current === 'openings' && openingMode !== 'form') render();
+  }
+
   /** Save a freshly built tree, open it, and drop the form. Both sources end here. */
   function openingsSave(store, tree) {
     store.add(tree);
@@ -516,7 +612,11 @@
   function renderOpenings() {
     var store = BiyaOpeningStore.shared();
     if (!openingForm) openingForm = BiyaOpenings.emptyForm();
+    // Pushed in rather than owned by the screen — the way `BiyaHome.setPremium` does it.
+    BiyaOpenings.setEngine({ on: engineOn, rows: engineRows, analyzing: engineBusy,
+                             snapshot: engineSnapshot });
     BiyaOpenings.render(view, store, openingForm, openingMode, {
+      onEngineToggle: openingsEngineToggle,
       onExit: function () { current = 'home'; render(); },
       onBuild: function () { openingForm = BiyaOpenings.emptyForm(); openingsGo('form'); },
       onCancel: function () { openingsGo('list'); },
@@ -530,13 +630,16 @@
         if (r.download) { runOpeningDownload(store, r.download); return; }
         openingsSave(store, r.tree);
       },
-      onOpen: function (id) { store.openTree(id); openingsGo('list'); },
+      // Opening a tree starts the engine OFF, the way closing the Swift explorer destroys its
+      // @StateObject. Every other one MOVES the board, so each re-schedules: the token bump
+      // cancels whatever was running before the debounce even starts.
+      onOpen: function (id) { store.openTree(id); openingsEngineReset(); openingsGo('list'); },
       onDelete: function (id) { store.remove(id); render(); },
-      onClose: function () { store.closeTree(); render(); },
-      onPlay: function (san) { store.play(san); render(); },
-      onBack: function () { store.stepBack(); render(); },
-      onForward: function () { store.stepForward(); render(); },
-      onReset: function () { store.reset(); render(); }
+      onClose: function () { store.closeTree(); openingsEngineReset(); render(); },
+      onPlay: function (san) { store.play(san); openingsEngineSchedule(); render(); },
+      onBack: function () { store.stepBack(); openingsEngineSchedule(); render(); },
+      onForward: function () { store.stepForward(); openingsEngineSchedule(); render(); },
+      onReset: function () { store.reset(); openingsEngineSchedule(); render(); }
     });
   }
 

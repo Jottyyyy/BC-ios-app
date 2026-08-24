@@ -138,6 +138,43 @@ const MUTANTS = [
   // stayed green while the rail could be rewritten backwards.
   //
   // A gate nothing mutates is a gate on trust. Mechanised here, they move with the file.
+  // ---- the SECOND rail's mount ------------------------------------------------
+  //
+  // §4d became a site table when the Opening Tree explorer grew an engine. A table with one row
+  // that happens to pass is not a table, so each rule is mutated on the NEW site — the one that
+  // was written after the rules, and the one that would have shipped unpinned.
+  {
+    id: 'opening_rail_drawn_with_engine_off',
+    file: 'OpeningTreeScreens.swift',
+    from: 'if engine.engineOn { evalRail(height: edge) }',
+    to: 'evalRail(height: edge)',
+    why: 'the explorer rail drawn unconditionally — with the engine off it sits at a dead 50/50 '
+      + 'with no number on it, and the board never takes the width back',
+  },
+  {
+    id: 'opening_board_ignores_the_toggle',
+    file: 'OpeningTreeScreens.swift',
+    from: 'OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)',
+    to: 'OpeningBoard.edge(screenWidth: width, engineOn: true)',
+    why: 'the explorer board budgeted for a rail that may not be there — 25pt of dead space on '
+      + 'the right whenever the engine is off',
+  },
+  {
+    id: 'opening_board_subtracts_the_rail_by_hand',
+    file: 'OpeningTreeScreens.swift',
+    from: 'let edge = OpeningBoard.edge(screenWidth: width, engineOn: engine.engineOn)',
+    to: 'let edge = width - AnalysisEval.railTotal',
+    why: 'the one entry point bypassed — the board and the rail then read two different widths, '
+      + 'which is the failure the CHANGELOG records for the Analysis Board',
+  },
+  {
+    id: 'second_eval_rail_in_the_module',
+    file: 'OpeningTreeScreens.swift',
+    from: 'EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)',
+    to: 'Rectangle().frame(height: AnalysisEval.fillHeight(rail: height, fraction: 0.5))',
+    why: 'a screen drawing its own eval fill instead of the shared rail — §4e`s census must see a '
+      + 'second drawer, or two rails drift on the fill anchor and the label ink',
+  },
   {
     id: 'rail_fill_anchored_at_the_top',
     file: 'EvalRail.swift',

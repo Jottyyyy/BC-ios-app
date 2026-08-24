@@ -752,6 +752,86 @@ var BiyaAnalysis = (function () {
     });
   }
 
+  /**
+   * How far into a PV the continuation column reads. Mirrors `AnalysisSession.pvPreview`.
+   *
+   * It lives here rather than in the screen because the rows do, and because `LocalEngine`'s
+   * `pvExtendLimit` is deliberately two greater — the DISPLAY truncates, not the engine.
+   */
+  var PV_PREVIEW = 12;
+
+  /**
+   * A snapshot's lines, flattened to the row a panel draws — the twin of
+   * `AnalysisSession.engineRows(from:)`, which is `static` in Swift for exactly this reason.
+   *
+   * Shared because the Opening Tree explorer is now the second screen with an engine panel and the
+   * third place this shape would otherwise be written out. `puzzle-solver.js` keeps its own
+   * narrower projection on purpose: it needs ALGEBRAIC from/to for the hint highlight and its own
+   * `MET.ENGINE.pvFrom/pvTo` window, so folding it in here would mean one function with two
+   * shapes, which is worse than two functions with one each.
+   */
+  function engineRows(snapshot) {
+    if (!snapshot || !snapshot.lines) return [];
+    return snapshot.lines.map(function (ln, i) {
+      var pv = ln.pv && ln.pv.length ? ln.pv[0] : null;
+      return {
+        rank: i,
+        // 1-based, because "line 0" means nothing to a player. Mirrors EngineRow.rankLabel.
+        rankLabel: String(i + 1),
+        evalText: formatScore(ln.score),
+        san: ln.pvSAN && ln.pvSAN.length ? ln.pvSAN[0] : '',
+        continuation: (ln.pvSAN || []).slice(1, 1 + PV_PREVIEW).join(' '),
+        uci: pv ? E.moveUci(pv) : '',
+        // The WHOLE line, so a panel can walk it on the board and not just play its first move.
+        pvUCI: (ln.pv || []).map(function (m) { return E.moveUci(m); }),
+        from: pv ? pv.from : -1,
+        to: pv ? pv.to : -1,
+        depth: ln.depth
+      };
+    });
+  }
+
+  /**
+   * The eval parts a rail needs — twin of `AnalysisSession.evalParts(from:)`.
+   *
+   * `winner` is set only for a finished game, and that is the case a fraction cannot express: a
+   * mate four moves away and a mate already on the board are different facts.
+   */
+  function evalPartsOf(snapshot) {
+    var score = snapshot && snapshot.score;
+    if (!score) return { cp: null, mate: null, winner: null };
+    if (score.kind === 'cp') return { cp: score.cp, mate: null, winner: null };
+    if (score.kind === 'mate') return { cp: null, mate: score.mate, winner: null };
+    var t = score.terminal;
+    return { cp: null, mate: null,
+             winner: t && t.kind === 'checkmate' ? t.winner : null };
+  }
+
+  /**
+   * White's share of the rail, 0…1 — the whole mapping, including the case `evalBarFraction`
+   * cannot express.
+   *
+   * A FINISHED game is not a big evaluation, it is a FULL rail: 0.95 for a mate still four moves
+   * away and 1 for one already on the board are different facts. That third branch lived only
+   * inside `analysis.js`, which was fine while one screen had an engine. The Opening Tree explorer
+   * has one now, and a second screen re-deriving "winner means full" is a second screen that will
+   * get it wrong for exactly the positions nobody tests.
+   *
+   * It lives HERE rather than in `analysis-metrics.js` because it has to compare against
+   * `Engine.WHITE`, and that table is a pure list of numbers with no dependencies at all — giving
+   * it one for a single comparison would be the wrong trade. Twin of
+   * `AnalysisEval.fraction(parts:)`, which can sit in the Swift metrics because that module already
+   * sees the Core's `PieceColor`.
+   */
+  function evalFractionFor(parts) {
+    var MET = isNode ? require('./analysis-metrics.js') : BiyaAnalysisMetrics;
+    if (!parts) return MET.evalBarFraction(null, null);
+    if (parts.winner !== null && parts.winner !== undefined) {
+      return parts.winner === E.WHITE ? 1 : 0;
+    }
+    return MET.evalBarFraction(parts.cp, parts.mate);
+  }
+
   /** Human-readable score, matching the spec's engine-line column. */
   function formatScore(score) {
     if (!score) return '';
@@ -994,6 +1074,8 @@ var BiyaAnalysis = (function () {
     analyzeSteps: analyzeSteps, analyzeProgressive: analyzeProgressive,
     toEngineScore: toEngineScore, terminalScore: terminalScore,
     asReviewEvaluation: asReviewEvaluation, formatScore: formatScore,
+    engineRows: engineRows, evalPartsOf: evalPartsOf, PV_PREVIEW: PV_PREVIEW,
+    evalFractionFor: evalFractionFor,
     selfTest: selfTest
   };
 })();

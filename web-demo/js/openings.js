@@ -29,12 +29,44 @@ var BiyaOpenings = (function () {
     throw new Error('openings.js needs opening-download.js — load it first');
   }
 
+  /** The Analysis Board's metrics — the eval rail's width, colours and timing are theirs. */
+  function analysisMetrics() {
+    if (typeof BiyaAnalysisMetrics !== 'undefined') return BiyaAnalysisMetrics;
+    if (isNode) return require('./analysis-metrics.js');
+    throw new Error('openings.js needs analysis-metrics.js — load it first');
+  }
+
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
     return n;
   }
+
+  /* ---- the engine's state, set by the router --------------------------------
+   *
+   * Pushed in rather than owned here, the way `BiyaHome.setPremium` does it: `app.js` runs the
+   * search and owns its token, this file draws the answer. Keeping the loop out of the renderer is
+   * what lets `openings.js` still be `require`d headlessly by `js_goldens.js`, where there is no
+   * Worker and no DOM.
+   *
+   * `on` is FALSE by default — the client's own answer. This screen is a repertoire browser first,
+   * and a search firing on every step of a fast walk is not what it is for.
+   */
+  var engineState = { on: false, rows: [], analyzing: false, snapshot: null };
+  function setEngine(next) {
+    engineState = {
+      on: !!(next && next.on),
+      rows: (next && next.rows) || [],
+      analyzing: !!(next && next.analyzing),
+      // The whole snapshot, not just the rows: the RAIL needs the position's own score, which is
+      // `snapshot.score` — terminal-first, so a finished game pins the rail rather than reading as
+      // a large evaluation. Row 1's eval and the rail's label are two projections of that one
+      // score and cannot be allowed to disagree.
+      snapshot: (next && next.snapshot) || null
+    };
+  }
+  function engineOn() { return engineState.on; }
 
   /**
    * Push every metric onto the root, so the stylesheet holds no number of its own.
@@ -65,6 +97,35 @@ var BiyaOpenings = (function () {
     // The load pill's fill is `rgba(253,176,34,0.15)` in the source: the gold at 15%, composed
     // from the same token rather than restated as a fourth spelling of it.
     colour('loadFill', 'color-mix(in srgb, ' + P.gold + ' 15%, transparent)');
+
+    applyRailVars(node);
+  }
+
+  /**
+   * The eval rail's own custom properties, from the ANALYSIS metrics.
+   *
+   * The explorer reuses `.an-eval` verbatim — one rail, one stylesheet block, which is what
+   * `swift_layout_check.js` §4e's "only ONE vertical eval bar" means in the browser. That block
+   * reads `--an-*`, and those are set by `analysis.js` on the ANALYSIS root, which this screen is
+   * not inside. So they are set here too, from the same table, never restated as numbers.
+   *
+   * `--an-board-edge` is deliberately NOT among them: the rail's height is this screen's board
+   * edge, and `.op-eval` overrides it with `--op-boardEdge`. Setting the analysis one here would
+   * give the rail the other screen's height.
+   */
+  function applyRailVars(node) {
+    var A = analysisMetrics();
+    function set(k, v) { node.style.setProperty(k, v); }
+    set('--an-rail-w', A.railWidth() + 'px');
+    set('--an-rail-r', A.EVAL_BAR.railRadius + 'px');
+    set('--an-rail-pad-v', A.EVAL_BAR.railPaddingV + 'px');
+    set('--an-rail-gap', A.EVAL_BAR.railGap + 'px');
+    set('--an-eval-anim', A.TIMINGS.evalBarAnimation + 'ms');
+    set('--an-fs-rail', A.evalLabelFontSize() + 'px');
+    set('--an-eval-track', A.PALETTE.evalTrack);
+    set('--an-eval-fill', A.PALETTE.evalFill);
+    set('--an-on-gold', A.PALETTE.onGold);
+    set('--an-text', A.PALETTE.textPrimary);
   }
 
   /* ---- shared chrome ------------------------------------------------------- */
@@ -247,8 +308,22 @@ var BiyaOpenings = (function () {
     // Read-only: navigation is the move LIST's job, so a tap on the board would be a second,
     // silently different way to walk the tree.
     if (open && open.colour === 'black') board.setAttribute('flipped', '');
+    // The rail, LEFT of the board and a sibling of it — never a wrapper. It is the SAME rail the
+    // Analysis Board draws: same `.an-eval` class, same `.fill`/`.lbl` children, same
+    // `.an-eval.off { display: none }`. Only where its height comes from is this screen's.
+    var rail = el('div', 'an-eval op-eval' + (engineState.on ? '' : ' off'));
+    var fill = el('div', 'fill');
+    var lbl = el('div', 'lbl');
+    rail.appendChild(fill);
+    rail.appendChild(lbl);
+    boardWrap.appendChild(rail);
     boardWrap.appendChild(board);
     root.appendChild(boardWrap);
+    paintEval(fill, lbl);
+    sizeExplorer(root, view);
+
+    root.appendChild(engineToggle(handlers.onEngineToggle));
+    root.appendChild(enginePanel());
 
     root.appendChild(el('div', 'op-history', store.historyText()));
 
@@ -268,6 +343,86 @@ var BiyaOpenings = (function () {
     }
 
     view.appendChild(root);
+  }
+
+  /**
+   * The board's width, through the ONE entry point.
+   *
+   * Both the board and the rail read `--op-boardEdge`, so they cannot disagree about how wide the
+   * board is — the failure the Analysis Board's own `edge` function exists to prevent. Measured
+   * from the view rather than assumed: the phone frame is a real element with a real width.
+   */
+  function sizeExplorer(root, view) {
+    var box = view.getBoundingClientRect ? view.getBoundingClientRect() : { width: 0 };
+    var w = box.width || view.clientWidth || 0;
+    if (!w) return;
+    root.style.setProperty('--op-boardEdge', MET.boardEdge(w, engineState.on) + 'px');
+  }
+
+  /**
+   * The rail's fill and label.
+   *
+   * `MET` here is the OPENING metrics; the fraction and the label placement are the ANALYSIS ones,
+   * because it is the analysis rail. `evalFractionFor` carries the branch a bare fraction cannot:
+   * a delivered mate pins the rail to a full 1, where a mate four moves away is 0.95.
+   */
+  function paintEval(fill, lbl) {
+    var A = analysisMetrics();
+    var AN = isNode ? require('./analysis-engine.js') : BiyaAnalysis;
+    var snap = engineState.snapshot;
+    var f = snap ? AN.evalFractionFor(AN.evalPartsOf(snap)) : A.evalBarFraction(null, null);
+    fill.style.height = (f * 100) + '%';
+    lbl.className = 'lbl ' + (A.evalLabelAtBottom(f) ? 'bottom' : 'top');
+    // ONE formatter, the same one the rows' eval column uses — the rail and row 1 are two
+    // projections of the same score and cannot disagree.
+    lbl.textContent = snap && snap.score ? AN.formatScore(snap.score) : '';
+  }
+
+  /** `alignSelf: flex-start` in the RN source, so it hugs the left rather than stretching. */
+  function engineToggle(onToggle) {
+    var wrap = el('div', 'op-engine-toggle-row');
+    var b = el('button', 'op-engine-toggle' + (engineState.on ? ' on' : ''),
+      engineState.on ? MET.STRINGS.engineOn : MET.STRINGS.engineOff);
+    b.onclick = onToggle;
+    wrap.appendChild(b);
+    return wrap;
+  }
+
+  /**
+   * The three best lines, or what is happening instead.
+   *
+   * The rows are NOT clickable, and that is a decision rather than an omission: `store.play` would
+   * append a SAN the tree has no node for, so a control that looks exactly like the candidate rows
+   * below would silently take you off book. Playing an engine move is what the BOARD is for.
+   */
+  function enginePanel() {
+    var panel = el('div', 'op-engine' + (engineState.on ? '' : ' off'));
+    if (!engineState.on) return panel;
+
+    // The spinner shows only while there is nothing to show — once lines exist the depth chip's
+    // trailing `…` carries the same information without the panel jumping.
+    if (!engineState.rows.length) {
+      if (engineState.analyzing) {
+        panel.appendChild(el('div', 'op-engine-status', MET.STRINGS.engineAnalyzing));
+      }
+      return panel;
+    }
+
+    engineState.rows.forEach(function (row) {
+      var line = el('div', 'op-erow');
+      var ev = el('div', 'op-eeval', row.evalText);
+      ev.style.color = MET.engineEvalInk(row.evalText);
+      line.appendChild(ev);
+      var san = el('div', 'op-esan', row.san);
+      san.style.color = MET.engineRankColor(row.rank);
+      line.appendChild(san);
+      line.appendChild(el('div', 'op-epv', row.continuation));
+      panel.appendChild(line);
+    });
+    panel.appendChild(el('div', 'op-edepth',
+      MET.fill(engineState.analyzing ? MET.STRINGS.engineDepthBusy : MET.STRINGS.engineDepth,
+               { n: engineState.rows[0].depth })));
+    return panel;
   }
 
   function navBtn(text, enabled, onTap) {
@@ -470,6 +625,8 @@ var BiyaOpenings = (function () {
     submitGames: submitGames,
     emptyForm: emptyForm,
     applyMetrics: applyMetrics,
+    setEngine: setEngine,
+    engineOn: engineOn,
     selfTest: selfTest
   };
 })();

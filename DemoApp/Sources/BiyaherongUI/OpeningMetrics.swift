@@ -11,6 +11,29 @@ import SwiftUI
 // The RN file is three screens behind one `view` state (`'list' | 'form' | 'explorer'`) sharing one
 // StyleSheet. These blocks split it the way the ported screens do.
 
+// MARK: - The board's width
+
+/// **The explorer board's edge. The one entry point — nothing else on that screen picks.**
+///
+/// Same contract as `AnalysisBoard.edge` and for the same reason the CHANGELOG gives for it: the
+/// board and the rail beside it must agree about how wide the board is, and two call sites reading
+/// the same viewport is two chances to disagree.
+///
+/// It deliberately does **not** go through `AnalysisBoard.size`. That snap-to-8-physical-pixels
+/// formula is pinned to `DragDropChessBoard.tsx` and belongs to the Analysis Board; this explorer
+/// has been full-bleed in both languages since it shipped, the engine defaults OFF, and the
+/// engine-off path has to stay byte-identical to what is on the client's phone today. Routing it
+/// through `AnalysisBoard.edge` would narrow the board by 0.67pt on a screen nobody asked to change.
+///
+/// `AnalysisEval.railTotal` is READ, never copied into `OpeningLayout`: §6 of the replay requires
+/// every `LAYOUT` key to be a literal `static let name = <number>`, so a copy is the only way to put
+/// it there — and a copy of a derived number is exactly what these gates exist to stop.
+enum OpeningBoard {
+    static func edge(screenWidth: CGFloat, engineOn: Bool) -> CGFloat {
+        max(0, screenWidth - (engineOn ? AnalysisEval.railTotal : 0))
+    }
+}
+
 // MARK: - Palette
 
 enum OpeningPalette {
@@ -41,6 +64,43 @@ enum OpeningPalette {
     static let errorBg = Theme.c(0x1A0808)
     static let errorBorder = Theme.c(0x5C1010)
     static let errorText = Theme.c(0xEF5350)
+
+    // engine — extracted from `openingtree.tsx`. The panel's fill is `cardDeep`, its border
+    // `hairline`, its prose `muted` and the ON state reuses `doneBg`/`doneText`; only these three
+    // are new.
+    static let engineToggleBorder = Theme.c(0x2A3F5A)   // engineToggleBtn.borderColor
+    static let engineDepth = Theme.c(0x4A6080)          // engineDepthChip.color
+
+    /// One colour per engine line, by rank — `ENGINE_MOVE_COLORS` in the RN module scope.
+    ///
+    /// NOT `AnalysisArrow.colors`, which carries the same three RGB triples at different alphas
+    /// (0.85/0.80/0.80 against this screen's 0.90/0.85/0.85). They are two extractions of two
+    /// screens and `opening-metrics.js`'s `selfTestSource` asserts these against
+    /// `opening_styles.json`; reusing the other table would quietly fail that check, or pass it by
+    /// having the check look away.
+    static let engineRank: [Color] = [
+        Color(.sRGB, red: 76 / 255, green: 175 / 255, blue: 80 / 255, opacity: 0.90),
+        Color(.sRGB, red: 68 / 255, green: 138 / 255, blue: 255 / 255, opacity: 0.85),
+        Color(.sRGB, red: 255 / 255, green: 152 / 255, blue: 0 / 255, opacity: 0.85),
+    ]
+
+    /// Clamped, so a fourth line drawn by a future multiPV cannot crash the panel.
+    static func engineRankColor(_ rank: Int) -> Color {
+        engineRank[min(max(rank, 0), engineRank.count - 1)]
+    }
+
+    /// The eval column's ink, by sign.
+    ///
+    /// The RN `getEvalColor` tests `startsWith('M')` BEFORE `startsWith('M-')`, so a black mate
+    /// `M-3` comes back green — the losing side's forced mate painted as an advantage. That is a
+    /// latent bug, not a decision, and `CLAUDE.md` says to port the intended behaviour: the minus
+    /// is checked first here. Asserted by name in `replay_opening_tree.js`.
+    static func engineEvalInk(_ text: String) -> Color {
+        if text.isEmpty { return muted }
+        if text.hasPrefix("-") || text.hasPrefix("M-") { return errorText }
+        if text.hasPrefix("+") || text.hasPrefix("M") { return doneText }
+        return muted
+    }
 }
 
 // MARK: - The W/D/L bar
@@ -157,6 +217,34 @@ enum OpeningLayout {
     static let statGap: CGFloat = 4
     static let statSize: CGFloat = 12
     static let chevronSize: CGFloat = 22
+    // engine — every value EXTRACTED from `openingtree.tsx`'s StyleSheet, which the extractor has
+    // been sweeping into `opening_styles.json` since the tree shipped. Nothing here is invented;
+    // `opening-metrics.js`'s selfTestSource asserts each one against that file.
+    static let engineTogglePadV: CGFloat = 8       // engineToggleBtn.paddingVertical
+    static let engineTogglePadH: CGFloat = 14      // engineToggleBtn.paddingHorizontal
+    static let engineToggleRadius: CGFloat = 10    // engineToggleBtn.borderRadius
+    static let engineToggleBorder: CGFloat = 1     // engineToggleBtn.borderWidth
+    static let engineToggleTop: CGFloat = 8        // engineToggleBtn.marginTop
+    static let engineToggleBottom: CGFloat = 4     // engineToggleBtn.marginBottom
+    static let engineToggleTextSize: CGFloat = 13  // engineToggleBtnText.fontSize
+    static let engineRadius: CGFloat = 10          // engineSection.borderRadius
+    static let engineBorder: CGFloat = 1           // engineSection.borderWidth
+    static let enginePadH: CGFloat = 12            // engineSection.paddingHorizontal
+    static let enginePadV: CGFloat = 8             // engineSection.paddingVertical
+    static let engineGap: CGFloat = 4              // engineSection.gap
+    static let engineBottom: CGFloat = 6           // engineSection.marginBottom
+    static let engineRowPadV: CGFloat = 3          // engineLineRow.paddingVertical
+    static let engineRowGap: CGFloat = 8           // engineLineRow.gap
+    static let engineEvalSize: CGFloat = 12        // engineChipEval.fontSize
+    static let engineEvalWidth: CGFloat = 42       // engineChipEval.minWidth
+    static let engineSanSize: CGFloat = 13         // engineChipSan.fontSize
+    static let engineSanWidth: CGFloat = 40        // engineChipSan.minWidth
+    static let enginePvSize: CGFloat = 12          // engineLinePv.fontSize
+    static let engineTextSize: CGFloat = 13        // engineLineText.fontSize
+    static let engineDepthSize: CGFloat = 11       // engineDepthChip.fontSize
+    static let engineDepthTop: CGFloat = 2         // engineDepthChip.marginTop
+    static let engineStatusPadV: CGFloat = 4       // engineAnalyzingRow.paddingVertical
+
     static let noMovesRadius: CGFloat = 12
     static let noMovesPad: CGFloat = 20
     static let noMovesSize: CGFloat = 14
@@ -221,6 +309,17 @@ enum OpeningStrings {
     static let offlineNote = "Works offline"
     static let offlineNoteSub = "Both Lichess and Chess.com let you download all your games as a "
         + "PGN file; paste it here and nothing leaves the device."
+
+    // engine — the toggle's two labels are the RN screen's, emoji and all.
+    static let engineOn = "🔍 Engine: ON"
+    static let engineOff = "🔍 Engine: OFF"
+    static let engineAnalyzing = "Analyzing…"
+    /// `d:12 · SF` when idle, `d:12…` while still searching — the RN depth chip's two spellings.
+    static let engineDepth = "d:{n} · SF"
+    static let engineDepthBusy = "d:{n}…"
+    static let engineMate = "# Checkmate"
+    static let engineStalemate = "= Stalemate"
+    static let engineDraw = "= Draw"
 
     // explorer
     static let noMoves = "No games reached this position."

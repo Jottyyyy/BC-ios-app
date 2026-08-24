@@ -729,6 +729,18 @@ enum AnalysisEval {
         guard let c = cp else { return 0.5 }
         return 0.5 + CGFloat(min(max(c, -clamp), clamp)) / CGFloat(clamp * 2)
     }
+
+    /// The whole mapping, including the case `fraction(cp:mate:)` cannot express.
+    ///
+    /// A **finished** game is not a big evaluation, it is a full rail — `0.95` for a mate that is
+    /// still four moves away and `1` for one already on the board are different facts. That third
+    /// branch lived only inside `AnalysisVM.refresh()`, which was fine while one screen had an
+    /// engine. The Opening Tree explorer has one now, and a second screen re-deriving "winner means
+    /// full" is a second screen that will get it wrong for exactly the positions nobody tests.
+    static func fraction(parts: EvalParts) -> CGFloat {
+        if let winner = parts.winner { return winner == .white ? 1 : 0 }
+        return fraction(cp: parts.cp, mate: parts.mate)
+    }
 }
 
 enum AnalysisGraph {

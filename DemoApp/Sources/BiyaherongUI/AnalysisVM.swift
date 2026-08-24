@@ -181,16 +181,15 @@ final class AnalysisVM: ObservableObject {
 
         // The one place the UI maps the session's raw score parts through the metrics tables.
         let parts = session.evalParts
-        if let winner = parts.winner {
-            evalFraction = winner == .white ? 1 : 0
-            evalSymbol = nil
-        } else if parts.cp == nil, parts.mate == nil {
-            evalFraction = AnalysisEval.fraction(cp: nil, mate: nil)
-            evalSymbol = nil
-        } else {
-            evalFraction = AnalysisEval.fraction(cp: parts.cp, mate: parts.mate)
-            evalSymbol = AnalysisTables.evalSymbol(cp: parts.cp, mate: parts.mate)
-        }
+        // The fraction moved to `AnalysisEval.fraction(parts:)` when the Opening Tree explorer grew
+        // an engine — the winner-means-full-rail branch is a decision, and a second screen
+        // re-deriving it is a second screen that will get a finished game wrong.
+        evalFraction = AnalysisEval.fraction(parts: parts)
+        // The SYMBOL stays here: it is the Analysis Board's own ⩲/± annotation, and it is absent
+        // both for a finished game and for no evaluation at all.
+        evalSymbol = parts.winner == nil && !(parts.cp == nil && parts.mate == nil)
+            ? AnalysisTables.evalSymbol(cp: parts.cp, mate: parts.mate)
+            : nil
         // ONE formatter. `EngineScore.displayText` is what the engine rows' eval column already
         // uses, so `+1.3` in the rail and `+1.3` in row 1 cannot disagree — they are two
         // projections of the same `score`, which is also what `evalParts` above destructures. A
