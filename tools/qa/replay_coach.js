@@ -214,6 +214,51 @@ function run() {
     }
   }
 
+  // ── CoachStrings: every interpolating function actually interpolates ────────
+  //
+  // All eight of these shipped as literals. `gen_coach_metrics.js` held them as Swift source inside
+  // JavaScript string literals — `'"ELO \(n)"'` — and `\(` is not a JS escape, so the parser
+  // silently dropped the backslash and emitted `"ELO (n)"`. Every coach card read `ELO (n)`.
+  //
+  // Nothing caught it. The JS twin was right, so `web-demo/` looked right, and the browser is where
+  // this checkout tests. Swift compiles `"ELO (n)"` happily — it is a valid string. `swift_lint.js`
+  // matches brackets and `swift_symbol_check.js` resolves members; neither reads inside a literal.
+  // The generator now verifies its own output, but a generator only runs when someone runs it —
+  // this reads the COMMITTED file, on every gate run.
+  {
+    const STR = require(path.join(JS, 'coach-strings.js')).STR;
+    const jsFuncs = Object.keys(STR).filter((k) => typeof STR[k] === 'function');
+    expect(jsFuncs.length >= 8, `the JS has ${jsFuncs.length} interpolating strings — not fewer`);
+
+    for (const key of jsFuncs) {
+      const decl = new RegExp(
+        `static func ${key}\\(([^)]*)\\) -> String \\{\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(code(swStrings));
+      expect(!!decl, `CoachStrings.${key} is a function in the Swift too`);
+      if (!decl) continue;
+
+      const names = decl[1].split(',').map((p) => p.trim().split(/\s+/)[1].replace(/:$/, ''));
+      const literal = decl[2];
+
+      // Distinctive values, so a swapped pair fails as loudly as a dropped one.
+      const sample = {};
+      names.forEach((n, i) => {
+        sample[n] = /Int/.test(decl[1].split(',')[i]) ? 4242 + i : n.toUpperCase();
+      });
+
+      const rendered = unescapeSwift(
+        literal.replace(/\\\((\w+)\)/g, (_, n) => String(sample[n])));
+      eq(String(STR[key](...names.map((n) => sample[n]))), rendered,
+         `CoachStrings.${key} renders what coach-strings.js renders`);
+
+      // The direct statement of the bug, so a failure names it rather than showing two odd strings.
+      for (const n of names) {
+        expect(!new RegExp(`(^|[^\\\\])\\(${n}\\)`).test(literal),
+          `CoachStrings.${key} contains a bare "(${n})" — the backslash is missing and the app will `
+          + 'print the parameter NAME instead of its value');
+      }
+    }
+  }
+
   // ── CoachGame: the draft contract ───────────────────────────────────────────
   {
     eq('biya.coach.draft.v1.', swStr(swGame, 'draftKeyPrefix'), 'the draft key prefix');

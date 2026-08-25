@@ -17,7 +17,7 @@ public enum CoachStrings {
     public static let allowTakeBack = "Allow Take Back"
     public static let tagline = "Kabyahe mo sa pag improve!!"
     public static let subTagline = "Train \u{2022} Improve \u{2022} Have Fun"
-    public static func elo(_ n: Int) -> String { "ELO (n)" }
+    public static func elo(_ n: Int) -> String { "ELO \(n)" }
     public static let blurbBeginner = "Beginner friendly bot"
     public static let blurbTricky = "Tricky and unpredictable"
     public static let blurbSharp = "Sharp attacking style"
@@ -26,10 +26,10 @@ public enum CoachStrings {
     public static let white = "White"
     public static let whiteSub = "You move first"
     public static let black = "Black"
-    public static func blackSub(_ coach: String) -> String { "(coach) goes first" }
-    public static func unfinished(_ n: Int, _ colour: String) -> String { "Unfinished game · (n) moves as (colour)" }
+    public static func blackSub(_ coach: String) -> String { "\(coach) goes first" }
+    public static func unfinished(_ n: Int, _ colour: String) -> String { "Unfinished game \u{B7} \(n) moves as \(colour)" }
     public static let resumeTitle = "Continue Previous Game?"
-    public static func resumeBody(_ n: Int, _ colour: String) -> String { "You have an unfinished game — (n) moves played as (colour)." }
+    public static func resumeBody(_ n: Int, _ colour: String) -> String { "You have an unfinished game \u{2014} \(n) moves played as \(colour)." }
     public static let resumeAsk = "Would you like to continue or start fresh?"
     public static let newGame = "New Game"
     public static let continueGame = "Continue"
@@ -40,12 +40,12 @@ public enum CoachStrings {
     public static let gameOverDraw = "Game over \u{2014} Draw"
     public static let reviewing = "Reviewing game..."
     public static let results = "Results"
-    public static func premove(_ from: String, _ to: String) -> String { "⚡ (from)→(to)" }
+    public static func premove(_ from: String, _ to: String) -> String { "\u{26A1} \(from)\u{2192}\(to)" }
     public static let live = "LIVE"
     public static let liveButton = "\u{25B6} Live"
     public static let resign = "Resign"
     public static let resignTitle = "Resign?"
-    public static func resignBody(_ coach: String) -> String { "(coach) will win this game." }
+    public static func resignBody(_ coach: String) -> String { "\(coach) will win this game." }
     public static let keepPlaying = "Keep Playing"
     public static let takeBack = "\u{21A9} Take Back"
     public static let choosePromotion = "Choose Promotion"
@@ -59,7 +59,7 @@ public enum CoachStrings {
     public static let rematch = "Rematch"
     public static let reviewGame = "Review Game"
     public static let gameReview = "GAME REVIEW"
-    public static func analyzing(_ done: Int, _ total: Int) -> String { "Analyzing… (done)/(total)" }
+    public static func analyzing(_ done: Int, _ total: Int) -> String { "Analyzing\u{2026} \(done)/\(total)" }
     public static let you = "You"
     public static let accuracy = "Accuracy"
     public static let startReview = "Start Review"
@@ -68,5 +68,5 @@ public enum CoachStrings {
     public static let drawFiftyMove = "Draw by the fifty-move rule."
     public static let drawInsufficient = "Draw \u{2014} not enough material to mate."
     public static let drawGeneric = "Draw! A well-balanced battle."
-    public static func resigned(_ coach: String) -> String { "You resigned. (coach) wins this round!" }
+    public static func resigned(_ coach: String) -> String { "You resigned. \(coach) wins this round!" }
 }

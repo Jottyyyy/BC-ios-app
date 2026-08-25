@@ -9,6 +9,60 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (fixed) — Every interpolating string in Play vs Coach printed its parameter name
+
+Client: the coach ratings are missing. They were not missing — every card read **`ELO (n)`**. And it
+was not one string: **all eight** interpolating functions in `CoachStrings.swift` shipped as
+literals. `web-demo/` needed no change; it was already right, which is exactly why this survived.
+
+    ELO (n)                                   should have been  ELO 2500
+    (coach) goes first                                          Pretty Jade goes first
+    Unfinished game · (n) moves as (colour)                     Unfinished game · 14 moves as White
+    ⚡ (from)→(to)                                               ⚡ e2→e4
+    (coach) will win this game.                                 Coach Pogi will win this game.
+    Analyzing… (done)/(total)                                   Analyzing… 12/41
+    You resigned. (coach) wins this round!                      You resigned. Coach Pogi wins…
+
+**One cause, in `tools/metrics/gen_coach_metrics.js`.** `CoachStrings.swift` is generated, and the
+generator held the Swift as source inside JavaScript string literals:
+
+```js
+elo: ['_ n: Int', '"ELO \(n)"'],      // looks right; is not
+```
+
+`\(` is not a recognised JavaScript escape, so **the parser silently drops the backslash** and the
+generator emitted `"ELO (n)"`. The same trap ran the other way for `'\u{00B7}'`, which IS valid JS —
+so `·` went into the file as a raw character, quietly breaking the 7-bit rule the generator's own
+`swiftString` exists to keep.
+
+**Why nothing caught it, which is the part worth keeping.** The JS twin was correct, so `web-demo/`
+rendered `ELO 2500` and the browser is where this checkout tests. Swift compiles `"ELO (n)"` happily
+— it is a valid string. `swift_lint.js` matches brackets, `swift_symbol_check.js` resolves member
+references; **neither reads inside a string literal.** The only witness was a device. Its near-twin
+`gen_pairing_metrics.js` writes `'"Board \\(n)"'` with the escape doubled and has always been
+correct, so the one working example sat next to the broken one the whole time.
+
+**Fixed so it cannot recur.** The table no longer contains Swift — it contains the message with real
+characters and `{name}` placeholders, neither of which JavaScript can reinterpret, and
+`swiftInterpolation` builds the literal. Then two checks:
+
+- The generator evaluates its own OUTPUT — `\u{XX}` back to characters, `\(name)` to distinctive
+  sample values — and refuses to write unless it renders exactly what the JS twin renders. Testing
+  the artifact, not the template, is the point: the intent was always right.
+- `replay_coach.js` does the same against the **committed** file, because a generator only runs when
+  someone runs it. It also names the failure directly: *"contains a bare `(n)` — the backslash is
+  missing and the app will print the parameter NAME instead of its value."*
+
+Mutation-tested 5/5: the original bug, two values swapped, a word drifting from the JS, a value
+dropped, and escaping turned off (which renders identically and breaks 7-bit — it needed its own
+assertion).
+
+**Also fixed while regenerating:** the generator emitted `CoachProfile` without `Sendable`, which
+the committed file had. Anyone who ran the generator would have silently broken Swift 6 strict
+concurrency. Now emitted.
+
+Gates: js_goldens 35,289 across 82 suites (ReplayCoach 292 → 324). Nothing compiled here.
+
 ### 2026-08-26 (changed) — The depth ceilings were throttling Stockfish, and the panel now names the engine
 
 Two follow-ups to embedding Stockfish, both found by asking a question the previous change did not:
