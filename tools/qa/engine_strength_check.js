@@ -33,10 +33,16 @@
  *
  * ## The floor
  *
- * Measured before this work: 105/120. After: 115/120. The floor is set at 108 — comfortably above
- * the old engine, comfortably below what it now does, so it catches a real regression without
- * failing on a one-puzzle wobble. Raise it if the engine gets better; do NOT lower it to make a run
- * pass, for the same reason `requireMinCounts` floors are never lowered.
+ * Measured before this work: 105/120. After: 115/120, and 117/120 once quiescence was fixed (it had
+ * been returning its stand-pat without searching a single capture at every shipped preset). The
+ * floor is 110 — above the old engine, below what it now does, so it catches a real regression
+ * without failing on a one-puzzle wobble. Raise it if the engine gets better; do NOT lower it to
+ * make a run pass, for the same reason `requireMinCounts` floors are never lowered.
+ *
+ * And do NOT read this suite as a quiescence gate. Its node budget caps most corpus positions at
+ * depth 5-6 — the last band in which quiescence still worked — so it scored 115/120 while the
+ * search was doing nothing at its leaves. `tools/qa/engine_quiescence_check.js` is the gate for
+ * that, and it runs deliberately ABOVE MAX_QDEPTH.
  */
 'use strict';
 
@@ -51,7 +57,7 @@ const PD = require(path.join(JS, 'puzzle-data.js'));
 /** Reproducible on any machine, unlike a deadline. */
 const NODE_BUDGET = 120000;
 const SAMPLE = 120;
-const SOLVED_FLOOR = 108;
+const SOLVED_FLOOR = 110;
 /** Below this rating the engine should be near-perfect; a miss here is a real bug, not a wobble. */
 const EASY_RATING = 1200;
 const EASY_FLOOR = 1.0;

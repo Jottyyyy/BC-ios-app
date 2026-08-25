@@ -314,6 +314,14 @@ enum AnalysisEval {
         let f = Square.file(ksq), r = Square.rank(ksq)
         var s = 0
         let lo = f > 0 ? f - 1 : 0, hi = f < 7 ? f + 1 : 7
+        // A king that can still castle is not yet committed to a shelter, so its "shield" files are
+        // whichever three it happens to stand between — d/e/f from the start square. Charging for
+        // those is charging White for playing 1.e4, and it did: e4 and d4 were each fined 18cp
+        // while Nc3 and Nf3 paid nothing, so the engine's whole opening repertoire became
+        // Nc3/Nf3/e3/d3. Once the rights are gone — by castling, or by the king walking out — the
+        // term is exactly right and applies unchanged.
+        let canCastle = color == .white ? (pos.castleWK || pos.castleWQ)
+                                        : (pos.castleBK || pos.castleBQ)
         for ff in lo...hi {
             // The nearest friendly pawn ahead of the king on this file.
             var dist = -1
@@ -325,9 +333,11 @@ enum AnalysisEval {
                    p.kind == .pawn, p.color == color { dist = step; break }
                 step += 1
             }
-            if dist < 0 { s += shieldMissing }
-            else if dist == 2 { s += shieldNear }
-            else if dist > 2 { s += shieldFar }
+            if !canCastle {
+                if dist < 0 { s += shieldMissing }
+                else if dist == 2 { s += shieldNear }
+                else if dist > 2 { s += shieldFar }
+            }
             // A file with no pawn of either colour is a highway to the king.
             if myPawnFiles[ff] == 0 && foePawnFiles[ff] == 0 { s += kingOpenFile }
         }

@@ -291,6 +291,14 @@ var BiyaAnalysisEval = (function () {
   function kingSafety(pos, ksq, color, myPawnFiles, foePawnFiles, foeQueenSq) {
     var f = E.sqFile(ksq), r = E.sqRank(ksq), s = 0;
     var lo = f > 0 ? f - 1 : 0, hi = f < 7 ? f + 1 : 7;
+    // A king that can still castle is not yet committed to a shelter, so its "shield" files are
+    // whichever three it happens to be standing between - d/e/f from the start square. Charging for
+    // those is charging White for playing 1.e4, and it did: e4 and d4 were each fined 18cp while
+    // Nc3 and Nf3 paid nothing, so the engine`s entire opening repertoire became Nc3/Nf3/e3/d3.
+    // Once the rights are gone - by castling, or by the king walking out - the term is exactly
+    // right and applies unchanged.
+    var canCastle = color === E.WHITE ? (pos.castleWK || pos.castleWQ)
+                                      : (pos.castleBK || pos.castleBQ);
     for (var ff = lo; ff <= hi; ff++) {
       // The nearest friendly pawn ahead of the king on this file.
       var dist = -1;
@@ -300,9 +308,11 @@ var BiyaAnalysisEval = (function () {
         var p = pos.squares[E.sqMake(ff, rr)];
         if (p && p.kind === E.PAWN && p.color === color) { dist = step; break; }
       }
-      if (dist < 0) s += SHIELD_MISSING;
-      else if (dist === 2) s += SHIELD_NEAR;
-      else if (dist > 2) s += SHIELD_FAR;
+      if (!canCastle) {
+        if (dist < 0) s += SHIELD_MISSING;
+        else if (dist === 2) s += SHIELD_NEAR;
+        else if (dist > 2) s += SHIELD_FAR;
+      }
       // A file with no pawn of either colour is a highway to the king.
       if (myPawnFiles[ff] === 0 && foePawnFiles[ff] === 0) s += KING_OPEN_FILE;
     }
@@ -451,6 +461,47 @@ var BiyaAnalysisEval = (function () {
     // 3. The start position is level apart from the tempo bonus.
     expect(evaluate(P(E.START_FEN)) === TEMPO,
       'the start position is exactly the tempo bonus, got ' + evaluate(P(E.START_FEN)));
+
+    // 3b. Advancing a central pawn must not be PUNISHED while the king can still castle.
+    //
+    // The king-shield term used to apply to an uncastled king on e1, whose shield files are d/e/f —
+    // exactly the files White has to push. 1.e4 and 1.d4 were each fined 18cp and the knight moves
+    // paid nothing, so the engine's whole opening repertoire became Nc3/Nf3/e3/d3 and e4 fell out
+    // of the top four entirely. This is that bug, stated as the one thing a chess player would
+    // check first.
+    var openStart = P(E.START_FEN);
+    function afterSan(san) {
+      var m = E.parseSan(openStart, san);
+      return m ? -evaluate(E.makeMove(openStart, m)) : null;   // White-relative
+    }
+    var eE4 = afterSan('e4'), eD4 = afterSan('d4'), eNc3 = afterSan('Nc3');
+    expect(eE4 !== null && eD4 !== null && eNc3 !== null, 'the three first moves parse');
+    expect(eE4 > eNc3, '1.e4 outscores 1.Nc3 statically, got ' + eE4 + ' vs ' + eNc3);
+    expect(eD4 > eNc3, 'and so does 1.d4, got ' + eD4 + ' vs ' + eNc3);
+
+    // The other half of the same rule, tested on the GATE itself so nothing else can move: two
+    // identical boards differing only in whether the castling right survives. With the right, the
+    // shield is not charged; without it, this king is missing two of its three files and the third
+    // pawn has run — so the same position must score strictly worse.
+    // A full board, because king safety is midgame-only (`KING_SAFETY_MIN_PHASE`); the three
+    // pawns in front of the king have all run to the fourth rank.
+    var mayCastle = P('rnbqkbnr/pppppppp/8/8/3PPP2/8/PPP3PP/RNBQKBNR w KQkq - 0 1');
+    var committed = P('rnbqkbnr/pppppppp/8/8/3PPP2/8/PPP3PP/RNBQKBNR w kq - 0 1');
+    expect(evaluate(mayCastle) > evaluate(committed),
+      'the shield is charged only once the king can no longer castle, got '
+      + evaluate(mayCastle) + ' with the right vs ' + evaluate(committed) + ' without it');
+
+    // The OPEN-FILE term is deliberately NOT gated — gate that one too and an uncastled king in the
+    // middle costs nothing at all, which is the opposite mistake. It cannot be isolated
+    // behaviourally here (changing a file's occupancy changes material too), so it is pinned as
+    // source text in `replay_engine_settings.js`, where both languages are checked together.
+
+    // Black symmetry with ASYMMETRIC rights. The mirror battery in §2 cannot catch a gate that
+    // reads only White's flags, because every FEN there has symmetric castling rights.
+    var asym = 'r3k2r/pppppppp/8/8/8/8/PPPP1PPP/R3K2R w Kq - 0 1';
+    expect(evaluate(P(asym)) === evaluate(P(mirrorFEN(asym))),
+      'the gate reads each colour`s OWN rights, got ' + evaluate(P(asym)) + ' vs '
+      + evaluate(P(mirrorFEN(asym))));
 
     // 4. Material still dominates, and the sign is still side-to-move relative.
     var upQueen = P('4k3/8/8/8/8/8/8/3QK3 w - - 0 1');

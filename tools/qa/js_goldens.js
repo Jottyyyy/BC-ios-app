@@ -57,6 +57,7 @@ var SLAYOUTMUT = require(path.join(__dirname, 'swift_layout_mutation_test.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
 var STRENGTH = require(path.join(__dirname, 'engine_strength_check.js'));
+var QUIESCE = require(path.join(__dirname, 'engine_quiescence_check.js'));
 var RENGINE = require(path.join(__dirname, 'replay_engine_settings.js'));
 var WORKER = require(path.join(__dirname, 'worker_protocol_check.js'));
 var CORPUS = require(path.join(__dirname, 'puzzle_corpus_check.js'));
@@ -180,6 +181,7 @@ record('swift layout mutation', SLAYOUTMUT.selfTest());
 record('engine-host.selfTest', HOST.selfTest());
 record('engine frame budget', BUDGET.selfTest());
 record('engine strength', STRENGTH.selfTest());
+record('engine quiescence', QUIESCE.selfTest());
 record('swift engine settings vs JS', RENGINE.selfTest());
 // The bundled puzzle corpus: quotas, indexes, and every line replayed through the real engine.
 // Every later puzzle assertion is stated against this DB, so a bad corpus would make them all
