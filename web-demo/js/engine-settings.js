@@ -42,11 +42,20 @@ var BiyaEngineSettings = (function () {
    * `heat` is 0-4 and drives nothing but the warning the panel shows; it is here rather than in the
    * view so that both languages agree on which presets are the expensive ones.
    */
+  /* Ceilings raised 2026-08-26; clocks untouched. They were chosen against LocalEngine, which
+     reached mean depth ~5 in 1.2 s, so a ceiling of 12 never bound. Stockfish reaches 12 in a
+     fraction of that and was stopping early with time left on its clock. thinkMs is what costs
+     battery, heat and the delay before the board settles — maxDepth costs nothing until it binds,
+     so every preset now searches deeper at the same power draw. Infinite has no clock, so 30 is
+     what guarantees it terminates -- and why the ladder stays strictly increasing, with Maximum
+     stopping at 28: selfTest asserts "infinite searches deeper than maximum", and a preset list
+     whose strongest two share a ceiling makes the top of the ladder a lie.
+     See Sources/BiyaherongCoachCore/EngineSettings.swift. */
   var PRESETS = [
-    { id: 'saver', label: 'Battery Saver', thinkMs: 500, maxDepth: 8, multiPV: 2, heat: 0 },
-    { id: 'balanced', label: 'Balanced', thinkMs: 1200, maxDepth: 12, multiPV: 3, heat: 1 },
-    { id: 'strong', label: 'Strong', thinkMs: 3000, maxDepth: 18, multiPV: 3, heat: 2 },
-    { id: 'maximum', label: 'Maximum', thinkMs: 8000, maxDepth: 22, multiPV: 4, heat: 3 },
+    { id: 'saver', label: 'Battery Saver', thinkMs: 500, maxDepth: 16, multiPV: 2, heat: 0 },
+    { id: 'balanced', label: 'Balanced', thinkMs: 1200, maxDepth: 22, multiPV: 3, heat: 1 },
+    { id: 'strong', label: 'Strong', thinkMs: 3000, maxDepth: 26, multiPV: 3, heat: 2 },
+    { id: 'maximum', label: 'Maximum', thinkMs: 8000, maxDepth: 28, multiPV: 4, heat: 3 },
     { id: 'infinite', label: 'Infinite', thinkMs: 0, maxDepth: 30, multiPV: 4, heat: 4 }
   ];
   var DEFAULT_PRESET = 'balanced';
@@ -389,7 +398,7 @@ var BiyaEngineSettings = (function () {
     expect(timeText(500) === '0.5s', 'timeText 0.5s, got ' + timeText(500));
     expect(timeText(3000) === '3s', 'a whole number of seconds drops the .0, got ' + timeText(3000));
     expect(timeText(THINK_INFINITE) === '∞', 'infinite shows as the symbol');
-    expect(presetSummary('balanced') === '1.2s · depth 12 · 3 lines',
+    expect(presetSummary('balanced') === '1.2s · depth 22 · 3 lines',
       'the Balanced summary line, got ' + presetSummary('balanced'));
     expect(presetSummary('infinite') === '∞ · depth 30 · 4 lines',
       'the Infinite summary line, got ' + presetSummary('infinite'));
@@ -410,7 +419,7 @@ var BiyaEngineSettings = (function () {
     expect(pm.presets.filter(function (p) { return p.active; }).length === 1,
       'exactly one preset row is selected');
     expect(pm.presets[1].active === true, 'and it is Balanced by default');
-    expect(pm.presets[1].summary === '1.2s · depth 12 · 3 lines', 'each row carries its own summary');
+    expect(pm.presets[1].summary === '1.2s · depth 22 · 3 lines', 'each row carries its own summary');
     expect(pm.advancedOpen === false, 'Advanced starts closed');
     expect(pm.advancedState === 'OFF', 'and says so');
     expect(pm.warning === null, 'no warning on the default preset');
@@ -433,13 +442,13 @@ var BiyaEngineSettings = (function () {
     expect(pmInf.warning === INFINITE_WARNING_TEXT, 'with the Infinite warning');
 
     // 7c. The two edits the panel can make.
-    expect(encode(selectPreset(defaults(), 'strong')) === 'v1|strong|0|3|18|3000',
+    expect(encode(selectPreset(defaults(), 'strong')) === 'v1|strong|0|3|26|3000',
       'picking a preset seeds the Advanced fields with its numbers, got '
       + encode(selectPreset(defaults(), 'strong')));
     var edited = applyControl(defaults(), CONTROL_LINES, 5);
     expect(edited.custom === true, 'editing a control switches Advanced on');
     expect(edited.multiPV === 5, 'and takes the new value');
-    expect(edited.maxDepth === 12 && edited.thinkMs === 1200,
+    expect(edited.maxDepth === 22 && edited.thinkMs === 1200,
       'while the other two keep whatever was in effect');
     expect(applyControl(defaults(), CONTROL_THINK, THINK_SLIDER_MIN).thinkMs === THINK_INFINITE,
       'the bottom of the Think time range is Infinite');
@@ -455,12 +464,12 @@ var BiyaEngineSettings = (function () {
       var round = decode(encode(all[a]));
       expect(encode(round) === encode(all[a]), 'round trip ' + a + ': ' + encode(round));
     }
-    expect(encode(defaults()) === 'v1|balanced|0|3|12|1200',
+    expect(encode(defaults()) === 'v1|balanced|0|3|22|1200',
       'the canonical default document, got ' + encode(defaults()));
     expect(encode(decode('v1|infinite|0|4|30|0')) === 'v1|infinite|0|4|30|0', 'infinite round-trips');
     expect(encode(decode('')) === encode(defaults()), 'an empty string decodes to the defaults');
     expect(encode(decode('garbage')) === encode(defaults()), 'garbage decodes to the defaults');
-    expect(encode(decode('v9|balanced|0|3|12|1200')) === encode(defaults()),
+    expect(encode(decode('v9|balanced|0|3|22|1200')) === encode(defaults()),
       'a future version decodes to the defaults rather than half-reading it');
     expect(encode(decode('v1|balanced|0|3')) === encode(defaults()), 'a truncated line decodes to the defaults');
     expect(encode(decode('v1|balanced|0|99|99|99999')) === 'v1|balanced|0|5|30|30000',
@@ -474,9 +483,9 @@ var BiyaEngineSettings = (function () {
                setItem: function (k, v) { m[k] = String(v); } };
     })();
     expect(load(mem).preset === DEFAULT_PRESET, 'an empty store loads the defaults');
-    save({ preset: 'strong', custom: false, multiPV: 3, maxDepth: 18, thinkMs: 3000 }, mem);
+    save({ preset: 'strong', custom: false, multiPV: 3, maxDepth: 26, thinkMs: 3000 }, mem);
     expect(load(mem).preset === 'strong', 'what was saved is what loads');
-    expect(mem.getItem(STORAGE_KEY) === 'v1|strong|0|3|18|3000',
+    expect(mem.getItem(STORAGE_KEY) === 'v1|strong|0|3|26|3000',
       'stored under the versioned key in the canonical shape, got ' + mem.getItem(STORAGE_KEY));
     var broken = { getItem: function () { throw new Error('denied'); },
                    setItem: function () { throw new Error('denied'); } };

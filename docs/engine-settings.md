@@ -6,13 +6,13 @@ make is the user's call, so it is a setting.
 
 This doc covers both halves of that change: the panel, and the search that got stronger under it.
 
-> **The engine underneath is now Stockfish 17.1** (2026-08-25 — `docs/stockfish.md`). **Nothing in
-> this panel changed**: the presets, the defaults, the derived review budget and the Advanced
-> controls all still mean exactly what they say below, and Balanced is still 1.2 s / depth 12 / 3
-> lines. What changed is what a *depth* is worth — the measurements in "What actually got stronger"
-> were taken against `LocalEngine`, which is now the fallback rather than the engine. The one
-> behavioural addition is that the deadline is also handed to Stockfish as `movetime`, because
-> `shouldCancel` is polled only when the engine reports and at depth 20 that can be seconds apart.
+> **The engine underneath is now Stockfish 17.1** (2026-08-25 — `docs/stockfish.md`), and the
+> measurements in "What actually got stronger" were taken against `LocalEngine`, which is now the
+> fallback rather than the engine. Two things followed from the swap: the deadline is also handed to
+> Stockfish as `movetime`, because `shouldCancel` is polled only when the engine reports and at
+> depth 20 that can be seconds apart; and **the depth ceilings were raised on 2026-08-26** — see the
+> note under the table. **No clock, line count or review budget changed**, so battery, heat and the
+> delay before the board settles are all exactly what they were.
 
 ---
 
@@ -20,11 +20,22 @@ This doc covers both halves of that change: the panel, and the search that got s
 
 | Preset | Think time | Depth ceiling | Lines | Review budget / position |
 |---|---|---|---|---|
-| Battery Saver | 0.5 s | 8 | 2 | 120 ms |
-| **Balanced** (default) | 1.2 s | 12 | 3 | 200 ms |
-| Strong | 3 s | 18 | 3 | 500 ms |
-| Maximum | 8 s | 22 | 4 | 1200 ms |
+| Battery Saver | 0.5 s | 16 | 2 | 120 ms |
+| **Balanced** (default) | 1.2 s | 22 | 3 | 200 ms |
+| Strong | 3 s | 26 | 3 | 500 ms |
+| Maximum | 8 s | 28 | 4 | 1200 ms |
 | Infinite | until stopped | 30 | 4 | 1200 ms |
+
+> **Why the ceilings moved, and why it was free.** They were 8/12/18/22/30, chosen against
+> `LocalEngine` — which reached a mean depth of about 5 in 1.2 seconds, so the ceiling was never what
+> stopped a search and the sentence below ("only the quiet endgame ever reaches its ceiling") was
+> literally true. Stockfish reaches 12 in a fraction of that budget, which **inverted the design**:
+> the ceiling became the binding limit and the engine stopped early with time left on its own clock.
+>
+> Raising them costs nothing, and the asymmetry is the point: **`thinkMs` buys depth with battery,
+> heat and latency; `maxDepth` costs nothing at all until it binds.** Every preset now searches
+> deeper at the same power draw and the same responsiveness. The ladder stays strictly increasing —
+> `Maximum` stops at 28 so `Infinite` is still the deepest, which the self-test asserts.
 
 - **Balanced is exactly what the board did before this setting existed** — same 1.2 s, same three
   lines, same 200 ms per reviewed position. Only the depth *ceiling* rose, and the ceiling is not
@@ -33,6 +44,10 @@ This doc covers both halves of that change: the panel, and the search that got s
   120…1200, which reproduces every value in that column. One number to get right instead of two.
 - **Infinite deliberately does not apply to Analyze Game.** A 41-position review cannot be
   unbounded, so its per-position budget saturates at 1200 ms. The panel says so.
+
+**The panel names the engine** at the top — `Stockfish 17.1`, or `Built-in engine` with a line
+saying why. The fallback is silent, so without it a build whose NNUE resources failed to load is
+indistinguishable from a working one. See `docs/stockfish.md`.
 
 **Advanced** overrides all of it: Lines 1–5, Max depth 2–30, Think time 0.2–30 s. The Think time
 slider's bottom step *is* Infinite — one control rather than a slider plus a checkbox that could

@@ -58,11 +58,28 @@ public enum EngineSettings {
     }
 
     /// Weakest and coolest first.
+    ///
+    /// **The ceilings were raised on 2026-08-26, and the clocks were not touched.** They were chosen
+    /// against `LocalEngine`, which reached a mean depth of about 5 in 1.2 seconds — so a ceiling of
+    /// 12 was never the thing that stopped a search, and `docs/engine-settings.md` could truthfully
+    /// say "only the quiet endgame ever reaches its ceiling". Stockfish reaches 12 in a fraction of
+    /// that budget, which inverted the design: the ceiling became the binding limit and the engine
+    /// stopped early with time left on its own clock.
+    ///
+    /// Raising them is close to free, and that asymmetry is the whole reason this was safe to change
+    /// without re-tuning anything else: **`thinkMs` is what costs battery, heat and the delay before
+    /// the board settles; `maxDepth` costs nothing until it binds.** Every preset therefore searches
+    /// deeper at exactly the same power draw and the same responsiveness as before.
+    ///
+    /// The ceiling still has a job — `Infinite` has no clock, so 30 is the only thing guaranteeing
+    /// it terminates on a nearly-empty board. That is also why the ladder stays STRICTLY increasing
+    /// and `Maximum` stops at 28: `selfTest` asserts "infinite searches deeper than maximum", and a
+    /// preset list where the strongest two share a ceiling makes the top of the ladder a lie.
     public static let presets: [Preset] = [
-        Preset(id: "saver", label: "Battery Saver", thinkMs: 500, maxDepth: 8, multiPV: 2, heat: 0),
-        Preset(id: "balanced", label: "Balanced", thinkMs: 1200, maxDepth: 12, multiPV: 3, heat: 1),
-        Preset(id: "strong", label: "Strong", thinkMs: 3000, maxDepth: 18, multiPV: 3, heat: 2),
-        Preset(id: "maximum", label: "Maximum", thinkMs: 8000, maxDepth: 22, multiPV: 4, heat: 3),
+        Preset(id: "saver", label: "Battery Saver", thinkMs: 500, maxDepth: 16, multiPV: 2, heat: 0),
+        Preset(id: "balanced", label: "Balanced", thinkMs: 1200, maxDepth: 22, multiPV: 3, heat: 1),
+        Preset(id: "strong", label: "Strong", thinkMs: 3000, maxDepth: 26, multiPV: 3, heat: 2),
+        Preset(id: "maximum", label: "Maximum", thinkMs: 8000, maxDepth: 28, multiPV: 4, heat: 3),
         Preset(id: "infinite", label: "Infinite", thinkMs: 0, maxDepth: 30, multiPV: 4, heat: 4)
     ]
     public static let defaultPreset = "balanced"
@@ -195,7 +212,7 @@ public enum EngineSettings {
         return (s.hasSuffix(".0") ? String(s.dropLast(2)) : s) + "s"
     }
 
-    /// The one-line description under a preset name: `"1.2s · depth 12 · 3 lines"`.
+    /// The one-line description under a preset name: `"1.2s · depth 22 · 3 lines"`.
     public static func summary(_ r: Resolved) -> String {
         "\(timeText(r.thinkMs)) · depth \(r.maxDepth) · \(r.multiPV) \(r.multiPV == 1 ? "line" : "lines")"
     }

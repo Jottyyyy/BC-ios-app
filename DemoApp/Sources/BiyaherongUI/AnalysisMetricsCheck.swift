@@ -437,8 +437,10 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expect(AnalysisTiming.uiCoalesceMs == 100, "engine progress coalesces to 100ms")
     expect(AnalysisTiming.engineDeadlineMs == 1200, "one interactive search gets 1200ms by default")
     expect(AnalysisEngineLimits.multiPV == 3, "the board shows three engine lines by default")
-    expect(AnalysisEngineLimits.maxDepth == 12,
-           "depth 12 is the default ceiling the deadline rarely reaches")
+    expect(AnalysisEngineLimits.maxDepth == 22,
+           "depth 22 is the default ceiling — high enough that the DEADLINE is what stops the "
+           + "search, which is the whole design. It was 12, which LocalEngine never reached in "
+           + "1.2s and Stockfish reaches in a fraction of it.")
 
     // ── 11b. Those defaults ARE the Balanced preset ──
     // Two files carrying the same four numbers is exactly how they drift, so the agreement is

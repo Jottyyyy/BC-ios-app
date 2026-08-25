@@ -13,6 +13,53 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## The ceilings, and naming the engine (2026-08-26)
+
+### INVENTED: the depth ceilings moved, and the clocks did not
+
+`EngineSettings.presets` is invented — nothing in the RN source has this panel — so its numbers have
+always been ours. They went 8/12/18/22/30 → 16/22/26/28/30.
+
+The reason is worth keeping because it is a *category* of mistake rather than a wrong number:
+**a constant tuned against one engine became wrong when the engine changed, without anything
+failing.** The ceilings were sized so `LocalEngine` never reached them, which made the deadline the
+real budget — the design `docs/engine-settings.md` describes. Stockfish reaches 12 in a fraction of
+1.2 s, so the ceiling silently became the limit and the engine stopped with time left on its clock.
+
+Raising them is close to free, and the asymmetry is the whole justification: **`thinkMs` buys depth
+with battery, heat and latency; `maxDepth` costs nothing until it binds.** No clock, line count or
+review budget changed.
+
+`Maximum` is 28 rather than 30 so the ladder stays strictly increasing. The first draft used 30 for
+both `Maximum` and `Infinite` and the JS self-test caught it — *"infinite searches deeper than
+maximum"* was already an assertion. Left as evidence that the preset ladder is a monotone sequence,
+not five independent rows.
+
+### INVENTED: the Engine panel names the engine
+
+`StockfishBridge.engineLabel(available:)` / `engineNote(available:)` — `"Stockfish 17.1"` or
+`"Built-in engine"` plus a line saying why.
+
+These exist because the `LocalEngine` fallback is **silent**. That is right for the user, and it
+means a build whose NNUE resources failed to load is indistinguishable from a working one except by
+a depth chip that stops climbing — which nobody would read as a resource failure.
+
+Deliberately **not** part of `EngineSettings.panelModel`, which lives in the Parity Core and is
+required to stay engine-agnostic. It is also not a setting: the same stored value yields a different
+name depending on whether the resources loaded. The strings are in the engine package, the view is
+handed them, and the web demo (which has no Stockfish and never will) carries the unavailable string
+as a literal that `replay_stockfish.js` pins to the twin.
+
+### The gate that transcribed instead of extracting
+
+`replay_engine_settings.js` rebuilt the canonical default document as
+`${version}|${preset}|0|3|12|1200` — a hand-typed third copy of the Balanced row, in the gate whose
+whole job is to stop the other two copies drifting. Changing the ceiling in both languages still
+failed there, with a message blaming the Swift for a number the Swift no longer contained. It now
+reads the default row out of the preset table it already parses twenty lines above. Same lesson as
+the annotation badge's transcribed sign, in a new place: **EXTRACT, DON'T TRANSCRIBE — including
+inside the gates.**
+
 ## Stockfish, embedded (2026-08-25)
 
 Decision #2 above, carried out. Full write-up in `docs/stockfish.md`; this section records only what

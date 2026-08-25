@@ -1091,6 +1091,12 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .an-eng-sum {
   font-family: var(--font); font-size: var(--an-eng-sum-fs); color: var(--an-text-muted);
 }
+/* Which engine is actually running. Styled like the Advanced disclosure label rather than like a
+   preset row, because it is a statement about the build, not something you can pick. */
+.an-eng-engine {
+  font-family: var(--font); font-size: var(--an-eng-adv-label-fs); font-weight: 700;
+  color: var(--an-text-muted); margin-bottom: var(--an-eng-row-gap);
+}
 .an-eng-warn {
   font-family: var(--font); font-size: var(--an-eng-warn-fs); color: var(--an-gold);
   margin-top: var(--an-eng-warn-gap); line-height: 1.3;

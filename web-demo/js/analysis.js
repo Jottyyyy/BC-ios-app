@@ -3251,6 +3251,15 @@ var BiyaAnalysisBoard = (function () {
       advancedOpen = m.advancedOpen;
       body.innerHTML = '';
 
+      /* Which engine is running, shown for the same reason the app shows it: the fallback to
+         LocalEngine is silent, so without a name here the only symptom of a failed engine is a
+         depth chip that stops climbing.
+
+         Hardcoded to the unavailable string because it IS unavailable here — the browser preview
+         runs LocalEngine and always will (docs/stockfish.md). `replay_stockfish.js` pins this
+         literal to `StockfishBridge.engineLabel(false)` so the two cannot drift. */
+      body.appendChild(el('div', 'an-eng-engine', 'Built-in engine'));
+
       var list = el('div', 'an-eng-list');
       m.presets.forEach(function (p) {
         var row = el('button', 'an-eng-row' + (p.active ? ' active' : ''));

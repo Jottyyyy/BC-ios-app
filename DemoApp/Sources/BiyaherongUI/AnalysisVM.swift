@@ -923,6 +923,19 @@ final class AnalysisVM: ObservableObject {
         EngineSettings.panelModel(engineSettings, advancedOpen: engineAdvancedOpen)
     }
 
+    /// Which engine the panel says is running, and the note under it when that is not Stockfish.
+    ///
+    /// Separate from `enginePanel` on purpose. `EngineSettings` is in the Parity Core, which
+    /// `CLAUDE.md` requires to stay engine-agnostic — it cannot name Stockfish. And this is a
+    /// RUNTIME fact rather than a setting: the same stored value produces a different name
+    /// depending on whether the NNUE resources loaded.
+    ///
+    /// It exists because the fallback is silent. `runAnalysis` drops to `LocalEngine` when
+    /// Stockfish is unavailable and every screen keeps working, so without a name on screen the
+    /// only symptom is a depth chip that stops climbing.
+    var engineName: String { StockfishBridge.engineLabel(available: StockfishRuntime.isStarted) }
+    var engineNote: String? { StockfishBridge.engineNote(available: StockfishRuntime.isStarted) }
+
     func selectEnginePreset(_ id: String) {
         engineSettings = EngineSettings.selectPreset(engineSettings, id)
     }
