@@ -9,6 +9,37 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (changed) — 1.0.6 (49) shipped: the first build with a Stockfish that runs
+
+Delivery UUID `7b99982d-5ba6-4b10-b955-31bb481819d3`. VERIFY SUCCEEDED before the upload,
+`com.apple.developer.applesignin` read back out of the archive *and* out of the signed `.ipa`.
+
+Build 48 shipped an engine that could not compile; 49 is the first one whose Stockfish has been
+built and run. The two C++ bugs and the smoke test that found them are the entry below.
+
+Pulled `origin/main` (16 commits: Stockfish 17.1 embedded and the app relicensed GPLv3, the
+quiescence and pawn-shield fixes, raised depth ceilings, the dead Share buttons removed, and every
+interpolating string in Play vs Coach). The local 48 ship commit was rebased onto them; the only
+conflict was the CHANGELOG's own top, resolved by keeping both sides newest-first.
+
+**Still a TEST build, exactly as 47 and 48 were.** `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is empty on
+the app target's Release config, so `#if BIYA_APPSTORE` is false and `BiyaherongBuild.isTestBuild`
+stays `true` — no login at launch, no paywall, every daily cap lifted. **Do not submit this build to
+App Review**; use codemagic's `ios-appstore`, which rewrites the flag and refuses to build without it.
+
+**`ParityRunner` still cannot run on this Mac**, unchanged from 48 and for the same reason:
+`../BYAHERONG-COACH-LARAVEL` has no `app/Services/ChessEngine.php`, so `generate_goldens.php` skips
+the `san_parse` + `pgn_tokens` goldens and the runner hard-fails on the missing file. Every other
+golden regenerated. What did run is green: `swift build` on all three packages, `StockfishSmoke`,
+`swift_lint` (138), `swift_symbol_check` (3646 refs / 159 types), `swift_enum_payload_check`,
+`stockfish_vendor_check` and `replay_stockfish` (80).
+
+**The commits are still local, again.** `git push` returns 403 — *"Permission to
+Jottyyyy/BC-ios-app.git denied to fush-toj"* — the same wrong keychain credential as 48, and there
+is no `gh` CLI on this Mac to route around it. Fetch works, write does not.
+
+`web-demo/` not updated — a release plus a C++ fix the browser build has no equivalent of.
+
 ### 2026-08-26 (fixed) — Stockfish did not compile, and once it did the first search killed the app
 
 The engine landed on 2026-08-25 with, in its own CHANGELOG entry, *"nothing here has been compiled
