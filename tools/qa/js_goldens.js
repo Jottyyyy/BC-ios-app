@@ -57,6 +57,7 @@ var SLAYOUTMUT = require(path.join(__dirname, 'swift_layout_mutation_test.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
 var STRENGTH = require(path.join(__dirname, 'engine_strength_check.js'));
+var QUIESCE = require(path.join(__dirname, 'engine_quiescence_check.js'));
 var RENGINE = require(path.join(__dirname, 'replay_engine_settings.js'));
 var SFVENDOR = require(path.join(__dirname, 'stockfish_vendor_check.js'));
 var SFREPLAY = require(path.join(__dirname, 'replay_stockfish.js'));
@@ -182,6 +183,7 @@ record('swift layout mutation', SLAYOUTMUT.selfTest());
 record('engine-host.selfTest', HOST.selfTest());
 record('engine frame budget', BUDGET.selfTest());
 record('engine strength', STRENGTH.selfTest());
+record('engine quiescence', QUIESCE.selfTest());
 record('swift engine settings vs JS', RENGINE.selfTest());
 // Stockfish. Neither of these can RUN it — no C++ toolchain here — so they cover the two things
 // that can be checked without one: that the vendored tree, its single patch and the two network

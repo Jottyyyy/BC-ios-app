@@ -294,7 +294,23 @@ public struct LocalEngine: AnalysisEngine {
         }
 
         /// Quiescence: only tactical moves, so the search never stops in the middle of a trade.
-        func quiesce(_ pos: ChessPosition, _ alpha0: Int, _ beta: Int, _ qdepth: Int) -> Int {
+        ///
+        /// TWO counters, and they are not interchangeable — this took an engine that never resolved
+        /// a capture and shipped it for three phases.
+        ///
+        /// - `ply` is the distance from the ROOT. Mate scores need it, so that a mate found deeper
+        ///   is worth less than the same mate found sooner.
+        /// - `qdepth` is the distance from THIS LEAF, and starts at 0 every time negamax bottoms
+        ///   out. It is what `maxQDepth` bounds.
+        ///
+        /// They used to be one parameter, called with `ply`. Since `maxQDepth` is 6 and every
+        /// shipped preset searches to depth 8 or more, `qdepth >= maxQDepth` was already true on
+        /// entry: quiescence returned `standPat` immediately, having examined no capture at all.
+        /// The engine evaluated statically in the middle of trades, and because White moves on odd
+        /// plies it was Black who pocketed the phantom material at every even depth — which is why
+        /// every evaluation on the client's screen read 0.0 or negative.
+        func quiesce(_ pos: ChessPosition, _ alpha0: Int, _ beta: Int,
+                     _ ply: Int, _ qdepth: Int) -> Int {
             nodes += 1
             if outOfBudget() { return alpha0 }
             var alpha = alpha0
@@ -303,18 +319,25 @@ public struct LocalEngine: AnalysisEngine {
             let moves = pos.legalMoves()
             // Terminal must be tested against ALL legal moves, never the tactical subset — "no
             // captures" is not "no moves".
-            if moves.isEmpty { return inCheck ? -(ChessAI.mate - qdepth) : 0 }
+            if moves.isEmpty { return inCheck ? -(ChessAI.mate - ply) : 0 }
 
             let standPat = AnalysisEval.evaluate(pos)
             if !inCheck {
                 if standPat >= beta { return standPat }
                 if standPat > alpha { alpha = standPat }
                 if qdepth >= LocalEngine.maxQDepth { return standPat }
+            } else if ply >= LocalEngine.maxPly {
+                // In check every evasion is searched and no depth is spent, so the cap above sits
+                // in a branch this node can never reach — in-check quiescence had no bound at all,
+                // and terminated only incidentally. `maxPly` is the ceiling `negamax`'s check
+                // extension already uses. Bounding this with `maxQDepth` instead would truncate a
+                // forced checking sequence, which is the one thing quiescence exists to follow.
+                return standPat
             }
 
             // In check every evasion must be considered; otherwise only tactical moves.
             let candidates = inCheck ? moves : moves.filter { LocalEngine.isTactical(pos, $0) }
-            if candidates.isEmpty { return inCheck ? -(ChessAI.mate - qdepth) : standPat }
+            if candidates.isEmpty { return inCheck ? -(ChessAI.mate - ply) : standPat }
 
             var best = inCheck ? -LocalEngine.win : standPat
             for m in ChessAI.ordered(candidates, pos) {
@@ -324,7 +347,7 @@ public struct LocalEngine: AnalysisEngine {
                     if let promo = m.promotion { gain += ChessAI.material(promo) }
                     if standPat + gain + LocalEngine.deltaMargin < alpha { continue }
                 }
-                let score = -quiesce(pos.makeMove(m), -beta, -alpha, qdepth + 1)
+                let score = -quiesce(pos.makeMove(m), -beta, -alpha, ply + 1, qdepth + 1)
                 if cancelled { return alpha }
                 if score > best { best = score }
                 if best > alpha { alpha = best }
@@ -357,7 +380,7 @@ public struct LocalEngine: AnalysisEngine {
 
             let moves = pos.legalMoves()
             if moves.isEmpty { return inCheck ? -(ChessAI.mate - ply) : 0 }
-            if depth <= 0 { return quiesce(pos, alpha, beta, ply) }
+            if depth <= 0 { return quiesce(pos, alpha, beta, ply, 0) }
 
             // ---- Table probe ------------------------------------------------
             let key = AnalysisEval.hash(pos)

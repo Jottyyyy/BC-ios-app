@@ -247,6 +247,54 @@ function run() {
     eq(AE.IDENTIFIER, /public let identifier = "([^"]+)"/.exec(sw)?.[1],
       'the engine identifier matches the JS');
 
+    // ---- Quiescence takes TWO counters, and they are not interchangeable -------------
+    //
+    // `swift build` runs on a Mac; on this checkout these greps are the only thing between a wrong
+    // Swift signature and a shipped one. This file stayed green for three phases while quiescence
+    // was dead in BOTH languages, because it pins constants and neither bug was a constant —
+    // `maxQDepth` was 6 before and is 6 now. What it could not see was the parameter list.
+    const jsEngineSrc = read(JS, 'analysis-engine.js');
+    expect(/func quiesce\(_ pos: ChessPosition, _ alpha0: Int, _ beta: Int,\s*\n\s*_ ply: Int, _ qdepth: Int\)/.test(sw),
+      'Swift quiescence takes BOTH a root distance and a leaf-local counter — one parameter serving '
+      + 'both is what disabled it at every shipped preset (depth 8/12/18/22/30)');
+    expect(/if depth <= 0 \{ return quiesce\(pos, alpha, beta, ply, 0\) \}/.test(sw),
+      'and negamax resets the leaf-local counter to 0 on entry rather than passing ply for it');
+    expect(/-quiesce\(pos\.makeMove\(m\), -beta, -alpha, ply \+ 1, qdepth \+ 1\)/.test(sw),
+      'and both counters advance together in the recursion');
+    expect(!/ChessAI\.mate - qdepth/.test(sw),
+      'no mate is scored from the leaf-local counter — that is the PLAUSIBLE WRONG FIX, and it '
+      + 'reports a three-ply mate as M1');
+    expect(/\} else if ply >= LocalEngine\.maxPly \{/.test(sw),
+      'and in-check quiescence is bounded by maxPly: the qdepth cap sits in a branch a checking '
+      + 'node never reaches, so it had no bound at all');
+    expect(/Search\.prototype\.quiesce = function \(pos, alpha, beta, ply, qdepth\)/
+      .test(jsEngineSrc), 'the JS twin takes the same two counters');
+    expect(/return this\.quiesce\(pos, alpha, beta, ply, 0\);/.test(jsEngineSrc),
+      'and resets the same one');
+    expect(!/MATE - qdepth/.test(jsEngineSrc), 'and scores no mate from it either');
+    expect(/\} else if \(ply >= MAX_PLY\) \{/.test(jsEngineSrc), 'and bounds in-check the same way');
+
+    // ---- The pawn shield is gated on castling rights, and only the shield ------------
+    //
+    // Gated on RIGHTS specifically, and rights are part of the Zobrist key — so the transposition
+    // table cannot hand back a score computed under a different evaluation for the same key. A
+    // guard on anything NOT in that key (a move number, a search-local flag) would do exactly that,
+    // silently, and it would look like non-determinism.
+    const jsEvalSrc = read(JS, 'analysis-eval.js');
+    expect(/let canCastle = color == \.white \? \(pos\.castleWK \|\| pos\.castleWQ\)/.test(code(swEval)),
+      'the Swift pawn shield is gated on this colour still having castling rights');
+    expect(/if !canCastle \{[\s\S]{0,240}shieldMissing[\s\S]{0,240}shieldFar/.test(code(swEval)),
+      'and all three shield branches sit inside that gate');
+    expect(/var canCastle = color === E\.WHITE \? \(pos\.castleWK \|\| pos\.castleWQ\)/.test(jsEvalSrc),
+      'and the JS twin reads the same flags');
+    // The open-file term is deliberately OUTSIDE the gate. An open file beside an uncastled king is
+    // a highway either way, and it is the only term still punishing a king left in the centre —
+    // gate it too and staying there costs nothing at all.
+    expect(/if myPawnFiles\[ff\] == 0 && foePawnFiles\[ff\] == 0 \{ s \+= kingOpenFile \}/
+      .test(code(swEval)), 'while kingOpenFile is NOT gated in Swift');
+    expect(/if \(myPawnFiles\[ff\] === 0 && foePawnFiles\[ff\] === 0\) s \+= KING_OPEN_FILE;/
+      .test(jsEvalSrc), 'nor in the JS');
+
     // The two rules that keep the accelerators honest. Both are single lines, and both are the kind
     // of thing that silently degrades the search if someone "simplifies" them.
     expect(/if e\.depth >= depth, !isPV \{/.test(sw),
