@@ -366,7 +366,6 @@ var BiyaPuzzleMetrics = (function () {
     rowScoreSize: 15, rowScoreMinWidth: 60, rowDateSize: 13,
     emptySize: 13,
     bottomPaddingH: 16, bottomPaddingBottom: 10, bottomPaddingTop: 6, bottomGap: 8,
-    shareFill: PALETTE.shareBlue, shareRadius: 14, sharePaddingV: 11, shareSize: 14,
     startFill: PALETTE.streakOrange, startRadius: 14, startPaddingV: 14, startSize: 16,
   };
 
@@ -424,7 +423,6 @@ var BiyaPuzzleMetrics = (function () {
     rowScoreSize: 15, rowScoreMinWidth: 60, rowMistakesSize: 12, rowDateSize: 13,
     emptySize: 13,
     bottomPaddingH: 16, bottomPaddingBottom: 10, bottomPaddingTop: 6, bottomGap: 8,
-    shareFill: PALETTE.shareBlue, shareRadius: 14, sharePaddingV: 11, shareSize: 14,
     // The start button has NO fill of its own in the source: it is set inline from the selected
     // mode's colour, which is why the extraction shows no `backgroundColor`.
     startRadius: 14, startPaddingV: 14, startSize: 16,
@@ -464,8 +462,6 @@ var BiyaPuzzleMetrics = (function () {
     finishedTitleSize: 24, finishedTitleMarginBottom: 24,
     finishedScoreSize: 72, finishedLabelSize: 16, finishedLabelMarginBottom: 24,
     finishedStatsGap: 8, finishedStatsMarginBottom: 24, finishedStatSize: 16,
-    shareFill: PALETTE.shareBlue, shareRadius: 14, sharePaddingV: 13, sharePaddingH: 32,
-    shareMarginBottom: 12, shareSize: 15,
     doneFill: '#4A90E2', doneRadius: 16, donePaddingV: 16, donePaddingH: 32, doneSize: 16,
   };
 
@@ -704,7 +700,6 @@ var BiyaPuzzleMetrics = (function () {
     streakBest: 'Best', streakCurrentShort: 'Current', streakNoTimer: 'No Timer',
     streakRecent: '🔥 Recent Runs',
     streakEmpty: 'No runs yet — start your first streak! 🔥',
-    streakShare: '📤 Share',
     streakStart: '🔥 Start Streak',
     streakResumeStart: '🔥 Resume / New Streak',
     streakResumeTitle: 'Resume Session?',
@@ -719,18 +714,13 @@ var BiyaPuzzleMetrics = (function () {
     streakBestLine: function (n) { return 'Best: ' + n; },
     streakNewBest: '🏆 NEW BEST!',
     streakShowSolution: '💡 Show Solution',
-    streakShareResult: '📤 Share Result',
     streakPlayAgain: '🔄 Play Again',
     streakBackToMenu: '← Back to Menu',
     streakCorrectMove: 'Correct move:',
-    streakStripMenu: 'Menu', streakStripShare: 'Share', streakStripPlayAgain: 'Play Again',
+    streakStripMenu: 'Menu', streakStripPlayAgain: 'Play Again',
     streakHint: function (white) {
       return white ? '♙ You play White — Find the best move!'
                    : '♟ You play Black — Find the best move!';
-    },
-    streakShareText: function (n, best) {
-      return 'I just completed a 🔥 ' + n + ' puzzle streak on Biyaherong Chess Coach! Best: '
-        + best + ' Can you beat me? #BiyaherongChess #ChessPH';
     },
 
     // Turbo (Part 19)
@@ -742,7 +732,6 @@ var BiyaPuzzleMetrics = (function () {
     turboBest: function (n) { return 'Best: ' + n; },
     turboRecent: function (label) { return '🏆 ' + label + ' Runs'; },
     turboEmpty: 'No runs yet — be the first! ⚡',
-    turboShare: '📤 Share',
     turboStart: function (minutes) {
       return minutes === 0 ? '⚡ Start Rush (Infinite)' : '⚡ Start Rush (' + minutes + ' min)';
     },
@@ -762,15 +751,10 @@ var BiyaPuzzleMetrics = (function () {
     turboModeLine: function (minutes) {
       return minutes === 0 ? '∞ Infinite mode' : '⏱️ ' + minutes + ' min mode';
     },
-    turboShareResult: '📤 Share Result',
     turboBack: '← Back to Puzzle Turbo',
     turboQuitTitle: 'Quit Puzzle Turbo?',
     turboQuitBody: 'Your current run will be lost.',
     turboKeepPlaying: 'Keep Playing',
-    turboShareText: function (score, label) {
-      return 'I scored ' + score + ' in Puzzle Turbo (' + label
-        + ') mode! Can you beat me on Biyaherong Chess Coach? #BiyaherongChess #ChessPH';
-    },
   };
 
   // ---- Derived, pure ---------------------------------------------------------------------
@@ -1052,8 +1036,6 @@ var BiyaPuzzleMetrics = (function () {
     e(STR.turboStart(3) === '⚡ Start Rush (3 min)', 'and the timed one');
     e(STR.turboModeLine(0) === '∞ Infinite mode', 'the infinite results line');
     e(STR.turboModeLine(5) === '⏱️ 5 min mode', 'and the timed one');
-    e(STR.streakShareText(12, 20).indexOf('http') < 0, 'the streak share text carries no URL');
-    e(STR.turboShareText(30, '3-minute').indexOf('http') < 0, 'nor does Turbo`s');
     e(STR.streakResumeBody(7).indexOf('7') > 0, 'the resume prompt names the streak');
     e(STR.turboResumeBody(9, 2).indexOf('9') > 0 && STR.turboResumeBody(9, 2).indexOf('2/3') > 0,
       'and Turbo`s names the score and the lives spent');

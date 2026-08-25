@@ -161,17 +161,11 @@ struct PuzzleTurboHomeScreen: View {
     }
 
     private var bottom: some View {
+        // One child now. The Share button above Start was removed at the client's request — it was
+        // `Button { }`, real chrome wired to an empty closure, so on a phone it did nothing at all.
+        // The `VStack` and its `bottomGap` stay: the gap is an extracted RN constant, the three
+        // paddings need a wrapper anyway, and Start may not stay alone.
         VStack(spacing: PuzzleTurboHome.bottomGap) {
-            Button { } label: {
-                Text(PuzzleStrings.turboShare)
-                    .font(Theme.nunito(PuzzleTurboHome.shareSize, .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, PuzzleTurboHome.sharePaddingV)
-                    .background(PuzzleTurboHome.shareFill,
-                                in: RoundedRectangle(cornerRadius: PuzzleTurboHome.shareRadius))
-            }
-            .buttonStyle(PuzzlePressStyle())
             Button(action: start) {
                 Text(PuzzleStrings.turboStart(selected))
                     .font(Theme.nunito(PuzzleTurboHome.startSize, .bold))
@@ -421,18 +415,11 @@ struct PuzzleTurboRunScreen: View {
                 }
                 .font(Theme.nunito(PuzzleTurboRun.finishedStatSize, .regular))
                 .foregroundStyle(PuzzlePalette.textPrimary)
+                // The stats now sit directly above Back: the Share Result button between them was
+                // removed with the rest, and its own 12pt bottom padding went with it. Nothing
+                // compensates, because `finishedStatsMarginBottom` above is the gap that matters
+                // and the browser drops exactly the same 12.
                 .padding(.bottom, PuzzleTurboRun.finishedStatsMarginBottom)
-                Button { } label: {
-                    Text(PuzzleStrings.turboShareResult)
-                        .font(Theme.nunito(PuzzleTurboRun.shareSize, .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, PuzzleTurboRun.sharePaddingH)
-                        .padding(.vertical, PuzzleTurboRun.sharePaddingV)
-                        .background(PuzzleTurboRun.shareFill,
-                                    in: RoundedRectangle(cornerRadius: PuzzleTurboRun.shareRadius))
-                }
-                .buttonStyle(PuzzlePressStyle())
-                .padding(.bottom, PuzzleTurboRun.shareMarginBottom)
                 Button { onExit() } label: {
                     Text(PuzzleStrings.turboBack)
                         .font(Theme.nunito(PuzzleTurboRun.doneSize, .bold))

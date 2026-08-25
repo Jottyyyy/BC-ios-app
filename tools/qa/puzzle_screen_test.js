@@ -962,6 +962,57 @@ function run() {
     }
   }
 
+  // =====================================================================================
+  // 3j. The hub offers exactly ONE share button, and it is Play Home's
+  //
+  // Five share buttons — Turbo lobby, Turbo results, Streak lobby, Streak overlay, Streak
+  // strip — were live in this demo and INERT `Button { }` stubs in Swift. On a phone they
+  // rendered, they pressed, and they did nothing. The client asked for them gone rather than
+  // wired up.
+  //
+  // Nothing else in this suite would notice one coming back: no per-screen section names
+  // them, and §3g's `--pz*` audit is satisfied by any var that is both set and read — which
+  // a re-added button trivially is.
+  //
+  // SET EQUALITY, not a count: a sixth button is as much a failure as a resurrected one. The
+  // survivor is named rather than implied — `.pzp-share` ("📤 Share My Rating", Part 10.1) is
+  // a real button, and the Pairing module has its own share and its own gates.
+  // =====================================================================================
+  {
+    const SCREENS = ['puzzle-hub.js', 'puzzle-home.js', 'puzzle-solver.js', 'puzzle-daily.js',
+                     'puzzle-thematic.js', 'puzzle-streak.js', 'puzzle-turbo.js'];
+    const found = [];
+    for (const f of SCREENS) {
+      const src = fs.readFileSync(path.join(JS, f), 'utf8')
+                    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      // Anchored at `pz`, so the `--pzp-share-*` CUSTOM PROPERTIES do not match: those are the
+      // surviving button's own variables, and counting them would make this rule unstatable.
+      for (const m of src.matchAll(/'(pz[a-z]*-(?:[a-z-]+-)?share[a-z-]*)'/g)) {
+        found.push(f + ':' + m[1]);
+      }
+      // The transports went with the buttons that used them. `puzzle-home.js` keeps its own.
+      expect(!/navigator\.(share|clipboard)/.test(src) || f === 'puzzle-home.js',
+        `${f} reaches for no share transport — its share buttons are gone`);
+    }
+    eq(found.sort().join(', '), 'puzzle-home.js:pzp-share',
+      'the ONLY share button in the puzzle hub is Play Home\'s "📤 Share My Rating" — Turbo\'s '
+      + 'two and Streak\'s three were removed as dead UI');
+    expect(SCREENS.length >= 7, 'and all seven hub screens were swept');
+
+    // The stylesheet half. A class with no button is drift; the reverse is a button coming back.
+    const css = fs.readFileSync(path.join(ROOT, 'web-demo', 'css', 'app.css'), 'utf8');
+    const cls = new Set([...css.matchAll(/\.(pz[a-z]*-(?:[a-z-]+-)?share[a-z-]*)\b/g)]
+      .map(m => m[1]));
+    eq([...cls].sort().join(', '), 'pzp-share',
+      'and app.css styles exactly that one — .pzk-share, .pzr-share, .pzrr-fin-share, '
+      + '.pzks-btn-share and .pzks-strip-share went with their buttons');
+
+    // The copy, too: a string with no button is how one grows back.
+    eq(Object.keys(MET.STR).filter(k => /share/i.test(k)).sort().join(', '),
+      'homeShare, shareText',
+      'and PuzzleStrings carries exactly Play Home\'s share copy');
+  }
+
   return finish();
 }
 

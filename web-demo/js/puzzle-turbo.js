@@ -89,8 +89,6 @@ var BiyaPuzzleTurbo = (function () {
     set('--pzr-row-date', H.rowDateSize + 'px'); set('--pzr-empty-fs', H.emptySize + 'px');
     set('--pzr-bot-ph', H.bottomPaddingH + 'px'); set('--pzr-bot-pb', H.bottomPaddingBottom + 'px');
     set('--pzr-bot-pt', H.bottomPaddingTop + 'px'); set('--pzr-bot-gap', H.bottomGap + 'px');
-    set('--pzr-share-fill', H.shareFill); set('--pzr-share-r', H.shareRadius + 'px');
-    set('--pzr-share-pv', H.sharePaddingV + 'px'); set('--pzr-share-fs', H.shareSize + 'px');
     set('--pzr-start-r', H.startRadius + 'px'); set('--pzr-start-pv', H.startPaddingV + 'px');
     set('--pzr-start-fs', H.startSize + 'px');
     set('--pzr-start-shadow', '0 ' + H.startShadowY + 'px ' + H.startShadowRadius
@@ -134,11 +132,6 @@ var BiyaPuzzleTurbo = (function () {
     set('--pzrr-fin-stats-gap', R.finishedStatsGap + 'px');
     set('--pzrr-fin-stats-mb', R.finishedStatsMarginBottom + 'px');
     set('--pzrr-fin-stat', R.finishedStatSize + 'px');
-    set('--pzrr-fin-share', R.shareFill); set('--pzrr-fin-share-r', R.shareRadius + 'px');
-    set('--pzrr-fin-share-pv', R.sharePaddingV + 'px');
-    set('--pzrr-fin-share-ph', R.sharePaddingH + 'px');
-    set('--pzrr-fin-share-mb', R.shareMarginBottom + 'px');
-    set('--pzrr-fin-share-fs', R.shareSize + 'px');
     set('--pzrr-done-fill', R.doneFill); set('--pzrr-done-r', R.doneRadius + 'px');
     set('--pzrr-done-pv', R.donePaddingV + 'px'); set('--pzrr-done-ph', R.donePaddingH + 'px');
     set('--pzrr-done-fs', R.doneSize + 'px');
@@ -146,12 +139,6 @@ var BiyaPuzzleTurbo = (function () {
     // inheritance. `mode` picks the scrim and the accent; nothing else varies.
     MET.applyPromotion(node, 'turbo');
 }
-
-  function shareText(text) {
-    if (typeof navigator === 'undefined') return;
-    if (navigator.share) navigator.share({ text: text }).catch(function () {});
-    else if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () {});
-  }
 
   // ---- Mode select (Part 14.1) ---------------------------------------------------------
   var selectedMode = MET.TURBO_DEFAULT_MODE;   // 3, not infinite
@@ -230,11 +217,6 @@ var BiyaPuzzleTurbo = (function () {
     }
 
     var bottom = el('div', 'pzr-bottom');
-    var share = el('button', 'pzr-share', T.turboShare);
-    share.onclick = function () {
-      shareText(T.turboShareText(PROG.rushBestFor(st, selectedMode), modeOf(selectedMode).label));
-    };
-    bottom.appendChild(share);
     var start = el('button', 'pzr-start');
     function paintStart() {
       var m = modeOf(selectedMode);
@@ -496,11 +478,6 @@ var BiyaPuzzleTurbo = (function () {
     stats.appendChild(el('div', 'pzrr-fin-stat', T.turboModeLine(run.mode)));
     stats.appendChild(el('div', 'pzrr-fin-stat', T.turboBest(result.best)));
     box.appendChild(stats);
-    var share = el('button', 'pzrr-fin-share', T.turboShareResult);
-    share.onclick = function () {
-      shareText(T.turboShareText(run.score, modeOf(run.mode).label));
-    };
-    box.appendChild(share);
     var done = el('button', 'pzrr-done', T.turboBack);
     done.onclick = function () { leave(); if (ui.onExit) ui.onExit(); };
     box.appendChild(done);

@@ -283,6 +283,11 @@ checked against the JS by `replay_puzzle_core.js`. They are the first item of th
 date and a `🏆` on any run equalling the best. The start button reads "🔥 Resume / New Streak" and
 raises the resume modal only when a run is actually live.
 
+There is **no Share button**: the lobby is the start button alone, the results overlay is Show
+Solution / Play Again / Back to Menu, and the solution strip is **two** `flex: 1` buttons (Menu,
+Play Again) rather than three. All three were `Button { }` in Swift — chrome wired to an empty
+closure — and were removed at the client`s request; see `PORTING_NOTES.md`.
+
 **Solver** — the live `🔥 n` counter, the stats bar, the board, the hint line. The header's
 right-hand mark is the gold ring (`.pzd-logo`); it used to be a bare `Color.clear` with a width and
 no height in Swift, which made the header greedy and pushed the whole screen into the middle of the
@@ -317,6 +322,10 @@ selected tab, and a start button in the selected mode's colour (set inline; the 
 `startButton` has no `backgroundColor`, which is why the extraction shows none). The resume prompt
 is **infinite-only** and only for a draft under 24 h old with a score on it — a timed run cannot be
 paused, so a draft of one would be meaningless.
+
+The lobby`s bottom band is the start button **alone**, and the run results go stats → Back: both
+Share buttons were dead in Swift and are gone. `puzzle_screen_test.js` §3j and
+`replay_puzzle_vm.js` §9 assert that the hub`s only share button is Play Home`s.
 
 **Run** — the four-band clock (`∞` purple · >30 s green · ≤30 gold · ≤10 red), three life dots, the
 board, the hint line, and the ✓/✕ feedback dot. Wrong moves **do not undo**: the piece stays where

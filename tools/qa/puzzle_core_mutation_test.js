@@ -549,6 +549,22 @@ const MUTANTS = [
    'engine.schedule(w.policy.advanceMs ?? PuzzleSession.Timing.turboAdvanceMs) { next() }',
    'engine.schedule(PuzzleSession.Timing.turboAdvanceMs) { next() }',
    'the delay travels with the outcome; restating it is how the two came to disagree'],
+  // --- The five removed share buttons. Live in this demo, INERT `Button { }` stubs in Swift,
+  // for three phases: they rendered, they pressed, and they did nothing. The client asked for
+  // them gone rather than wired up. These two prove the new `puzzle_screen_test.js` §3j and
+  // `replay_puzzle_vm.js` §9 are not gates on trust — one per language, because the two rules
+  // are enforced by two different files and neither would notice the other going quiet.
+  ['streak: a share button grows back in the browser', 'puzzle-streak.js',
+   "    var start = el('button', 'pzk-start', live ? T.streakResumeStart : T.streakStart);",
+   "    bottom.appendChild(el('button', 'pzk-share', 'Share'));\n"
+   + "    var start = el('button', 'pzk-start', live ? T.streakResumeStart : T.streakStart);",
+   'a re-added share button — removed as dead UI, and nothing else in the suite names it'],
+  ['swift: a dead Button { } stub grows back', 'PuzzleStreakScreens.swift',
+   '            Button { if live { showResume = true } else { onStart() } } label: {',
+   '            Button { } label: { Text(PuzzleStrings.streakStart) }\n'
+   + '            Button { if live { showResume = true } else { onStart() } } label: {',
+   'chrome wired to an empty closure — exactly the shape the five share buttons had, and the '
+   + 'general rule that would have caught them the day they were written'],
   ['swift: Thematic moves Elo', 'PuzzleThematicScreens.swift',
    'PuzzleProgress.recordThematicAttempt(&s, themes: p.themes, isCorrect: correct,',
    'PuzzleProgress.recordRatedAttempt(&s, puzzleId: p.id, isCorrect: correct,',

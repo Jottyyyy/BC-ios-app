@@ -141,6 +141,51 @@ correctly refuses a module in `web-demo/js/` that nothing loads.
 
 ## Ported-algorithm parity notes & deliberate deviations
 
+### DELIBERATE DEVIATION — the Streak and Turbo share buttons are removed, not ported (2026-08-25)
+
+Spec 13.1 / 13.3 / 14.1 / 14.4 describe **five** share buttons: the Streak lobby, its results
+overlay and its solution strip; the Turbo lobby and its run results. All five shipped in Swift as
+`Button { }` / `overlayButton(…, fill) { }` — **real chrome wired to an empty closure.** They
+rendered, they pressed, and they did nothing, for three phases. The browser twin was live
+(`navigator.share`, falling back to the clipboard), which is exactly why nobody noticed: the demo
+worked and the app did not.
+
+The client found the Turbo one and asked for it removed. Offered the alternative of wiring all five
+up to a real `ShareLink` — the Pairing module already does that and the share-text builders already
+existed — they chose removal. So they are gone rather than implemented.
+
+The RN source's share targeted the hosted `/share/streak` and `/share/rush` endpoints, which Part 21
+had already deleted, leaving a text-only payload; that is the context in which they were ported as
+stubs in the first place.
+
+**Kept:** Play Home's `📤 Share My Rating` (Part 10.1) — a live JS button the client did not ask
+about, and Swift never had one for it at all. The Pairing module's `ShareLink` — genuinely
+functional, separate namespace, its own gates.
+
+**`PuzzlePalette.shareBlue` stays** even though it now has **zero Swift references**.
+`replay_puzzle_core.js`'s palette loop asserts the declaration by name, and its JS twin is still
+live via `PLAY_HOME.shareFill` → `--pzp-share-fill` → `.pzp-share`. A comment on the declaration
+records this so nobody tidies it away and reds the gate.
+
+**The containers and their `gap`s stay too.** The two lobby bands drop to one child, so `bottomGap`
+stops having any effect — but removing the CSS `gap` makes `--pz*-bot-gap` a property nobody reads
+and fails the `--pz*` audit's second direction, and removing the setter as well cascades into
+deleting an *extracted* RN constant from two metrics tables and two parity lists, for zero pixels.
+
+**Two new rules**, because nothing in 35,000 assertions would have noticed a share button returning:
+`puzzle_screen_test.js` §3j (set equality over the hub's share classes, CSS classes and strings) and
+`replay_puzzle_vm.js` §9. The second lives there rather than in `replay_puzzle_core.js` because the
+mutation harness's `RUN_ALL` omits that file — an assertion there is invisible to mutation, so a
+Swift mutant re-adding a button would report SURVIVED.
+
+§9's second half is the **general** rule, and it is the one that would have caught all five the day
+they were written: *no puzzle screen may declare a button wired to an empty closure.* Its first
+draft anchored `label:` to end-of-line and therefore matched nothing at all — vacuous from birth,
+and the new mutant is what said so. Verified after fixing against the pre-deletion source: it finds
+exactly the original five.
+
+**One real pixel change:** the Streak solution strip goes 3 → 2 buttons, and they are `flex: 1` /
+`maxWidth: .infinity`, so Menu and Play Again grow from a third to half the width each.
 ### Quiescence never ran, and the pawn shield fined 1.e4 (2026-08-25)
 
 Two bugs in the analysis search, both found from a client screenshot, both reproduced here to the

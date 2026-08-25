@@ -137,17 +137,11 @@ struct PuzzleStreakHomeScreen: View {
     }
 
     private var bottom: some View {
+        // One child now. The Share button above Start was removed at the client’s request — it
+        // was `Button { }`, real chrome wired to an empty closure, so on a phone it did nothing.
+        // The `VStack` and its `bottomGap` stay: the gap is an extracted RN constant and the
+        // paddings need a wrapper anyway.
         VStack(spacing: PuzzleStreakHome.bottomGap) {
-            Button { } label: {
-                Text(PuzzleStrings.streakShare)
-                    .font(Theme.nunito(PuzzleStreakHome.shareSize, .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, PuzzleStreakHome.sharePaddingV)
-                    .background(PuzzleStreakHome.shareFill,
-                                in: RoundedRectangle(cornerRadius: PuzzleStreakHome.shareRadius))
-            }
-            .buttonStyle(PuzzlePressStyle())
             Button { if live { showResume = true } else { onStart() } } label: {
                 Text(live ? PuzzleStrings.streakResumeStart : PuzzleStrings.streakStart)
                     .font(Theme.nunito(PuzzleStreakHome.startSize, .bold))
@@ -339,7 +333,6 @@ struct PuzzleStreakSolverScreen: View {
                                   text: PuzzlePalette.onGold) {
                         reveal()
                     }
-                    overlayButton(PuzzleStrings.streakShareResult, PuzzleStreakHome.shareFill) { }
                     overlayButton(PuzzleStrings.streakPlayAgain, PuzzleStreakHome.badgeFill) {
                         playAgain()
                     }
@@ -394,7 +387,6 @@ struct PuzzleStreakSolverScreen: View {
                 stripButton(PuzzleStrings.streakStripMenu, PuzzleStreakSolver.stripMenuFill) {
                     engine.leave(); onExit()
                 }
-                stripButton(PuzzleStrings.streakStripShare, PuzzleStreakHome.shareFill) { }
                 stripButton(PuzzleStrings.streakStripPlayAgain, PuzzleStreakHome.badgeFill) {
                     playAgain()
                 }

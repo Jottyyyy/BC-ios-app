@@ -1666,9 +1666,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
              padding: var(--pzk-list-pt) 0; }
 .pzk-bottom { flex: none; display: flex; flex-direction: column; gap: var(--pzk-bot-gap);
               padding: var(--pzk-bot-pt) var(--pzk-bot-ph) var(--pzk-bot-pb); }
-.pzk-share { border: 0; cursor: pointer; font-family: inherit; color: #fff;
-             background: var(--pzk-share-fill); border-radius: var(--pzk-share-r);
-             padding: var(--pzk-share-pv) 0; font-size: var(--pzk-share-fs); font-weight: 700; }
 .pzk-start { border: 0; cursor: pointer; font-family: inherit; color: #fff;
              background: var(--pzk-start-fill); border-radius: var(--pzk-start-r);
              padding: var(--pzk-start-pv) 0; font-size: var(--pzk-start-fs); font-weight: 700; }
@@ -1731,7 +1728,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
             padding: var(--pzks-btn-pv) var(--pzks-btn-ph); font-size: var(--pzks-btn-fs);
             font-weight: 700; color: #fff; }
 .pzks-btn-gold { background: var(--pz-gold); color: var(--pz-on-gold); }
-.pzks-btn-share { background: var(--pzk-share-fill); }
 .pzks-again { background: var(--pz-orange); border-radius: var(--pzks-again-r);
               padding: var(--pzks-again-pv) var(--pzks-btn-ph); }
 .pzks-menu { margin-top: var(--pzks-menu-mt); padding: var(--pzks-menu-pv) 0; background: none;
@@ -1753,7 +1749,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
                   font-size: var(--pzks-strip-btn-fs); font-weight: 700; }
 .pzks-strip-menu { background: var(--pzks-strip-menu-fill);
                    border: 1px solid var(--pzks-strip-menu-border); }
-.pzks-strip-share { background: var(--pzk-share-fill); }
 .pzks-strip-again { background: var(--pz-orange); }
 
 /* ============================================================================ *
@@ -1815,9 +1810,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
              padding: var(--pzr-list-pt) 0; }
 .pzr-bottom { flex: none; display: flex; flex-direction: column; gap: var(--pzr-bot-gap);
               padding: var(--pzr-bot-pt) var(--pzr-bot-ph) var(--pzr-bot-pb); }
-.pzr-share { border: 0; cursor: pointer; font-family: inherit; color: #fff;
-             background: var(--pzr-share-fill); border-radius: var(--pzr-share-r);
-             padding: var(--pzr-share-pv) 0; font-size: var(--pzr-share-fs); font-weight: 700; }
 /* No background here on purpose: the source sets it inline from the selected mode's colour. */
 .pzr-start { border: 0; cursor: pointer; font-family: inherit; color: #fff;
              border-radius: var(--pzr-start-r); padding: var(--pzr-start-pv) 0;
@@ -1885,11 +1877,6 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .pzrr-fin-stats { display: flex; flex-direction: column; gap: var(--pzrr-fin-stats-gap);
                   margin-bottom: var(--pzrr-fin-stats-mb); }
 .pzrr-fin-stat { font-size: var(--pzrr-fin-stat); color: var(--pz-text); }
-.pzrr-fin-share { border: 0; cursor: pointer; font-family: inherit; color: #fff;
-                  background: var(--pzrr-fin-share); border-radius: var(--pzrr-fin-share-r);
-                  padding: var(--pzrr-fin-share-pv) var(--pzrr-fin-share-ph);
-                  margin-bottom: var(--pzrr-fin-share-mb); font-size: var(--pzrr-fin-share-fs);
-                  font-weight: 700; }
 .pzrr-done { border: 0; cursor: pointer; font-family: inherit; color: #fff;
              background: var(--pzrr-done-fill); border-radius: var(--pzrr-done-r);
              padding: var(--pzrr-done-pv) var(--pzrr-done-ph); font-size: var(--pzrr-done-fs);
@@ -1923,9 +1910,9 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 /* ---- Press feedback -------------------------------------------------------
    Every button in the hub was inert on tap: no ripple, no dim, no scale. On a
    phone that reads as "did it register?" and people tap twice. */
-.pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzk-share, .pzr-start,
-.pzr-share, .pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
-.pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done, .pzrr-fin-share,
+.pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzr-start,
+.pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
+.pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done,
 .pzr-tab, .pzt-card, .pzk-row, .pzr-row {
   transition: transform var(--pzx-fast) var(--pzx-ease),
               opacity var(--pzx-fast) var(--pzx-ease),
@@ -1933,10 +1920,10 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   -webkit-tap-highlight-color: transparent;
 }
 .pzh-card:active, .pzd-start:active, .pzds-done:active, .pzk-start:active,
-.pzk-share:active, .pzr-start:active, .pzr-share:active, .pzt-start:active,
+.pzr-start:active, .pzt-start:active,
 .pzp-share:active, .pz-btn:active, .pzts-btn:active, .pzks-btn:active,
 .pzks-strip-btn:active, .pz-modal-btn:active, .pzrr-modal-btn:active,
-.pzrr-done:active, .pzrr-fin-share:active {
+.pzrr-done:active {
   opacity: var(--pzx-press);
   transform: scale(.975);
 }
@@ -2053,9 +2040,9 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   .pzds-banner, .pzts-feedback, .pzrr-fb, .pzk-row, .pzr-row {
     animation: none !important;
   }
-  .pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzk-share, .pzr-start,
-  .pzr-share, .pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
-  .pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done, .pzrr-fin-share,
+  .pzh-card, .pzd-start, .pzds-done, .pzk-start, .pzr-start,
+  .pzt-start, .pzp-share, .pz-btn, .pzts-btn, .pzks-btn,
+  .pzks-strip-btn, .pz-modal-btn, .pzrr-modal-btn, .pzrr-done,
   .pzr-tab, .pzt-card, .pzk-row, .pzr-row {
     transition: none;
   }
