@@ -9,6 +9,58 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-25 (changed) — Puzzle hub: the five dead Share buttons are gone
+
+Client, with a screenshot of the Puzzle Turbo lobby: *"Iremove yung share button."* Correct — and it
+was worse than unnecessary. **Every Share button in the Swift puzzle hub was `Button { }`**: real
+chrome wired to an empty closure. On a phone they rendered, they pressed, and they did nothing.
+`web-demo/` updated.
+
+**There were FIVE, not one.** Turbo lobby (the screenshot), Turbo run results, Streak lobby, Streak
+results overlay, Streak solution strip. They were live only in the browser twin (`navigator.share`,
+falling back to the clipboard), which is exactly why nobody noticed: **the demo worked and the app
+did not.** The screenshot even shows the button sitting over *"No runs yet — be the first!"* and
+*"Best: 0"* — nothing to share, and nothing would have happened anyway.
+
+Offered the alternative of wiring all five to a real `ShareLink` — Pairing already does that, and the
+share-text builders already existed with no caller — the user chose removal. So they are gone rather
+than implemented.
+
+**Buttons 3, 4 and 5 were one indivisible edit.** All three read `--pzk-share-fill` from a single
+setter, so deleting any one alone leaves two rules reading a property nobody writes and fails the
+`--pz*` audit's first direction.
+
+**What stays, and why the tempting tidy-ups are wrong.** Play Home's `📤 Share My Rating` is a live
+button the client did not ask about. `PuzzlePalette.shareBlue` now has **zero Swift references** and
+still may not be deleted — the palette parity loop asserts it by name and its JS twin still paints
+`.pzp-share`; a comment on the declaration says so. And the two one-child lobby bands **keep their
+`gap`**: removing it fails the audit's *second* direction, and removing the setter too would cascade
+into deleting an extracted RN constant from two metrics tables and two parity lists, for zero pixels.
+
+**Two new rules, because nothing in 35,000 assertions would have noticed one coming back.** No
+per-screen section named them, and the `--pz*` audit is satisfied by any property that is both set
+and read — which a re-added button trivially is. `puzzle_screen_test.js` **§3j** is set equality over
+the hub's share classes, CSS classes and strings, so a *sixth* button fails as loudly as a
+resurrected one. `replay_puzzle_vm.js` **§9** is the Swift half, and it lives there rather than in
+`replay_puzzle_core.js` for one concrete reason: the mutation harness's `RUN_ALL` omits that file, so
+a rule written there is invisible to mutation and a Swift mutant would report SURVIVED.
+
+§9's second half is the **general** rule, and it is the one that would have caught all five on the
+day they were written: *no puzzle screen may declare a button wired to an empty closure.*
+
+**And the mutant earned its keep on the first run.** `'a dead Button { } stub grows back'`
+**SURVIVED**: the rule had anchored `label:` to end-of-line, so it never matched the real
+`Button { } label: {` form — **vacuous from birth**, landing on zero because it could not match
+anything rather than because there was nothing to match. Fixed, then verified against the
+*pre-deletion* source, where it finds exactly the original five: three in Streak, two in Turbo.
+
+**One real pixel change:** the Streak solution strip goes 3 → 2 buttons, and they are `flex: 1` /
+`maxWidth: .infinity`, so **Menu** and **Play Again** each grow from a third to half the width.
+Turbo's results lose 12 pt, symmetrically in both languages.
+
+Suite: **35,104 assertions across 79 suites**. `puzzle_core_mutation` 166 → **168 mutants, all
+killed**; `puzzle_screen_test` 459 → 470; `replay_puzzle_vm` 117 → 136.
+
 ### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
 
 Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag

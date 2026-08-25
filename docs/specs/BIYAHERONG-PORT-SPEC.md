@@ -1063,6 +1063,11 @@ Sudden death. One wrong move ends the run.
 
 ### 13.1 Streak Home
 
+> **Ported WITHOUT the lobby’s share button** — it shipped in Swift as `Button { }`, an empty closure, so on
+> a phone it rendered and pressed and did nothing. Removed at the client’s request on
+> 2026-08-25 rather than wired up; `PORTING_NOTES.md` records the decision. The rest of this
+> section is ported as written.
+
 1. Header: back · **"Puzzle Streak"** 18pt bold · badge pill fill `#F4511E`,
    `paddingHorizontal 10`, `paddingVertical 4`, radius 12, text **"🔥 STREAK"** 11pt bold
    `#FFFFFF`.
@@ -1119,6 +1124,11 @@ let WARMUP_COUNT   = 10
 - Selection: Part 7.3 with the tier fallback.
 
 ### 13.3 Streak solver
+
+> **Ported WITHOUT the overlay’s “Share Result” and the strip’s “Share”** — it shipped in Swift as `Button { }`, an empty closure, so on
+> a phone it rendered and pressed and did nothing. Removed at the client’s request on
+> 2026-08-25 rather than wired up; `PORTING_NOTES.md` records the decision. The rest of this
+> section is ported as written.
 
 1. Header (`paddingHorizontal 20`, `paddingVertical 6`): back — a **44×44** target with `←`
    **28pt bold** `#FFFFFF` · the live counter **`🔥 {current}`** 34pt bold `#F4511E` · app logo
@@ -1186,6 +1196,11 @@ I just completed a 🔥 {finalStreak} puzzle streak on Biyaherong Chess Coach! B
 Three modes, three lives, one clock.
 
 ### 14.1 Mode select screen
+
+> **Ported WITHOUT the lobby’s share button** — it shipped in Swift as `Button { }`, an empty closure, so on
+> a phone it rendered and pressed and did nothing. Removed at the client’s request on
+> 2026-08-25 rather than wired up; `PORTING_NOTES.md` records the decision. The rest of this
+> section is ported as written.
 
 ```swift
 let TIME_OPTIONS = [ (minutes: 0, label: "∞ Infinite", color: "#9C27B0"),
@@ -1291,6 +1306,11 @@ the board flip.
 **stays**, dot shows, and after **500 ms** either the next puzzle mounts or the game ends.
 
 ### 14.4 Ending a run
+
+> **Ported WITHOUT the “📤 Share Result” button** — it shipped in Swift as `Button { }`, an empty closure, so on
+> a phone it rendered and pressed and did nothing. Removed at the client’s request on
+> 2026-08-25 rather than wired up; `PORTING_NOTES.md` records the decision. The rest of this
+> section is ported as written.
 
 Triggers: 3 mistakes · the clock reaching 0 (timed only) · Quit (confirmed).
 
@@ -1473,6 +1493,11 @@ is centered, so they disagree by up to ~3.5 px.
 ---
 
 ## PART 19 — String Catalog
+
+> **Ported WITHOUT the five puzzle-hub share strings** — it shipped in Swift as `Button { }`, an empty closure, so on
+> a phone it rendered and pressed and did nothing. Removed at the client’s request on
+> 2026-08-25 rather than wired up; `PORTING_NOTES.md` records the decision. The rest of this
+> section is ported as written.
 
 Every user-facing string, so nothing gets paraphrased in translation.
 
