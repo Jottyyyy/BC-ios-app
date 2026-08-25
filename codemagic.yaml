@@ -101,6 +101,17 @@ workflows:
           sed -i '' "s/^        CURRENT_PROJECT_VERSION: .*/        CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
           grep -n "CURRENT_PROJECT_VERSION" project.yml
           xcodegen generate
+      - name: Fail fast if the Stockfish networks are missing from the clone
+        # Same failure shape as the icon check below: the build SUCCEEDS without them. The app
+        # falls back to LocalEngine (AnalysisVM checks StockfishRuntime.isStarted), so what ships
+        # is a quietly weaker engine and no error anywhere. Both files are tracked in git and
+        # tools/qa/stockfish_vendor_check.js verifies their contents; this only checks the clone
+        # actually carried them. See docs/stockfish.md.
+        script: |
+          for net in nn-1c0000000000.nnue nn-37f18f62d772.nnue; do
+            test -s "Engine/Sources/StockfishEngine/Nets/$net" || {
+              echo "NNUE $net missing — the build would ship without Stockfish"; exit 1; }
+          done
       - name: Fail fast if the app icon is missing from the clone
         # A build with ASSETCATALOG_COMPILER_APPICON_NAME set but no catalog on disk still
         # SUCCEEDS and silently ships with no icon keys — then dies at upload on ITMS-90713.
@@ -170,6 +181,17 @@ workflows:
           sed -i '' "s/^        SWIFT_ACTIVE_COMPILATION_CONDITIONS: .*/        SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/" project.yml
           grep -n "SWIFT_ACTIVE_COMPILATION_CONDITIONS" project.yml
           xcodegen generate
+      - name: Fail fast if the Stockfish networks are missing from the clone
+        # Same failure shape as the icon check below: the build SUCCEEDS without them. The app
+        # falls back to LocalEngine (AnalysisVM checks StockfishRuntime.isStarted), so what ships
+        # is a quietly weaker engine and no error anywhere. Both files are tracked in git and
+        # tools/qa/stockfish_vendor_check.js verifies their contents; this only checks the clone
+        # actually carried them. See docs/stockfish.md.
+        script: |
+          for net in nn-1c0000000000.nnue nn-37f18f62d772.nnue; do
+            test -s "Engine/Sources/StockfishEngine/Nets/$net" || {
+              echo "NNUE $net missing — the build would ship without Stockfish"; exit 1; }
+          done
       - name: Fail fast if the app icon is missing from the clone
         script: |
           test -f ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png || {

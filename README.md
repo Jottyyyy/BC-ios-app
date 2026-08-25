@@ -40,7 +40,7 @@ Sources/BiyaherongCoachCore/     # domain engines (Foundation only — no UIKit/
   ChessRules.swift               # position key, insufficient material, fifty-move, threefold
   MoveTree.swift                 # the move tree with variations + a pure flatten() render model
   PGN.swift                      # parse + serialize: RAVs, NAGs, comments — the persistence format
-  AnalysisEngine.swift           # the engine protocol and its score types (Stockfish drops in here)
+  AnalysisEngine.swift           # the engine protocol and its score types (Stockfish conforms in Engine/)
   LocalEngine.swift              # the interim search: iterative deepening, quiescence, MultiPV, PV
   OpeningBook.swift              # ECO lookup over the bundled 7,854-row book
   ReviewAnnotator.swift          # drives the engine over a game; layers `book` on top of GameReview
@@ -121,10 +121,15 @@ cd DemoApp && swift run PieceArtCheck   # 99 assertions: the 12 files + grammar/
 - **ECO opening names** — [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
   **CC0 1.0** (public domain dedication). Inputs: `tools/eco/data/*.tsv` (+ `COPYING.txt`); built product:
   `DemoApp/Sources/BiyaherongUI/ECO/eco.tsv` via `php tools/eco/build_eco.php`.
+- **Stockfish 17.1** — the Stockfish developers, **GPLv3**. Source vendored at
+  `Engine/Sources/CStockfish/sf/` (with its own `Copying.txt` and `AUTHORS`); the two NNUE networks it
+  evaluates with are at `Engine/Sources/StockfishEngine/Nets/`. **Unlike every other entry here, this
+  one relicenses the app**: GPLv3 §5 covers the combined work. See `LICENSE` and `docs/stockfish.md`.
 
 ## Decisions locked (see PORTING_NOTES.md)
 - **Puzzle bank:** full **550,000** puzzles (~100 MB) → build-time `puzzles.sqlite` (later phase).
-- **Engine:** **Stockfish (GPL)** + publish the app source openly (later `Engine/` phase).
+- **Engine:** **Stockfish 17.1 (GPL)** — DONE 2026-08-25, embedded at `Engine/`, app source published.
+  `LICENSE` is the GPL and that grant is irrevocable. See `docs/stockfish.md`.
 
 ## Next phases (not yet built)
 Foundations (SwiftData models + CloudKit, chess primitives) → on-device Stockfish → Puzzle Hub +

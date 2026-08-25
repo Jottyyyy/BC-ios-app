@@ -59,6 +59,8 @@ var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
 var STRENGTH = require(path.join(__dirname, 'engine_strength_check.js'));
 var QUIESCE = require(path.join(__dirname, 'engine_quiescence_check.js'));
 var RENGINE = require(path.join(__dirname, 'replay_engine_settings.js'));
+var SFVENDOR = require(path.join(__dirname, 'stockfish_vendor_check.js'));
+var SFREPLAY = require(path.join(__dirname, 'replay_stockfish.js'));
 var WORKER = require(path.join(__dirname, 'worker_protocol_check.js'));
 var CORPUS = require(path.join(__dirname, 'puzzle_corpus_check.js'));
 var PUZCORE = require(path.join(__dirname, 'puzzle_core_test.js'));
@@ -183,6 +185,12 @@ record('engine frame budget', BUDGET.selfTest());
 record('engine strength', STRENGTH.selfTest());
 record('engine quiescence', QUIESCE.selfTest());
 record('swift engine settings vs JS', RENGINE.selfTest());
+// Stockfish. Neither of these can RUN it — no C++ toolchain here — so they cover the two things
+// that can be checked without one: that the vendored tree, its single patch and the two network
+// files are still what the build assumes, and that the Swift adapter makes the same decisions the
+// JS twin makes about what Stockfish says. See docs/stockfish.md.
+record('stockfish vendored tree', SFVENDOR.selfTest());
+record('swift stockfish bridge vs JS', SFREPLAY.selfTest());
 // The bundled puzzle corpus: quotas, indexes, and every line replayed through the real engine.
 // Every later puzzle assertion is stated against this DB, so a bad corpus would make them all
 // pass while the app served nothing.
