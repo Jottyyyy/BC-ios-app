@@ -43,6 +43,10 @@ Feature- and subsystem-level documentation for this repo.
 - [`analysis-board.md`](analysis-board.md) — the offline analysis screen: move tree, local engine, ECO book,
   game review, persistence, Setup Position, PGN import/export, and the pure metrics layer extracted from the
   real RN StyleSheet.
+- [`stockfish.md`](stockfish.md) — **Stockfish 17.1, compiled into the app.** How it is vendored and
+  bridged (the public `Engine` class, not pipes; a pure-C header, so no C++ interop), the four things
+  that would have shipped badly — including a net-load failure that calls `exit()` and takes the app
+  with it — why the app is now GPLv3, and what `LocalEngine` is still for.
 - [`engine-settings.md`](engine-settings.md) — ☰ > Engine: five presets from Battery Saver to
   Infinite plus Advanced controls, and the search behind them — the analysis-only evaluation
   (tapered phase, pawn structure, king safety, mobility) and the accelerated search (transposition

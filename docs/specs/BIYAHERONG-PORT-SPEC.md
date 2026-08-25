@@ -67,7 +67,10 @@ statistic is computed on-device or read from a bundled asset.
 - Platform: **SwiftUI, iOS 17+**, portrait only
 - Persistence: **SwiftData** for user state; **read-only SQLite** in the app bundle for puzzles
 - Puzzle corpus: **~100,000 curated Lichess puzzles**, shipped inside the app
-- Engine (for solution hints only): **the embedded Stockfish actor** already built for the
+- Engine (for solution hints only): ~~**the embedded Stockfish actor** already built for the~~ *(There is no embedded Stockfish. This spec says so in four places and it was never true —
+  see `PORTING_NOTES.md`. What ships is `LocalEngine`, an in-repo negamax. A client read this spec
+  and reasonably concluded otherwise.)*
+  the
   Analysis Board
 - All dimensions are in **points**. Colors are exact — do not substitute.
 - No `URLSession` anywhere in this feature. If you find yourself writing one, you have
@@ -1455,7 +1458,9 @@ is **deleted** — there is nothing to time out.
 ## PART 18 — Engine Panel (solution hints)
 
 Play Puzzles and Thematic show engine suggestions after a solve or a solution reveal. Offline
-this runs on the **embedded Stockfish actor** from the Analysis Board, not on a server.
+this runs on the Analysis Board`s engine, not on a server. *(There is no embedded Stockfish. This spec says so in four places and it was never true —
+  see `PORTING_NOTES.md`. What ships is `LocalEngine`, an in-repo negamax. A client read this spec
+  and reasonably concluded otherwise.)*
 
 Search limits: **depth ceiling 20, 1000 ms, MultiPV 3** — the same interactive profile as the
 Analysis Board. Cancel any in-flight search when the position changes.
@@ -1659,7 +1664,9 @@ mix → all local), Save Puzzle (HTTP POST → SwiftData `AnalysisSession`).
 11. Thematic (Part 12) — grid + solver.
 12. Puzzle Streak (Part 13) — home, pending lock, ramp, result overlay, solution strip.
 13. Puzzle Turbo (Part 14) — mode select, clock, lives, feedback dot, draft/resume, results.
-14. Engine panel + arrows (Part 18), wired to the existing Stockfish actor.
+14. Engine panel + arrows (Part 18), wired to the existing engine. *(There is no embedded Stockfish. This spec says so in four places and it was never true —
+  see `PORTING_NOTES.md`. What ships is `LocalEngine`, an in-repo negamax. A client read this spec
+  and reasonably concluded otherwise.)*
 15. Sounds, haptics, and a final pass over the Part 17 timing table.
 
 ---
@@ -2511,6 +2518,9 @@ Dialogue, exactly as written (the Taglish is deliberate — do not "clean it up"
 the redirect to the paywall.
 
 ### 2.2 Engine strength — embedded Stockfish
+ *(There is no embedded Stockfish. This spec says so in four places and it was never true —
+  see `PORTING_NOTES.md`. What ships is `LocalEngine`, an in-repo negamax. A client read this spec
+  and reasonably concluded otherwise.)*
 
 Strength comes from three things only: search depth, MultiPV width, and a client-side randomiser.
 There is no Skill Level, no UCI_LimitStrength, no Elo cap, and no explicit blunder chance.
@@ -3890,7 +3900,9 @@ Real defects found in the shipping app. Each is a decision, not an oversight —
    against published FIDE examples and against criteria 3–6.
 3. Pairing Manager UI: list → create → detail (players → rounds → standings) → modals → share.
 4. **Play vs Coach engine layer**: level config, `pickMove`, the opening book, the think-time
-   pacer, wired to the existing Stockfish actor.
+   pacer, wired to the existing engine. *(There is no embedded Stockfish. This spec says so in four places and it was never true —
+  see `PORTING_NOTES.md`. What ships is `LocalEngine`, an in-repo negamax. A client read this spec
+  and reasonably concluded otherwise.)*
 5. Play vs Coach UI: coach select → colour select → game screen → premove → nav → modals.
 6. Offline game review, reusing the Analysis Board's batch analysis.
 7. **`ContentClient`** + the pack format + the download cache.

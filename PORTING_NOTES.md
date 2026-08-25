@@ -10,8 +10,110 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | # | Decision | Choice | Consequence |
 |---|----------|--------|-------------|
 | **1** | App download size / puzzle-bank size | **Full 550,000 puzzles (~100 MB)** | The build-time puzzle tool must convert the entire `byahero_puzzle.csv` (96 MB on disk) into an indexed read-only `puzzles.sqlite`. Apple shows a cellular-download warning at this size — accepted. Does **not** affect the parity core. |
-| **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** | The whole app is GPL-licensed; source will be published. Affects the later `Engine/` phase (Stockfish xcframework/SPM + UCI bridge). Does **not** affect the parity core. The parity core stays engine-agnostic. |
+| **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
+
+## Stockfish, embedded (2026-08-25)
+
+Decision #2 above, carried out. Full write-up in `docs/stockfish.md`; this section records only what
+deviates or was invented.
+
+### The licence is no longer a plan
+
+`LICENSE` was "proprietary, all rights reserved" with a note saying not to make the GPL grant early,
+because it cannot be withdrawn. Stockfish is now linked in, GPLv3 §5 applies to the combined work,
+and `LICENSE` is the GPL. **That grant is irrevocable and this file should not describe it as
+reversible.** `THIRD-PARTY-NOTICES.md`'s "Stockfish is not in this application" section is gone; the
+Terms sheet's older claim that "the app itself is GPL", corrected on 2026-08-18 for being untrue, is
+true again.
+
+### DEVIATION: repetition history does not reach the engine
+
+`AnalysisEngine.analyze` carries `historyKeys` — position *keys*. UCI wants the *moves*
+(`position fen … moves …`), which is how Stockfish learns that a line repeats something played before
+the search began. We do not have them at that boundary and the protocol is not being widened for one
+engine.
+
+Consequence, stated precisely: repetitions **inside** the search are found normally, and
+`ChessRules.terminalOutcome` has already ruled on the root before the engine is called. What is lost
+is a line that walks back into a position seen before the root being scored as a draw. `LocalEngine`
+does use the keys, so the two engines genuinely differ here.
+
+### DEVIATION: the caller's closures run on the engine's thread
+
+`LocalEngine` calls `shouldCancel` and `onProgress` inline on the caller's thread.
+`StockfishEngine` cannot: Stockfish delivers `info` from its own search thread, and the alternative
+is a queue that would delay cancellation by an entire iteration. Safe at the one call site that
+exists — `AnalysisVM.runAnalysis` reads a `CancelToken` and a `Date` in `shouldCancel` and hops to
+`@MainActor` inside `onProgress` — and `docs/stockfish.md` states it as a contract for new callers.
+
+### INVENTED: `mate 0` maps to a mate against the side to move
+
+Stockfish rounds mate distance as `(plies + 1) / 2` winning and `plies / 2` losing, truncating toward
+zero, so a side mated one ply from now reports `mate 0`. `EngineScore.mate` documents itself as never
+zero. A *winning* side cannot report 0 — a positive `plies` of 0 would mean mate is already on the
+board and no search would have run — so a zero is always the side to move being mated, and is mapped
+to a mate of magnitude 1 against them. Derived, not guessed, and asserted in both languages.
+
+### INVENTED: an exact score is never replaced by a bound
+
+Stockfish emits `lowerbound`/`upperbound` while an aspiration window fails, and those numbers sit
+whole pawns from what the same depth settles on moments later. `StockfishBridge.merge` keeps an exact
+score over a bound at the same rank. Without it the eval bar lurches on every re-search — visible,
+wrong, and almost impossible to attribute once shipped.
+
+### INVENTED: an incomplete iteration is not published
+
+A search stopped mid-iteration leaves rank 1 a ply deeper than ranks 2 and 3 — a snapshot that never
+existed, orderable into a sequence Stockfish never believed. `StockfishBridge.isComplete` requires
+`min(multiPV, max(legalMoves, 1))` ranks before an iteration is published, and the last complete one
+is returned otherwise. `AnalysisSnapshot` documents itself as one completed iteration; this is what
+makes that true.
+
+### Stockfish 17.1, not 18, and the reason is GitHub
+
+Stockfish 18's big net is 103.9 MiB. **GitHub refuses any file over 100 MiB.** 17.1's is 71.4 MiB.
+Git LFS was the alternative and was rejected: a free plan's 1 GB/month bandwidth against a 104 MB
+file fetched by every CI build, and a `git lfs pull` that CI can silently skip — leaving a 130-byte
+pointer file where the network should be. The Elo difference between 17.1 and 18 is irrelevant at the
+depth a phone reaches in one second. `tools/qa/stockfish_vendor_check.js` asserts the limit so the
+next person to upgrade finds out here rather than at push time.
+
+### The one patch to the vendored tree
+
+`sf/types.h` gains `#include "../sfconfig.h"`. SwiftPM never runs Stockfish's Makefile and Stockfish
+auto-detects none of the switches it sets — `nnue/simd.h:34` keys off `USE_NEON`, never
+`__ARM_NEON`. Without them the NNUE runs its scalar fallback: correct chess, several times slower,
+nothing reporting a problem. It has to be a C header rather than SwiftPM `.define`s because
+`.when(platforms:)` filters by platform and there is no architecture filter, and `USE_NEON` on an
+x86_64 host fails the build outright.
+
+`USE_NEON_DOTPROD` is deliberately **not** enabled: its `-march=armv8.2-a+dotprod` means
+`.unsafeFlags`, which SwiftPM bans in a package consumed as a dependency and which nothing here can
+compile-test. Worth 10-20%; NEON versus scalar is worth several times that.
+
+### Stockfish calls `exit(EXIT_FAILURE)`, and `Engine::go()` is what reaches it
+
+`sf/nnue/network.cpp:267` terminates the process when the requested net is not the loaded one. In a
+CLI that is reasonable. In an iOS app the process vanishes with no exception and nothing in the crash
+log that reads like a crash — and because the call sits inside `Engine::go()`, the trigger is the
+user's *first analysis*, not launch.
+
+Handled without patching Stockfish: `biya_sf_start` opens both files itself first, and installs an
+`on_verify_networks` listener that throws on a message beginning `"ERROR:"`. `f(msg)` runs one line
+before `exit()`, so the unwind wins. `verify_networks()` is then called at startup rather than left
+to the first search. This is the second time this port has hit "a library's idea of a fatal error is
+an app's idea of a disappearance" — see also the undefined-constant HTTP 500 rule at the top of this
+file: **do not reproduce a host's crash semantics; port the intent.**
+
+### The web demo is not mirrored, and that is a first
+
+`CLAUDE.md` step 5 requires user-facing features to be mirrored into `web-demo/`. This one cannot be:
+a 71 MB network and a WASM engine cannot be carried by a preview that opens from `file://` with no
+install step. The demo keeps `LocalEngine`, which is also the app's fallback, so the demo is showing
+a real code path rather than a stub. The consequence for the gate is that the JS twin has no demo
+behind it, which is why it lives at `tools/qa/stockfish_bridge_twin.js` — `web_shell_check.js` §2
+correctly refuses a module in `web-demo/js/` that nothing loads.
 
 ## Resolved decisions (August 2026 — Analysis Board)
 
@@ -84,6 +186,65 @@ exactly the original five.
 
 **One real pixel change:** the Streak solution strip goes 3 → 2 buttons, and they are `flex: 1` /
 `maxWidth: .infinity`, so Menu and Play Again grow from a third to half the width each.
+### Quiescence never ran, and the pawn shield fined 1.e4 (2026-08-25)
+
+Two bugs in the analysis search, both found from a client screenshot, both reproduced here to the
+centipawn.
+
+**Quiescence was disabled at every depth the app ships.** `negamax` called
+`quiesce(pos, alpha, beta, ply)` and `quiesce`'s fourth parameter was doing two incompatible jobs:
+mate-distance scoring wants the distance from the **root**, the `maxQDepth` budget wants a counter
+that **restarts at each leaf**. `maxQDepth` is 6 and every preset is depth 8/12/18/22/30, so the
+budget was spent on entry and quiescence returned its stand-pat having examined not one capture.
+
+`maxQDepth = 6` was never wrong. Its **caller** was. The note in the invented-constants table
+saying *"without quiescence, depth-3 lines are noise"* turned out to describe the shipping engine at
+every depth.
+
+Fixed by splitting the parameter in two. **The mate terms keep the root distance** — leaving them on
+the leaf-local counter is a fix that looks right, passes everything else, and reports a three-ply
+mate as **M1**, because mates delivered by a capture are found inside quiescence. There is now a
+test that walks a mate's own PV and checks the claim.
+
+Also: the `qdepth >= maxQDepth` cap sat **inside** the `!inCheck` branch, which a checking node
+never reaches — in-check quiescence had no bound at all and terminated only incidentally. It is
+bounded by `maxPly` now, the same ceiling the check extension uses. Bounding it with `maxQDepth`
+instead would truncate forced checking sequences, which is the one thing quiescence exists to
+follow. Behaviour-identical today (measured: same node counts, same lines), so it is a safety net
+with no mutant — pinned by source text instead.
+
+**DELIBERATE DEVIATION — the pawn shield is gated on castling rights.** The term applied to an
+uncastled king on e1, whose shield files are d/e/f: exactly the files White must push. `1.e4` and
+`1.d4` were fined 18cp each, `1.e3`/`1.d3` ten, and `1.Nc3`/`1.Nf3` nothing — so the engine's whole
+opening repertoire became `Nc3, Nf3, e3, d3` and `e4` fell out of the top four entirely.
+
+Gated on **rights**, not on the king's square, for two reasons. It still fires for a king sitting on
+e1 whose rooks have both moved — genuinely stuck in the middle, which is what the term is *for*. And
+rights are already part of the Zobrist key, so the transposition table cannot hand back a score
+computed under a different evaluation for the same key. **A guard on anything not in that key — a
+move number, a search-local flag — would do exactly that, silently, and would present as
+non-determinism.**
+
+The **open-file** term is deliberately left ungated: an open file beside an uncastled king is a
+highway either way, and it is the only term still punishing a king left in the centre.
+
+**Known, deferred, and now pinned: `queenProximity`.** A flat `-4 * (7 - kingDistance)` with no
+attacker count and no shelter test, i.e. a standing bonus for parking a queen near the enemy king on
+move 2 — which is why `Qg5`/`Qh5`/`Qd3` littered the principal variations. Most of that symptom was
+bug 1 (the search could not see the sorties refuted) and is gone. The term is still wrong; the right
+fix is a king-zone attack-unit table, not a tweak, and `AnalysisEval` already records that an
+`isAttacked` sweep at every leaf measured too expensive. Its own follow-up, with its own before/after.
+
+**Two gates were structurally blind, and that is the real finding.** The suite's only quiescence
+assertion ran at `maxDepth: 2` — the single band in which quiescence still worked. `engine_strength_check`
+scored 115/120 throughout, because its node budget caps most corpus positions at depth 5-6, again
+below `maxQDepth`. `replay_engine_settings` stayed green too: it pins constants, and neither bug was
+a constant. A green gate is not evidence the search is right.
+
+**One thing nobody would ever have found:** `extendTail` calls `negamax` with `ply: 0`, so its
+probes entered quiescence with a fresh budget and quiescence *worked there*. Users were shown a PV
+whose head came from a search without quiescence and whose tail came from one with it — which is why
+displayed lines sometimes appeared to change their mind after the extension. The two agree now.
 
 ### ELO / rating (Appendix C §2 — `PuzzleController::submitAnswer`, verified against source)
 - K = 32, divisor 400, floor `max(400, …)`, no upper cap.

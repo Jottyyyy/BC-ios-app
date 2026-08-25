@@ -139,6 +139,8 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
 - **`DemoApp/`** — its own SwiftPM package: `BiyaherongUI` (SwiftUI + `SVGVector.swift` renderer +
   `PuzzleStore` + `*View.swift`) and the `DemoApp`/`PieceArtCheck` executables. Fonts, sounds, coach art,
   and the puzzle DB ship **inside** this package and load via `Bundle.module`.
+- **`Engine/`** — own package, the **only C++ here**: Stockfish 17.1 vendored (one patched line) + an
+  `extern "C"` shim + `StockfishEngine`. **Nothing here compiles it** — read `docs/stockfish.md` first.
 - **`ios/`** — XcodeGen-driven app shell (`project.yml` → `Biyaherong.xcodeproj`); portrait-only; depends on
   `DemoApp` for `BiyaherongUI`. Build/signing runbook: `ios/BUILD-iOS.md`.
 - **`tools/`** — `oracle` (PHP → golden JSON), `eco` (CC0 TSVs → the bundled opening book), `metrics`
@@ -153,7 +155,7 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
 - **"Correct" = differentially matches the real PHP output**, not the appendix text. When porting or fixing
   an algorithm, verify against `../BYAHERONG-COACH-LARAVEL` via the golden oracle.
 - **Keep the Parity Core Foundation-only and engine-agnostic** — never import a UI framework there, and don't
-  leak the future Stockfish/UCI integration into it.
+  leak the Stockfish integration into it — it lives in the separate `Engine/` package.
 - **Goldens are generated and gitignored** — never hand-edit `Goldens/*.json`; regenerate via the oracle.
 - After changing an engine, **`swift run ParityRunner` must exit 0.** If you intentionally add cases, **raise**
   that group's `requireMinCounts` floor — **never lower a floor to make a run pass** (the floor guards against
@@ -190,8 +192,8 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   a **profile snapshots the App ID's capabilities when minted**, so enabling one means delete-and-recreate,
   never refresh; and `manageAppVersionAndBuildNumber` **defaults to true**, rewriting the build number at
   export, so `ExportOptions.plist` pins it false.
-- **Licensing:** piece art is CC BY-SA, Nunito is SIL OFL, and the Stockfish decision makes the whole app
-  **GPL** — keep attributions intact.
+- **Licensing:** the app is **GPLv3** (Stockfish is embedded; the grant is irrevocable, source published).
+  Piece art is CC BY-SA, Nunito is SIL OFL — keep attributions intact.
 
 ## Notes
 
@@ -202,5 +204,5 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   hand-authored Swift tables are replayed through that twin
   (`tools/qa/replay_position_editor.js`), and `swift_lint.js` catches the structural errors. `swift build`
   remains the last gate, on a Mac.
-- Locked decisions: the full **550,000-puzzle** bank (~100 MB) is built to `puzzles.sqlite` at build time;
-  the engine will be **Stockfish (GPL)** with the app source published openly.
+- Locked decisions: the full **550,000-puzzle** bank (~100 MB) is built to `puzzles.sqlite` at build time.
+  The engine is **Stockfish 17.1 (GPL)**, embedded 2026-08-25, app source published — `docs/stockfish.md`.

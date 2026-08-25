@@ -349,8 +349,25 @@ var BiyaAnalysis = (function () {
     return p;
   }
 
-  /** Quiescence: only tactical moves, so the search does not stop in the middle of a trade. */
-  Search.prototype.quiesce = function (pos, alpha, beta, qdepth) {
+  /**
+   * Quiescence: only tactical moves, so the search does not stop in the middle of a trade.
+   *
+   * TWO counters, and they are not interchangeable — this took an engine that never resolved a
+   * capture and shipped it for three phases.
+   *
+   *  - `ply` is the distance from the ROOT. Mate scores need it, so that a mate found deeper is
+   *    worth less than the same mate found sooner.
+   *  - `qdepth` is the distance from THIS LEAF, and it starts at 0 every time negamax bottoms out.
+   *    It is what `MAX_QDEPTH` bounds.
+   *
+   * They used to be one parameter, called with `ply`. Since `MAX_QDEPTH` is 6 and every shipped
+   * preset searches to depth 8 or more, `qdepth >= MAX_QDEPTH` was already true on entry: quiescence
+   * returned `standPat` immediately, having examined no capture at all. The engine evaluated
+   * statically in the middle of trades, and because White moves on odd plies it was Black who
+   * pocketed the phantom material at every even depth — which is exactly why every eval on the
+   * client's screen read 0.0 or negative.
+   */
+  Search.prototype.quiesce = function (pos, alpha, beta, ply, qdepth) {
     this.nodes++;
     if (this.outOfBudget()) return alpha;
 
@@ -358,18 +375,25 @@ var BiyaAnalysis = (function () {
     var moves = E.legalMoves(pos);
     // Terminal must be tested on ALL legal moves, never on the tactical subset — "no captures" is
     // not "no moves". (ai.js's negamax tests terminal before depth for the same reason.)
-    if (moves.length === 0) return inCheck ? -(MATE - qdepth) : 0;
+    if (moves.length === 0) return inCheck ? -(MATE - ply) : 0;
 
     var standPat = EV.evaluate(pos);
     if (!inCheck) {
       if (standPat >= beta) return standPat;
       if (standPat > alpha) alpha = standPat;
       if (qdepth >= MAX_QDEPTH) return standPat;
+    } else if (ply >= MAX_PLY) {
+      // In check every evasion is searched and no depth is spent, so the cap above sits in a branch
+      // this node can never reach — in-check quiescence had no bound at all, and terminated only
+      // incidentally. MAX_PLY is the ceiling negamax`s check extension already uses. Bounding this
+      // with MAX_QDEPTH instead would truncate a forced checking sequence, which is the one thing
+      // quiescence exists to follow.
+      return standPat;
     }
 
     // In check, every evasion must be considered; otherwise only tactical moves.
     var candidates = inCheck ? moves : moves.filter(function (m) { return isTactical(pos, m); });
-    if (candidates.length === 0) return inCheck ? -(MATE - qdepth) : standPat;
+    if (candidates.length === 0) return inCheck ? -(MATE - ply) : standPat;
 
     var ord = AI.ordered(candidates, pos);
     var best = inCheck ? -WIN : standPat;
@@ -381,7 +405,7 @@ var BiyaAnalysis = (function () {
         if (ord[i].promotion != null) gain += AI.material(ord[i].promotion);
         if (standPat + gain + DELTA_MARGIN < alpha) continue;
       }
-      var score = -this.quiesce(E.makeMove(pos, ord[i]), -beta, -alpha, qdepth + 1);
+      var score = -this.quiesce(E.makeMove(pos, ord[i]), -beta, -alpha, ply + 1, qdepth + 1);
       if (this.cancelled) return alpha;
       if (score > best) best = score;
       if (best > alpha) alpha = best;
@@ -418,7 +442,7 @@ var BiyaAnalysis = (function () {
 
     var moves = E.legalMoves(pos);
     if (moves.length === 0) return inCheck ? -(MATE - ply) : 0;
-    if (depth <= 0) return this.quiesce(pos, alpha, beta, ply);
+    if (depth <= 0) return this.quiesce(pos, alpha, beta, ply, 0);
 
     // ---- Table probe -------------------------------------------------------
     this.hash(pos);
@@ -944,9 +968,86 @@ var BiyaAnalysis = (function () {
       'a cancelled search never returns an empty PV');
 
     // 7. Quiescence: a hanging queen must be taken, not left hanging by the horizon.
+    //
+    // This assertion existed and passed throughout the three phases in which quiescence was DEAD at
+    // every depth the app ships, because it ran at `maxDepth: 2` — `MAX_QDEPTH` is 6, the old code
+    // passed `ply` as the quiescence budget, and at depth 2 there were still 4 plies left. It was a
+    // test that could not fail. It now runs at a depth we actually ship as well.
     var hanging = P('4k3/8/8/8/3q4/8/3Q4/4K3 w - - 0 1');
     var hq = analyze(hanging, { maxDepth: 2, multiPV: 1 });
     expect(hq.lines[0].pvSAN[0] === 'Qxd4', 'the free queen is captured, got ' + hq.lines[0].pvSAN[0]);
+    var hqDeep = analyze(hanging, { maxDepth: 8, multiPV: 1 });
+    expect(hqDeep.lines[0].pvSAN[0] === 'Qxd4',
+      'and still captured at depth 8, which is the SHALLOWEST preset the app ships — the budget '
+      + 'must restart at each leaf, not count from the root, got ' + hqDeep.lines[0].pvSAN[0]);
+
+    // 7a. A mate score must be PROVABLE FROM ITS OWN PV.
+    //
+    // This is the assertion that catches the PLAUSIBLE WRONG FIX. Splitting quiescence's one
+    // counter in two and then leaving the mate term on the leaf-local half looks right, passes
+    // everything else here, and reports M2 as M1 for every mate whose delivering move is a capture
+    // — because those are found inside quiescence, where the leaf-local counter is near zero.
+    //
+    // M(n) means the (2n-1)th ply of the line is checkmate and no earlier ply is. Walk it.
+    var mates = [
+      ['7k/4R2p/1p2p2P/2pp1r2/8/P6K/1PP2p2/8 w - - 0 38', 'Re8+ Rf8 Rxf8#'],
+      ['2b3k1/1p3ppp/p1p5/2P1q3/1P5P/P5P1/5PB1/3R2K1 w - - 0 30', 'Rd8+ Qe8 Rxe8#']
+    ];
+    for (var mi = 0; mi < mates.length; mi++) {
+      var mpos = P(mates[mi][0]);
+      var mline = analyze(mpos, { maxDepth: 8, multiPV: 1 }).lines[0];
+      if (!mline || mline.score.kind !== 'mate') {
+        expect(false, mates[mi][1] + ': expected a mate score');
+        continue;
+      }
+      var want = Math.abs(mline.score.mate) * 2 - 1;
+      var okMate = (mline.pv || []).length >= want;
+      var mw = P(mates[mi][0]);
+      for (var mj = 0; okMate && mj < want; mj++) {
+        mw = E.makeMove(mw, mline.pv[mj]);
+        var st = E.status(mw);
+        if (mj < want - 1 && st === 'checkmate') okMate = false;   // shorter than claimed
+        if (mj === want - 1 && st !== 'checkmate') okMate = false;  // longer than claimed
+      }
+      expect(okMate, mates[mi][1] + ': M' + mline.score.mate
+        + ' is not provable from its own PV (' + (mline.pvSAN || []).slice(0, 4).join(' ')
+        + ') — a mate must be scored from the ROOT distance, not from quiescence`s own counter');
+    }
+
+    // 7b. The general form of that bug, and the one assertion that would have caught it on day one.
+    //
+    // A search whose quiescence is dead returns, for every line, exactly the STATIC evaluation of
+    // its own PV leaf — there is nothing between the last searched move and the number on screen.
+    // With quiescence alive, resolving the captures at the leaf must move at least some of those
+    // numbers. Asserted as "not all of them agree", which is robust: a single line may legitimately
+    // end quiet.
+    var qStart = analyze(P(E.START_FEN), { maxDepth: 6, multiPV: 8 });
+    var agree = 0;
+    for (var qi = 0; qi < qStart.lines.length; qi++) {
+      var walk = P(E.START_FEN);
+      var pvMoves = qStart.lines[qi].pv || [];
+      for (var qm = 0; qm < pvMoves.length; qm++) walk = E.makeMove(walk, pvMoves[qm]);
+      // The leaf's static score, White-relative, the same convention the displayed score uses.
+      var leafStatic = walk.sideToMove === E.WHITE ? EV.evaluate(walk) : -EV.evaluate(walk);
+      if (qStart.lines[qi].score.kind === 'cp' && qStart.lines[qi].score.cp === leafStatic) agree++;
+    }
+    expect(agree < qStart.lines.length,
+      'not every score is merely the static eval of its own PV leaf (' + agree + ' of '
+      + qStart.lines.length + ' agree) — when they ALL agree, quiescence has searched nothing and '
+      + 'the engine is evaluating in the middle of trades');
+
+    // 7c. The start position, as a sanity check a chess player would recognise.
+    //
+    // Membership and sign, never an exact centipawn: the point is that the engine plays chess, not
+    // that it agrees with a number someone once measured. Before the quiescence and king-shield
+    // fixes this read `Nc3 -0.0 / Nf3 -0.0 / e3 -0.1 / d4 -0.3`, with e4 absent entirely.
+    var opening = analyze(P(E.START_FEN), { maxDepth: 8, multiPV: 4 });
+    var firsts = opening.lines.map(function (l) { return (l.pvSAN || [])[0]; });
+    expect(firsts.indexOf('e4') >= 0 || firsts.indexOf('d4') >= 0,
+      'the top four first moves include e4 or d4, got ' + firsts.join(' '));
+    expect(opening.lines[0].score.kind === 'cp' && opening.lines[0].score.cp > 0,
+      'and White is not worse in the start position, got '
+      + formatScore(opening.lines[0].score));
 
     // 8. Progress callbacks arrive once per completed depth.
     var seen = [];

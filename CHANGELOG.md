@@ -60,6 +60,147 @@ Turbo's results lose 12 pt, symmetrically in both languages.
 
 Suite: **35,104 assertions across 79 suites**. `puzzle_core_mutation` 166 → **168 mutants, all
 killed**; `puzzle_screen_test` 459 → 470; `replay_puzzle_vm` 117 → 136.
+### 2026-08-25 (fixed) — The analysis engine never resolved a capture, and it fined 1.e4
+
+Client: *"Medyo mahina engine natin … No.1 engine move nya kasi Nc3 sa opening lagi. Wala naman
+ganun tira ibang engine."* **It is not weak.** Two bugs, both reproduced here to the centipawn — the
+screenshot's four lines and four numbers came back move for move from a clean `origin/main`.
+`web-demo/` updated.
+
+**Quiescence was disabled at every depth we ship.** `negamax` called `quiesce(pos, alpha, beta, ply)`
+and that fourth parameter was doing two incompatible jobs: mate-distance scoring wants the distance
+from the **root**, the `maxQDepth` budget wants a counter that **restarts at each leaf**. `maxQDepth`
+is 6 and every preset is depth 8/12/18/22/30 — so the budget was already spent on entry and
+quiescence returned its stand-pat **having examined not one capture**. The engine was evaluating
+positions in the middle of trades.
+
+Measured at depth 6: the search score equalled the static evaluation of its own PV leaf for **all 20
+root moves, diff 0**, with 11 of 20 lines ending on an unanswered capture. The client's third line
+displayed **−0.1** and genuinely stood at **+8.4** — `Rxh2` wins the queen. Because White moves on
+odd plies it was Black who pocketed the phantom material at even depths, which is exactly why every
+number on their screen read 0.0 or negative.
+
+The mate terms keep the **root** distance. Leaving them on the leaf-local counter is a fix that looks
+right, passes everything else in the suite, and reports a three-ply mate as **M1** — mates delivered
+by a capture are found inside quiescence. There is a test that walks a mate's own PV now.
+
+**The pawn shield fined exactly the two best first moves.** It applied to an uncastled king on e1,
+whose shield files are d/e/f — the files White must push. `1.e4` and `1.d4` paid **−18** each,
+`1.e3`/`1.d3` −10, and `1.Nc3`/`1.Nf3` **nothing**: statically `Nc3 64, e4 55, d4 53`. Gated on the
+side still holding castling rights, it is now `e4 61, d4 59, Nc3 52`. Gated on **rights** rather than
+the king's square for a reason worth keeping: rights are part of the Zobrist key, so the
+transposition table cannot return a score computed under a different evaluation for the same key. The
+**open-file** term stays ungated — it is the only thing still punishing a king left in the centre.
+
+**The result.** Start position at depth 8, before: `Nc3 −0.0, Nf3 −0.0, e3 −0.1, d4 −0.3`, no `e4`
+anywhere. After: `Nc3, d4, Nf3, e4`, all `+0.1`. The client's own line — `1.Nc3 d5 2.e3 Nf6 3.Nf3 d4`
+— used to answer **Bd3 +0.2** and now answers **exd4 +1.1**: it simply takes the free pawn, which it
+previously could not see. Corpus tactics **115 → 117/120**, floor raised **108 → 110**. And the
+depth-8 node count on the start position **fell from 670k to 247k** — an accurate leaf score is what
+makes alpha-beta work.
+
+**No preset, default or `EngineSettings` value changed.** The client asked for the engine to be
+defaulted to its strongest; the limiter is the wall-clock deadline rather than the depth cap, so that
+would have bought about one ply while costing battery and three to eight seconds of settling after
+every move. This is far better at the same budget.
+
+**And the honest half: the tests could not fail.** The suite's one quiescence assertion ran at
+`maxDepth: 2` — the *single* band in which quiescence still worked. `engine_strength_check` scored
+115/120 the whole time, because its node budget caps most corpus positions at depth 5-6, again below
+`maxQDepth`. `replay_engine_settings` stayed green too: it pins constants, and neither bug was a
+constant. Three green gates, all structurally blind.
+
+New `tools/qa/engine_quiescence_check.js` asserts the property directly — *no line may report its own
+leaf's stand-pat while a 200cp capture is standing there* — deliberately **above** `maxQDepth`, with
+that premise asserted so it cannot drift back into the blind band. Restoring the bug produces **9
+violations over 18 lines**, each naming the hanging piece. Plus the mate-provability test, a
+start-position sanity check stated as ranks and a sign rather than a pinned centipawn, and **14 new
+parity assertions covering the parameter list itself**, since the Swift cannot be compiled here.
+
+**Watch for:** Play vs Coach levels 3-5 search about a ply deeper at the same clock and will pick
+different moves; levels 1-2 are unchanged, their leaves already sat below `maxQDepth`. Not
+re-calibrated — the ladder was flat at the top for this very reason. Game Review's opening plies will
+reclassify, and `docs/analysis-board.md`'s "shallow classification is coarse" caveat **stays**: the
+review's 200 ms budget reaches depth 2-3, where quiescence already worked.
+
+Suite: **35,132 assertions across 80 suites**. `analysis-engine.selfTest` 68 → 74;
+`analysis-eval.selfTest` 47 → 53; `replay_engine_settings` 142 → 156.
+
+**Also corrected: the spec.** `docs/specs/BIYAHERONG-PORT-SPEC.md` refers to *"the embedded Stockfish
+actor already built for the Analysis Board"* in five places. **There is no Stockfish in this repo** —
+no `.cpp`, no xcframework, no NNUE, no dependency — and there never was; `PORTING_NOTES.md`,
+`LICENSE` and `THIRD-PARTY-NOTICES.md` each already said so while the spec did not. That is where the
+client's belief came from, and it was a reasonable one to reach.
+### 2026-08-25 (added) — Stockfish 17.1 is in the app, and the app is GPLv3
+
+Client: *"pwede stockfish gamitin nating engine?"* — pointing at `BYAHERONG-COACH-STOCKFISH`. That
+repository holds three files and **no Stockfish**: `main.py` shells out to a Linux binary installed
+by `apt` at `/usr/games/stockfish`. Nothing there could have run on a phone, and iOS forbids
+subprocesses outright. So Stockfish is now compiled **into** the app. `web-demo/` is deliberately
+**not** updated — see the last section. Full doc: `docs/stockfish.md`.
+
+**The licence changed, irrevocably.** Stockfish is GPLv3 and §5 covers the combined work, so
+`LICENSE` — "proprietary, all rights reserved" until today, with a note warning not to make this
+grant early — is now the GPL, and the source is published. That note existed for exactly this
+moment; it has been spent. Decision #2 in `PORTING_NOTES.md` was taken at the start of the port and
+is now carried out rather than pending.
+
+**Not the usual embedding.** Everyone else keeps `UCIEngine::loop()` and `dup2()`s the process's
+stdin and stdout onto pipes. Since 16.1 Stockfish has had a public `Engine` class — `set_position`,
+`go`, `stop`, `set_on_update_full` — delivering depth, score, nodes and PV as struct fields. Using it
+directly means no text parsing, no reader thread, no custom `streambuf`, and no seizing the whole
+app's standard output. The entire C++ surface of this app is now one ~330-line file with one lock,
+behind a **pure-C** header so `.interoperabilityMode(.Cxx)` never enters the package.
+
+**Every judgement call is in Swift, because nothing here can compile C++.** The C layer only
+marshals. The score sign flip, `mate 0`, which of two reports for a rank wins, when an iteration
+counts as finished, where a PV stops — all in `StockfishBridge.swift`, mirrored by
+`tools/qa/stockfish_bridge_twin.js` (40 assertions) and replayed in both languages by
+`tools/qa/replay_stockfish.js` (71). `tools/qa/stockfish_vendor_check.js` (26) covers the vendored
+tree. `swift_lint`, `swift_symbol_check` and `swift_enum_payload_check` did not scan `Engine/` and
+now do — 135 files → 137, 157 types → 159.
+
+**Four things that would have shipped looking fine:**
+
+- **`sf/nnue/network.cpp:267` calls `exit(EXIT_FAILURE)`** when the net it wants is not the net that
+  loaded. In a CLI that is reasonable; in an iOS app the process vanishes with no exception and
+  nothing in the crash log that reads like a crash — and since `Engine::go()` is what calls
+  `verify_networks()`, the trigger is the user's *first analysis*, not launch. Now: the files are
+  opened before Stockfish sees them, and an `on_verify_networks` listener throws so the unwind beats
+  the `exit()`. It is an error code at startup instead.
+- **Silent scalar NNUE.** SwiftPM never runs Stockfish's Makefile and Stockfish auto-detects none of
+  its switches — `simd.h:34` keys off `USE_NEON`, never `__ARM_NEON`. Without them the app compiles,
+  links, ships, plays correct chess and evaluates several times slower with nothing reporting a
+  problem. `sfconfig.h` sets them from the preprocessor's own architecture macros; it has to be C,
+  because SwiftPM's `.define(.when(platforms:))` has no architecture filter and `USE_NEON` on x86_64
+  fails the build.
+- **17.1, not 18, and the reason is GitHub.** SF18's big net is 103.9 MiB and GitHub refuses anything
+  over 100 MiB; 17.1's is 71.4 MiB. Git LFS was rejected — a 1 GB/month free quota against a 104 MB
+  file per CI build, and a `git lfs pull` CI can silently skip, leaving a 130-byte pointer where the
+  network should be. The gate asserts the limit so the next upgrade finds out here, not at push time.
+  (This was found the hard way: SF18 was vendored and downloaded first.)
+- **No `-march=armv8.2-a+dotprod`**, so no `.unsafeFlags` anywhere. Dotprod is worth 10-20%; NEON
+  versus scalar is worth several times that. Take the safe multiple.
+
+**No preset, default or `EngineSettings` value changed.** Balanced is still 1.2 s / depth 12 / 3
+lines. What changed is what a depth means — `LocalEngine` reached ~5 in that budget. The deadline is
+now also handed down as `movetime`, because `shouldCancel` is only polled when Stockfish reports and
+at depth 20 that can be seconds apart. Threads 2, hash 32 MiB: a phone throttles, and the net is
+already ~71 MB resident.
+
+**`LocalEngine` stays** — as the fallback when the nets fail to load (the board keeps working instead
+of showing an empty panel), as the web demo's engine, and as the engine every golden vector still
+runs against. The Parity Core is untouched and still Foundation-only.
+
+**`web-demo/` is NOT mirrored, a first for this repo.** A 71 MB network and a WASM engine cannot be
+carried by a preview that opens from `file://` with no install step. The demo keeps `LocalEngine` —
+a real code path, not a stub, since it is also the app's fallback. Consequence: the JS twin has no
+demo behind it, so it lives at `tools/qa/stockfish_bridge_twin.js`; `web_shell_check.js` §2 caught it
+sitting in `web-demo/js/` and was right to.
+
+**App size: ~+75 MiB** (two NNUE files). Nothing here has been compiled or run — no Swift, no C++
+toolchain, no Xcode on this checkout. The gates cover what can be covered without one; `swift build`
+on a Mac is still the first real test.
 
 ### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
 
