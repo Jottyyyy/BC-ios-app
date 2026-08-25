@@ -9,6 +9,47 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (changed) — The depth ceilings were throttling Stockfish, and the panel now names the engine
+
+Two follow-ups to embedding Stockfish, both found by asking a question the previous change did not:
+**is the default actually the strongest thing we can cheaply give?** It was not. `web-demo/` updated.
+
+**The ceilings had quietly become the binding limit.** They were 8/12/18/22/30, chosen against
+`LocalEngine` — which reached a mean depth of about 5 in 1.2 seconds, so a ceiling of 12 was never
+what stopped a search. `docs/engine-settings.md` could say, truthfully, *"only the quiet endgame ever
+reaches its ceiling. Everywhere else the clock runs out first, which is the whole design."* Stockfish
+reaches 12 in a fraction of that budget, which **inverted the design**: the engine stopped early with
+time left on its own clock.
+
+Now 16/22/26/28/30. **No clock, line count or review budget changed**, and that asymmetry is the
+whole reason this was safe: `thinkMs` buys depth with battery, heat and the delay before the board
+settles, while `maxDepth` costs nothing at all until it binds. Every preset searches deeper at the
+same power draw and the same responsiveness. Balanced is still 1.2 s / 3 lines / 200 ms per reviewed
+position.
+
+`Maximum` stops at 28 rather than 30 because the suite already asserted *"infinite searches deeper
+than maximum"* — the first draft made them equal and the self-test said so. A preset list whose
+strongest two share a ceiling makes the top of the ladder a lie.
+
+**The Engine panel now names the engine.** The fallback to `LocalEngine` is silent by design — if the
+NNUE resources fail to load, every screen keeps working — which is right for the user and useless for
+anyone trying to find out whether a TestFlight build is really running Stockfish. The only other
+symptom is a depth chip that stops climbing, which nobody would read as a resource failure. The panel
+shows `Stockfish 17.1`, or `Built-in engine` plus a line saying why. Not routed through
+`EngineSettings.panelModel`: that is Parity Core, which must stay engine-agnostic, and this is a
+runtime fact rather than a setting. The web demo carries the unavailable string as a literal and
+`replay_stockfish.js` pins the two together.
+
+**One gate was transcribing instead of extracting.** `replay_engine_settings.js` rebuilt the
+canonical default document as `${version}|${preset}|0|3|12|1200` — a hand-typed third copy of the
+Balanced row. Changing the ceiling in both languages still failed there, blaming the Swift for a
+number the Swift no longer contained. It now reads the default row out of the preset table it
+already parses.
+
+Gates: js_goldens 35,260 across 82 suites; `engine_budget_check` worst chunk 103 ms → 114 ms against
+a 320 ms ceiling (expected — the demo's `LocalEngine` now searches to the clock in quiet endgames
+where it used to stop at the ceiling). Still nothing compiled here.
+
 ### 2026-08-25 (changed) — Puzzle hub: the five dead Share buttons are gone
 
 Client, with a screenshot of the Puzzle Turbo lobby: *"Iremove yung share button."* Correct — and it

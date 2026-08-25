@@ -158,6 +158,30 @@ public enum StockfishBridge {
         store.count >= min(multiPV, max(legalMoves, 1))
     }
 
+    // MARK: - What the panel calls the engine
+
+    /// The engine's name for the Engine panel.
+    ///
+    /// This exists because the fallback is **silent**. If the NNUE resources fail to load,
+    /// `AnalysisVM` quietly uses `LocalEngine` and every screen still works — which is right for the
+    /// user and terrible for anyone trying to find out whether a TestFlight build is actually
+    /// running Stockfish. Without a name on screen the only symptom is a depth chip that stops
+    /// climbing, which nobody would recognise as a resource failure.
+    ///
+    /// Deliberately not routed through `EngineSettings.panelModel`: that lives in the Parity Core,
+    /// which `CLAUDE.md` requires to stay engine-agnostic. The panel is handed these strings.
+    public static func engineLabel(available: Bool) -> String {
+        available ? "Stockfish 17.1" : "Built-in engine"
+    }
+
+    /// The line under the name when Stockfish is NOT the engine, or `nil` when it is.
+    ///
+    /// Phrased as a statement of fact rather than an apology: the app is not broken, it is weaker,
+    /// and the person who needs to act on it is a developer reading a build.
+    public static func engineNote(available: Bool) -> String? {
+        available ? nil : "Stockfish could not load — analysis is using the built-in engine."
+    }
+
     // MARK: - Limits
 
     /// What `SearchLimits` means to a UCI engine.

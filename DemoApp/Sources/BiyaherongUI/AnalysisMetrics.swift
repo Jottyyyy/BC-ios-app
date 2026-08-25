@@ -1337,17 +1337,18 @@ enum AnalysisTiming {
 }
 
 /// Default search limits for the live board — the **Balanced** preset, for an install where nobody
-/// has opened ☰ > Engine. `maxDepth` is a ceiling; the deadline is what usually binds, and only a
-/// nearly-empty board ever reaches the ceiling at all.
+/// has opened ☰ > Engine. `maxDepth` is a ceiling; the deadline is what should bind.
 ///
-/// The ceiling used to be 6, which the search began hitting in three of the six benchmark positions
-/// once it grew a transposition table. A ceiling the engine reaches is a ceiling doing the
-/// budgeting, which is exactly the deadline's job.
+/// The ceiling has been raised twice for the same reason, and the reason is worth keeping. It was 6,
+/// which the search began hitting in three of six benchmark positions once it grew a transposition
+/// table. It was then 12, which `LocalEngine` never reached in 1.2 s but Stockfish reaches in a
+/// fraction of it. **A ceiling the engine reaches is a ceiling doing the budgeting, which is exactly
+/// the deadline's job** — and unlike the deadline, raising it costs no battery.
 ///
 /// These are asserted against `EngineSettings.resolve(EngineSettings.defaults())` in
 /// `AnalysisMetricsCheck`, so the two files cannot drift apart.
 enum AnalysisEngineLimits {
-    static let maxDepth = 12
+    static let maxDepth = 22
     static let multiPV = 3
 }
 

@@ -718,7 +718,7 @@ var BiyaAnalysisMetrics = (function () {
    * grew a transposition table. A ceiling the engine reaches is a ceiling that is doing the
    * budgeting, which is exactly what the deadline is for.
    */
-  var ENGINE_LIMITS = { maxDepth: 12, multiPV: 3 };
+  var ENGINE_LIMITS = { maxDepth: 22, multiPV: 3 };
 
   // ---- The Engine Settings panel ---------------------------------------------
   // INVENTED, all of it: nothing in the RN source has this screen. Laid out like the Autoplay Speed
@@ -1124,7 +1124,10 @@ var BiyaAnalysisMetrics = (function () {
     expect(resultLabel('*') === 'No Result (*)', 'the star renders as "No Result (*)"');
     expect(resultLabel('1-0') === '1-0', 'the others render as themselves');
     expect(ENGINE_LIMITS.multiPV === 3, 'the board shows three engine lines by default');
-    expect(ENGINE_LIMITS.maxDepth === 12, 'depth 12 is the default ceiling the deadline rarely reaches');
+    expect(ENGINE_LIMITS.maxDepth === 22,
+      'depth 22 is the default ceiling — high enough that the DEADLINE is what stops the search, '
+      + 'which is the whole design. It was 12, which LocalEngine never reached in 1.2s and Stockfish '
+      + 'reaches in a fraction of it.');
 
     // 11b. The defaults above ARE the Balanced preset. Two files carrying the same four numbers is
     // exactly how they drift, so the agreement is asserted rather than assumed. Resolved lazily:

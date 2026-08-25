@@ -494,6 +494,8 @@ struct AnalysisBoardScreen: View {
             // something you compare, and the engine re-runs behind the sheet so the effect is
             // visible in the panel's own summary lines.
             AnalysisEngineSettingsSheet(model: vm.enginePanel,
+                                        engineName: vm.engineName,
+                                        engineNote: vm.engineNote,
                                         onPickPreset: { vm.selectEnginePreset($0) },
                                         onSetControl: { vm.setEngineControl($0, $1) },
                                         onToggleAdvanced: { vm.toggleEngineAdvanced() },

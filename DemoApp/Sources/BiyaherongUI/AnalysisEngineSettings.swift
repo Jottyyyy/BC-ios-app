@@ -1,5 +1,6 @@
 import SwiftUI
 import BiyaherongCoachCore
+import StockfishEngine
 
 // MARK: - ⚙️ Engine (☰ > Engine)
 //
@@ -17,6 +18,11 @@ import BiyaherongCoachCore
 
 struct AnalysisEngineSettingsSheet: View {
     let model: EngineSettings.PanelModel
+    /// Which engine is actually loaded. Passed in rather than read from `StockfishRuntime` here,
+    /// because this view decides nothing — and because the Parity Core, which owns `model`, is
+    /// required to stay engine-agnostic and so cannot carry it.
+    let engineName: String
+    let engineNote: String?
     let onPickPreset: (String) -> Void
     let onSetControl: (String, Int) -> Void
     let onToggleAdvanced: () -> Void
@@ -25,6 +31,16 @@ struct AnalysisEngineSettingsSheet: View {
     var body: some View {
         AnalysisBottomSheet(title: model.title, onClose: onClose) {
             VStack(alignment: .leading, spacing: AnalysisEngineStyle.rowGap) {
+                Text(engineName)
+                    .font(Theme.nunito(AnalysisEngineStyle.advancedLabelSize, .bold))
+                    .foregroundStyle(AnalysisPalette.textSecondaryAlt)
+                if let engineNote {
+                    Text(engineNote)
+                        .font(Theme.nunito(AnalysisEngineStyle.warningSize))
+                        .foregroundStyle(AnalysisPalette.gold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 ForEach(model.presets) { row in
                     presetRow(row)
                 }

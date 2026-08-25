@@ -136,6 +136,27 @@ expect(/StockfishBridge\.isComplete\(store:/.test(engine),
   'the engine publishes an iteration only when it completed — a half-reported depth is a snapshot '
   + 'that never existed');
 
+// -- 8b. The engine badge ---------------------------------------------------------------------------
+
+expect(/available \? "Stockfish 17\.1" : "Built-in engine"/.test(bridge),
+  'engineLabel names the engine when it loaded and says "Built-in engine" when it did not');
+expect(/engineNote\(available: Bool\) -> String\? \{\s*\n\s*available \? nil :/.test(bridge),
+  'engineNote is nil when Stockfish IS the engine — a note shown always is a note nobody reads');
+
+// The web demo has no Stockfish and never will, so it carries the unavailable string as a literal.
+// Pinned here rather than trusted: two copies of a user-visible string in two languages is exactly
+// how one of them ends up saying something slightly different for a year.
+const demoPanel = read(path.join(ROOT, 'web-demo', 'js', 'analysis.js'));
+const demoLabel = (demoPanel.match(/el\('div', 'an-eng-engine', '([^']+)'\)/) || [])[1];
+expect(demoLabel === JS.engineLabel(false),
+  `web-demo/js/analysis.js shows "${demoLabel}", the twin's unavailable label is `
+  + `"${JS.engineLabel(false)}"`);
+
+const vm = read(path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI', 'AnalysisVM.swift'));
+expect(/StockfishBridge\.engineLabel\(available: StockfishRuntime\.isStarted\)/.test(vm),
+  'the VM derives the name from whether the runtime actually STARTED, not from whether the code '
+  + 'was compiled in — the whole point is to catch a build where the nets did not load');
+
 // -- 9. No UI, and no second network ---------------------------------------------------------------
 
 for (const file of [bridge, engine]) {

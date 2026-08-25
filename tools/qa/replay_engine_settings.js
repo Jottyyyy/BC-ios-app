@@ -134,9 +134,24 @@ function run() {
     eq(ES.CONTROL_LINES, swStr(swSettings, 'controlLines'), 'the Lines control key');
     eq(ES.CONTROL_DEPTH, swStr(swSettings, 'controlDepth'), 'the Max depth control key');
     eq(ES.CONTROL_THINK, swStr(swSettings, 'controlThink'), 'the Think time control key');
-    eq(ES.encode(ES.defaults()),
-      `${swStr(swSettings, 'encodingVersion')}|${swStr(swSettings, 'defaultPreset')}|0|3|12|1200`,
-      'the canonical default document, rebuilt from the Swift constants');
+    // Rebuilt entirely from what the Swift SAYS, including the default preset's own numbers. This
+    // line used to end `|0|3|12|1200` — a hand-typed third copy of the Balanced row, which meant
+    // raising a ceiling in both languages still failed here, with a message blaming the Swift for a
+    // number the Swift no longer contained. Extract, don't transcribe: the preset table is parsed
+    // twenty lines above, so read the default row out of it.
+    {
+      const swDefaultID = swStr(swSettings, 'defaultPreset');
+      const swDefault = [...code(swSettings).matchAll(
+        /Preset\(id:\s*"([a-z]+)",\s*label:\s*"[^"]+",\s*thinkMs:\s*(\d+),\s*maxDepth:\s*(\d+),\s*multiPV:\s*(\d+),/g)]
+        .find((r) => r[1] === swDefaultID);
+      expect(!!swDefault, `the Swift preset table has no row for the default preset "${swDefaultID}"`);
+      if (swDefault) {
+        const [, id, thinkMs, maxDepth, multiPV] = swDefault;
+        eq(ES.encode(ES.defaults()),
+          `${swStr(swSettings, 'encodingVersion')}|${id}|0|${multiPV}|${maxDepth}|${thinkMs}`,
+          'the canonical default document, rebuilt from the Swift constants');
+      }
+    }
     eq(2, swNum(swSettings, 'heatWarningMin'), 'the heat level at which the warning appears');
   }
 

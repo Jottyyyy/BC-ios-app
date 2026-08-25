@@ -107,6 +107,23 @@
     };
   }
 
+  /* -- What the panel calls the engine ---------------------------------------------------------- */
+
+  /* The fallback is SILENT: if the nets fail to load the app quietly uses LocalEngine and every
+     screen still works. Right for the user, terrible for anyone trying to find out whether a
+     TestFlight build is really running Stockfish — the only other symptom is a depth chip that
+     stops climbing, which nobody would read as a resource failure.
+
+     Not routed through EngineSettings.panelModel: that lives in the Parity Core, which CLAUDE.md
+     requires to stay engine-agnostic. The panel is handed these strings. */
+  function engineLabel(available) {
+    return available ? 'Stockfish 17.1' : 'Built-in engine';
+  }
+
+  function engineNote(available) {
+    return available ? null : 'Stockfish could not load — analysis is using the built-in engine.';
+  }
+
   /* -- Limits ---------------------------------------------------------------------------------- */
 
   function resolve(limits, movetimeMs) {
@@ -211,7 +228,17 @@
     expect(bsnap.lines[0].score.value === -55,
       'a snapshot taken with Black to move reports White-relative');
 
-    /* 12. Limits. */
+    /* 12. The engine name the panel shows. The web demo carries the unavailable string too, and
+       replay_stockfish.js pins the two together. */
+    expect(engineLabel(true) === 'Stockfish 17.1', 'the name when Stockfish loaded');
+    expect(engineLabel(false) === 'Built-in engine', 'the name when it did not');
+    expect(engineNote(true) === null, 'no note to show when the engine is the one we shipped');
+    expect(typeof engineNote(false) === 'string' && engineNote(false).length > 0,
+      'and a note that says so when it is not');
+    expect(engineLabel(true) !== engineLabel(false),
+      'the two names must differ, or the badge tells you nothing');
+
+    /* 13. Limits. */
     var r = resolve({ maxDepth: 300, maxNodes: 0, multiPV: 99 }, 1200);
     expect(r.depth === 245, 'depth is clamped to MAX_PLY - 1');
     expect(r.multiPV === 8, 'multiPV is clamped to the same 8 the C layer clamps to');
@@ -236,6 +263,8 @@
 
   var API = {
     PV_LIMIT: PV_LIMIT,
+    engineLabel: engineLabel,
+    engineNote: engineNote,
     whiteRelative: whiteRelative,
     parsePV: parsePV,
     merge: merge,

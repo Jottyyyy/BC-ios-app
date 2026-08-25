@@ -783,7 +783,7 @@ h.check(bal.thinkMs == 1200, "the default budget is still 1200ms, got \(bal.thin
 h.check(bal.multiPV == 3, "the default is still three lines, got \(bal.multiPV)")
 h.check(bal.reviewMs == 200, "the default review budget is still 200ms, got \(bal.reviewMs)")
 h.check(bal.infinite == false, "and the default is not an unbounded search")
-h.check(bal.searchLimits.maxDepth == 12 && bal.searchLimits.multiPV == 3,
+h.check(bal.searchLimits.maxDepth == 22 && bal.searchLimits.multiPV == 3,
         "the resolved SearchLimits carry the preset through")
 h.check(bal.reviewLimits.multiPV == 1, "a review always runs one line")
 
@@ -813,7 +813,7 @@ h.check(tiny.multiPV == EngineSettings.linesMin, "lines clamp to the minimum")
 h.check(tiny.maxDepth == EngineSettings.depthMin, "depth clamps to the floor")
 h.check(tiny.thinkMs == EngineSettings.thinkMin, "a too-small think time clamps UP, not to zero")
 h.check(clamped(EngineSettings.Value(preset: "balanced", custom: false, multiPV: 3,
-                                     maxDepth: 12, thinkMs: 0)).thinkMs == EngineSettings.thinkInfinite,
+                                     maxDepth: 22, thinkMs: 0)).thinkMs == EngineSettings.thinkInfinite,
         "zero survives clamping — it means infinite")
 
 // Custom overrides the preset, and only when it is switched on.
@@ -831,7 +831,7 @@ h.check(ro.multiPV == 2 && ro.thinkMs == 500,
 h.check(EngineSettings.timeText(1200) == "1.2s", "timeText 1.2s, got \(EngineSettings.timeText(1200))")
 h.check(EngineSettings.timeText(3000) == "3s", "a whole number of seconds drops the .0")
 h.check(EngineSettings.timeText(EngineSettings.thinkInfinite) == "∞", "infinite shows as the symbol")
-h.check(EngineSettings.presetSummary("balanced") == "1.2s · depth 12 · 3 lines",
+h.check(EngineSettings.presetSummary("balanced") == "1.2s · depth 22 · 3 lines",
         "the Balanced summary line, got \(EngineSettings.presetSummary("balanced"))")
 h.check(EngineSettings.presetSummary("infinite") == "∞ · depth 30 · 4 lines",
         "the Infinite summary line, got \(EngineSettings.presetSummary("infinite"))")
@@ -875,12 +875,12 @@ h.check(infPanel.controls[2].valueText == "∞", "and reads as the symbol")
 
 // The two edits the panel can make.
 h.check(EngineSettings.encode(EngineSettings.selectPreset(EngineSettings.defaults(), "strong"))
-        == "v1|strong|0|3|18|3000",
+        == "v1|strong|0|3|26|3000",
         "picking a preset seeds the Advanced fields with its numbers")
 let edited = EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.controlLines, 5)
 h.check(edited.custom, "editing a control switches Advanced on")
 h.check(edited.multiPV == 5, "and takes the new value")
-h.check(edited.maxDepth == 12 && edited.thinkMs == 1200,
+h.check(edited.maxDepth == 22 && edited.thinkMs == 1200,
         "while the other two keep whatever was in effect")
 h.check(EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.controlThink,
                                     EngineSettings.thinkSliderMin).thinkMs == EngineSettings.thinkInfinite,
@@ -889,7 +889,7 @@ h.check(EngineSettings.applyControl(EngineSettings.defaults(), EngineSettings.co
         .maxDepth == EngineSettings.depthMax, "a control value is clamped like any other")
 
 // The encoding round-trips and survives everything it should.
-h.check(EngineSettings.encode(EngineSettings.defaults()) == "v1|balanced|0|3|12|1200",
+h.check(EngineSettings.encode(EngineSettings.defaults()) == "v1|balanced|0|3|22|1200",
         "the canonical default document, got \(EngineSettings.encode(EngineSettings.defaults()))")
 for v in [EngineSettings.defaults(), custom,
           EngineSettings.Value(preset: "infinite", custom: false, multiPV: 4,
@@ -897,7 +897,7 @@ for v in [EngineSettings.defaults(), custom,
     h.check(EngineSettings.encode(EngineSettings.decode(EngineSettings.encode(v)))
             == EngineSettings.encode(v), "round trip: \(EngineSettings.encode(v))")
 }
-for bad in ["", "garbage", "v9|balanced|0|3|12|1200", "v1|balanced|0|3"] {
+for bad in ["", "garbage", "v9|balanced|0|3|22|1200", "v1|balanced|0|3"] {
     h.check(EngineSettings.encode(EngineSettings.decode(bad))
             == EngineSettings.encode(EngineSettings.defaults()),
             "\"\(bad)\" decodes to the defaults rather than half-reading it")
@@ -919,7 +919,7 @@ h.check(EngineSettings.load(mem).preset == EngineSettings.defaultPreset,
         "an empty store loads the defaults")
 EngineSettings.save(EngineSettings.selectPreset(EngineSettings.defaults(), "strong"), mem)
 h.check(EngineSettings.load(mem).preset == "strong", "what was saved is what loads")
-h.check(mem.values[EngineSettings.storageKey] == "v1|strong|0|3|18|3000",
+h.check(mem.values[EngineSettings.storageKey] == "v1|strong|0|3|26|3000",
         "stored under the versioned key in the canonical shape")
 
 

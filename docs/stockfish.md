@@ -103,9 +103,10 @@ that. Only the safe multiple is taken.
 ## Settings, and what the presets now mean
 
 Nothing in `EngineSettings` changed. The preset table (`docs/engine-settings.md`) still owns think
-time, depth ceiling, line count and review budget, and Balanced is still 1.2 s / depth 12 / 3 lines.
-What changed is what a depth means: `LocalEngine` reached ~5 in that budget, Stockfish reaches
-depth 20 and beyond.
+time, line count and review budget, and Balanced is still 1.2 s / 3 lines. The DEPTH CEILINGS were
+raised on 2026-08-26 and the clocks were not — see `docs/engine-settings.md`. They had been chosen
+against `LocalEngine`, which never reached them; Stockfish did, in a fraction of the budget, so the
+ceiling had quietly become the binding limit instead of the clock.
 
 The deadline is handed to Stockfish as `movetime` **as well as** being polled through
 `shouldCancel`. `AnalysisEngine`'s limits are deliberately depth and nodes only, so that a result
@@ -117,6 +118,22 @@ cancel token stays the only clock.
 Threads are fixed at 2 and the hash at 32 MiB. A phone will hand out efficiency cores and then
 thermally throttle, and the big net is already ~71 MB resident — iOS terminates a foreground app
 that grows without the user seeing why.
+
+## How to tell which engine is actually running
+
+The Engine panel names it: **Stockfish 17.1**, or **Built-in engine** with a line underneath saying
+Stockfish could not load.
+
+That line exists because the fallback below is *silent*. If the NNUE resources ever go missing the
+Analysis Board keeps working, the presets keep meaning what they say, and nothing anywhere reports a
+problem — the only other symptom is a depth chip that stops climbing, which reads as "the engine is
+a bit weak" rather than "a resource is missing from the bundle". On a TestFlight build handed to
+someone else, that difference is the whole diagnosis.
+
+The strings come from `StockfishBridge.engineLabel(available:)`, keyed on
+`StockfishRuntime.isStarted` — whether the engine really **started**, not whether it was compiled in.
+They are deliberately outside `EngineSettings.panelModel`: that lives in the Parity Core, which has
+to stay engine-agnostic, and this is a runtime fact rather than a setting.
 
 ## What LocalEngine is still for
 
