@@ -281,6 +281,56 @@ function run() {
     }
   }
 
+  // ── 9. No puzzle screen declares a share button, and none declares a DEAD button ────────
+  //
+  // The five share buttons were `Button { } label:` and `overlayButton(…, fill) { }` — real
+  // chrome wired to an empty closure. They rendered, they pressed, and they did nothing,
+  // through three phases and 35,000 assertions, because nothing anywhere asserts what a button
+  // DOES. The client found them; they are removed rather than implemented.
+  //
+  // This lives here and NOT in `replay_puzzle_core.js` for one concrete reason: the mutation
+  // harness's RUN_ALL does not include that file, so a Swift mutant re-adding a share button
+  // would report SURVIVED and the rule would be a gate on trust. This file is in RUN_ALL.
+  //
+  // The second rule is the GENERAL one, and it is the one that would have caught all five in
+  // the first place.
+  {
+    const FILES = {
+      'PuzzleStreakScreens.swift': streak,
+      'PuzzleTurboScreens.swift': turbo,
+      'PuzzleDailyScreens.swift': daily,
+      'PuzzleThematicScreens.swift': thematic,
+      'PuzzlePlayScreens.swift': play,
+      'PuzzleSolverParts.swift': parts,
+    };
+    for (const [name, raw] of Object.entries(FILES)) {
+      const src = code(raw);
+
+      // Scoped to REFERENCES, never to the word. `SoundManager.shared.play(…)` is in
+      // PuzzleTurboScreens, and four of these files use "share"/"shares" in prose — a rule
+      // spelled `/[Ss]hare/` fails on all of them on the day it is written.
+      expect(!/PuzzleStrings\.\w*[Ss]hare/.test(src),
+        `${name} draws no share copy — the hub's five share buttons are gone, and Play Home `
+        + 'never had one in Swift');
+      expect(!/\.share(Fill|Radius|PaddingV|PaddingH|Size|MarginBottom)\b/.test(src),
+        `${name} reads no share metric either — those blocks went with the buttons`);
+
+      // A trailing closure that is EMPTY is dead UI: it renders and presses and does nothing.
+      //
+      // Two shapes, and the anchoring is the whole difference. `Button { } label:` is followed
+      // by ` {` and the label body, so it must match ANYWHERE in the line; `overlayButton(…,
+      // fill) { }` ends the line, so that one anchors at `$`. The first draft of this rule put
+      // `$` after both and therefore matched nothing at all — it read as a clean sweep on a
+      // file that still had the buttons in it, and the mutation harness is what said so.
+      const dead = [...src.matchAll(/^.*(?:Button\s*\{\s*\}\s*label:|\)\s*\{\s*\}\s*$)/gm)]
+        .map(m => m[0].trim());
+      eq(dead.join(' | '), '',
+        `${name} declares no button wired to an empty closure — that is exactly what the five `
+        + 'share buttons were, and it is invisible on screen');
+    }
+    expect(Object.keys(FILES).length >= 6, 'and six screen files were swept');
+  }
+
   return finish();
 }
 

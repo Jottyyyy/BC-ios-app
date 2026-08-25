@@ -95,8 +95,6 @@ var BiyaPuzzleStreak = (function () {
     set('--pzk-empty-fs', H.emptySize + 'px');
     set('--pzk-bot-ph', H.bottomPaddingH + 'px'); set('--pzk-bot-pb', H.bottomPaddingBottom + 'px');
     set('--pzk-bot-pt', H.bottomPaddingTop + 'px'); set('--pzk-bot-gap', H.bottomGap + 'px');
-    set('--pzk-share-fill', H.shareFill); set('--pzk-share-r', H.shareRadius + 'px');
-    set('--pzk-share-pv', H.sharePaddingV + 'px'); set('--pzk-share-fs', H.shareSize + 'px');
     set('--pzk-start-fill', H.startFill); set('--pzk-start-r', H.startRadius + 'px');
     set('--pzk-start-pv', H.startPaddingV + 'px'); set('--pzk-start-fs', H.startSize + 'px');
     // solver
@@ -211,11 +209,6 @@ var BiyaPuzzleStreak = (function () {
     root.appendChild(list);
 
     var bottom = el('div', 'pzk-bottom');
-    var share = el('button', 'pzk-share', T.streakShare);
-    share.onclick = function () {
-      shareText(T.streakShareText(st.streak.currentStreak, st.streak.bestStreak));
-    };
-    bottom.appendChild(share);
     var start = el('button', 'pzk-start', live ? T.streakResumeStart : T.streakStart);
     start.onclick = function () {
       if (!live) { if (onStart) onStart(); return; }
@@ -250,12 +243,6 @@ var BiyaPuzzleStreak = (function () {
     box.appendChild(row);
     scrim.appendChild(box);
     root.appendChild(scrim);
-  }
-
-  function shareText(text) {
-    if (typeof navigator === 'undefined') return;
-    if (navigator.share) navigator.share({ text: text }).catch(function () {});
-    else if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () {});
   }
 
   // ---- Solver (Part 13.3) -----------------------------------------------------------------
@@ -404,9 +391,6 @@ var BiyaPuzzleStreak = (function () {
     }
     function btn(cls, label, fn) { var b = el('button', cls, label); b.onclick = fn; return b; }
     box.appendChild(btn('pzks-btn pzks-btn-gold', T.streakShowSolution, showSolutionStrip));
-    box.appendChild(btn('pzks-btn pzks-btn-share', T.streakShareResult, function () {
-      shareText(T.streakShareText(finalStreak, lastResult.best));
-    }));
     box.appendChild(btn('pzks-btn pzks-again', T.streakPlayAgain, function () {
       scrim.remove(); ui.overlay = null; serveNext(false); paint();
     }));
@@ -436,9 +420,6 @@ var BiyaPuzzleStreak = (function () {
     function btn(cls, label, fn) { var b = el('button', cls, label); b.onclick = fn; return b; }
     row.appendChild(btn('pzks-strip-btn pzks-strip-menu', T.streakStripMenu, function () {
       leave(); if (ui.onExit) ui.onExit();
-    }));
-    row.appendChild(btn('pzks-strip-btn pzks-strip-share', T.streakStripShare, function () {
-      shareText(T.streakShareText(finalStreak, lastResult.best));
     }));
     row.appendChild(btn('pzks-strip-btn pzks-strip-again', T.streakStripPlayAgain, function () {
       strip.remove();

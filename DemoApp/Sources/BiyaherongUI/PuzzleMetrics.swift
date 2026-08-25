@@ -36,6 +36,13 @@ public enum PuzzlePalette {
     public static let correct = Theme.c(0x43D97C)
     public static let wrong = Theme.c(0xFF6B6B)
     public static let engineEval = Theme.c(0x90CAF9)
+    /// **No Swift screen reads this any more, and it still may not be deleted.**
+    ///
+    /// It painted the five puzzle-hub share buttons; those were removed at the client's request
+    /// (they were `Button { }` — chrome wired to an empty closure). Its JS twin is still live:
+    /// `PLAY_HOME.shareFill` → `--pzp-share-fill` → `.pzp-share`, the one real share button in the
+    /// hub. `replay_puzzle_core.js`'s palette loop asserts this declaration by name, so tidying it
+    /// away reds the gate — and Swift's own Play Home never had a share button to read it.
     public static let shareBlue = Theme.c(0x1E88E5)
 
     /// Mode accents. Part 9.2 flags that the hub's own card colours for Thematic, Turbo and Streak
@@ -648,10 +655,6 @@ public enum PuzzleStreakHome {
     public static let bottomPaddingBottom: CGFloat = 10
     public static let bottomPaddingTop: CGFloat = 6
     public static let bottomGap: CGFloat = 8
-    public static let shareFill = PuzzlePalette.shareBlue
-    public static let shareRadius: CGFloat = 14
-    public static let sharePaddingV: CGFloat = 11
-    public static let shareSize: CGFloat = 14
     public static let startFill = PuzzlePalette.streakOrange
     public static let startRadius: CGFloat = 14
     public static let startPaddingV: CGFloat = 14
@@ -821,10 +824,6 @@ public enum PuzzleTurboHome {
     public static let bottomPaddingBottom: CGFloat = 10
     public static let bottomPaddingTop: CGFloat = 6
     public static let bottomGap: CGFloat = 8
-    public static let shareFill = PuzzlePalette.shareBlue
-    public static let shareRadius: CGFloat = 14
-    public static let sharePaddingV: CGFloat = 11
-    public static let shareSize: CGFloat = 14
     /// No fill here on purpose: the source sets the start button's colour inline from the selected
     /// mode, which is why the extraction shows no `backgroundColor` on it.
     public static let startRadius: CGFloat = 14
@@ -893,12 +892,6 @@ public enum PuzzleTurboRun {
     public static let finishedStatsGap: CGFloat = 8
     public static let finishedStatsMarginBottom: CGFloat = 24
     public static let finishedStatSize: CGFloat = 16
-    public static let shareFill = PuzzlePalette.shareBlue
-    public static let shareRadius: CGFloat = 14
-    public static let sharePaddingV: CGFloat = 13
-    public static let sharePaddingH: CGFloat = 32
-    public static let shareMarginBottom: CGFloat = 12
-    public static let shareSize: CGFloat = 15
     public static let doneFill = Color(red: 74/255, green: 144/255, blue: 226/255)
     public static let doneRadius: CGFloat = 16
     public static let donePaddingV: CGFloat = 16
@@ -1202,7 +1195,6 @@ public enum PuzzleStrings {
     public static let streakNoTimer = "No Timer"
     public static let streakRecent = "🔥 Recent Runs"
     public static let streakEmpty = "No runs yet — start your first streak! 🔥"
-    public static let streakShare = "📤 Share"
     public static let streakStart = "🔥 Start Streak"
     public static let streakResumeStart = "🔥 Resume / New Streak"
     public static let streakResumeTitle = "Resume Session?"
@@ -1214,12 +1206,10 @@ public enum PuzzleStrings {
     public static let streakGameOver = "Game Over"
     public static let streakNewBest = "🏆 NEW BEST!"
     public static let streakShowSolution = "💡 Show Solution"
-    public static let streakShareResult = "📤 Share Result"
     public static let streakPlayAgain = "🔄 Play Again"
     public static let streakBackToMenu = "← Back to Menu"
     public static let streakCorrectMove = "Correct move:"
     public static let streakStripMenu = "Menu"
-    public static let streakStripShare = "Share"
     public static let streakStripPlayAgain = "Play Again"
     public static let turboTitle = "Puzzle Turbo"
     public static let turboBadge = "⚡ RUSH"
@@ -1227,7 +1217,6 @@ public enum PuzzleStrings {
     public static let turboMistakes = "3 mistakes = game over"
     public static let turboSelectMode = "SELECT MODE"
     public static let turboEmpty = "No runs yet — be the first! ⚡"
-    public static let turboShare = "📤 Share"
     public static let turboResumeTitle = "Resume Session?"
     public static let turboNewSession = "New Session"
     public static let turboResume = "Resume"
@@ -1238,13 +1227,12 @@ public enum PuzzleStrings {
     public static let turboWhite = "♙ White to move"
     public static let turboBlack = "♟ Black to move"
     public static let turboSolved = "Puzzles Solved"
-    public static let turboShareResult = "📤 Share Result"
     public static let turboBack = "← Back to Puzzle Turbo"
     public static let turboQuitTitle = "Quit Puzzle Turbo?"
     public static let turboQuitBody = "Your current run will be lost."
     public static let turboKeepPlaying = "Keep Playing"
 
-    /// The eleven that interpolate. Transcribed from the JS twin's `STR` and pinned to it by the
+    /// The nine that interpolate. Transcribed from the JS twin's `STR` and pinned to it by the
     /// key-parity assertion in `replay_puzzle_core.js` — the check whose absence let all 61 of
     /// these strings exist in one language only for two phases.
     public static func streakResumeBody(_ n: Int) -> String {
@@ -1255,10 +1243,6 @@ public enum PuzzleStrings {
     public static func streakHint(_ white: Bool) -> String {
         white ? "\u{2659} You play White \u{2014} Find the best move!"
               : "\u{265F} You play Black \u{2014} Find the best move!"
-    }
-    public static func streakShareText(_ n: Int, _ best: Int) -> String {
-        "I just completed a \u{1F525} \(n) puzzle streak on Biyaherong Chess Coach! "
-        + "Best: \(best) Can you beat me? #BiyaherongChess #ChessPH"
     }
 
     public static func turboBest(_ n: Int) -> String { "Best: \(n)" }
@@ -1277,10 +1261,6 @@ public enum PuzzleStrings {
     }
     public static func turboModeLine(_ minutes: Int) -> String {
         minutes == 0 ? "\u{221E} Infinite mode" : "\u{23F1}\u{FE0F} \(minutes) min mode"
-    }
-    public static func turboShareText(_ score: Int, _ label: String) -> String {
-        "I scored \(score) in Puzzle Turbo (\(label)) mode! "
-        + "Can you beat me on Biyaherong Chess Coach? #BiyaherongChess #ChessPH"
     }
 
     // MARK: Glyphs and formatting shared by the run screens
