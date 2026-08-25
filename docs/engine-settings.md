@@ -6,6 +6,14 @@ make is the user's call, so it is a setting.
 
 This doc covers both halves of that change: the panel, and the search that got stronger under it.
 
+> **The engine underneath is now Stockfish 17.1** (2026-08-25 — `docs/stockfish.md`). **Nothing in
+> this panel changed**: the presets, the defaults, the derived review budget and the Advanced
+> controls all still mean exactly what they say below, and Balanced is still 1.2 s / depth 12 / 3
+> lines. What changed is what a *depth* is worth — the measurements in "What actually got stronger"
+> were taken against `LocalEngine`, which is now the fallback rather than the engine. The one
+> behavioural addition is that the deadline is also handed to Stockfish as `movetime`, because
+> `shouldCancel` is polled only when the engine reports and at depth 20 that can be seconds apart.
+
 ---
 
 ## The presets

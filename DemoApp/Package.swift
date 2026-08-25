@@ -18,11 +18,19 @@ let package = Package(
     // checkout DIRECTORY name, so the product reference below only resolves when the repo happens
     // to sit in a folder called "BC-ios-app". CI clones into /Users/builder/clone and the build
     // dies at package resolution. Naming it pins the identity to the root manifest's package name.
-    dependencies: [.package(name: "BiyaherongCoachCore", path: "..")],
+    dependencies: [
+        .package(name: "BiyaherongCoachCore", path: ".."),
+        // Stockfish 17.1 and its two NNUE networks (~75 MiB of the app's size). Same `name:` pin,
+        // same reason. This is why the app is GPLv3 — see ../LICENSE.
+        .package(name: "BiyaherongEngine", path: "../Engine"),
+    ],
     targets: [
         .target(
             name: "BiyaherongUI",
-            dependencies: [.product(name: "BiyaherongCoachCore", package: "BiyaherongCoachCore")],
+            dependencies: [
+                .product(name: "BiyaherongCoachCore", package: "BiyaherongCoachCore"),
+                .product(name: "StockfishEngine", package: "BiyaherongEngine"),
+            ],
             // All `.copy` (never `.process`): the folder structure is preserved verbatim, so every
             // Bundle.module lookup MUST pass `subdirectory:`. `.process` would flatten these and
             // silently break PieceArt / Sound / Theme.fontsReady / HomeArt.

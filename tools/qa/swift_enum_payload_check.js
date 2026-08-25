@@ -33,6 +33,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const DIRS = [
   path.join(ROOT, 'Sources', 'BiyaherongCoachCore'),
   path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI'),
+  path.join(ROOT, 'Engine', 'Sources', 'StockfishEngine'),
 ];
 
 /** Comment-strip, so prose about `= .premium` is never read as code. */

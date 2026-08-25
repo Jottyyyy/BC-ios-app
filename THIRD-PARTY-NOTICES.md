@@ -49,9 +49,30 @@ database is committed because CI clones this repository alone.
 
 ---
 
+## Stockfish — GPLv3
+
+- **Authors:** The Stockfish developers. The full list ships with the source, at
+  `Engine/Sources/CStockfish/sf/AUTHORS`.
+- **Version:** Stockfish 17.1.
+- **Licence:** GNU General Public License, version 3. The licence text ships at
+  `Engine/Sources/CStockfish/sf/Copying.txt`, and is byte-identical to the copy at
+  <https://www.gnu.org/licenses/gpl-3.0.txt> and to [`LICENSE`](LICENSE)'s own copy.
+- **Source:** <https://github.com/official-stockfish/Stockfish>, tag `sf_17.1`. Vendored complete and
+  unmodified apart from a single documented line in `sf/types.h`, which pulls in `../sfconfig.h` to
+  supply the build switches Stockfish's own Makefile would have set. That patch is labelled in place
+  and asserted by `tools/qa/stockfish_vendor_check.js`.
+- **Bundled with the app:** the two neural networks it evaluates with,
+  `Engine/Sources/StockfishEngine/Nets/nn-1c0000000000.nnue` (71.4 MiB) and `nn-37f18f62d772.nnue`
+  (3.4 MiB). They are part of Stockfish and carry its licence.
+
+**This is why the application is GPLv3.** Unlike every other entry in this file, Stockfish's licence
+is not merely preserved alongside the app's own — GPLv3 section 5 requires the *combined* work to be
+licensed under the GPL as a whole. [`LICENSE`](LICENSE) is that licence, the corresponding source is
+published, and the grant cannot be withdrawn. See `docs/stockfish.md`.
+
+---
+
 ## Not bundled, and deliberately so
 
-**Stockfish is not in this application.** `CLAUDE.md` and `README.md` record it as a locked decision
-for a later phase; no `.cpp`, `.xcframework`, NNUE file, submodule or package dependency exists in
-this repository. Nothing here is GPL today. See the note at the end of [`LICENSE`](LICENSE) for what
-changes when that lands.
+**No tablebases.** Syzygy probing code is present because it is part of Stockfish, but no `.rtbw` or
+`.rtbz` file is shipped and `SyzygyPath` is never set. Endgame play is search and evaluation only.

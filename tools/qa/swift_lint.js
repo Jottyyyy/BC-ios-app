@@ -40,6 +40,10 @@ var narrowed = files.length > 0;
 if (!files.length) {
   files = walk(path.join(ROOT, 'Sources'), []);
   walk(path.join(ROOT, 'DemoApp', 'Sources'), files);
+  // The Stockfish adapter is a third SwiftPM package and would otherwise be invisible to every
+  // check in this file — which, for the one module nothing here can compile, is the worst place
+  // to have a blind spot.
+  walk(path.join(ROOT, 'Engine', 'Sources'), files);
   walk(path.join(ROOT, 'ios'), files);
 }
 
@@ -144,7 +148,7 @@ files.forEach(function (f) {
 // enough that has not happened, and a false positive costs one rename.
 
 function moduleOf(rel) {
-  var m = /^(?:DemoApp\/)?Sources\/([^/]+)\//.exec(rel);
+  var m = /^(?:DemoApp\/|Engine\/)?Sources\/([^/]+)\//.exec(rel);
   return m ? m[1] : '(root)';
 }
 
