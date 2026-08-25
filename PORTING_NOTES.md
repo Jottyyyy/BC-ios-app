@@ -13,6 +13,56 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## A generated Swift string that was valid and wrong (2026-08-26)
+
+### The bug
+
+All eight interpolating functions in the generated `CoachStrings.swift` shipped as literals —
+`"ELO (n)"`, `"(coach) goes first"`, `"Analyzing… (done)/(total)"`. `tools/metrics/
+gen_coach_metrics.js` held the Swift as source inside JavaScript string literals (`'"ELO \(n)"'`),
+and `\(` is not a recognised JS escape, so the parser silently dropped the backslash. The same trap
+ran the other way for `'\u{00B7}'`, which IS valid JS, so `·` entered the file as a raw character
+and broke the 7-bit rule `swiftString` exists to enforce.
+
+### Why every gate was blind to it, which is the transferable part
+
+- **The JS twin was correct.** `web-demo/` rendered `ELO 2500`, and the browser is where this
+  checkout tests. A correct twin does not imply a correct Swift when the two are not generated from
+  one another in the direction being checked.
+- **Swift compiles it.** `"ELO (n)"` is a valid string literal. There is no compiler error to find,
+  even on a Mac.
+- **No gate reads inside a string literal.** `swift_lint.js` matches brackets;
+  `swift_symbol_check.js` resolves `Namespace.member`. Both treat a literal as opaque.
+
+The near-twin `gen_pairing_metrics.js` writes `'"Board \\(n)"'` with the escape doubled and has
+always been right, so a working example sat beside the broken one the entire time. **Two generators
+that look alike are not evidence about each other.**
+
+### The fix, and the rule
+
+The table no longer contains Swift. It contains the message with real characters and `{name}`
+placeholders — neither of which JavaScript can reinterpret — and `swiftInterpolation` builds the
+literal. **Do not embed one language's source inside another language's string literal when a
+template will do.**
+
+Two checks, deliberately at different times:
+
+- `checkAgainstJS` evaluates the generator's OWN OUTPUT (`\u{XX}` back to characters, `\(name)` to
+  distinctive samples) and refuses to write unless it renders what the JS twin renders. Testing the
+  artifact rather than the template is the point: the intent was never wrong.
+- `replay_coach.js` repeats it against the **committed** file, because a generator only runs when
+  someone runs it, and the file is what ships.
+
+Mutation-tested 5/5, including one that renders identically and only breaks the 7-bit rule — that
+one needed its own assertion, because a render comparison cannot see it.
+
+### Also: the generator had drifted from the file it generates
+
+Regenerating dropped `Sendable` from `CoachProfile`, which the committed file carried. Anyone who
+ran the generator would have silently broken Swift 6 strict concurrency in a file whose header says
+DO NOT HAND-EDIT. The generator now emits it. **A generated file that no longer matches its
+generator is a trap armed for whoever runs it next.**
+
 ## The ceilings, and naming the engine (2026-08-26)
 
 ### INVENTED: the depth ceilings moved, and the clocks did not

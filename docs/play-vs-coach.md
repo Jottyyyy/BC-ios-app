@@ -235,6 +235,28 @@ It was also why the **Swift** sample Play tab outlived the browser one: `BoardVi
 board chrome are deleted. `LegacyCoachSelect` stays: the macOS demo's `Panel.play` still renders it
 through `PlayView`, which is the board harness, not a phone screen.
 
+### A generated string can be a valid Swift string and still be wrong
+
+`CoachStrings.swift` is generated. For a long time every one of its eight interpolating functions
+read `"ELO (n)"` rather than `"ELO \(n)"`, so the coach cards showed **`ELO (n)`**, the resign modal
+showed `(coach) will win this game.`, and Analyze Game counted `Analyzing… (done)/(total)`.
+
+The cause was one line in `tools/metrics/gen_coach_metrics.js`, which held the Swift as source
+inside a JavaScript string: `'"ELO \(n)"'`. `\(` is not a JS escape, so the parser **silently
+dropped the backslash**.
+
+Three things made it invisible, and all three are worth remembering before trusting a green run:
+
+- **The JS twin was correct**, so `web-demo/` rendered `ELO 2500`. The browser is where this
+  checkout tests, so the only broken artifact was the one nobody here can run.
+- **Swift compiles it.** `"ELO (n)"` is a perfectly valid string literal.
+- **No gate reads inside a string literal.** `swift_lint.js` matches brackets and
+  `swift_symbol_check.js` resolves member references; a literal's *contents* were unexamined.
+
+Now: the generator's table holds `{name}` placeholders instead of Swift, it evaluates its own output
+against the JS twin before writing, and `replay_coach.js` re-checks the **committed** file on every
+gate run — because a generator only runs when someone runs it.
+
 ## How to test
 
 ```bash

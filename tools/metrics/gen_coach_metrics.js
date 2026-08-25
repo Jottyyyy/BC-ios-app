@@ -393,7 +393,7 @@ ${Object.keys(accentColours()).map((lv) =>
 ///
 /// \`winMsg\` / \`loseMsg\` are what the result card shows, so they are part of the roster rather
 /// than of \`CoachStrings\`: they vary per coach, and a missing one is a blank modal.
-public struct CoachProfile: Identifiable, Hashable {
+public struct CoachProfile: Identifiable, Hashable, Sendable {
     public let id: Int
     public let name: String
     public let role: String
@@ -436,18 +436,67 @@ ${mapLines.length ? '\n' + mapLines.join('\n\n') + '\n' : ''}`;
 // nothing in the RN StyleSheets to derive it from. Plain constants are copied across verbatim, so
 // the two languages cannot hold different WORDS, not merely different keys.
 
+/**
+ * Signature, then the message as a TEMPLATE with `{name}` where a value goes.
+ *
+ * ## Why this is not the Swift literal any more
+ *
+ * It used to be, and all eight shipped broken. The entries read `'"ELO \(n)"'` — which looks exactly
+ * right and is not: in a JavaScript string `\(` is not a recognised escape, so **the parser silently
+ * drops the backslash** and this generator emitted `"ELO (n)"`. Every coach card read `ELO (n)`
+ * instead of `ELO 2500`, the resign modal read `(coach) will win this game.`, and Analyze Game read
+ * `Analyzing… (done)/(total)`.
+ *
+ * Nothing could have caught it. The JS twin was correct, so `web-demo/` looked right — and the
+ * browser is where this checkout tests. `swift_lint.js` matches brackets and `swift_symbol_check.js`
+ * resolves member references; neither reads inside a string literal, and Swift compiles `"ELO (n)"`
+ * happily because it is a perfectly valid string. The only witness was a device.
+ *
+ * The same trap ran the other way for the escapes: `'\u{00B7}'` IS valid JS, so `·` went into the
+ * file as a raw character, quietly breaking the 7-bit rule `swiftString` exists to keep.
+ *
+ * So the table holds the message with real characters and `{name}` placeholders — neither of which
+ * JavaScript can reinterpret — `swiftInterpolation` builds the literal, and `checkAgainstJS` proves
+ * the built literal renders what the JS twin renders.
+ */
 const STRING_FUNCS = {
-  elo:         ['_ n: Int', '"ELO \(n)"'],
-  blackSub:    ['_ coach: String', '"\(coach) goes first"'],
-  unfinished:  ['_ n: Int, _ colour: String',
-                '"Unfinished game \u{00B7} \(n) moves as \(colour)"'],
+  elo:         ['_ n: Int', 'ELO {n}'],
+  blackSub:    ['_ coach: String', '{coach} goes first'],
+  unfinished:  ['_ n: Int, _ colour: String', 'Unfinished game · {n} moves as {colour}'],
   resumeBody:  ['_ n: Int, _ colour: String',
-                '"You have an unfinished game \u{2014} \(n) moves played as \(colour)."'],
-  premove:     ['_ from: String, _ to: String', '"\u{26A1} \(from)\u{2192}\(to)"'],
-  resignBody:  ['_ coach: String', '"\(coach) will win this game."'],
-  analyzing:   ['_ done: Int, _ total: Int', '"Analyzing\u{2026} \(done)/\(total)"'],
-  resigned:    ['_ coach: String', '"You resigned. \(coach) wins this round!"'],
+                'You have an unfinished game — {n} moves played as {colour}.'],
+  premove:     ['_ from: String, _ to: String', '⚡ {from}→{to}'],
+  resignBody:  ['_ coach: String', '{coach} will win this game.'],
+  analyzing:   ['_ done: Int, _ total: Int', 'Analyzing… {done}/{total}'],
+  resigned:    ['_ coach: String', 'You resigned. {coach} wins this round!'],
 };
+
+const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/;
+
+/** The `{name}` placeholders in a template, in order, duplicates kept. */
+function placeholders(template) {
+  return [...template.matchAll(new RegExp(PLACEHOLDER, 'g'))].map((m) => m[1]);
+}
+
+/**
+ * Template -> Swift string literal.
+ *
+ * Literal halves go through the same non-ASCII escaping as every plain constant, so the file stays
+ * 7-bit; placeholders come out as `\(name)`, which is the one thing the old table could not
+ * reliably produce.
+ */
+function swiftInterpolation(template) {
+  let out = '"';
+  let rest = template;
+  for (;;) {
+    const m = PLACEHOLDER.exec(rest);
+    if (!m) { out += swiftString(rest).slice(1, -1); break; }
+    out += swiftString(rest.slice(0, m.index)).slice(1, -1);
+    out += '\\' + '(' + m[1] + ')';
+    rest = rest.slice(m.index + m[0].length);
+  }
+  return out + '"';
+}
 
 /** A Swift string literal with every non-ASCII character escaped, so the file stays 7-bit. */
 function swiftString(str) {
@@ -461,6 +510,84 @@ function swiftString(str) {
     else out += ch;
   }
   return '"' + out + '"';
+}
+
+/**
+ * Evaluate an emitted Swift string literal the way Swift would, given values for its
+ * interpolations. `\u{XX}` back to the character, `\(name)` to the supplied value.
+ *
+ * Testing the ARTIFACT rather than the template is the point. The bug this guards against lived
+ * entirely in the template-to-Swift step: the intent was right and the literal was not.
+ */
+function evalSwiftLiteral(literal, values) {
+  return literal
+    .replace(/^"|"$/g, '')
+    .replace(/\\\((\w+)\)/g, (_, name) => String(values[name]))
+    .replace(/\\u\{([0-9A-Fa-f]+)\}/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
+/** Parameter names from a Swift signature like `_ n: Int, _ colour: String`. */
+function swiftParamNames(sig) {
+  return sig.split(',').map((p) => p.trim().split(/\s+/)[1].replace(/:$/, ''));
+}
+
+/** Parameter names from a JS function's own source. */
+function jsParamNames(fn) {
+  const m = /\(([^)]*)\)/.exec(fn.toString());
+  return m && m[1].trim() ? m[1].split(',').map((s) => s.trim()) : [];
+}
+
+/**
+ * The generated Swift function must render exactly what the JS twin renders.
+ *
+ * Values are deliberately distinctive — `4242`, `COACH`, `COLOUR` — so a swapped pair fails as
+ * loudly as a dropped one.
+ */
+function checkAgainstJS(key, sig, template, body, jsFn) {
+  const swiftNames = swiftParamNames(sig);
+  const jsNames = jsParamNames(jsFn);
+  const fail = (why) => {
+    console.error('FATAL: CoachStrings.' + key + ' — ' + why);
+    process.exit(1);
+  };
+
+  if (swiftNames.join(',') !== jsNames.join(',')) {
+    fail(`the Swift signature takes (${swiftNames.join(', ')}) and the JS takes `
+         + `(${jsNames.join(', ')}); they must name and order their values the same way`);
+  }
+
+  const used = new Set(placeholders(template));
+  for (const name of swiftNames) {
+    if (!used.has(name)) fail(`the template never uses {${name}}, so that value is dropped`);
+  }
+  for (const name of used) {
+    if (!swiftNames.includes(name)) fail(`the template uses {${name}}, which is not a parameter`);
+  }
+
+  const sample = {};
+  swiftNames.forEach((name, i) => {
+    sample[name] = /Int/.test(sig.split(',')[i]) ? 4242 + i : name.toUpperCase();
+  });
+
+  const fromSwift = evalSwiftLiteral(body, sample);
+  const fromJS = String(jsFn(...swiftNames.map((n) => sample[n])));
+  if (fromSwift !== fromJS) {
+    fail(`the generated Swift renders ${JSON.stringify(fromSwift)} where the JS twin renders `
+         + `${JSON.stringify(fromJS)}`);
+  }
+
+  // Rendering correctly is not the only thing that has to be true. A literal half that skipped
+  // `swiftString` renders identically and puts a raw `·` in the file — same text, no longer 7-bit,
+  // and the escaping this generator does everywhere else quietly stops applying here. Checked
+  // separately because the render comparison above cannot see it.
+  const nonAscii = [...body].find((ch) => ch.codePointAt(0) > 0x7e);
+  if (nonAscii) {
+    fail(`the generated literal contains a raw ${JSON.stringify(nonAscii)}; every character above `
+         + 'ASCII must be emitted as \\u{...} so the file stays 7-bit');
+  }
 }
 
 function stringsFile() {
@@ -482,7 +609,9 @@ function stringsFile() {
 
   const lines = keys.map((k) => {
     if (typeof S.STR[k] === 'function') {
-      const [sig, body] = STRING_FUNCS[k];
+      const [sig, template] = STRING_FUNCS[k];
+      const body = swiftInterpolation(template);
+      checkAgainstJS(k, sig, template, body, S.STR[k]);
       return '    public static func ' + k + '(' + sig + ') -> String { ' + body + ' }';
     }
     return '    public static let ' + k + ' = ' + swiftString(S.STR[k]);
