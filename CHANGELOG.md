@@ -9,6 +9,78 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-25 (fixed) — The analysis engine never resolved a capture, and it fined 1.e4
+
+Client: *"Medyo mahina engine natin … No.1 engine move nya kasi Nc3 sa opening lagi. Wala naman
+ganun tira ibang engine."* **It is not weak.** Two bugs, both reproduced here to the centipawn — the
+screenshot's four lines and four numbers came back move for move from a clean `origin/main`.
+`web-demo/` updated.
+
+**Quiescence was disabled at every depth we ship.** `negamax` called `quiesce(pos, alpha, beta, ply)`
+and that fourth parameter was doing two incompatible jobs: mate-distance scoring wants the distance
+from the **root**, the `maxQDepth` budget wants a counter that **restarts at each leaf**. `maxQDepth`
+is 6 and every preset is depth 8/12/18/22/30 — so the budget was already spent on entry and
+quiescence returned its stand-pat **having examined not one capture**. The engine was evaluating
+positions in the middle of trades.
+
+Measured at depth 6: the search score equalled the static evaluation of its own PV leaf for **all 20
+root moves, diff 0**, with 11 of 20 lines ending on an unanswered capture. The client's third line
+displayed **−0.1** and genuinely stood at **+8.4** — `Rxh2` wins the queen. Because White moves on
+odd plies it was Black who pocketed the phantom material at even depths, which is exactly why every
+number on their screen read 0.0 or negative.
+
+The mate terms keep the **root** distance. Leaving them on the leaf-local counter is a fix that looks
+right, passes everything else in the suite, and reports a three-ply mate as **M1** — mates delivered
+by a capture are found inside quiescence. There is a test that walks a mate's own PV now.
+
+**The pawn shield fined exactly the two best first moves.** It applied to an uncastled king on e1,
+whose shield files are d/e/f — the files White must push. `1.e4` and `1.d4` paid **−18** each,
+`1.e3`/`1.d3` −10, and `1.Nc3`/`1.Nf3` **nothing**: statically `Nc3 64, e4 55, d4 53`. Gated on the
+side still holding castling rights, it is now `e4 61, d4 59, Nc3 52`. Gated on **rights** rather than
+the king's square for a reason worth keeping: rights are part of the Zobrist key, so the
+transposition table cannot return a score computed under a different evaluation for the same key. The
+**open-file** term stays ungated — it is the only thing still punishing a king left in the centre.
+
+**The result.** Start position at depth 8, before: `Nc3 −0.0, Nf3 −0.0, e3 −0.1, d4 −0.3`, no `e4`
+anywhere. After: `Nc3, d4, Nf3, e4`, all `+0.1`. The client's own line — `1.Nc3 d5 2.e3 Nf6 3.Nf3 d4`
+— used to answer **Bd3 +0.2** and now answers **exd4 +1.1**: it simply takes the free pawn, which it
+previously could not see. Corpus tactics **115 → 117/120**, floor raised **108 → 110**. And the
+depth-8 node count on the start position **fell from 670k to 247k** — an accurate leaf score is what
+makes alpha-beta work.
+
+**No preset, default or `EngineSettings` value changed.** The client asked for the engine to be
+defaulted to its strongest; the limiter is the wall-clock deadline rather than the depth cap, so that
+would have bought about one ply while costing battery and three to eight seconds of settling after
+every move. This is far better at the same budget.
+
+**And the honest half: the tests could not fail.** The suite's one quiescence assertion ran at
+`maxDepth: 2` — the *single* band in which quiescence still worked. `engine_strength_check` scored
+115/120 the whole time, because its node budget caps most corpus positions at depth 5-6, again below
+`maxQDepth`. `replay_engine_settings` stayed green too: it pins constants, and neither bug was a
+constant. Three green gates, all structurally blind.
+
+New `tools/qa/engine_quiescence_check.js` asserts the property directly — *no line may report its own
+leaf's stand-pat while a 200cp capture is standing there* — deliberately **above** `maxQDepth`, with
+that premise asserted so it cannot drift back into the blind band. Restoring the bug produces **9
+violations over 18 lines**, each naming the hanging piece. Plus the mate-provability test, a
+start-position sanity check stated as ranks and a sign rather than a pinned centipawn, and **14 new
+parity assertions covering the parameter list itself**, since the Swift cannot be compiled here.
+
+**Watch for:** Play vs Coach levels 3-5 search about a ply deeper at the same clock and will pick
+different moves; levels 1-2 are unchanged, their leaves already sat below `maxQDepth`. Not
+re-calibrated — the ladder was flat at the top for this very reason. Game Review's opening plies will
+reclassify, and `docs/analysis-board.md`'s "shallow classification is coarse" caveat **stays**: the
+review's 200 ms budget reaches depth 2-3, where quiescence already worked.
+
+Suite: **35,132 assertions across 80 suites**. `analysis-engine.selfTest` 68 → 74;
+`analysis-eval.selfTest` 47 → 53; `replay_engine_settings` 142 → 156.
+
+**Also corrected: the spec.** `docs/specs/BIYAHERONG-PORT-SPEC.md` refers to *"the embedded Stockfish
+actor already built for the Analysis Board"* in five places. **There is no Stockfish in this repo** —
+no `.cpp`, no xcframework, no NNUE, no dependency — and there never was; `PORTING_NOTES.md`,
+`LICENSE` and `THIRD-PARTY-NOTICES.md` each already said so while the spec did not. That is where the
+client's belief came from, and it was a reasonable one to reach.
+
 ### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
 
 Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag

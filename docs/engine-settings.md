@@ -47,6 +47,12 @@ somewhere or too shallow everywhere. Measured on this engine over the six positi
 Only the quiet endgame — the fourth column — ever reaches its ceiling. Everywhere else the clock
 runs out first, which is the whole design. `maxDepth` exists so a nearly-empty board terminates.
 
+> **These depths were measured while quiescence was dead** (see the 2026-08-25 entry in
+> `CHANGELOG.md`), and they barely move now that it runs — the fix costs nodes at each leaf and wins
+> more back in cutoffs. **What changed is not the depth but what the number means: a depth-8 score is
+> now a real score.** Before the fix the search returned the static evaluation of its own leaf, taken
+> in the middle of a trade, on every line at every preset. Re-measure this table before quoting it.
+
 ## What actually got stronger
 
 Two changes, both in the search rather than the settings.
@@ -69,7 +75,7 @@ Measured, at the same 1200 ms budget:
 |---|---|---|
 | mean depth over the six benchmark positions | 3.83 | **5.00** |
 | sharpest position ("queens on") | depth 2 | **depth 4** |
-| corpus tactics found at 120k nodes | 105/120 (87.5%) | **115/120 (95.8%)** |
+| corpus tactics found at 120k nodes | 105/120 (87.5%) | **117/120 (97.5%)** |
 | tactics nodes/sec | 38.1k | **60.8k** |
 
 Battery Saver at 0.5 s now reaches a mean depth of 5.17 — deeper than the *old* engine managed in

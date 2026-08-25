@@ -39,6 +39,66 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ## Ported-algorithm parity notes & deliberate deviations
 
+### Quiescence never ran, and the pawn shield fined 1.e4 (2026-08-25)
+
+Two bugs in the analysis search, both found from a client screenshot, both reproduced here to the
+centipawn.
+
+**Quiescence was disabled at every depth the app ships.** `negamax` called
+`quiesce(pos, alpha, beta, ply)` and `quiesce`'s fourth parameter was doing two incompatible jobs:
+mate-distance scoring wants the distance from the **root**, the `maxQDepth` budget wants a counter
+that **restarts at each leaf**. `maxQDepth` is 6 and every preset is depth 8/12/18/22/30, so the
+budget was spent on entry and quiescence returned its stand-pat having examined not one capture.
+
+`maxQDepth = 6` was never wrong. Its **caller** was. The note in the invented-constants table
+saying *"without quiescence, depth-3 lines are noise"* turned out to describe the shipping engine at
+every depth.
+
+Fixed by splitting the parameter in two. **The mate terms keep the root distance** — leaving them on
+the leaf-local counter is a fix that looks right, passes everything else, and reports a three-ply
+mate as **M1**, because mates delivered by a capture are found inside quiescence. There is now a
+test that walks a mate's own PV and checks the claim.
+
+Also: the `qdepth >= maxQDepth` cap sat **inside** the `!inCheck` branch, which a checking node
+never reaches — in-check quiescence had no bound at all and terminated only incidentally. It is
+bounded by `maxPly` now, the same ceiling the check extension uses. Bounding it with `maxQDepth`
+instead would truncate forced checking sequences, which is the one thing quiescence exists to
+follow. Behaviour-identical today (measured: same node counts, same lines), so it is a safety net
+with no mutant — pinned by source text instead.
+
+**DELIBERATE DEVIATION — the pawn shield is gated on castling rights.** The term applied to an
+uncastled king on e1, whose shield files are d/e/f: exactly the files White must push. `1.e4` and
+`1.d4` were fined 18cp each, `1.e3`/`1.d3` ten, and `1.Nc3`/`1.Nf3` nothing — so the engine's whole
+opening repertoire became `Nc3, Nf3, e3, d3` and `e4` fell out of the top four entirely.
+
+Gated on **rights**, not on the king's square, for two reasons. It still fires for a king sitting on
+e1 whose rooks have both moved — genuinely stuck in the middle, which is what the term is *for*. And
+rights are already part of the Zobrist key, so the transposition table cannot hand back a score
+computed under a different evaluation for the same key. **A guard on anything not in that key — a
+move number, a search-local flag — would do exactly that, silently, and would present as
+non-determinism.**
+
+The **open-file** term is deliberately left ungated: an open file beside an uncastled king is a
+highway either way, and it is the only term still punishing a king left in the centre.
+
+**Known, deferred, and now pinned: `queenProximity`.** A flat `-4 * (7 - kingDistance)` with no
+attacker count and no shelter test, i.e. a standing bonus for parking a queen near the enemy king on
+move 2 — which is why `Qg5`/`Qh5`/`Qd3` littered the principal variations. Most of that symptom was
+bug 1 (the search could not see the sorties refuted) and is gone. The term is still wrong; the right
+fix is a king-zone attack-unit table, not a tweak, and `AnalysisEval` already records that an
+`isAttacked` sweep at every leaf measured too expensive. Its own follow-up, with its own before/after.
+
+**Two gates were structurally blind, and that is the real finding.** The suite's only quiescence
+assertion ran at `maxDepth: 2` — the single band in which quiescence still worked. `engine_strength_check`
+scored 115/120 throughout, because its node budget caps most corpus positions at depth 5-6, again
+below `maxQDepth`. `replay_engine_settings` stayed green too: it pins constants, and neither bug was
+a constant. A green gate is not evidence the search is right.
+
+**One thing nobody would ever have found:** `extendTail` calls `negamax` with `ply: 0`, so its
+probes entered quiescence with a fresh budget and quiescence *worked there*. Users were shown a PV
+whose head came from a search without quiescence and whose tail came from one with it — which is why
+displayed lines sometimes appeared to change their mind after the extension. The two agree now.
+
 ### ELO / rating (Appendix C §2 — `PuzzleController::submitAnswer`, verified against source)
 - K = 32, divisor 400, floor `max(400, …)`, no upper cap.
 - `ratingChange = (int) round(32 * (actual - expected))`. PHP `round()` is

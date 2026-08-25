@@ -496,6 +496,13 @@ raise the preset, since the per-position budget scales with it (Maximum gives ea
 It remains a property of the interim engine rather than of the port, and goes away when Stockfish
 lands.
 
+**The 2026-08-25 quiescence fix does NOT lift this caveat**, and it is worth being exact about why:
+the review's per-position budget is 200 ms, which reaches depth 2-3 — *below* `maxQDepth`, where
+quiescence already worked. The live board, at depth 8 and up, was the half that was broken. What the
+fix does change here is the opening: gating the pawn shield on castling rights re-scores every
+position that still has them, so the first plies of every review reclassify, and `1.e4`/`1.d4`
+classify better than they did.
+
 `evaluate(_:engine:limits:)` is deliberately **left in place** — it is right for a headless harness,
 and `review_book` and `tools/qa/review_demo.js` still use it.
 
