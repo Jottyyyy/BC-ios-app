@@ -9,6 +9,54 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (fixed) — Stockfish did not compile, and once it did the first search killed the app
+
+The engine landed on 2026-08-25 with, in its own CHANGELOG entry, *"nothing here has been compiled
+or run — no Swift, no C++ toolchain, no Xcode on this checkout."* It was pulled onto a Mac today.
+It did not compile, and after it compiled it terminated the process on the first analysis. Both are
+fixed, and a gate that would have caught either is now in the tree.
+
+**It did not compile.** `biya_stockfish.cpp` reads `EvalFileDefaultNameBig`/`...Small`, which are
+`#define`s in `sf/evaluate.h` — the one Stockfish header the shim never included. Two
+`use of undeclared identifier` errors. `sf/evaluate.h` is now included.
+
+**Then the first search called an empty `std::function`.** `Engine` has five listener slots;
+the shim installed two, `on_verify_networks` and `on_update_full`. `Search::Worker` calls the other
+three unconditionally and never checks for emptiness — `updates.onIter(...)` once per root
+iteration, `onBestmove` at the end of every search, `onUpdateNoMoves` on a root with no legal moves.
+A default-constructed `std::function` throws `std::bad_function_call`, and it throws **on Stockfish's
+search thread**, so every `catch` in `biya_stockfish.cpp` is on the wrong stack and the process goes
+straight to `std::terminate`:
+
+    libc++abi: terminating due to uncaught exception of type std::__1::bad_function_call
+
+That is the `exit(EXIT_FAILURE)` failure mode the header was written to prevent, arriving through a
+different door: no exception the app can see, nothing in the crash log that reads like chess, and the
+trigger is the user's **first analysis**, not launch. Stockfish's own bench path installs no-op
+lambdas in exactly these three slots (`sf/uci.cpp:309`); so does `biya_sf_start` now.
+
+**`Engine/Sources/StockfishSmoke` — the only gate here that runs the engine.** `swift_lint` and
+`replay_stockfish` cover the Swift decisions; nothing covered the C++, which is precisely where both
+bugs were. It starts the runtime, searches the start position at 1.2 s / MultiPV 3, and asserts on
+depth, node count, score sign and a forced mate. Not a member of any product, so Xcode never builds
+it into the app — run it by hand on a Mac after touching `CStockfish`:
+
+    cd Engine && swift run -c release StockfishSmoke
+
+What it reports on an M-series Mac, and what shipping was verified against:
+
+    banner   : Stockfish 17.1
+    depth 21-22 in 1.20s   1.97M nodes   ~1.9M nps   3 lines
+    #0 cp(34) e4 e5 Nf3 Nf6 Nxe5 ...   #1 cp(28) d4 ...   #2 cp(28) Nf3 ...
+    rook-endgame : mate(1)  best=Ra8#
+
+Two of those numbers are load-bearing beyond "it ran". **~1.9M nps is the NNUE SIMD check** — the
+silent-scalar fallback `docs/stockfish.md` warns about is several times slower, and it reports
+nothing. And **`cp(34)` at the start position with White to move** is the score sign: White-relative,
+not side-to-move-relative, which is the flip `StockfishBridge` owns.
+
+`web-demo/` not updated — C++ the browser build does not have, behind a `LocalEngine` it keeps.
+
 ### 2026-08-26 (fixed) — Every interpolating string in Play vs Coach printed its parameter name
 
 Client: the coach ratings are missing. They were not missing — every card read **`ELO (n)`**. And it

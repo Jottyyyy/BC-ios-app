@@ -52,6 +52,8 @@ Engine/                                   a third SwiftPM package
     StockfishBridge.swift                 every DECISION, pure, mirrored in JS
     StockfishEngine.swift                 conforms to Core's AnalysisEngine
     Nets/                                 nn-1c0000000000.nnue (71.4 MiB) + nn-37f18f62d772.nnue
+  Sources/StockfishSmoke/
+    main.swift                            the only gate that RUNS it; Mac-only, in no product
 ```
 
 Three things about that shape are deliberate.
@@ -73,7 +75,7 @@ iteration counts as finished, where a PV stops — all of it lives in `Stockfish
 `tools/qa/stockfish_bridge_twin.js` mirrors and `tools/qa/replay_stockfish.js` replays in both
 languages.
 
-## Four things that would have shipped badly
+## Five things that would have shipped badly
 
 **`exit(EXIT_FAILURE)`.** `sf/nnue/network.cpp:267` terminates the process when the net it was asked
 for is not the net that loaded. Fine in a command-line engine; in an iOS app the process simply
@@ -94,6 +96,15 @@ platform and there is no architecture filter, and `USE_NEON` on an x86_64 host m
 Git LFS. 17.1's is 71.4 MiB. That is the entire reason this repository vendors 17.1, it appears
 nowhere in the source, and it would be rediscovered at push time by whoever upgrades next; the
 vendor check asserts it.
+
+**Five listener slots, and only two of them filled.** `Engine` exposes `set_on_iter`,
+`set_on_update_no_moves`, `set_on_bestmove`, `set_on_update_full` and `set_on_verify_networks`. The
+shim installed the last two. `Search::Worker` calls the first three unconditionally with no emptiness
+check — `onIter` per root iteration, `onBestmove` at the end of every search — so a
+default-constructed `std::function` threw `std::bad_function_call` on the **first analysis**, from
+**Stockfish's search thread**, where no `catch` in `biya_stockfish.cpp` is on the stack. The process
+terminated. Same shape as the `exit()` hazard above and caught only by running it. Stockfish's own
+bench path fills these slots with no-ops (`sf/uci.cpp:309`); `biya_sf_start` now does the same.
 
 **`-march=armv8.2-a+dotprod`.** Stockfish's Makefile pairs `USE_NEON_DOTPROD` with that flag, which
 on SwiftPM means `.unsafeFlags` — banned outright in a package consumed as a dependency, and
@@ -202,13 +213,27 @@ node tools/qa/js_goldens.js
 node tools/qa/swift_lint.js && node tools/qa/swift_symbol_check.js
 ```
 
-**On a Mac, which is the only place any of the C++ has ever been compiled:**
+**On a Mac, which is the only place any of the C++ can be compiled. Run the smoke test — it is the
+only gate here that starts the engine, and both bugs the C++ shipped with were invisible to
+everything above it:**
 
 ```bash
+cd Engine && swift run -c release StockfishSmoke   # MUST print SMOKE OK
 cd DemoApp && swift build          # compiles Stockfish too, first time is slow
 swift run DemoApp                  # Analysis Board -> the depth chip should pass 15 in a second
 cd .. && swift run ParityRunner    # still LocalEngine, still must exit 0
 ```
+
+`StockfishSmoke` (`Engine/Sources/StockfishSmoke/main.swift`) starts the runtime, searches the start
+position at 1.2 s / MultiPV 3, then a forced mate, and fails on any of: no lines, depth under 12,
+under 100k nodes, or a start-position score outside ±120 cp. It belongs to no product, so Xcode never
+builds it into the app. Three of its numbers mean more than "it ran":
+
+| Reading | On an M-series Mac | What it is really testing |
+|---|---|---|
+| nodes/sec | ~1.9M | **NNUE SIMD.** The silent scalar fallback below is several times slower and announces nothing. |
+| start-position score | `cp(34)`, White to move | **The sign.** White-relative, not side-to-move-relative — the flip `StockfishBridge` owns. |
+| `mate(1)` / `Ra8#` | depth 21-22 in 1.20 s | The search, the PV, and SAN conversion, end to end. |
 
 What to look for in the demo: the depth climbing past anything `LocalEngine` reached, `1.e4` and
 `1.d4` among the top lines from the start position, and a score that settles rather than lurching

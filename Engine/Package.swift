@@ -66,6 +66,14 @@ let package = Package(
             // The two files are ~77 MB together and are the reason the app is the size it is.
             resources: [.copy("Nets")]
         ),
+        // The only gate in this repository that RUNS Stockfish. `swift_lint` and `replay_stockfish`
+        // cover the Swift; nothing covered the C++, and the first two things wrong with it were a
+        // missing include and three unset `std::function`s that killed the process on the first
+        // search -- neither of which any check here could see. Not in any product, so Xcode never
+        // builds it; run it by hand on a Mac after touching `CStockfish`:
+        //
+        //     cd Engine && swift run -c release StockfishSmoke
+        .executableTarget(name: "StockfishSmoke", dependencies: ["StockfishEngine"]),
     ],
     // Stockfish 18 is C++17 and uses GNU extensions the strict dialect rejects. `.gnucxx17` is what
     // its own Makefile compiles with, and what chesskit-engine ships with — this is not a guess.

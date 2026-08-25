@@ -86,6 +86,7 @@ node tools/metrics/extract_board_styles.js    # re-derive board_styles.json from
 DemoApp/run-demo.sh                           # build (release) + bundle + launch BiyaherongCoachDemo.app
 cd DemoApp && swift run DemoApp               # run the demo executable directly (faster dev loop)
 cd DemoApp && swift run PieceArtCheck         # 99-assertion SVG piece-renderer self-check
+cd Engine && swift run -c release StockfishSmoke   # Mac-only: RUNS Stockfish; must print SMOKE OK
 
 # --- Puzzle bank (repo-relative defaults; ~9s) ---
 python3 tools/puzzlebank/build_puzzles.py     # 550k-row CSV -> curated 93k puzzles.sqlite + web slice

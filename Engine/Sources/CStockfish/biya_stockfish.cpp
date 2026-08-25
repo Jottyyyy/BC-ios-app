@@ -21,6 +21,7 @@
 
 #include "sf/bitboard.h"
 #include "sf/engine.h"
+#include "sf/evaluate.h"   // EvalFileDefaultNameBig / ...Small live here, and only here.
 #include "sf/misc.h"
 #include "sf/position.h"
 #include "sf/score.h"
@@ -191,6 +192,20 @@ int32_t biya_sf_start(const char* nets_directory, int32_t threads, int32_t hash_
             if (text.rfind("ERROR:", 0) == 0)
                 throw NetworkRejected(text);
         });
+
+        // `Search::Worker` calls all four of these UNCONDITIONALLY -- `updates.onIter(...)` per root
+        // iteration, `onBestmove` at the end of every search, `onUpdateNoMoves` when the root has
+        // none. They are plain `std::function`s with no emptiness check, so leaving any of them
+        // default-constructed throws `std::bad_function_call` out of the SEARCH THREAD on the first
+        // `go()` -- past every `catch` in this file, straight to `std::terminate`. Stockfish's own
+        // bench path installs the same no-ops for the ones it ignores (`sf/uci.cpp:309`).
+        //
+        // `on_update_full` is the one this app actually reads; `biya_sf_search` swaps its own
+        // listener in for the duration of a search and puts a no-op back afterwards.
+        engine->set_on_iter([](const Stockfish::Engine::InfoIter&) {});
+        engine->set_on_update_no_moves([](const Stockfish::Engine::InfoShort&) {});
+        engine->set_on_bestmove([](std::string_view, std::string_view) {});
+        engine->set_on_update_full([](const Stockfish::Engine::InfoFull&) {});
 
         // Deliberately at STARTUP. `Engine::go` would otherwise run this on the user's first
         // analysis, and the failure mode there is the process disappearing.
