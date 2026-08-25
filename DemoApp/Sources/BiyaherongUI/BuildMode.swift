@@ -1,4 +1,5 @@
 import Foundation
+import StockfishEngine
 
 /// Is this a TEST build or a submission build — decided by the **app target**, never in here.
 ///
@@ -40,5 +41,22 @@ public enum BiyaherongBuild {
     /// Called once, from the app target's `init`, before the view tree is built.
     public static func configure(isTestBuild: Bool) {
         Self.isTestBuild = isTestBuild
+        warmUpEngine()
+    }
+
+    /// Start Stockfish in the background, at launch.
+    ///
+    /// It reads a 71 MB network file and lays out a transposition table, which is a visible stall
+    /// on the main thread and roughly free on a utility one. Doing it here rather than on the first
+    /// tap means the Analysis Board is already warm when someone opens it.
+    ///
+    /// **Nothing is thrown or shown on failure**, and that is deliberate: `AnalysisVM` checks
+    /// `StockfishRuntime.isStarted` and falls back to `LocalEngine`, so a missing network file
+    /// costs strength rather than the screen. `tools/qa/stockfish_vendor_check.js` is what makes
+    /// sure that path stays theoretical. See docs/stockfish.md.
+    public static func warmUpEngine() {
+        Task.detached(priority: .utility) {
+            _ = StockfishRuntime.start()
+        }
     }
 }

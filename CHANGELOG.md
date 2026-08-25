@@ -9,6 +9,77 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-25 (added) — Stockfish 17.1 is in the app, and the app is GPLv3
+
+Client: *"pwede stockfish gamitin nating engine?"* — pointing at `BYAHERONG-COACH-STOCKFISH`. That
+repository holds three files and **no Stockfish**: `main.py` shells out to a Linux binary installed
+by `apt` at `/usr/games/stockfish`. Nothing there could have run on a phone, and iOS forbids
+subprocesses outright. So Stockfish is now compiled **into** the app. `web-demo/` is deliberately
+**not** updated — see the last section. Full doc: `docs/stockfish.md`.
+
+**The licence changed, irrevocably.** Stockfish is GPLv3 and §5 covers the combined work, so
+`LICENSE` — "proprietary, all rights reserved" until today, with a note warning not to make this
+grant early — is now the GPL, and the source is published. That note existed for exactly this
+moment; it has been spent. Decision #2 in `PORTING_NOTES.md` was taken at the start of the port and
+is now carried out rather than pending.
+
+**Not the usual embedding.** Everyone else keeps `UCIEngine::loop()` and `dup2()`s the process's
+stdin and stdout onto pipes. Since 16.1 Stockfish has had a public `Engine` class — `set_position`,
+`go`, `stop`, `set_on_update_full` — delivering depth, score, nodes and PV as struct fields. Using it
+directly means no text parsing, no reader thread, no custom `streambuf`, and no seizing the whole
+app's standard output. The entire C++ surface of this app is now one ~330-line file with one lock,
+behind a **pure-C** header so `.interoperabilityMode(.Cxx)` never enters the package.
+
+**Every judgement call is in Swift, because nothing here can compile C++.** The C layer only
+marshals. The score sign flip, `mate 0`, which of two reports for a rank wins, when an iteration
+counts as finished, where a PV stops — all in `StockfishBridge.swift`, mirrored by
+`tools/qa/stockfish_bridge_twin.js` (40 assertions) and replayed in both languages by
+`tools/qa/replay_stockfish.js` (71). `tools/qa/stockfish_vendor_check.js` (26) covers the vendored
+tree. `swift_lint`, `swift_symbol_check` and `swift_enum_payload_check` did not scan `Engine/` and
+now do — 135 files → 137, 157 types → 159.
+
+**Four things that would have shipped looking fine:**
+
+- **`sf/nnue/network.cpp:267` calls `exit(EXIT_FAILURE)`** when the net it wants is not the net that
+  loaded. In a CLI that is reasonable; in an iOS app the process vanishes with no exception and
+  nothing in the crash log that reads like a crash — and since `Engine::go()` is what calls
+  `verify_networks()`, the trigger is the user's *first analysis*, not launch. Now: the files are
+  opened before Stockfish sees them, and an `on_verify_networks` listener throws so the unwind beats
+  the `exit()`. It is an error code at startup instead.
+- **Silent scalar NNUE.** SwiftPM never runs Stockfish's Makefile and Stockfish auto-detects none of
+  its switches — `simd.h:34` keys off `USE_NEON`, never `__ARM_NEON`. Without them the app compiles,
+  links, ships, plays correct chess and evaluates several times slower with nothing reporting a
+  problem. `sfconfig.h` sets them from the preprocessor's own architecture macros; it has to be C,
+  because SwiftPM's `.define(.when(platforms:))` has no architecture filter and `USE_NEON` on x86_64
+  fails the build.
+- **17.1, not 18, and the reason is GitHub.** SF18's big net is 103.9 MiB and GitHub refuses anything
+  over 100 MiB; 17.1's is 71.4 MiB. Git LFS was rejected — a 1 GB/month free quota against a 104 MB
+  file per CI build, and a `git lfs pull` CI can silently skip, leaving a 130-byte pointer where the
+  network should be. The gate asserts the limit so the next upgrade finds out here, not at push time.
+  (This was found the hard way: SF18 was vendored and downloaded first.)
+- **No `-march=armv8.2-a+dotprod`**, so no `.unsafeFlags` anywhere. Dotprod is worth 10-20%; NEON
+  versus scalar is worth several times that. Take the safe multiple.
+
+**No preset, default or `EngineSettings` value changed.** Balanced is still 1.2 s / depth 12 / 3
+lines. What changed is what a depth means — `LocalEngine` reached ~5 in that budget. The deadline is
+now also handed down as `movetime`, because `shouldCancel` is only polled when Stockfish reports and
+at depth 20 that can be seconds apart. Threads 2, hash 32 MiB: a phone throttles, and the net is
+already ~71 MB resident.
+
+**`LocalEngine` stays** — as the fallback when the nets fail to load (the board keeps working instead
+of showing an empty panel), as the web demo's engine, and as the engine every golden vector still
+runs against. The Parity Core is untouched and still Foundation-only.
+
+**`web-demo/` is NOT mirrored, a first for this repo.** A 71 MB network and a WASM engine cannot be
+carried by a preview that opens from `file://` with no install step. The demo keeps `LocalEngine` —
+a real code path, not a stub, since it is also the app's fallback. Consequence: the JS twin has no
+demo behind it, so it lives at `tools/qa/stockfish_bridge_twin.js`; `web_shell_check.js` §2 caught it
+sitting in `web-demo/js/` and was right to.
+
+**App size: ~+75 MiB** (two NNUE files). Nothing here has been compiled or run — no Swift, no C++
+toolchain, no Xcode on this checkout. The gates cover what can be covered without one; `swift build`
+on a Mac is still the first real test.
+
 ### 2026-08-24 (added) — Opening Tree: an engine on the explorer, and a board you can play on
 
 Client, after the download landed: *"sana lagyan mo din ng engine evaluation tapos pwede mag

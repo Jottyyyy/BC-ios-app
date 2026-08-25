@@ -1,5 +1,6 @@
 import SwiftUI
 import BiyaherongCoachCore
+import StockfishEngine
 
 // The Analysis Board's view model — a thin shell over `AnalysisSession`.
 //
@@ -692,6 +693,9 @@ final class AnalysisVM: ObservableObject {
         let resolved = EngineSettings.resolve(engineSettings)
         let limits = resolved.reviewLimits
         let budget = Double(resolved.reviewMs) / 1000
+        // Captured as a plain Int rather than reaching through `resolved` inside the detached
+        // task: Swift 6 checks every capture for Sendable, and an Int is one.
+        let reviewMs = resolved.reviewMs
         let book = OpeningBookLoader.shared
 
         // Only value types cross: `Evaluator` is Sendable precisely so the whole walk can run off
@@ -707,8 +711,16 @@ final class AnalysisVM: ObservableObject {
                     // The deadline is per position, inside the closure the Evaluator hands to the
                     // engine — so a sharp position stops shallow instead of blowing the budget.
                     let deadline = Date().addingTimeInterval(budget)
-                    w.step(engine: LocalEngine(),
-                           shouldCancel: { token.isCancelled || Date() > deadline })
+                    let stop = { token.isCancelled || Date() > deadline }
+                    // Same engine choice as the live board, and the same fallback. A review that
+                    // silently used a different engine from the one the panel shows would make
+                    // every centipawn-loss number incomparable with the eval bar beside it.
+                    if StockfishRuntime.isStarted {
+                        w.step(engine: StockfishEngine(movetimeMs: reviewMs),
+                               shouldCancel: stop)
+                    } else {
+                        w.step(engine: LocalEngine(), shouldCancel: stop)
+                    }
                     let progress = (w.completed, w.total)
                     Task { @MainActor in
                         guard let self, !token.isCancelled else { return }
@@ -800,28 +812,46 @@ final class AnalysisVM: ObservableObject {
         session.analyzing = true
         analyzing = true
 
+        // Stockfish also gets the deadline as `movetime`. It is a clock-driven engine, and
+        // `shouldCancel` is only consulted when it reports — which at depth 20 can be seconds
+        // apart, so polling alone would let a preset's "1.2 seconds" mean four. Infinite passes
+        // nil, and the token stays the only clock.
+        let movetimeMs: Int? = resolved.infinite ? nil : resolved.thinkMs
+
         // Capture shape copied verbatim from `ChessGameVM.maybeBotMove` (PlayView.swift:139-148):
         // `[weak self]` on the detached task, `guard let self` inside every main-actor hop. The
         // engine blocks its thread and never yields, which is exactly why it is detached.
         searchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let engine = LocalEngine()
-            let result = engine.analyze(
-                searchPosition,
-                limits: limits,
-                historyKeys: keys,
-                shouldCancel: {
-                    if token.isCancelled { return true }
-                    guard let deadline else { return false }     // Infinite: the token is the clock
-                    return Date() > deadline
-                },
-                onProgress: { snap in
-                    // One hop per completed depth, so lines appear as they are found rather than
-                    // all at once when the deadline expires.
-                    Task { @MainActor in
-                        guard let self, !token.isCancelled else { return }
-                        self.adopt(snap, for: searchPosition)
-                    }
-                })
+            let shouldCancel: () -> Bool = {
+                if token.isCancelled { return true }
+                guard let deadline else { return false }     // Infinite: the token is the clock
+                return Date() > deadline
+            }
+            let onProgress: (AnalysisSnapshot) -> Void = { snap in
+                // One hop per completed depth, so lines appear as they are found rather than
+                // all at once when the deadline expires.
+                Task { @MainActor in
+                    guard let self, !token.isCancelled else { return }
+                    self.adopt(snap, for: searchPosition)
+                }
+            }
+
+            // Written as a branch rather than an `any AnalysisEngine` on purpose: the two engines
+            // are chosen once per search and never mixed, and an existential here would be the one
+            // place in this file where a protocol witness is resolved at runtime for no gain.
+            //
+            // The fallback is not decoration. If the NNUE resources ever fail to load — a `.copy`
+            // turned into a `.process`, a CI step that strips the resource bundle — the Analysis
+            // Board keeps working on LocalEngine instead of showing an empty panel, and
+            // `EngineSettings` still means what it says. See docs/stockfish.md.
+            let result: AnalysisSnapshot = StockfishRuntime.isStarted
+                ? StockfishEngine(movetimeMs: movetimeMs).analyze(
+                    searchPosition, limits: limits, historyKeys: keys,
+                    shouldCancel: shouldCancel, onProgress: onProgress)
+                : LocalEngine().analyze(
+                    searchPosition, limits: limits, historyKeys: keys,
+                    shouldCancel: shouldCancel, onProgress: onProgress)
+
             await MainActor.run {
                 guard let self, !token.isCancelled else { return }
                 self.session.analyzing = false

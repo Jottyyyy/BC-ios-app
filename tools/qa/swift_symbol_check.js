@@ -38,6 +38,7 @@ function walk(dir, out) {
 var args = process.argv.slice(2);
 var all = walk(path.join(ROOT, 'Sources'), []);
 walk(path.join(ROOT, 'DemoApp', 'Sources'), all);
+walk(path.join(ROOT, 'Engine', 'Sources'), all);   // the Stockfish adapter is a third package
 walk(path.join(ROOT, 'ios'), all);
 var targets = args.length ? args.map(function (f) { return f.replace(/\\/g, '/'); }) : all;
 
