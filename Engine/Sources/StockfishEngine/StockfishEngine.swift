@@ -143,8 +143,10 @@ public struct StockfishEngine: AnalysisEngine {
         let resolved = StockfishBridge.resolve(limits, movetimeMs: movetimeMs)
         let legalMoves = position.legalMoves().count
 
-        return withoutActuallyEscaping(shouldCancel) { cancel in
-            withoutActuallyEscaping(onProgress) { progress in
+        // Both return types are written out. Nested `withoutActuallyEscaping` is a known place for
+        // Swift's inference to give up, and the error it gives up with points at the wrong line.
+        return withoutActuallyEscaping(shouldCancel) { cancel -> AnalysisSnapshot in
+            withoutActuallyEscaping(onProgress) { progress -> AnalysisSnapshot in
                 let relay = Relay(position: position,
                                   multiPV: resolved.multiPV,
                                   legalMoves: legalMoves,

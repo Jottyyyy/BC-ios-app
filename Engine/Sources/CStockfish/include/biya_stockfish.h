@@ -131,7 +131,15 @@ typedef int32_t (*biya_sf_info_cb)(void* ctx, const biya_sf_info* info);
  */
 int32_t biya_sf_start(const char* nets_directory, int32_t threads, int32_t hash_mb);
 
-/** Stop and destroy the engine. Safe to call when not started. */
+/**
+ * Stop and destroy the engine. Safe to call when not started.
+ *
+ * **Do not call this from the main thread while a search is running.** Every entry point here takes
+ * the same lock, and `biya_sf_search` holds it for the whole search — so this waits for the current
+ * search to finish rather than interrupting it. It cannot deadlock (a search always ends: on its
+ * `movetime`, its depth, or the callback returning non-zero), but on an Infinite preset "always"
+ * means "when the cancel token says so". Nothing in the app calls it today.
+ */
 void biya_sf_shutdown(void);
 
 /** Non-zero once `biya_sf_start` has returned `BIYA_SF_OK`. */

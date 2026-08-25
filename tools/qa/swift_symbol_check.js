@@ -115,7 +115,13 @@ all.forEach(collect);
 //
 // Only namespaces that look like a metrics/constant holder are checked. Instance values, locals
 // and anything generic are out of scope: this is a name check, not a type checker.
-var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Pairing[A-Z]\w*|Coach[A-Z]\w*|Login[A-Z]\w*|Home[A-Z]\w*|Paywall[A-Z]\w*|Premium[A-Z]\w*|Entitlement|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits|GameReview|ReviewAnnotator|MoveTree|OpeningBook|ChessNotation)$/;
+//
+// This list is an ALLOW-LIST, which means a new module is invisible here until someone adds it —
+// and invisible looks exactly like clean. `Stockfish[A-Z]\w*` was added when a deliberately bogus
+// `StockfishBridge.thisMemberDoesNotExist` survived a full green run: the walk had been widened to
+// `Engine/Sources` and the TYPE count rose, so everything read as covered while every reference in
+// the new module was being skipped. Widening the walk is half the job; this line is the other half.
+var CHECKED = /^(Puzzle[A-Z]\w*|Analysis[A-Z]\w*|Pairing[A-Z]\w*|Coach[A-Z]\w*|Login[A-Z]\w*|Home[A-Z]\w*|Paywall[A-Z]\w*|Premium[A-Z]\w*|Stockfish[A-Z]\w*|Entitlement|Theme|Haptics|DailyGoal|StreakEngine|TurboRun|Rating|PuzzleServing|PuzzleSelection|PuzzleSession|PuzzleProgress|PuzzleStats|PuzzleRush|DailyLimits|GameReview|ReviewAnnotator|MoveTree|OpeningBook|ChessNotation)$/;
 var SKIP_MEMBER = /^(self|init|Type|shared)$/;
 
 var bad = 0, checked = 0;
