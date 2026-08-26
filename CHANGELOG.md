@@ -40,6 +40,55 @@ Same screenshot confirmed the previous fix on a real device: the banner read
 `Unfinished game · 4 moves as White` and the card read `Jaden Pogi goes first`, both correct.
 
 Gates: js_goldens 35,303 across 82 suites (ReplayCoach 324 → 338).
+### 2026-08-26 (fixed) — Deleting a tournament was possible, and its instructions were behind a button
+
+Client: *"doon daw sa tournament walang way na mag delete ng tournament na ginawa."* There is a way,
+and it was already ported whole — long-press a card, confirm in a modal, `PairingStore.remove`. So
+was the line that tells you, `"Long press a card to delete"`, sitting in the same ScrollView.
+`web-demo/` needed no change; it was already right. Three lines of Swift, all of them extracted
+constants nobody had applied.
+
+**The cause is one missing modifier.** `tournaments/index.tsx:212` is
+`list: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 90 }`. The Swift applied two of the
+three:
+
+```swift
+.padding(.horizontal, PairingList.listPaddingHorizontal)
+.padding(.top, PairingList.listPaddingTop)
+// listPaddingBottom = 90 — extracted, generated, never applied
+```
+
+That 90 is what holds the scroll content clear of the "New Tournament" button floating over it in
+the same `ZStack`. Without it the **last** thing in the ScrollView sits under the button — and the
+last thing in this ScrollView is the hint. The feature was there; its only documentation was not
+visible.
+
+Two more of the same defect, found by sweeping for it: `PairingDetail.playerActions` had lost its
+horizontal padding, and `generateWrap` had lost horizontal **and** bottom.
+
+**Why no gate saw it.** The browser applies all three — `.pgl-list` is a three-value `padding`
+shorthand — so `web-demo/` looked right, and the browser is where this checkout tests.
+`metrics_key_check.js` and `swift_source_keys.js` verify that every constant REFERENCE resolves;
+neither can notice a constant nobody references. And a blanket unused-constant rule is useless here:
+99 layout constants are unused in the pairing metrics alone, nearly all of them legitimately — the
+share card and the free-tier banner are not ported at all.
+
+**New gate, `tools/qa/swift_padding_check.js`:** if the Swift applies ANY of a block's
+`*Padding<Side>` constants it must apply ALL of them. Referencing one is the proof the block is
+rendered, which is exactly what an unused-constant census cannot establish — so an unported block is
+silent by construction and a block that quietly lost a side fails. 62 rendered blocks across seven
+metrics files, mutation-tested 3/3.
+
+Its first draft passed while the bug was still in the tree: it matched `.listPaddingBottom` by member
+name, and `PuzzleStreakHome.listPaddingBottom` exists too. Block names repeat across screens, so the
+match is enum-qualified now.
+
+**Still open, same class, not fixed here:** `generateWrapBorderTopWidth` / `BorderTopColor` are
+extracted and unapplied, so the Generate Round footer is missing the 1px divider the RN draws above
+it. Borders are outside this gate's rule on purpose — a margin or border often becomes something
+else in SwiftUI, so "unapplied" does not imply "wrong" there.
+
+Gates: js_goldens 35,353 across 83 suites. Nothing compiled here.
 
 ### 2026-08-26 (fixed) — Every interpolating string in Play vs Coach printed its parameter name
 
