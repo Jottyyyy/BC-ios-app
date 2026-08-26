@@ -9,6 +9,80 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (added) — Tutorial Videos, the last unwired tile
+
+`onVideos` was the only Home callback without a destination. It has one now: a premium catalogue,
+grouped by phase of the game, streamed from the content bucket. `web-demo/` updated.
+
+The client asked for three things and all three are in: **it works**, **it says it needs internet**,
+and **it says it needs a subscription**.
+
+**The refusal ORDER is the product decision**, and it is asserted rather than assumed:
+
+    not premium     ->  paywall
+    not configured  ->  "Videos are not published yet"
+    offline         ->  "Online Feature"
+    loading / failed / empty / list
+
+Premium is tested first. A user who is offline *and* has no subscription sees the paywall — the
+entitlement is decided on-device by StoreKit and is knowable with the radio off, so it is the answer
+we are certain of, and sending somebody to find wifi for a screen they could not open with wifi
+would be a wasted trip. `replay_videos.js` pins that order in both languages.
+
+**"Not published" is deliberately not a connection error.** When the app has nowhere to look, telling
+the user to check their wifi sends them to fix the one thing that is working. The gate asserts that
+copy mentions neither internet nor wifi, so a rewording cannot blur the two.
+
+**It reads a published manifest, not the Laravel API — and that is not a shortcut.**
+`GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no account
+and no token, by design**: it signs in with Apple on the device, never talks to the backend, and
+there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that endpoint would
+produce a permanent 401 that looks exactly like a broken feature. Spec §0.1 already settled it:
+*"Content = static files on R2/S3. No API. No accounts. No sync."*
+
+**Neither prerequisite exists yet, and the code says so instead of pretending.** `AWS_BUCKET` is
+empty in the Laravel `.env` and `tutorial_videos` has **0 rows** — checked, not assumed. So
+`manifestURL` is empty in both languages and the screen reads *"Videos are not published yet."*
+Three steps turn it on, and `tools/content/generate_video_manifest.php` is step one: it runs the
+**same query** the controller runs, so the manifest and the API cannot describe different
+catalogues. It was run against the real Laravel app and DB to prove it works.
+
+**Nothing was transcribed.** `extract_video_styles.js` is the sixth extractor on the same
+`rn_ast.js` machine (35 style keys for the list, 21 for the player, plus `CATEGORY_ORDER` and
+`CATEGORY_META`), and `gen_video_metrics.js` emits both languages from it — 214 Swift constants and
+5 category styles. After two transcription bugs shipped in one day, hand-typing 56 style blocks was
+not a defensible option.
+
+**Two deviations, both deliberate:**
+
+- **An unknown category is visible.** The RN renders `CATEGORY_ORDER.filter(...)`, so a video whose
+  category is not one of the five is grouped and then **silently dropped** — the admin sees it saved
+  and visible, the app shows a catalogue missing it. Both ports fold the unknown into
+  `Uncategorized`: wrong section beats no section.
+- **The player is `AVPlayerViewController`.** The RN builds 21 style keys of custom transport because
+  `expo-av` gave it nothing usable. The system player has all of it plus AirPlay, PiP, the lock
+  screen and the accessibility stack. `VideoPlayer` from spec §0.1 will never be written, and the
+  spec now says so.
+
+**The networking allow-list grew, on purpose.** Spec §0.1 always named `ContentClient` as one of the
+two files permitted to open a connection; §12 now holds each language to an EXACT pair —
+`ContentClient.swift`/`OpeningDownloader.swift` and `content-client.js`/`opening-download.js`. Exact
+rather than "at most two", because a ceiling would let a third arrive by having one of these deleted.
+
+**That sweep had a hole, and this feature found it.** It matched a literal `fetch(`, and the first
+draft of `content-client.js` called the function through a local alias — so a file that genuinely
+opened a connection was invisible to the rule whose whole job is to count them. It matches the
+identifier now, with strings stripped: the looser pattern immediately named `opening-metrics.js`,
+whose crime was the label `'Games to fetch'`.
+
+Two more caught by existing gates while wiring: `nav_icons_check.js` refused a hand-rolled `‹` back
+button, and `trial_gate_check.js` caught the Swift leaving `onVideos` ungated while the web demo
+gated it — the two languages disagreeing about who may open the screen.
+
+Gates: js_goldens **35,616 across 86 suites** (ReplayVideos 100, VideoLibrary 27, ContentClient 6);
+swift_lint 142 files; swift_symbol_check 3,750 refs, with `Video*` added to its allow-list. Nothing
+compiled here.
+
 ### 2026-08-26 (changed) — The Opening Tree names itself; the Tree name field is gone
 
 Client: *"Pwede ba tanggalin na yung tree name. Automatic name ng tree eh yung account name na

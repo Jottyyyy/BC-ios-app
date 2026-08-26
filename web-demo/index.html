@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/pairing.css" />
   <link rel="stylesheet" href="css/coach.css" />
+  <link rel="stylesheet" href="css/video.css" />
 </head>
 
 <body>
@@ -163,6 +164,14 @@
   <script src="js/opening-download.js"></script>
   <script src="js/opening-store.js"></script>
   <script src="js/openings.js"></script>
+
+  <!-- Tutorial Videos. Order is load-bearing: content-client.js reads video-library.js at IIFE
+       time, and videos.js reads all three of metrics, strings and the client. -->
+  <script src="js/video-library.js"></script>
+  <script src="js/video-metrics.js"></script>
+  <script src="js/video-strings.js"></script>
+  <script src="js/content-client.js"></script>
+  <script src="js/videos.js"></script>
   <!-- Play vs Coach. Order is load-bearing: coach-game reads BiyaCoachGame's engine at load time,
        coach-strings is read by every screen, and coach-play reads coach-turn.
 

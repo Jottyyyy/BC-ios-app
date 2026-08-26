@@ -24,6 +24,10 @@ Goldens/*.tmp
 # that has not existed for several phases.)
 Goldens/
 
+# The Tutorial Videos manifest that tools/content/generate_video_manifest.php writes. An
+# artifact of a database that lives elsewhere, and it is UPLOADED rather than shipped.
+build/
+
 # Claude Code: per-task worktrees live here (see the Workflow section of CLAUDE.md). Never committed.
 .claude/worktrees/
 .claude/settings.local.json
