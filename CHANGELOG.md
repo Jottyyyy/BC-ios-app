@@ -9,6 +9,48 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (changed) — The Opening Tree names itself; the Tree name field is gone
+
+Client: *"Pwede ba tanggalin na yung tree name. Automatic name ng tree eh yung account name na
+hahanapan ng tira."* Done — and it turns out this was a **restoration**, not a request. The RN form
+never had a name field. It builds one and saves without asking
+(`analysis-board/openingtree.tsx:531`):
+
+```js
+const name = `${username} · ${playerColor}`;
+```
+
+The port had grown a **TREE NAME** text box, so every download made the user invent a label for a
+thing that already has one — and refused to build until they did (`errNoName`, *"Give the tree a
+name."*). Gone from both languages, along with `nameLabel` and `namePlaceholder`. `web-demo/`
+updated.
+
+Trees now read `hikaru · white`, `magnuscarlsen · both`.
+
+**The colour is part of the name, not just the meta line underneath.** Two trees for one account —
+one per side — would otherwise be impossible to tell apart in the list. That is why the RN puts it
+there too, and it is asserted rather than assumed: `autoName('a', 'white') !== autoName('a', 'black')`.
+
+**Paste PGN and My Coach games are the offline port's own** — the RN form offers Lichess and
+Chess.com only — so there is no account to name them after. They read `Pasted games · both`.
+Deriving a name from the PGN's `[White]`/`[Black]` headers was considered and rejected: it is a
+guess, it is wrong the moment a PGN holds more than one player's games, and nothing downstream uses
+it. A tree named for something that is not in it is worse than one named plainly.
+
+**One edge case worth the guard it got.** A user who types a username for Lichess and then switches
+to Paste PGN leaves that username behind in the form. Naming the pasted tree after an account whose
+games are not in it would be a quiet lie, so the username is read only when the source actually has
+one — `source.needsUsername ? username : ""` in Swift, `''` at the JS paste site.
+
+The rule is one pure function per language (`OpeningStrings.autoName` / `MET.autoName`) rather than a
+string built at each call site, because there are three call sites — paste, download, and the Swift
+tail — and two of them would eventually drift. `replay_opening_tree.js` pins the template, the
+trimming, the paste fallback, the colour distinction, and the absence of the field in both languages.
+Mutation-tested 5/5, including the leftover-username case and a capitalised colour.
+
+Gates: js_goldens 35,384 across 83 suites (ReplayOpeningTree 577 → 592, Openings 23 → 28). Nothing
+compiled here.
+
 ### 2026-08-26 (fixed) — Choose Your Side said each colour twice, and lost the king
 
 Client, on a TestFlight build: *"2x nasabi black and white. Pagandahin lang natin."* The card read

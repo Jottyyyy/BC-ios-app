@@ -201,14 +201,6 @@ var BiyaOpenings = (function () {
 
     function label(text) { return el('div', 'op-label', text.toUpperCase()); }
 
-    body.appendChild(label(MET.STRINGS.nameLabel));
-    var name = el('input', 'op-input');
-    name.type = 'text';
-    name.placeholder = MET.STRINGS.namePlaceholder;
-    name.value = form.name;
-    name.oninput = function () { form.name = name.value; };
-    body.appendChild(name);
-
     body.appendChild(label(MET.STRINGS.colourLabel));
     body.appendChild(toggleRow(['white', 'black', 'both'], form.colour, function (v) {
       form.colour = v; handlers.onChanged();
@@ -568,9 +560,6 @@ var BiyaOpenings = (function () {
    * indistinguishable from a real outage, so they checked their wifi and reported the app.
    */
   function submit(form, nowMs, isPremium) {
-    var name = String(form.name || '').trim();
-    if (!name) return { error: MET.STRINGS.errNoName };
-
     if (form.source === 'coach') return { error: MET.STRINGS.errNoCoachGames };
     if (MET.isOnlineSource(form.source)) {
       var user = String(form.username || '').trim();
@@ -599,7 +588,11 @@ var BiyaOpenings = (function () {
     // validator: `"not a game"` comes back as three move tokens and would pass a `games.length`
     // test while producing a tree with nothing in it. Only the replay knows whether the PGN held
     // any chess, so the check is on POSITIONS.
-    var built = ST.build({ games: games, name: name, colour: form.colour,
+    // '', not `form.username`. Switching from Lichess to Paste PGN leaves the username behind in
+    // the form, and naming a pasted tree after an account whose games are not in it is worse than
+    // naming it plainly.
+    var built = ST.build({ games: games, name: MET.autoName('', form.colour),
+                           colour: form.colour,
                            source: form.source, username: form.username || '', nowMs: nowMs });
     if (!built.positionCount) return { error: MET.STRINGS.errNoGames };
     return { tree: built };
@@ -616,7 +609,8 @@ var BiyaOpenings = (function () {
    */
   function submitGames(form, games, nowMs) {
     if (!games || !games.length) return { error: MET.STRINGS.errUnknownUser };
-    var built = ST.build({ games: games, name: String(form.name || '').trim(),
+    // Only the online sources reach here, so the username is always the account just downloaded.
+    var built = ST.build({ games: games, name: MET.autoName(form.username, form.colour),
                            colour: form.colour, source: form.source,
                            username: form.username || '', nowMs: nowMs });
     if (!built.positionCount) return { error: MET.STRINGS.errNoGames };
@@ -625,7 +619,7 @@ var BiyaOpenings = (function () {
 
   function emptyForm() {
     return {
-      name: '', colour: 'both', source: 'pgn', pgn: '', username: '',
+      colour: 'both', source: 'pgn', pgn: '', username: '',
       maxGames: MET.STRINGS.maxDefault, downloading: false, fetched: 0, error: null
     };
   }
@@ -635,8 +629,11 @@ var BiyaOpenings = (function () {
     function expect(c, w) { c ? passed++ : failures.push(w); }
 
     var f = emptyForm();
-    expect(submit(f, 1).error === MET.STRINGS.errNoName, 'a nameless tree is refused');
-    f.name = 'Mine';
+    // There is no name to give and none to refuse: the form has no such field any more, so the
+    // FIRST thing a bare form can be wrong about is its PGN.
+    expect(f.name === undefined, 'the form carries no name of its own');
+    expect(MET.STRINGS.errNoName === undefined,
+      'and the error for a missing one is gone with it');
     expect(submit(f, 1).error === MET.STRINGS.errNoPgn, 'an empty PGN is refused');
     f.pgn = 'not a game';
     expect(submit(f, 1).error === MET.STRINGS.errNoGames, 'unparseable PGN is refused');
@@ -644,7 +641,8 @@ var BiyaOpenings = (function () {
     f.pgn = '[White "A"]\n[Black "B"]\n[Result "1-0"]\n\n1. e4 c5 1-0\n';
     var ok = submit(f, 1234);
     expect(!ok.error && ok.tree, 'a real PGN builds');
-    expect(ok.tree.name === 'Mine' && ok.tree.gameCount === 1, 'with the name and one game');
+    expect(ok.tree.name === 'Pasted games · both' && ok.tree.gameCount === 1,
+      'named for the source it came from, since a paste has no account behind it');
     expect(ok.tree.createdAtMs === 1234, 'and the injected clock, never Date.now()');
 
     // The two online sources return a PLAN, not an apology. This is the assertion that used to
@@ -669,7 +667,6 @@ var BiyaOpenings = (function () {
 
     // The downloaded tail — same three checks as the paste path, same order.
     var d = emptyForm();
-    d.name = 'Downloaded';
     d.source = 'lichess';
     d.username = 'someone';
     expect(submitGames(d, [], 5).error === MET.STRINGS.errUnknownUser,
@@ -692,6 +689,15 @@ var BiyaOpenings = (function () {
     expect(!built.error && built.tree.gameCount === 1, 'and real games build a tree');
     expect(built.tree.source === 'lichess' && built.tree.username === 'someone',
       'which remembers where it came from');
+    // The client's actual request, asserted: the tree names itself after the account it was built
+    // from. `analysis-board/openingtree.tsx:531` builds the same string.
+    expect(built.tree.name === 'someone · both',
+      'and names itself after the account and side, never a label the user had to invent — got '
+      + JSON.stringify(built.tree.name));
+    var dw = emptyForm();
+    dw.source = 'chesscom'; dw.username = '  Hikaru  '; dw.colour = 'white';
+    expect(submitGames(dw, [{ sanMoves: ['e4'], userIsWhite: true, outcome: '1-0' }], 5)
+      .tree.name === 'Hikaru · white', 'the username is trimmed and the side follows it');
     expect(built.tree.createdAtMs === 5, 'on the injected clock');
 
     // The colour filter reaches the builder.
