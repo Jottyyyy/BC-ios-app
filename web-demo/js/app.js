@@ -622,7 +622,7 @@
 
   function videosGo() {
     if (!videoState) videoState = BiyaVideos.emptyState();
-    current = videos;
+    current = 'videos';
     render();
     videosLoad();
   }
@@ -636,7 +636,7 @@
     render();
     BiyaContentClient.videos().then(function (r) {
       // Dropped if the user has left, the same guard `openingForm !== form` gives the download.
-      if (current !== videos) return;
+      if (current !== 'videos') return;
       videoState.loading = false;
       videoState.loaded = true;
       videoState.error = r.error || null;
@@ -649,13 +649,29 @@
     if (!videoState) videoState = BiyaVideos.emptyState();
     videoState.isPremium = !locked();
     BiyaVideos.render(view, videoState, {
-      onExit: function () { current = home; render(); },
+      onExit: function () { videoState.playing = null; current = 'home'; render(); },
       onPaywall: function () { goPaywall(); },
       onRetry: function () { videoState.loaded = false; videoState.error = null; videosLoad(); },
+      // Plays IN the screen, which is what the app does too — the browser has <video> and the phone
+      // has AVPlayerViewController, and neither needs a transport rebuilt for it.
+      //
+      // This line used to read `global.open(video.videoURL, _blank)` and carried TWO faults: there
+      // is no `global` in this file (everything else says `window`), and `_blank` had lost its
+      // quotes and was a bare identifier. A ReferenceError inside a click handler goes to the
+      // console and nowhere else, so the card simply did nothing.
       onPlay: function (video) {
-        // The browser has a <video> element and the phone has AVPlayer; neither needs a custom
-        // transport built for it. Opening the URL is the honest demo of "this streams".
-        if (video && video.videoURL) global.open(video.videoURL, _blank);
+        if (video && video.videoURL) { videoState.playing = video; render(); }
+      },
+      onClosePlayer: function () { videoState.playing = null; render(); },
+      // Demo only. No manifest is published yet — AWS_BUCKET is empty and tutorial_videos has no
+      // rows — so the honest state is a notice, and a notice is indistinguishable from a broken
+      // screen. This loads js/video-sample.js THROUGH the real parser, so what appears is the
+      // actual screen rather than a mock of it.
+      onLoadSample: function () {
+        videoState.videos = BiyaVideoLibrary.parse(BiyaVideoSample.manifestText());
+        videoState.error = null;
+        videoState.loaded = true;
+        render();
       }
     });
   }
