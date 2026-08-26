@@ -48,6 +48,13 @@ const expect = (cond, what) => { cond ? passed++ : failures.push(what); };
 /** Strip CSS comments so a rule described in prose is never mistaken for a rule. */
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
 
+
+/** Every word that names a route. A bare one of these next to `current` is the bug §6 exists for. */
+const ROUTE_WORDS = new Set([
+  'home', 'login', 'paywall', 'profile', 'play', 'analysis', 'videos', 'openings', 'puzzles',
+  'pairing', 'coach-color', 'coach-game',
+]);
+
 // ── 1. Every stylesheet on disk is linked, and every link resolves ──────────────
 {
   const onDisk = fs.readdirSync(CSS_DIR).filter((f) => f.endsWith('.css')).sort();
@@ -258,6 +265,40 @@ const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
     + 'can leave the saved line and play your own move. If you add a deliberately read-only board, '
     + 'change this number and say so in CHANGELOG.md — it is the census, and it is what makes "a '
     + 'board with neither is exempt" falsifiable.');
+}
+
+// ── 6. A route is a STRING, never a bare identifier ─────────────────────────────
+//
+// `current` holds a route name. Assigning or comparing it against an unquoted word is a
+// ReferenceError, and it is one that hides: the throw happens inside a click handler, so it goes to
+// the console and the screen simply does nothing. The user reports "the button is dead".
+//
+// Not hypothetical. The Tutorial Videos block shipped with FOUR of these at once —
+// `current = videos`, `current !== videos`, `current = home` and `_blank` — because the quotes were
+// eaten by a shell escaping fault while the block was being inserted. `node --check` passes them all:
+// they are syntactically perfect JavaScript that refers to variables nobody declared. Every JS
+// self-test in the suite passed too, because none of them drives the router.
+{
+  const app = fs.readFileSync(path.join(ROOT, 'web-demo', 'js', 'app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, '');
+
+  const bad = [];
+  const ASSIGN = /\bcurrent\s*(?:=|===|!==|==|!=)\s*([A-Za-z_$][\w$]*)/g;
+  for (const m of code.matchAll(ASSIGN)) {
+    // Legitimate: comparing one variable against another the file declares. The bug is a WORD that
+    // is also a route name, so anything matching a known route id is the tell.
+    if (ROUTE_WORDS.has(m[1])) bad.push(m[1]);
+  }
+  expect(bad.length === 0,
+    `app.js compares or assigns \`current\` against the bare identifier(s) ${[...new Set(bad)].join(', ')} `
+    + '— a route is a string, and an unquoted one is a ReferenceError the screen swallows');
+
+  // The sweep must actually be looking at routes, or it would pass on an empty file.
+  const quoted = [...code.matchAll(/\bcurrent\s*(?:=|===|!==|==|!=)\s*'([a-z-]+)'/g)].map((m) => m[1]);
+  expect(quoted.length > 15,
+    `swept ${quoted.length} quoted route uses — too few means the pattern stopped matching`);
+  expect(quoted.includes('home') && quoted.includes('videos'),
+    'and it sees the routes it is meant to, including the newest one');
 }
 
 // ---- report ------------------------------------------------------------------

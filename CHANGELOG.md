@@ -9,6 +9,50 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (fixed) — The Videos tile was dead on tap: four route names had lost their quotes
+
+Reported straight after the feature landed: *"bakit hindi nagpaplay yung video sa web demo?"*
+
+It was worse than not playing. **The screen could not open at all.** The Tutorial Videos block in
+`app.js` shipped with four bare identifiers where string literals belonged:
+
+```js
+current = videos;                                  // 'videos'
+if (current !== videos) return;                    // 'videos'
+onExit: function () { current = home; render(); }  // 'home'
+global.open(video.videoURL, _blank);               // window.open(…, '_blank')
+```
+
+All four were eaten by a shell-escaping fault while the block was being inserted — `'` in a
+`node -e` command that bash unwrapped — and the last line carried a second, independent fault:
+there is no `global` in that file, every other reference says `window`.
+
+**Nothing caught it, and the reasons are worth keeping.** `node --check` passes every one: they are
+syntactically perfect JavaScript referring to variables nobody declared. Every JS self-test passed,
+because none of them drives the router. And a `ReferenceError` thrown inside a click handler goes to
+the console and nowhere else — the screen simply does nothing, which reads as a dead button rather
+than as a crash.
+
+**New gate, `web_shell_check.js` §6:** `current` is compared or assigned against a string literal,
+never a bare word that happens to name a route. Mutation-tested 3/3, and the harness prints
+`node --check: PASSES` beside each kill, because that is the point.
+
+**And the deeper reason nothing played: there is nothing to play.** No manifest is published
+(`AWS_BUCKET` empty) and `tutorial_videos` has 0 rows, so the honest state is a notice — which is
+correct and completely undemonstrable, since a notice looks identical whether the screen works or
+not.
+
+So the notice now carries a **Load sample catalogue** button, in the browser demo only. It runs
+`web-demo/js/video-sample.js` **through the real parser**, so what appears is the actual screen and
+not a mock: four rows, real streams, one of them deliberately categorised `"Tactics"` so the
+unknown-category deviation is visible rather than only documented. The app has no such button and
+`manifestURL` stays empty in both languages.
+
+Videos also play **in** the screen now — a `<video>` element in the demo, matching the app's
+`AVPlayerViewController` — rather than opening a tab.
+
+Gates: js_goldens 35,628 across 86 suites (WebShell 218 → 223).
+
 ### 2026-08-26 (added) — Tutorial Videos, the last unwired tile
 
 `onVideos` was the only Home callback without a destination. It has one now: a premium catalogue,

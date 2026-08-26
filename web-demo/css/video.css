@@ -189,6 +189,35 @@
   font-weight: 700;
   color: var(--vid-card-title-color);
 }
+/* ---- The player ------------------------------------------------------------- */
+/*
+ * The browser's own <video>, for the same reason the app uses AVPlayerViewController: the platform
+ * already has controls, full screen, keyboard handling and the accessibility tree.
+ */
+.vid-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  min-height: 0;
+}
+.vid-video {
+  width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+/* The demo-only line under the "not published" notice. Muted on purpose: it is scaffolding, and it
+   should not read like part of the product. */
+.vid-sample-note {
+  font-family: var(--font);
+  font-size: var(--vid-section-count-font-size);
+  color: var(--vid-section-count-color);
+  margin-top: var(--vid-empty-title-margin-bottom);
+  font-style: italic;
+}
+
 .vid-card-desc {
   font-family: var(--font);
   font-size: var(--vid-card-desc-font-size);

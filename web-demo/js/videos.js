@@ -53,6 +53,11 @@
 
   function kebab(s) { return String(s).replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); }); }
 
+  /* Demo-only copy. Deliberately NOT in video-strings.js: that file is pinned against the Swift by
+     replay_videos.js, and the app has no sample catalogue and no button to load one. */
+  var SAMPLE_CTA = 'Load sample catalogue';
+  var SAMPLE_NOTE = 'Browser demo only — the real catalogue is published to the content bucket.';
+
   /* -- States ---------------------------------------------------------------- */
 
   function header(title, onBack) {
@@ -142,6 +147,36 @@
     return h;
   }
 
+
+  /* -- The player ------------------------------------------------------------ */
+
+  /* The browser's own <video>, for the same reason the app uses AVPlayerViewController: the platform
+     already has controls, full screen, keyboard handling and the accessibility tree. The RN built
+     its own because expo-av gave it nothing usable; neither of these two needs to. */
+  function player(video, onBack) {
+    var root = el('div', 'vid-root');
+    applyVars(root);
+    root.appendChild(header(video.title, onBack));
+
+    var stage = el('div', 'vid-stage');
+    var v = document.createElement('video');
+    v.className = 'vid-video';
+    v.src = video.videoURL;
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = true;
+    // A stream that will not start is the ONE failure this screen exists to survive, and the
+    // element reports it on its own event rather than through the promise.
+    v.onerror = function () {
+      stage.innerHTML = '';
+      stage.appendChild(notice(STR.STR.onlineGlyph, STR.STR.onlineTitle,
+                               STR.STR.offlineBody, STR.STR.offlineSub));
+    };
+    stage.appendChild(v);
+    root.appendChild(stage);
+    return root;
+  }
+
   /* -- Render ---------------------------------------------------------------- */
 
   /**
@@ -150,6 +185,13 @@
    */
   function render(view, state, cb) {
     view.innerHTML = '';
+
+    // A video is open: the player IS the screen, exactly as the fullScreenCover is in the app.
+    if (state.playing) {
+      view.appendChild(player(state.playing, cb.onClosePlayer));
+      return;
+    }
+
     var root = el('div', 'vid-root');
     applyVars(root);
     root.appendChild(header(STR.STR.title, cb.onExit));
@@ -158,9 +200,14 @@
 
     if (!state.isPremium) {
       body.appendChild(paywall(cb.onPaywall));
-    } else if (!CC.isConfigured()) {
-      body.appendChild(notice(STR.STR.emptyGlyph, STR.STR.notConfiguredTitle,
-                              STR.STR.notConfiguredBody));
+    } else if (!CC.isConfigured() && !state.videos.length) {
+      // The TRUE state: no manifest has been published, so there is nowhere to look. The button is
+      // a demo affordance and says so -- the app has no such button, and this branch is what an app
+      // user would see. See web-demo/js/video-sample.js.
+      var box = notice(STR.STR.emptyGlyph, STR.STR.notConfiguredTitle, STR.STR.notConfiguredBody,
+                       null, SAMPLE_CTA, cb.onLoadSample);
+      box.appendChild(el('div', 'vid-sample-note', SAMPLE_NOTE));
+      body.appendChild(box);
     } else if (state.error === CC.FAILURE.offline) {
       body.appendChild(notice(STR.STR.onlineGlyph, STR.STR.onlineTitle, STR.STR.offlineBody,
                               STR.STR.offlineSub, STR.STR.retry, cb.onRetry));
@@ -186,7 +233,8 @@
   }
 
   function emptyState() {
-    return { isPremium: false, loading: false, loaded: false, error: null, videos: [] };
+    return { isPremium: false, loading: false, loaded: false, error: null, videos: [],
+             playing: null };
   }
 
   var API = { render: render, emptyState: emptyState };

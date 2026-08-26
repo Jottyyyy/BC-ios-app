@@ -85,6 +85,23 @@ LARAVEL_ROOT=/path/to/BYAHERONG-COACH-LARAVEL php tools/content/generate_video_m
 Until then the screen says *"Videos are not published yet."* — which is true, and is not a network
 error.
 
+## Seeing it work on Windows
+
+The honest state today is *"Videos are not published yet"* — no manifest, no rows. That is correct
+and completely undemonstrable: a notice looks the same whether the screen works or not.
+
+So that notice carries a **Load sample catalogue** button, in the browser demo only. It loads
+`web-demo/js/video-sample.js` **through the real parser**, so what appears is the actual screen
+rather than a mock of it — sections in category order, chips, thumbnails, and a card that really
+plays when you click it. One of the four rows is deliberately categorised `"Tactics"`, which is not
+one of the five, so the deviation below is something you can see rather than only read about.
+
+The app has no such button. `ContentClient.manifestURL` is empty in both languages and
+`replay_videos.js` asserts they match; nothing in the sample is reachable from Swift.
+
+The media are Blender Foundation open movies (CC BY 3.0) — the standard public test streams, used as
+placeholder content, credited in the fixture itself.
+
 ## Deviations from the RN, both deliberate
 
 **An unknown category is visible.** The RN groups by category and then renders
