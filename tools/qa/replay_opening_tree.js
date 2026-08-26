@@ -602,26 +602,46 @@ const ST = require(path.join(JS, 'opening-store.js'));
   expect(/\.reversed\(\)/.test(DOWN_CODE),
     'and the Swift reverses too — oldest-first would build every tree from the user’s first month');
 
-  // -- the transport is in ONE file ---------------------------------------------
+  // -- the transport is in a NAMED SET of files ---------------------------------
   //
-  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and
-  // VideoPlayer". Neither exists yet and this download reached the client first, so
-  // OpeningDownloader is that rule's first inhabitant — and it stays the ONLY one.
+  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and VideoPlayer".
+  // OpeningDownloader reached the client ahead of both and was this rule's first inhabitant;
+  // ContentClient landed with Tutorial Videos on 2026-08-26 and is its second.
+  //
+  // The list is EXACT, not a ceiling. "At most two" would let a third arrive by having one of these
+  // deleted, which is the kind of accounting that passes while the property it protects is gone —
+  // the whole point is that adding a networked file is a decision somebody made on purpose, in this
+  // file, with the spec updated beside it. VideoPlayer is not here: AVPlayer streams the media
+  // itself, so the app never writes that request.
   expect(!/URLSession|URLRequest/.test(DOWN_CODE),
     'the parity core opens no socket — it only describes the request');
   expect(/URLSession/.test(LOADER_SRC), 'OpeningDownloader is where the transport lives');
   const uiFiles = fs.readdirSync(UI).filter((f) => f.endsWith('.swift'));
   const networked = uiFiles.filter((f) =>
     /URLSession|URLRequest/.test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
-  eq(networked.join(','), 'OpeningDownloader.swift',
-    'and it is the ONLY file in BiyaherongUI that does');
+  expect(/URLSession/.test(read(UI, 'ContentClient.swift')),
+    'ContentClient is where the Tutorial Videos transport lives');
+  eq(networked.sort().join(','), 'ContentClient.swift,OpeningDownloader.swift',
+    'and those two are the ONLY files in BiyaherongUI that open a connection');
   expect(uiFiles.length > 20, `swept ${uiFiles.length} UI files — the sweep is not vacuous`);
 
-  // Same rule in the browser: one file with `fetch`, and it is the twin.
+  // Same rule in the browser, and the same two names.
   const jsFiles = fs.readdirSync(JS).filter((f) => f.endsWith('.js'));
+  // `\bfetch\b`, not `fetch\(`. `content-client.js` passed this sweep on its first draft because it
+  // called the function through a local alias — so a file that genuinely opened a connection was
+  // invisible to the rule whose whole job is to count them.
+  //
+  // STRINGS have to go too, and that is not hypothetical either: the looser pattern immediately
+  // named `opening-metrics.js`, whose crime is the label `'Games to fetch'`. `code()` strips
+  // comments; this strips quoted text as well, so what is left is identifiers.
+  const identifiers = (src) => code(src)
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``');
   const fetching = jsFiles.filter((f) =>
-    /\bfetch\(|XMLHttpRequest/.test(code(fs.readFileSync(path.join(JS, f), 'utf8'))));
-  eq(fetching.join(','), 'opening-download.js', 'exactly one web-demo file fetches');
+    /\bfetch\b|XMLHttpRequest/.test(identifiers(fs.readFileSync(path.join(JS, f), 'utf8'))));
+  eq(fetching.sort().join(','), 'content-client.js,opening-download.js',
+    'exactly those two web-demo files fetch');
   expect(jsFiles.length > 20, `swept ${jsFiles.length} JS files — the sweep is not vacuous`);
 
   // -- and cancellation is real -------------------------------------------------

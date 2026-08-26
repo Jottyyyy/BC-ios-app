@@ -13,6 +13,66 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## Tutorial Videos (2026-08-26)
+
+The last unwired Home tile. Full write-up in `docs/tutorial-videos.md`; this records only what
+deviates or was decided.
+
+### DECISION: a published manifest, not the Laravel API
+
+`GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no
+account and no token, by design** — it signs in with Apple on the device, never talks to the Laravel
+backend, and there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that
+endpoint would produce a permanent 401 indistinguishable from a broken feature.
+
+Spec §0.1 had already settled it: *"Content = static files on R2/S3. No API. No accounts. No sync."*
+`tools/content/generate_video_manifest.php` runs the SAME query the controller runs, so the manifest
+and the API cannot describe different catalogues.
+
+**Neither prerequisite exists.** `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos`
+has 0 rows — both checked, not assumed. `manifestURL` is therefore empty in both languages and the
+screen says *"Videos are not published yet."* rather than inventing an address that would 404.
+
+### DEVIATION: an unknown category is visible
+
+The RN renders `CATEGORY_ORDER.filter(cat => grouped[cat]?.length > 0)`, so a video whose category
+is not one of the five is grouped and then **silently dropped**: the admin sees it saved and visible,
+the app shows a catalogue missing it, and nothing anywhere says why. Both ports fold the unknown into
+`Uncategorized`. **Wrong section beats no section**, and this is the "do not reproduce a latent bug —
+port the intent" rule applied to a client, not a server.
+
+### DEVIATION: no `VideoPlayer`
+
+Spec §0.1 names `VideoPlayer` as the second of two files allowed to open a connection. It will never
+be written: `AVPlayerViewController` streams the media itself, so the app never writes that request,
+and it arrives with AirPlay, Picture in Picture, the lock screen and the accessibility stack. The RN
+built 21 style keys of custom transport because `expo-av` gave it nothing usable; that is a week of
+work to arrive somewhere worse. The spec is amended in place.
+
+### The networking allow-list is an EXACT pair, not a ceiling
+
+§12 now holds each language to two names rather than to a count. "At most two" would let a third
+arrive by having one of the two deleted — accounting that passes while the property it protects is
+gone. Adding one is an edit to that line, on purpose, with the spec updated beside it.
+
+### The §12 sweep was fooled by an alias
+
+It matched a literal `fetch(`. The first draft of `content-client.js` called the function through a
+local variable, so **a file that genuinely opened a connection was invisible to the rule whose whole
+job is to count them** — the gate reported one transport while there were two. It matches the
+identifier now, with string literals stripped as well as comments: the looser pattern immediately
+named `opening-metrics.js`, whose only crime was the label `'Games to fetch'`.
+
+Worth keeping as a shape: **a sweep that looks for a call site can be defeated by one indirection.**
+Look for the name.
+
+### Everything else is generated
+
+`extract_video_styles.js` (sixth extractor, same `rn_ast.js` machine) and `gen_video_metrics.js`
+emit 214 Swift constants and 5 category styles from the RN source. After `"⬜ White"` and the
+unapplied 90pt padding both shipped from transcriptions on this same day, hand-typing 56 style blocks
+was not defensible.
+
 ## DEVIATION REMOVED: the Tree name field the RN never had (2026-08-26)
 
 The build form carried a **TREE NAME** text box and refused to build without it (`errNoName`). The RN

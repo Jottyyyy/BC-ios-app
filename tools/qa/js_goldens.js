@@ -55,6 +55,9 @@ var OSCREENS = require(path.join(JS, 'openings.js'));
 var ROTREE = require(path.join(__dirname, 'replay_opening_tree.js'));
 var SLAYOUTMUT = require(path.join(__dirname, 'swift_layout_mutation_test.js'));
 var SPADDING = require(path.join(__dirname, 'swift_padding_check.js'));
+var RVIDEO = require(path.join(__dirname, 'replay_videos.js'));
+var VLIB = require(path.join(ROOT, 'web-demo', 'js', 'video-library.js'));
+var VCC = require(path.join(ROOT, 'web-demo', 'js', 'content-client.js'));
 var HOST = require(path.join(JS, 'engine-host.js'));
 var BUDGET = require(path.join(__dirname, 'engine_budget_check.js'));
 var STRENGTH = require(path.join(__dirname, 'engine_strength_check.js'));
@@ -184,6 +187,12 @@ record('swift layout mutation', SLAYOUTMUT.selfTest());
 // list applied top and horizontal and dropped a 90pt bottom, so the scroll content ran under the
 // FAB -- taking the only hint about the only delete gesture with it. See docs/pairing-manager.md.
 record('swift padding sides', SPADDING.selfTest());
+// Tutorial Videos: the ONE online-only screen. The parser is Foundation-only and replayed here;
+// the gate also pins the refusal ORDER, which is the decision that would drift between the two
+// screens. See docs/tutorial-videos.md.
+record('video-library.selfTest', VLIB.selfTest());
+record('content-client.selfTest', VCC.selfTest());
+record('swift videos vs JS', RVIDEO.selfTest());
 // Where the search runs, and the frame budget it must respect when it runs in-thread.
 record('engine-host.selfTest', HOST.selfTest());
 record('engine frame budget', BUDGET.selfTest());

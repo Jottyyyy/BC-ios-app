@@ -139,6 +139,7 @@
     else if (current === 'pairing-create') renderPairingCreate();
     else if (current === 'pairing-detail') renderPairingDetail();
     else if (current === 'openings') renderOpenings();
+    else if (current === 'videos') renderVideos();
     else if (current === 'puzzles') renderPuzzleHub();
     else if (current === 'puzzle-play') renderPuzzlePlayHome();
     else if (current === 'puzzle-solve') renderPuzzleSolver();
@@ -609,6 +610,56 @@
     });
   }
 
+  /* ======================================================================== *
+   *  TUTORIAL VIDEOS — see js/videos.js, js/content-client.js, js/video-library.js
+   *
+   *  The ONE online-only screen in the app. State lives here rather than in the
+   *  screen for the same reason `openingForm` does: the router owns when to
+   *  fetch, the module owns what to draw.
+   * ======================================================================== */
+
+  var videoState = null;
+
+  function videosGo() {
+    if (!videoState) videoState = BiyaVideos.emptyState();
+    current = videos;
+    render();
+    videosLoad();
+  }
+
+  /* Fetch once per visit. The catalogue changes when somebody publishes a new manifest, not while
+     the user is looking at it. */
+  function videosLoad() {
+    if (!videoState || videoState.loaded || videoState.loading) return;
+    if (!BiyaContentClient.isConfigured()) return;
+    videoState.loading = true;
+    render();
+    BiyaContentClient.videos().then(function (r) {
+      // Dropped if the user has left, the same guard `openingForm !== form` gives the download.
+      if (current !== videos) return;
+      videoState.loading = false;
+      videoState.loaded = true;
+      videoState.error = r.error || null;
+      videoState.videos = r.videos || [];
+      render();
+    });
+  }
+
+  function renderVideos() {
+    if (!videoState) videoState = BiyaVideos.emptyState();
+    videoState.isPremium = !locked();
+    BiyaVideos.render(view, videoState, {
+      onExit: function () { current = home; render(); },
+      onPaywall: function () { goPaywall(); },
+      onRetry: function () { videoState.loaded = false; videoState.error = null; videosLoad(); },
+      onPlay: function (video) {
+        // The browser has a <video> element and the phone has AVPlayer; neither needs a custom
+        // transport built for it. Opening the URL is the honest demo of "this streams".
+        if (video && video.videoURL) global.open(video.videoURL, _blank);
+      }
+    });
+  }
+
   function renderOpenings() {
     var store = BiyaOpeningStore.shared();
     if (!openingForm) openingForm = BiyaOpenings.emptyForm();
@@ -672,6 +723,11 @@
       // home.js has emitted 'openingTrainer' since the tile was drawn and nothing caught it —
       // the tile did nothing at all, which is the bug the client reported. This is where it goes.
       else if (action === 'openingTrainer') openingsGo('list');
+      // home.js has emitted 'videos' since the tile was drawn and nothing caught it. This is where
+      // it goes. It sits BELOW the `locked()` line above deliberately -- the gate still applies,
+      // the same way it does in PhoneView, because a trial user seeing the subscribe screen is the
+      // point rather than an accident.
+      else if (action === 'videos') videosGo();
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
     });

@@ -1,0 +1,198 @@
+/* video.css — Tutorial Videos.
+ *
+ * Every number and colour arrives as a `--vid-*` custom property that `videos.js` pushes onto the
+ * root from `video-metrics.js`, which is GENERATED from the React Native extraction. Nothing in this
+ * file is a design decision; it is the layout those values describe.
+ *
+ * The category accents are the exception and deliberately so: they are per-section and set inline,
+ * exactly as `tutorial-videos/index.tsx:175-176` sets them.
+ */
+
+.vid-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--vid-container-background-color);
+}
+
+/* ---- Header ---------------------------------------------------------------- */
+
+.vid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--vid-header-padding-vertical) var(--vid-header-padding-horizontal);
+  border-bottom: var(--vid-header-border-bottom-width) solid var(--vid-header-border-bottom-color);
+  flex: 0 0 auto;
+}
+.vid-back {
+  width: var(--vid-back-button-width);
+  height: var(--vid-back-button-height);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; cursor: pointer;
+  font-size: var(--vid-back-icon-font-size);
+  color: var(--vid-back-icon-color);
+  font-family: inherit;
+}
+.vid-title {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font);
+  font-size: var(--vid-header-title-font-size);
+  font-weight: 700;
+  color: var(--vid-header-title-color);
+}
+/* The counterweight that keeps the title centred — the Swift puts the app logo here. */
+.vid-logo { width: var(--vid-back-button-width); height: var(--vid-back-button-height); }
+
+/* ---- Body ------------------------------------------------------------------ */
+
+.vid-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--vid-list-content-padding-top) var(--vid-list-content-padding-horizontal)
+           var(--vid-list-content-padding-bottom);
+}
+
+/* The standing "this needs internet" line. Shown even when the videos loaded, because every other
+   screen in this app works in Airplane Mode and one that quietly does not is a surprise. */
+.vid-online-note {
+  font-family: var(--font);
+  font-size: var(--vid-loading-text-font-size);
+  color: var(--vid-loading-text-color);
+  margin-bottom: var(--vid-section-header-margin-bottom);
+}
+
+/* ---- The four notices ------------------------------------------------------- */
+
+.vid-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  padding: 0 var(--vid-paywall-container-padding-horizontal);
+}
+.vid-notice-glyph {
+  font-size: var(--vid-empty-icon-font-size);
+  margin-bottom: var(--vid-empty-icon-margin-bottom);
+}
+.vid-notice-title {
+  font-family: var(--font);
+  font-size: var(--vid-empty-title-font-size);
+  font-weight: 700;
+  color: var(--vid-empty-title-color);
+  margin-bottom: var(--vid-empty-title-margin-bottom);
+}
+.vid-notice-body {
+  font-family: var(--font);
+  font-size: var(--vid-empty-subtitle-font-size);
+  color: var(--vid-empty-subtitle-color);
+  line-height: 1.4;
+}
+.vid-cta {
+  margin-top: var(--vid-paywall-subtext-margin-bottom);
+  padding: var(--vid-subscribe-button-padding-vertical) var(--vid-subscribe-button-padding-horizontal);
+  border: 0;
+  border-radius: var(--vid-subscribe-button-border-radius);
+  background: var(--vid-subscribe-button-background-color);
+  color: var(--vid-subscribe-button-text-color);
+  font-family: var(--font);
+  font-size: var(--vid-subscribe-button-text-font-size);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---- Sections -------------------------------------------------------------- */
+
+.vid-section {
+  display: flex;
+  align-items: center;
+  gap: var(--vid-section-header-gap);
+  margin-top: var(--vid-section-header-margin-top);
+  margin-bottom: var(--vid-section-header-margin-bottom);
+}
+.vid-accent {
+  width: var(--vid-section-accent-width);
+  height: var(--vid-section-accent-height);
+  border-radius: var(--vid-section-accent-border-radius);
+  flex: 0 0 auto;
+}
+.vid-section-title {
+  flex: 1;
+  font-family: var(--font);
+  font-size: var(--vid-section-title-font-size);
+  font-weight: 700;
+}
+.vid-section-count {
+  font-family: var(--font);
+  font-size: var(--vid-section-count-font-size);
+  color: var(--vid-section-count-color);
+  font-weight: 500;
+}
+
+/* ---- Cards ----------------------------------------------------------------- */
+
+.vid-card {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  background: var(--vid-video-card-background-color);
+  border-radius: var(--vid-video-card-border-radius);
+  border: var(--vid-video-card-border-width) solid var(--vid-video-card-border-color);
+  margin-bottom: var(--vid-video-card-margin-bottom);
+  font-family: inherit;
+}
+.vid-thumb {
+  position: relative;
+  width: var(--vid-thumb-w);
+  height: var(--vid-thumb-h);
+  flex: 0 0 auto;
+  background: var(--vid-thumb-wrap-background-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vid-play {
+  width: var(--vid-play-btn-width);
+  height: var(--vid-play-btn-height);
+  border-radius: var(--vid-play-btn-border-radius);
+  background: var(--vid-play-btn-background-color);
+  color: var(--vid-play-btn-icon-color);
+  font-size: var(--vid-play-btn-icon-font-size);
+  display: flex; align-items: center; justify-content: center;
+}
+.vid-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--vid-card-info-gap);
+  padding: var(--vid-card-info-padding);
+}
+.vid-chip {
+  align-self: flex-start;
+  border-radius: var(--vid-cat-chip-border-radius);
+  padding: var(--vid-cat-chip-padding-vertical) var(--vid-cat-chip-padding-horizontal);
+  font-family: var(--font);
+  font-size: var(--vid-cat-chip-text-font-size);
+  font-weight: 700;
+}
+.vid-card-title {
+  font-family: var(--font);
+  font-size: var(--vid-card-title-font-size);
+  font-weight: 700;
+  color: var(--vid-card-title-color);
+}
+.vid-card-desc {
+  font-family: var(--font);
+  font-size: var(--vid-card-desc-font-size);
+  color: var(--vid-card-desc-color);
+  line-height: 1.4;
+  overflow: hidden;
+}
