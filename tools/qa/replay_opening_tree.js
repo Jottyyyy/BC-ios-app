@@ -415,7 +415,9 @@ const ST = require(path.join(JS, 'opening-store.js'));
 
   // -- the regression guard, first. Both languages, both sources. --------------
   for (const site of ['lichess', 'chesscom']) {
-    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site},`)
+    // No trailing comma any more: `startDownload` used to take the typed tree name as a second
+    // argument, and there is no typed tree name.
+    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site}\\)`)
       .test(code(SCREENS_SRC)), `picking ${site} starts a download in Swift, not an apology`);
   }
   // `errNetwork` may still be SET — a download really can fail — but only from a `catch`. Set
@@ -532,6 +534,49 @@ const ST = require(path.join(JS, 'opening-store.js'));
     && /case "black": return \.blackWin/.test(DOWN_CODE)
     && /contains\(status\) \? nil : \.draw/.test(DOWN_CODE),
     'as is the Swift one');
+
+  // -- the tree names itself ----------------------------------------------------
+  //
+  // The port had grown a "Tree name" field the RN form never had, so every download made the user
+  // invent a label for a thing that already has one. `analysis-board/openingtree.tsx:531` is
+  //
+  //     const name = `${username} · ${playerColor}`
+  //
+  // and a client asked for exactly that back. The rule is one pure function per language rather
+  // than a string built at each call site, because there are three call sites — paste, download,
+  // and the Swift tail — and two of them would eventually drift.
+  {
+    const MET = require(path.join(JS, 'opening-metrics.js'));
+    eq(MET.STRINGS.autoNameTemplate, swString(MET_SRC, 'OpeningStrings', 'autoNameTemplate'),
+      'both languages hold the same name template');
+    eq(MET.STRINGS.autoNamePasted, swString(MET_SRC, 'OpeningStrings', 'autoNamePasted'),
+      'and the same word for a source with no account behind it');
+
+    eq(MET.autoName('hikaru', 'white'), 'hikaru · white', 'an account and a side');
+    eq(MET.autoName('  Hikaru  ', 'both'), 'Hikaru · both', 'the username is trimmed');
+    eq(MET.autoName('', 'black'), 'Pasted games · black', 'and a paste says so');
+    expect(MET.autoName('a', 'white') !== MET.autoName('a', 'black'),
+      'two trees for one account, one per side, must not share a name — which is the whole reason '
+      + 'the colour is in it and not only in the meta line underneath');
+
+    // The field, and the error for leaving it blank, are gone from BOTH languages.
+    for (const [src, what] of [[MET_SRC, 'Swift'], [read(JS, 'opening-metrics.js'), 'JS']]) {
+      for (const gone of ['nameLabel', 'namePlaceholder', 'errNoName']) {
+        expect(!new RegExp(`\\b${gone}\\b`).test(src),
+          `${what} no longer carries ${gone} — the form has no name field to label, fill or refuse`);
+      }
+    }
+    expect(!/@State private var name\b/.test(code(SCREENS_SRC)),
+      'and the Swift form holds no name of its own');
+
+    // The one Swift site that decides it, and the guard that keeps a pasted tree from being named
+    // after a username left behind in the form by a source the user switched away from.
+    expect(/OpeningStrings\.autoName\(username: source\.needsUsername \? username : ""/
+      .test(code(SCREENS_SRC)),
+      'the Swift names the tree in `finish`, reading the username only when the source has one');
+    expect(/colour: colour\.rawValue/.test(code(SCREENS_SRC)),
+      'and passes the colour as its raw lower-case value, which is what the RN\'s playerColor is');
+  }
 
   // -- the colour rule ----------------------------------------------------------
   //

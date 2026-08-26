@@ -13,6 +13,48 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## DEVIATION REMOVED: the Tree name field the RN never had (2026-08-26)
+
+The build form carried a **TREE NAME** text box and refused to build without it (`errNoName`). The RN
+form has no such field: it names the tree and saves, at `analysis-board/openingtree.tsx:531`,
+
+```js
+const name = `${username} · ${playerColor}`;
+```
+
+So this was an **invented** control that made the user label a thing that already had a label. Both
+languages now build the same string; `nameLabel`, `namePlaceholder` and `errNoName` are gone.
+
+Recorded here because of how it got in: nothing was wrong with the field, it passed every gate, and
+the JS twin agreed with the Swift throughout — the two were faithful to each other and neither was
+faithful to the RN. Extraction could not catch it either, since `extract_opening_styles.js` walks
+StyleSheets, not JSX. **An invented control is invisible to a parity harness that only compares the
+two ports.** The client noticed in a minute.
+
+### INVENTED: `Pasted games` for the sources the RN does not have
+
+Paste PGN and My Coach games are the offline port's own, so there is no account to name them after.
+They read `Pasted games · both`.
+
+Deriving the name from the PGN's `[White]`/`[Black]` headers was considered and rejected. It is a
+guess; it is wrong the moment a PGN holds more than one player's games; and nothing downstream would
+use it — `OpeningTree.games(fromPGN:userName:)` is already called with `nil`, so the colour filter
+falls back to the picker rather than to any derived identity. Naming a tree for something not in it
+is worse than naming it plainly.
+
+### The colour belongs in the name
+
+Not only in the meta line beneath it: two trees for one account, one per side, would otherwise be
+indistinguishable in the list. The RN reached the same conclusion. Asserted as a property —
+`autoName('a', 'white') != autoName('a', 'black')` — rather than as a literal, so the reason survives
+a copy change.
+
+### The guard worth having
+
+A user who types a username for Lichess and switches to Paste PGN leaves the username in the form.
+The name reads it only when `source.needsUsername`, so a pasted tree is never labelled with an
+account whose games it does not contain. Mutation-tested; removing the guard fails the gate.
+
 ## An extracted constant that was never applied (2026-08-26)
 
 ### The bug
