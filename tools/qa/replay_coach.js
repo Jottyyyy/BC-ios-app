@@ -259,6 +259,41 @@ function run() {
     }
   }
 
+  // ── Choose Your Side: three lines, three different things ───────────────────
+  //
+  // `play.tsx:1524-1526` is a king glyph at 44pt, the colour's name at 17, and the hint at 11:
+  //
+  //     <Text style={styles.kingW}>♔</Text>
+  //     <Text style={styles.colorNameW}>White</Text>
+  //     <Text style={styles.colorHintW}>You move first</Text>
+  //
+  // The glyph strings used to read `⬜ White` / `⬛ Black`, so each card said its colour TWICE — once
+  // at 44pt and again at 17 — and the king was gone. BOTH languages had it, so the twin agreed with
+  // itself and every gate stayed green; only the RN disagreed, and the extraction cannot help here
+  // because it carries StyleSheets, not JSX text. A client reported it as "2x nasabi black and
+  // white". Asserted as a property instead: the glyph line may not repeat the name line.
+  {
+    const STR = require(path.join(JS, 'coach-strings.js')).STR;
+    for (const [glyphKey, nameKey, cp] of
+         [['kingWhite', 'white', 0x2654], ['kingBlack', 'black', 0x265A]]) {
+      eq(String.fromCodePoint(cp), STR[glyphKey],
+         `${glyphKey} is the chess king U+${cp.toString(16).toUpperCase()}, alone`);
+      eq(swStr(swStrings, glyphKey), STR[glyphKey], `CoachStrings.${glyphKey} matches the JS`);
+      expect(!STR[glyphKey].toLowerCase().includes(STR[nameKey].toLowerCase()),
+        `${glyphKey} must not contain "${STR[nameKey]}" — the card already prints the name on the `
+        + 'line below, and saying it twice is what the client reported');
+      expect([...STR[glyphKey]].length === 1,
+        `${glyphKey} is a single character; anything longer is a label, not a glyph`);
+    }
+    // The Swift card must read all three from different places, or the property above proves
+    // nothing about what actually renders.
+    const side = code(read(UI, 'CoachScreens.swift'));
+    for (const key of ['kingWhite', 'kingBlack', 'white', 'black', 'whiteSub', 'blackSub']) {
+      expect(new RegExp(`CoachStrings\\.${key}\\b`).test(side),
+        `the Swift colour card reads CoachStrings.${key}`);
+    }
+  }
+
   // ── CoachGame: the draft contract ───────────────────────────────────────────
   {
     eq('biya.coach.draft.v1.', swStr(swGame, 'draftKeyPrefix'), 'the draft key prefix');

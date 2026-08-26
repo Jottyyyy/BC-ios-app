@@ -9,6 +9,38 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-26 (fixed) — Choose Your Side said each colour twice, and lost the king
+
+Client, on a TestFlight build: *"2x nasabi black and white. Pagandahin lang natin."* The card read
+
+    ⬜ White          ← 44pt
+    White             ← 17pt
+    You move first    ← 11pt
+
+`play.tsx:1524-1526` is a king glyph, then the name, then the hint:
+
+```jsx
+<Text style={styles.kingW}>♔</Text>
+<Text style={styles.colorNameW}>White</Text>
+<Text style={styles.colorHintW}>You move first</Text>
+```
+
+The top line had been transcribed as `'⬜ White'` / `'⬛ Black'` — the word repeated at 44pt, and the
+king gone. Now `♔` / `♚`, and renamed `kingWhite` / `kingBlack` after the RN elements they render,
+which is also what `CoachPlay.kingWFontSize` has been styling all along. `web-demo/` updated.
+
+**Both languages had it**, which is why every gate stayed green: the twin agreed with itself and only
+the RN source disagreed — the exact failure `CLAUDE.md` warns about, *"two hand-typed copies agreeing
+with each other is not verification."* The extraction cannot help here either; it carries
+StyleSheets, not JSX text. So `replay_coach.js` asserts the property instead: the glyph is a single
+character, it is the chess king at that code point, and **it may not contain the colour's name**,
+because the line below already prints it. Mutation-tested — restoring `'⬜ White'` fails four ways.
+
+Same screenshot confirmed the previous fix on a real device: the banner read
+`Unfinished game · 4 moves as White` and the card read `Jaden Pogi goes first`, both correct.
+
+Gates: js_goldens 35,303 across 82 suites (ReplayCoach 324 → 338).
+
 ### 2026-08-26 (fixed) — Every interpolating string in Play vs Coach printed its parameter name
 
 Client: the coach ratings are missing. They were not missing — every card read **`ELO (n)`**. And it

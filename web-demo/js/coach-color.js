@@ -110,7 +110,7 @@ var BiyaCoachColor = (function () {
 
   function sideButton(colour, title, sub, draft, cb, root, coachName) {
     var b = el('button', 'cgc-side cgc-side-' + colour);
-    b.appendChild(el('div', 'cgc-side-chip', colour === WHITE ? STR.whiteChip : STR.blackChip));
+    b.appendChild(el('div', 'cgc-side-chip', colour === WHITE ? STR.kingWhite : STR.kingBlack));
     b.appendChild(el('div', 'cgc-side-title', title));
     b.appendChild(el('div', 'cgc-side-sub', sub));
     b.onclick = function () {
