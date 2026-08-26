@@ -13,6 +13,55 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## An extracted constant that was never applied (2026-08-26)
+
+### The bug
+
+`PairingList.listPaddingBottom = 90` was extracted from the RN, generated into both languages, and
+never applied in the Swift. The Tournaments list and the "New Tournament" button share a `ZStack`,
+so that 90pt is what holds the scroll content clear of the button floating over it. Without it the
+last element in the ScrollView sits under the button — and the last element is the hint reading
+*"Long press a card to delete"*, the only documentation of the only delete gesture.
+
+The client reported it as "walang way na mag delete ng tournament". Everything was ported; one
+modifier was missing, and it happened to be the one that made the instructions visible.
+
+Two more of the same defect: `PairingDetail.playerActions` lost its horizontal padding and
+`generateWrap` lost horizontal and bottom.
+
+### Why the existing checks could not see it
+
+- **The browser was right.** `.pgl-list` is a three-value `padding` shorthand, so `web-demo/` showed
+  the hint. A correct twin is not evidence about the Swift — the third time this exact shape has
+  cost something on this checkout.
+- **`metrics_key_check.js` / `swift_source_keys.js` check the wrong direction.** They prove every
+  constant REFERENCE resolves. A constant nobody references is invisible to both.
+- **An unused-constant census is unusable as a rule here.** 99 layout constants are unused in the
+  pairing metrics alone, nearly all legitimately: the share card and the free-tier banner were never
+  ported. Enforcing "unused is a bug" would have to be silenced immediately, and a silenced rule is
+  worse than no rule.
+
+### The rule that works, and why
+
+`tools/qa/swift_padding_check.js`: **if the Swift applies ANY of a block's `*Padding<Side>`
+constants, it must apply ALL of them.**
+
+Referencing one is the proof the block is rendered — which is exactly what a census cannot
+establish. An unported block is silent by construction; a rendered block that quietly lost a side
+fails. 62 rendered blocks across seven metrics files, 0 violations after the three fixes,
+mutation-tested 3/3.
+
+**Match the ENUM-QUALIFIED name.** The first draft searched for `.listPaddingBottom` and passed while
+the bug was in the tree, because `PuzzleStreakHome.listPaddingBottom` also exists. Block names repeat
+across screens; only `Enum.member` identifies one. A gate that reports a member as "used" because a
+different screen uses a same-named one is worse than absent.
+
+### Deliberately out of scope
+
+Borders and margins. A margin usually becomes padding on a neighbour in SwiftUI, so "unapplied" says
+nothing there. One known consequence: `generateWrapBorderTopWidth`/`BorderTopColor` are extracted
+and unapplied, so the Generate Round footer is missing the 1px divider the RN draws above it.
+
 ## A generated Swift string that was valid and wrong (2026-08-26)
 
 ### The bug

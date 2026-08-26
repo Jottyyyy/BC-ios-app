@@ -130,6 +130,29 @@ Worth keeping, because each is a class of mistake rather than a one-off.
    are documented in the mutant table rather than left as false survivors — and the second pointed
    at a real hole, since the store's own guard had no test until it did.
 
+## How a tournament is deleted, and how that hid
+
+**Long-press a card**, then confirm. The list footer says so: `"Long press a card to delete"`, which
+is what `tournaments/index.tsx:174` shows as the `FlatList`'s `ListFooterComponent`. Nothing is
+removed until the modal is confirmed — spec 7 #18, because the RN fired the request and dropped the
+row without reading the response, so a 422 looked like success.
+
+A client reported that there was **no way to delete a tournament**. There was, and it had been ported
+whole — store, modal, gesture, hint. What was missing was one modifier: `list` in the RN is
+`{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 90 }`, and the Swift applied the first two.
+
+That 90 is not decoration. The list and the "New Tournament" button share a `ZStack`, so the button
+floats *over* the scroll content, and 90pt of bottom padding is what keeps the content clear of it.
+Without it the last element in the ScrollView sits underneath the button — and the last element is
+the hint. The delete gesture had no discoverable documentation, which is indistinguishable from not
+existing.
+
+The browser never had the bug: `.pgl-list` is a three-value `padding` shorthand, so `web-demo/`
+showed the hint from the start. That is the recurring shape on this checkout — **the JS twin being
+right is not evidence about the Swift**, and no gate read the Swift closely enough to disagree.
+`tools/qa/swift_padding_check.js` now does: a block the Swift renders may not have lost one of its
+extracted padding sides.
+
 ## Acceptance criterion 4 — met
 
 The official handbook chapter C.04.3 is **purely normative and contains no worked example**
