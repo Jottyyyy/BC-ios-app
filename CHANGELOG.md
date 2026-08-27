@@ -9,6 +9,38 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-27 (changed) — 1.0.6 (50) shipped: the teammates' Tutorial Videos, built on a Mac
+
+Delivery UUID `61ddfa91-ba8f-42cc-b525-a9116b42424d`. VERIFY SUCCEEDED before the upload,
+`com.apple.developer.applesignin` read back out of the archive *and* out of the signed `.ipa`.
+82 MB, 1.0.6 (50).
+
+The first build carrying the eleven commits from `origin/main` — Tutorial Videos, the Opening Tree
+naming itself, the tournament delete hint, Choose Your Side, and the four unquoted route names —
+together with the local Stockfish fix that main still does not have. Neither half had been built
+alongside the other before. The two compile errors that merge produced are the entry below.
+
+**Still a TEST build, exactly as 47 through 49 were.** `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is
+empty on the app target's Release config, so `#if BIYA_APPSTORE` is false and
+`BiyaherongBuild.isTestBuild` stays `true` — no login at launch, no paywall, every daily cap lifted.
+**Do not submit this build to App Review**; use codemagic's `ios-appstore`, which rewrites the flag
+and refuses to build without it.
+
+**The commits are still local, for the third build running** — but the cause is now identified
+rather than guessed at. `git push` returns 403, *"Permission to Jottyyyy/BC-ios-app.git denied to
+fush-toj"*, because `credential.helper` is `osxkeychain` and the keychain's `github.com`
+internet-password entry is for the account **`fush-toj`**, while `user.email` on this Mac is
+`146051802+Jottyyyy@users.noreply.github.com`. Every push authenticates as the wrong account, which
+has no write access; fetch works because reads are public. The fix is to erase that entry and
+re-authenticate as `Jottyyyy` with a PAT carrying `repo` scope:
+
+```bash
+printf 'protocol=https\nhost=github.com\n' | git credential-osxkeychain erase
+git push origin HEAD    # username Jottyyyy, password = the PAT
+```
+
+`web-demo/` not updated — a release, and a fix to generated Swift whose JS twin did not change.
+
 ### 2026-08-27 (fixed) — Tutorial Videos did not compile: a missing import and a macOS-only modifier
 
 `origin/main` was pulled onto the Mac (11 commits: Tutorial Videos, the Opening Tree naming itself,
