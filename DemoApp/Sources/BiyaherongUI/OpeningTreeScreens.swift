@@ -195,7 +195,6 @@ struct OpeningTreeBuildScreen: View {
     // order; the other way round it is a compile error, not a style preference.
     let onDone: () -> Void
 
-    @State private var name = ""
     @State private var colour: OpeningTree.Colour = .both
     @State private var source: OpeningSource = .pgn
     @State private var pgn = ""
@@ -218,9 +217,6 @@ struct OpeningTreeBuildScreen: View {
             OpeningHeader(title: OpeningStrings.title, onBack: onDone)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    label(OpeningStrings.nameLabel)
-                    field($name, placeholder: OpeningStrings.namePlaceholder)
-
                     label(OpeningStrings.colourLabel)
                     colourRow
 
@@ -414,8 +410,6 @@ struct OpeningTreeBuildScreen: View {
     /// tail is shared rather than written twice.
     private func build() {
         guard !isDownloading else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { error = OpeningStrings.errNoName; return }
         error = nil
 
         switch source {
@@ -430,13 +424,13 @@ struct OpeningTreeBuildScreen: View {
             guard !games.isEmpty else { error = OpeningStrings.errNoGames; return }
             // The real check is in `finish`, on POSITIONS: `PGN.mainlineTokens` is a tokenizer, not
             // a validator, so "not a game" comes back as three move tokens and passes this one.
-            finish(name: trimmed, games: games)
+            finish(games: games)
         case .coach:
             error = OpeningStrings.errNoCoachGames
         case .lichess:
-            startDownload(site: .lichess, name: trimmed)
+            startDownload(site: .lichess)
         case .chesscom:
-            startDownload(site: .chesscom, name: trimmed)
+            startDownload(site: .chesscom)
         }
     }
 
@@ -449,7 +443,7 @@ struct OpeningTreeBuildScreen: View {
     /// tree once the banner is gone. Here nothing is saved until the download finishes, so a
     /// failure leaves the form open with the reason on it and the list exactly as it was. The
     /// counter still moves, because that is what the banner is for.
-    private func startDownload(site: OpeningDownload.Site, name treeName: String) {
+    private func startDownload(site: OpeningDownload.Site) {
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !user.isEmpty else { error = OpeningStrings.errNoUser; return }
 
@@ -482,12 +476,22 @@ struct OpeningTreeBuildScreen: View {
             // problem, and telling the user to check their connection would send them to fix the
             // one thing that is working. It is the same 404-shaped answer, from a 200.
             guard !collected.isEmpty else { error = OpeningStrings.errUnknownUser; return }
-            finish(name: treeName, games: collected)
+            finish(games: collected)
         }
     }
 
     /// Build, save, close — the tail both sources share.
-    private func finish(name treeName: String, games: [OpeningTree.Game]) {
+    ///
+    /// **The name is decided here and nowhere else.** It used to be typed into a field the RN form
+    /// never had, threaded through both paths as an argument. Doing it in the one tail both paths
+    /// reach means the two cannot name a tree differently.
+    ///
+    /// The username is read only when the source actually has one: switching from Lichess to Paste
+    /// PGN leaves it behind in the form, and a pasted tree named after an account whose games are
+    /// not in it would be worse than one named plainly.
+    private func finish(games: [OpeningTree.Game]) {
+        let treeName = OpeningStrings.autoName(username: source.needsUsername ? username : "",
+                                               colour: colour.rawValue)
         var tree = OpeningTree()
         tree.add(games)
         guard tree.nodeCount > 0 else { error = OpeningStrings.errNoGames; return }

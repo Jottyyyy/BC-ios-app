@@ -13,6 +13,157 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 | **2** | Chess engine | **Stockfish (GPL) + publish the app's source openly** — **CARRIED OUT 2026-08-25** | Done: Stockfish 17.1 is vendored at `Engine/Sources/CStockfish/sf/`, `LICENSE` is the GPL, and the grant is irrevocable. Not an xcframework and not a UCI text bridge — the public `Engine` C++ class with structured callbacks, behind a pure-C header. The parity core is untouched and still engine-agnostic. See `docs/stockfish.md`. |
 | First build target | What to build first | **Parity core + tests** | This package: pure-Swift domain engines + a golden-vector parity harness, verified against the real Laravel source. |
 
+## Tutorial Videos (2026-08-26)
+
+The last unwired Home tile. Full write-up in `docs/tutorial-videos.md`; this records only what
+deviates or was decided.
+
+### DECISION: a published manifest, not the Laravel API
+
+`GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no
+account and no token, by design** — it signs in with Apple on the device, never talks to the Laravel
+backend, and there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that
+endpoint would produce a permanent 401 indistinguishable from a broken feature.
+
+Spec §0.1 had already settled it: *"Content = static files on R2/S3. No API. No accounts. No sync."*
+`tools/content/generate_video_manifest.php` runs the SAME query the controller runs, so the manifest
+and the API cannot describe different catalogues.
+
+**Neither prerequisite exists.** `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos`
+has 0 rows — both checked, not assumed. `manifestURL` is therefore empty in both languages and the
+screen says *"Videos are not published yet."* rather than inventing an address that would 404.
+
+### DEVIATION: an unknown category is visible
+
+The RN renders `CATEGORY_ORDER.filter(cat => grouped[cat]?.length > 0)`, so a video whose category
+is not one of the five is grouped and then **silently dropped**: the admin sees it saved and visible,
+the app shows a catalogue missing it, and nothing anywhere says why. Both ports fold the unknown into
+`Uncategorized`. **Wrong section beats no section**, and this is the "do not reproduce a latent bug —
+port the intent" rule applied to a client, not a server.
+
+### DEVIATION: no `VideoPlayer`
+
+Spec §0.1 names `VideoPlayer` as the second of two files allowed to open a connection. It will never
+be written: `AVPlayerViewController` streams the media itself, so the app never writes that request,
+and it arrives with AirPlay, Picture in Picture, the lock screen and the accessibility stack. The RN
+built 21 style keys of custom transport because `expo-av` gave it nothing usable; that is a week of
+work to arrive somewhere worse. The spec is amended in place.
+
+### The networking allow-list is an EXACT pair, not a ceiling
+
+§12 now holds each language to two names rather than to a count. "At most two" would let a third
+arrive by having one of the two deleted — accounting that passes while the property it protects is
+gone. Adding one is an edit to that line, on purpose, with the spec updated beside it.
+
+### The §12 sweep was fooled by an alias
+
+It matched a literal `fetch(`. The first draft of `content-client.js` called the function through a
+local variable, so **a file that genuinely opened a connection was invisible to the rule whose whole
+job is to count them** — the gate reported one transport while there were two. It matches the
+identifier now, with string literals stripped as well as comments: the looser pattern immediately
+named `opening-metrics.js`, whose only crime was the label `'Games to fetch'`.
+
+Worth keeping as a shape: **a sweep that looks for a call site can be defeated by one indirection.**
+Look for the name.
+
+### Everything else is generated
+
+`extract_video_styles.js` (sixth extractor, same `rn_ast.js` machine) and `gen_video_metrics.js`
+emit 214 Swift constants and 5 category styles from the RN source. After `"⬜ White"` and the
+unapplied 90pt padding both shipped from transcriptions on this same day, hand-typing 56 style blocks
+was not defensible.
+
+## DEVIATION REMOVED: the Tree name field the RN never had (2026-08-26)
+
+The build form carried a **TREE NAME** text box and refused to build without it (`errNoName`). The RN
+form has no such field: it names the tree and saves, at `analysis-board/openingtree.tsx:531`,
+
+```js
+const name = `${username} · ${playerColor}`;
+```
+
+So this was an **invented** control that made the user label a thing that already had a label. Both
+languages now build the same string; `nameLabel`, `namePlaceholder` and `errNoName` are gone.
+
+Recorded here because of how it got in: nothing was wrong with the field, it passed every gate, and
+the JS twin agreed with the Swift throughout — the two were faithful to each other and neither was
+faithful to the RN. Extraction could not catch it either, since `extract_opening_styles.js` walks
+StyleSheets, not JSX. **An invented control is invisible to a parity harness that only compares the
+two ports.** The client noticed in a minute.
+
+### INVENTED: `Pasted games` for the sources the RN does not have
+
+Paste PGN and My Coach games are the offline port's own, so there is no account to name them after.
+They read `Pasted games · both`.
+
+Deriving the name from the PGN's `[White]`/`[Black]` headers was considered and rejected. It is a
+guess; it is wrong the moment a PGN holds more than one player's games; and nothing downstream would
+use it — `OpeningTree.games(fromPGN:userName:)` is already called with `nil`, so the colour filter
+falls back to the picker rather than to any derived identity. Naming a tree for something not in it
+is worse than naming it plainly.
+
+### The colour belongs in the name
+
+Not only in the meta line beneath it: two trees for one account, one per side, would otherwise be
+indistinguishable in the list. The RN reached the same conclusion. Asserted as a property —
+`autoName('a', 'white') != autoName('a', 'black')` — rather than as a literal, so the reason survives
+a copy change.
+
+### The guard worth having
+
+A user who types a username for Lichess and switches to Paste PGN leaves the username in the form.
+The name reads it only when `source.needsUsername`, so a pasted tree is never labelled with an
+account whose games it does not contain. Mutation-tested; removing the guard fails the gate.
+
+## An extracted constant that was never applied (2026-08-26)
+
+### The bug
+
+`PairingList.listPaddingBottom = 90` was extracted from the RN, generated into both languages, and
+never applied in the Swift. The Tournaments list and the "New Tournament" button share a `ZStack`,
+so that 90pt is what holds the scroll content clear of the button floating over it. Without it the
+last element in the ScrollView sits under the button — and the last element is the hint reading
+*"Long press a card to delete"*, the only documentation of the only delete gesture.
+
+The client reported it as "walang way na mag delete ng tournament". Everything was ported; one
+modifier was missing, and it happened to be the one that made the instructions visible.
+
+Two more of the same defect: `PairingDetail.playerActions` lost its horizontal padding and
+`generateWrap` lost horizontal and bottom.
+
+### Why the existing checks could not see it
+
+- **The browser was right.** `.pgl-list` is a three-value `padding` shorthand, so `web-demo/` showed
+  the hint. A correct twin is not evidence about the Swift — the third time this exact shape has
+  cost something on this checkout.
+- **`metrics_key_check.js` / `swift_source_keys.js` check the wrong direction.** They prove every
+  constant REFERENCE resolves. A constant nobody references is invisible to both.
+- **An unused-constant census is unusable as a rule here.** 99 layout constants are unused in the
+  pairing metrics alone, nearly all legitimately: the share card and the free-tier banner were never
+  ported. Enforcing "unused is a bug" would have to be silenced immediately, and a silenced rule is
+  worse than no rule.
+
+### The rule that works, and why
+
+`tools/qa/swift_padding_check.js`: **if the Swift applies ANY of a block's `*Padding<Side>`
+constants, it must apply ALL of them.**
+
+Referencing one is the proof the block is rendered — which is exactly what a census cannot
+establish. An unported block is silent by construction; a rendered block that quietly lost a side
+fails. 62 rendered blocks across seven metrics files, 0 violations after the three fixes,
+mutation-tested 3/3.
+
+**Match the ENUM-QUALIFIED name.** The first draft searched for `.listPaddingBottom` and passed while
+the bug was in the tree, because `PuzzleStreakHome.listPaddingBottom` also exists. Block names repeat
+across screens; only `Enum.member` identifies one. A gate that reports a member as "used" because a
+different screen uses a same-named one is worse than absent.
+
+### Deliberately out of scope
+
+Borders and margins. A margin usually becomes padding on a neighbour in SwiftUI, so "unapplied" says
+nothing there. One known consequence: `generateWrapBorderTopWidth`/`BorderTopColor` are extracted
+and unapplied, so the Generate Round footer is missing the 1px divider the RN draws above it.
+
 ## A generated Swift string that was valid and wrong (2026-08-26)
 
 ### The bug

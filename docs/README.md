@@ -43,6 +43,10 @@ Feature- and subsystem-level documentation for this repo.
 - [`analysis-board.md`](analysis-board.md) — the offline analysis screen: move tree, local engine, ECO book,
   game review, persistence, Setup Position, PGN import/export, and the pure metrics layer extracted from the
   real RN StyleSheet.
+- [`tutorial-videos.md`](tutorial-videos.md) — the one screen that does not work offline: a
+  premium catalogue streamed from the content bucket. Why it reads a published manifest and not the
+  Laravel API (this app has no account and no token, by design), the order the four refusals are
+  tested in, and the three steps that turn it on — none of which are done yet.
 - [`stockfish.md`](stockfish.md) — **Stockfish 17.1, compiled into the app.** How it is vendored and
   bridged (the public `Engine` class, not pipes; a pure-C header, so no C++ interop), the four things
   that would have shipped badly — including a net-load failure that calls `exit()` and takes the app

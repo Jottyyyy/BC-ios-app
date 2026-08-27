@@ -279,8 +279,6 @@ enum OpeningStrings {
     static let meta = "{games} games · {positions} positions · {colour}"
 
     // form
-    static let nameLabel = "Tree name"
-    static let namePlaceholder = "e.g. My White repertoire"
     static let colourLabel = "Side you played"
     static let sourceLabel = "Where the games come from"
     /// NEW — the offline port's own sources. The RN form offers Lichess and Chess.com only.
@@ -345,13 +343,46 @@ enum OpeningStrings {
     static let done = "✓ Built from {n} games"
 
     // errors
-    static let errNoName = "Give the tree a name."
     static let errNoPgn = "Paste some PGN first."
     static let errNoUser = "Enter a username."
     static let errNoGames = "No games found in that PGN."
     static let errNoCoachGames = "You have not finished a game against a coach yet."
     static let errNetwork = "Could not reach that site. Check your connection and try again."
     static let errUnknownUser = "No games found for that username."
+
+    // MARK: - The tree's name, built rather than typed
+
+    /// `hikaru · white`. The RN builds exactly this and never asks
+    /// (`analysis-board/openingtree.tsx:531`):
+    ///
+    ///     const name = `${username} · ${playerColor}`
+    ///
+    /// The port had grown a **Tree name** field the RN never had, so every download made the user
+    /// invent a label for a thing that already has one. A client asked for it back: *"Pwede ba
+    /// tanggalin na yung tree name — automatic name ng tree eh yung account name na hahanapan ng
+    /// tira."*
+    static let autoNameTemplate = "{who} · {colour}"
+
+    /// The `{who}` for a source with no account behind it.
+    ///
+    /// Paste PGN and My Coach games are the offline port's own — the RN form offers Lichess and
+    /// Chess.com only — so there is no username to name them after. Deriving one from the PGN's
+    /// `[White]`/`[Black]` headers was considered and rejected: it is a guess, it is wrong the
+    /// moment a PGN holds more than one player's games, and nothing downstream uses it. A tree
+    /// named for something that is not in it is worse than a tree named plainly.
+    static let autoNamePasted = "Pasted games"
+
+    /// The one place a tree's name is decided, in either language.
+    ///
+    /// `colour` arrives as the raw `OpeningTree.Colour` value — `white`/`black`/`both`, lower case,
+    /// which is what the RN's `playerColor` is. The colour is part of the name and not just of the
+    /// meta line underneath because two trees for one account, one per side, would otherwise be
+    /// impossible to tell apart in the list.
+    static func autoName(username: String, colour: String) -> String {
+        let who = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fill(autoNameTemplate,
+                    ["who": who.isEmpty ? autoNamePasted : who, "colour": colour])
+    }
 
     /// `{k}` substitution, the same helper `PaywallStrings` uses. Never re-type a count into a
     /// string — that is how `Repertoire exceeds {actualCount} positions (max 500)` happened.

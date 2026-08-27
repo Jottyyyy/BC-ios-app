@@ -54,8 +54,17 @@ var BiyaCoachStrings = (function () {
     resumeAsk: 'Would you like to continue or start fresh?',
     newGame: 'New Game',
     continueGame: 'Continue',
-    whiteChip: '⬜ White',
-    blackChip: '⬛ Black',
+    /* The big glyph at the top of each Choose Your Side card. `play.tsx:1524` is
+       `<Text style={styles.kingW}>♔</Text>` — a KING, alone, at 44pt, with the colour's name on the
+       line below it in `colorNameW`.
+
+       These used to read '⬜ White' / '⬛ Black', which put the word on the card TWICE — once here at
+       44pt and again underneath at 17pt — and dropped the king entirely. Both languages had it, so
+       the twin agreed with itself and nothing failed; only the RN source disagreed. A client
+       reported it as "2x nasabi black and white". The names now match the RN element they render
+       (`kingW`/`kingB`), which is also what `CoachPlay.kingWFontSize` styles them with. */
+    kingWhite: '♔',
+    kingBlack: '♚',
 
     // --- Game (2.7) ---
     gameOverWon: 'Game over — You won!',

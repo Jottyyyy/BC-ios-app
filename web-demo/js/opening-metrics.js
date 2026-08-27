@@ -249,9 +249,10 @@
     remove: 'Delete',
     newTree: '+ New Tree',
     meta: '{games} games · {positions} positions · {colour}',
+    // The tree name, built from the account and the side. See `autoName` below.
+    autoNameTemplate: '{who} · {colour}',
+    autoNamePasted: 'Pasted games',
     // form
-    nameLabel: 'Tree name',
-    namePlaceholder: 'e.g. My White repertoire',
     colourLabel: 'Side you played',
     sourceLabel: 'Where the games come from',
     // NEW — the offline port's own sources. The RN form offers Lichess and Chess.com only.
@@ -309,7 +310,6 @@
     fetched: '{n} games',
     done: '✓ Built from {n} games',
     // errors
-    errNoName: 'Give the tree a name.',
     errNoPgn: 'Paste some PGN first.',
     errNoUser: 'Enter a username.',
     errNoGames: 'No games found in that PGN.',
@@ -317,6 +317,27 @@
     errNetwork: 'Could not reach that site. Check your connection and try again.',
     errUnknownUser: 'No games found for that username.'
   };
+
+  /* ---- The tree name, built rather than typed ------------------------------- */
+
+  /* `hikaru · white`. The RN builds exactly this and never asks
+     (analysis-board/openingtree.tsx:531):
+
+         const name = `${username} · ${playerColor}`
+
+     The port had grown a Tree name field the RN never had, so every download made the user invent
+     a label for a thing that already has one. A client asked for it back: "Pwede ba tanggalin na
+     yung tree name -- automatic name ng tree eh yung account name na hahanapan ng tira."
+
+     `autoNamePasted` is the {who} for a source with no account behind it. Paste PGN and My Coach
+     games are the offline port's own, so there is no username to name them after; deriving one
+     from the PGN headers was considered and rejected as a guess that is wrong the moment a PGN
+     holds more than one player's games. */
+  function autoName(username, colour) {
+    var who = String(username || '').trim();
+    return fill(STRINGS.autoNameTemplate,
+                { who: who || STRINGS.autoNamePasted, colour: colour });
+  }
 
   /** `{k}` substitution, the same helper premium.js uses. Never re-type a count into a string. */
   function fill(template, values) {
@@ -633,7 +654,7 @@
   global.BiyaOpeningMetrics = {
     PALETTE: PALETTE, LAYOUT: LAYOUT, WDL: WDL, STRINGS: STRINGS, SOURCES: SOURCES,
     ENGINE_RANK: ENGINE_RANK,
-    fill: fill, sourceById: sourceById, isOnlineSource: isOnlineSource,
+    fill: fill, autoName: autoName, sourceById: sourceById, isOnlineSource: isOnlineSource,
     engineRankColor: engineRankColor, engineEvalInk: engineEvalInk, boardEdge: boardEdge,
     selfTest: selfTest, selfTestSource: selfTestSource
   };

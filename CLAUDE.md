@@ -9,12 +9,12 @@ Native, **~90% offline** Swift rebuild of **Biyaherong Chess Coach** (originally
 backend by a golden-vector parity harness — plus two user-facing screens built on it: the **Home dashboard**
 and the **Analysis Board** (the app's most complex screen, and complete).
 
-**"90% offline", not 100%, and the number is the client's own.** Spec §0.1 always drew an online half
-(Opening Trainer packs, Tutorial Videos); the Opening Tree's Lichess/Chess.com download is the first part
-of it to ship. Three things need the radio — Sign in with Apple, that download, and Videos when they land
-— and **everything else works in Airplane Mode forever**. All app networking lives in exactly one file per
-language (`OpeningDownloader.swift` / `web-demo/js/opening-download.js`), and `replay_opening_tree.js` §12
-fails the gate if a second one appears.
+**"90% offline", not 100%, and the number is the client's own.** Spec §0.1 always drew an online half.
+Three things need the radio — Sign in with Apple, the Opening Tree's Lichess/Chess.com download, and
+Tutorial Videos — and **everything else works in Airplane Mode forever**. App networking lives in an EXACT
+pair of files per language (`OpeningDownloader.swift` + `ContentClient.swift` / `opening-download.js` +
+`content-client.js`); `replay_opening_tree.js` §12 fails the gate on any third — and on any second that
+tries to hide behind an alias, which is how `content-client.js` first slipped past it.
 
 **Ground truth for every ported algorithm is the real Laravel backend at `../BYAHERONG-COACH-LARAVEL`**
 (a sibling repo, *not* in this tree) — the actual PHP controller behavior, not prose. The proposal

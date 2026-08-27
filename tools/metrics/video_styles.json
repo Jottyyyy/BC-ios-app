@@ -1,0 +1,947 @@
+{
+  "_generated": "tools/metrics/extract_video_styles.js — do not hand-edit",
+  "screens": {
+    "list": {
+      "_spec": "BOOK TWO — Tutorial Videos: the catalogue, its sections and its paywall",
+      "_source": "app/(app)/user/tutorial-videos/index.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "container": {
+          "flex": 1,
+          "backgroundColor": "#0F1A2E"
+        },
+        "header": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "justifyContent": "space-between",
+          "paddingHorizontal": 16,
+          "paddingVertical": 12,
+          "borderBottomWidth": 1,
+          "borderBottomColor": "#1A2942"
+        },
+        "backButton": {
+          "width": 40,
+          "height": 40,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backIcon": {
+          "fontSize": 26,
+          "color": "#FFFFFF"
+        },
+        "headerTitle": {
+          "fontSize": 18,
+          "fontWeight": "bold",
+          "color": "#FFFFFF"
+        },
+        "loadingContainer": {
+          "flex": 1,
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "loadingText": {
+          "marginTop": 12,
+          "fontSize": 14,
+          "color": "#8BA3C7"
+        },
+        "emptyContainer": {
+          "flex": 1,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "paddingHorizontal": 40
+        },
+        "emptyIcon": {
+          "fontSize": 48,
+          "marginBottom": 16
+        },
+        "emptyTitle": {
+          "fontSize": 22,
+          "fontWeight": "bold",
+          "color": "#FFFFFF",
+          "marginBottom": 8
+        },
+        "emptySubtitle": {
+          "fontSize": 14,
+          "color": "#8BA3C7",
+          "textAlign": "center"
+        },
+        "paywallContainer": {
+          "flex": 1,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "paddingHorizontal": 40
+        },
+        "paywallIcon": {
+          "fontSize": 56,
+          "marginBottom": 20
+        },
+        "paywallLabel": {
+          "fontSize": 22,
+          "fontWeight": "bold",
+          "color": "#FDB022",
+          "marginBottom": 16
+        },
+        "paywallMessage": {
+          "fontSize": 16,
+          "color": "#FFFFFF",
+          "textAlign": "center",
+          "marginBottom": 10,
+          "lineHeight": 24
+        },
+        "paywallSubtext": {
+          "fontSize": 13,
+          "color": "#8BA3C7",
+          "textAlign": "center",
+          "marginBottom": 32,
+          "lineHeight": 20
+        },
+        "subscribeButton": {
+          "backgroundColor": "#FDB022",
+          "borderRadius": 12,
+          "paddingVertical": 14,
+          "paddingHorizontal": 40
+        },
+        "subscribeButtonText": {
+          "color": "#0F1A2E",
+          "fontSize": 16,
+          "fontWeight": "bold"
+        },
+        "listContent": {
+          "paddingHorizontal": 16,
+          "paddingTop": 12,
+          "paddingBottom": 28
+        },
+        "sectionHeader": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "marginTop": 20,
+          "marginBottom": 10,
+          "gap": 8
+        },
+        "sectionAccent": {
+          "width": 3,
+          "height": 18,
+          "borderRadius": 2
+        },
+        "sectionTitle": {
+          "fontSize": 15,
+          "fontWeight": "700",
+          "flex": 1
+        },
+        "sectionCount": {
+          "fontSize": 11,
+          "color": "#5A7A9A",
+          "fontWeight": "500"
+        },
+        "videoCard": {
+          "flexDirection": "row",
+          "backgroundColor": "#162136",
+          "borderRadius": 14,
+          "overflow": "hidden",
+          "marginBottom": 10,
+          "borderWidth": 1,
+          "borderColor": "rgba(255,255,255,0.05)",
+          "elevation": 3,
+          "shadowColor": "#000",
+          "shadowOffset": {
+            "width": 0,
+            "height": 2
+          },
+          "shadowOpacity": 0.2,
+          "shadowRadius": 4
+        },
+        "thumbWrap": {
+          "backgroundColor": "#0D1520",
+          "position": "relative",
+          "flexShrink": 0
+        },
+        "thumb": {
+          "width": "100%",
+          "height": "100%"
+        },
+        "playOverlay": {
+          "position": "absolute",
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 0,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "backgroundColor": "rgba(0,0,0,0.28)"
+        },
+        "playBtn": {
+          "width": 36,
+          "height": 36,
+          "borderRadius": 18,
+          "backgroundColor": "rgba(253,176,34,0.92)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "playBtnIcon": {
+          "fontSize": 14,
+          "color": "#FFFFFF",
+          "marginLeft": 2
+        },
+        "cardInfo": {
+          "flex": 1,
+          "padding": 12,
+          "justifyContent": "center",
+          "gap": 6
+        },
+        "catChip": {
+          "alignSelf": "flex-start",
+          "borderRadius": 6,
+          "paddingVertical": 3,
+          "paddingHorizontal": 8
+        },
+        "catChipText": {
+          "fontSize": 10,
+          "fontWeight": "700",
+          "letterSpacing": 0.3
+        },
+        "cardTitle": {
+          "fontSize": 14,
+          "fontWeight": "700",
+          "color": "#FFFFFF",
+          "lineHeight": 19
+        },
+        "cardDesc": {
+          "fontSize": 12,
+          "color": "#7A9AB8",
+          "lineHeight": 17
+        },
+        "cardDate": {
+          "fontSize": 10,
+          "color": "#4A6A8A",
+          "marginTop": 2
+        }
+      },
+      "extraStyles": null,
+      "moduleConstants": {
+        "THUMB_W": 90,
+        "CATEGORY_ORDER": [
+          "Opening",
+          "Middlegame",
+          "Endgame",
+          "General",
+          "Uncategorized"
+        ],
+        "CATEGORY_META": {
+          "Opening": {
+            "color": "#7BB3F0",
+            "bg": "#1D3461",
+            "icon": "📖"
+          },
+          "Middlegame": {
+            "color": "#A78BFA",
+            "bg": "#2D1B69",
+            "icon": "⚔️"
+          },
+          "Endgame": {
+            "color": "#FDB022",
+            "bg": "#3B2200",
+            "icon": "👑"
+          },
+          "General": {
+            "color": "#5CC264",
+            "bg": "#1A3320",
+            "icon": "♟️"
+          },
+          "Uncategorized": {
+            "color": "#8BA3C7",
+            "bg": "#1A2942",
+            "icon": "📂"
+          }
+        }
+      },
+      "renderConstants": {
+        "renderVideoCard": {
+          "catKey": {
+            "text": "item.category ?? 'Uncategorized'",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "item.category ?? 'Uncategorized'"
+              }
+            ]
+          },
+          "meta": {
+            "text": "CATEGORY_META[catKey] ?? CATEGORY_META['Uncategorized']",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "CATEGORY_META[catKey] ?? CATEGORY_META['Uncategorized']"
+              }
+            ]
+          },
+          "dateStr": {
+            "text": "new Date(item.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', })",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "new Date(item.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', })"
+              }
+            ]
+          },
+          "TouchableOpacity[0].style": {
+            "text": "styles.videoCard",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.videoCard",
+                "ref": "styles.videoCard",
+                "ratio": 1
+              }
+            ]
+          },
+          "TouchableOpacity[0].activeOpacity": {
+            "text": "0.82",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "0.82",
+                "value": 0.82
+              }
+            ]
+          },
+          "TouchableOpacity[0].onPress": {
+            "text": "() => router.push({ pathname: '/(app)/user/tutorial-videos/play', params: { video_url: item.video_url, title: item.title } })",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "() => router.push({ pathname: '/(app)/user/tutorial-videos/play', params: { video_url: item.video_url, title: item.title } })"
+              }
+            ]
+          },
+          "View[0].style": {
+            "text": "styles.thumbWrap",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.thumbWrap",
+                "ref": "styles.thumbWrap",
+                "ratio": 1
+              }
+            ]
+          },
+          "Image[0].source": {
+            "text": "{ uri: item.thumbnail_url }",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "{ uri: item.thumbnail_url }"
+              }
+            ]
+          },
+          "Image[0].style": {
+            "text": "styles.thumb",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.thumb",
+                "ref": "styles.thumb",
+                "ratio": 1
+              }
+            ]
+          },
+          "Image[0].resizeMode": {
+            "text": "cover",
+            "literal": "cover"
+          },
+          "Video[0].source": {
+            "text": "{ uri: item.video_url }",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "{ uri: item.video_url }"
+              }
+            ]
+          },
+          "Video[0].style": {
+            "text": "styles.thumb",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.thumb",
+                "ref": "styles.thumb",
+                "ratio": 1
+              }
+            ]
+          },
+          "Video[0].shouldPlay": {
+            "text": "false",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "false"
+              }
+            ]
+          },
+          "Video[0].isMuted": {
+            "text": "true",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "true"
+              }
+            ]
+          },
+          "Video[0].useNativeControls": {
+            "text": "false",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "false"
+              }
+            ]
+          },
+          "Video[0].resizeMode": {
+            "text": "ResizeMode.COVER",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "ResizeMode.COVER",
+                "ref": "ResizeMode.COVER",
+                "ratio": 1
+              }
+            ]
+          },
+          "Video[0].isLooping": {
+            "text": "false",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "false"
+              }
+            ]
+          },
+          "View[1].style": {
+            "text": "styles.playOverlay",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.playOverlay",
+                "ref": "styles.playOverlay",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[2].style": {
+            "text": "styles.playBtn",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.playBtn",
+                "ref": "styles.playBtn",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[0].style": {
+            "text": "styles.playBtnIcon",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.playBtnIcon",
+                "ref": "styles.playBtnIcon",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[3].style": {
+            "text": "styles.cardInfo",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardInfo",
+                "ref": "styles.cardInfo",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[4].style": {
+            "text": "[styles.catChip, { backgroundColor: meta.bg }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.catChip, { backgroundColor: meta.bg }]"
+              }
+            ]
+          },
+          "Text[1].style": {
+            "text": "[styles.catChipText, { color: meta.color }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.catChipText, { color: meta.color }]"
+              }
+            ]
+          },
+          "Text[2].style": {
+            "text": "styles.cardTitle",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardTitle",
+                "ref": "styles.cardTitle",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[2].numberOfLines": {
+            "text": "3",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "3",
+                "value": 3
+              }
+            ]
+          },
+          "Text[3].style": {
+            "text": "styles.cardDesc",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardDesc",
+                "ref": "styles.cardDesc",
+                "ratio": 1
+              }
+            ]
+          },
+          "Text[3].numberOfLines": {
+            "text": "2",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "2",
+                "value": 2
+              }
+            ]
+          },
+          "Text[4].style": {
+            "text": "styles.cardDate",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.cardDate",
+                "ref": "styles.cardDate",
+                "ratio": 1
+              }
+            ]
+          }
+        },
+        "renderSectionHeader": {
+          "View[0].style": {
+            "text": "styles.sectionHeader",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.sectionHeader",
+                "ref": "styles.sectionHeader",
+                "ratio": 1
+              }
+            ]
+          },
+          "View[1].style": {
+            "text": "[styles.sectionAccent, { backgroundColor: section.color }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.sectionAccent, { backgroundColor: section.color }]"
+              }
+            ]
+          },
+          "Text[0].style": {
+            "text": "[styles.sectionTitle, { color: section.color }]",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "[styles.sectionTitle, { color: section.color }]"
+              }
+            ]
+          },
+          "Text[1].style": {
+            "text": "styles.sectionCount",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "styles.sectionCount",
+                "ref": "styles.sectionCount",
+                "ratio": 1
+              }
+            ]
+          }
+        }
+      },
+      "inlineStyles": {
+        "View[4].backgroundColor": {
+          "text": "meta.bg",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "meta.bg",
+              "ref": "meta.bg",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[1].color": {
+          "text": "meta.color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "meta.color",
+              "ref": "meta.color",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[6].backgroundColor": {
+          "text": "section.color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "section.color",
+              "ref": "section.color",
+              "ratio": 1
+            }
+          ]
+        },
+        "Text[5].color": {
+          "text": "section.color",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "section.color",
+              "ref": "section.color",
+              "ratio": 1
+            }
+          ]
+        }
+      }
+    },
+    "play": {
+      "_spec": "BOOK TWO — Tutorial Videos: the player",
+      "_source": "app/(app)/user/tutorial-videos/play.tsx",
+      "_bindings": [
+        "styles"
+      ],
+      "styles": {
+        "root": {
+          "flex": 1,
+          "backgroundColor": "#000"
+        },
+        "topBar": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "paddingHorizontal": 12,
+          "paddingBottom": 12,
+          "gap": 8,
+          "backgroundColor": "rgba(0,0,0,0.55)"
+        },
+        "backBtn": {
+          "width": 40,
+          "height": 40,
+          "borderRadius": 20,
+          "backgroundColor": "rgba(255,255,255,0.15)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "backIcon": {
+          "fontSize": 22,
+          "color": "#FFFFFF",
+          "fontWeight": "bold"
+        },
+        "titleText": {
+          "flex": 1,
+          "fontSize": 15,
+          "fontWeight": "600",
+          "color": "#FFFFFF"
+        },
+        "fullscreenBtn": {
+          "width": 40,
+          "height": 40,
+          "borderRadius": 20,
+          "backgroundColor": "rgba(255,255,255,0.15)",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "middleArea": {
+          "flex": 1
+        },
+        "controlBar": {
+          "backgroundColor": "rgba(15,26,46,0.92)",
+          "paddingHorizontal": 16,
+          "paddingTop": 12,
+          "gap": 6,
+          "borderTopWidth": 1,
+          "borderTopColor": "rgba(255,255,255,0.08)"
+        },
+        "seekRow": {
+          "flexDirection": "row",
+          "alignItems": "center",
+          "gap": 8
+        },
+        "timeText": {
+          "fontSize": 12,
+          "color": "#8BA3C7",
+          "minWidth": 38
+        },
+        "timeRight": {
+          "textAlign": "right"
+        },
+        "seekTrackContainer": {
+          "flex": 1,
+          "justifyContent": "center"
+        },
+        "trackBg": {
+          "position": "absolute",
+          "left": 0,
+          "right": 0,
+          "backgroundColor": "rgba(255,255,255,0.25)"
+        },
+        "trackFill": {
+          "position": "absolute",
+          "left": 0,
+          "backgroundColor": "#FDB022"
+        },
+        "trackThumb": {
+          "position": "absolute",
+          "backgroundColor": "#FDB022",
+          "shadowColor": "#FDB022",
+          "shadowOpacity": 0.7,
+          "shadowRadius": 4,
+          "elevation": 4
+        },
+        "buttonsRow": {
+          "flexDirection": "row",
+          "justifyContent": "center",
+          "alignItems": "center",
+          "gap": 24,
+          "paddingVertical": 4
+        },
+        "seekBtn": {
+          "alignItems": "center",
+          "padding": 8,
+          "minWidth": 56
+        },
+        "seekIcon": {
+          "fontSize": 26,
+          "color": "#FFFFFF"
+        },
+        "seekLabel": {
+          "fontSize": 11,
+          "color": "#8BA3C7",
+          "marginTop": 2
+        },
+        "playPauseBtn": {
+          "width": 56,
+          "height": 56,
+          "borderRadius": 28,
+          "backgroundColor": "#FDB022",
+          "justifyContent": "center",
+          "alignItems": "center"
+        },
+        "playPauseIcon": {
+          "fontSize": 24,
+          "color": "#0F1A2E"
+        }
+      },
+      "extraStyles": null,
+      "moduleConstants": {
+        "HIDE_DELAY": 2000,
+        "THUMB_SIZE": 14,
+        "TRACK_HEIGHT": 4,
+        "SEEK_TOUCH_HEIGHT": 24
+      },
+      "renderConstants": {
+        "formatTime": {
+          "totalSec": {
+            "text": "Math.floor(ms / 1000)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "Math.floor(ms / 1000)"
+              }
+            ]
+          },
+          "min": {
+            "text": "Math.floor(totalSec / 60)",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "Math.floor(totalSec / 60)"
+              }
+            ]
+          },
+          "sec": {
+            "text": "totalSec % 60",
+            "terms": [
+              {
+                "sign": 1,
+                "text": "totalSec % 60"
+              }
+            ]
+          }
+        }
+      },
+      "inlineStyles": {
+        "View[0].flex": {
+          "text": "1",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "1",
+              "value": 1
+            }
+          ]
+        },
+        "View[0].backgroundColor": {
+          "text": "'#000'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#000'"
+            }
+          ]
+        },
+        "View[0].justifyContent": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "View[0].alignItems": {
+          "text": "'center'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'center'"
+            }
+          ]
+        },
+        "Text[0].color": {
+          "text": "'#8BA3C7'",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "'#8BA3C7'"
+            }
+          ]
+        },
+        "Text[0].fontSize": {
+          "text": "15",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "15",
+              "value": 15
+            }
+          ]
+        },
+        "Animated.View[0].opacity": {
+          "text": "controlsAnim",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "controlsAnim",
+              "ref": "controlsAnim",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[2].paddingTop": {
+          "text": "insets.top + 8",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "insets.top",
+              "ref": "insets.top",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "8",
+              "value": 8
+            }
+          ]
+        },
+        "View[4].paddingBottom": {
+          "text": "insets.bottom + 8",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "insets.bottom",
+              "ref": "insets.bottom",
+              "ratio": 1
+            },
+            {
+              "sign": 1,
+              "text": "8",
+              "value": 8
+            }
+          ]
+        },
+        "View[8].width": {
+          "text": "progressPercent",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "progressPercent",
+              "ref": "progressPercent",
+              "ratio": 1
+            }
+          ]
+        },
+        "View[9].left": {
+          "text": "progressPercent",
+          "terms": [
+            {
+              "sign": 1,
+              "text": "progressPercent",
+              "ref": "progressPercent",
+              "ratio": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "palette": {
+    "_note": "Every colour literal in either StyleSheet, by frequency.",
+    "counts": {
+      "#FFFFFF": 9,
+      "#FDB022": 7,
+      "#8BA3C7": 6,
+      "#0F1A2E": 3,
+      "#1A2942": 2,
+      "#000": 2,
+      "rgba(255,255,255,0.15)": 2,
+      "#5A7A9A": 1,
+      "#162136": 1,
+      "rgba(255,255,255,0.05)": 1,
+      "#0D1520": 1,
+      "rgba(0,0,0,0.28)": 1,
+      "rgba(253,176,34,0.92)": 1,
+      "#7A9AB8": 1,
+      "#4A6A8A": 1,
+      "#7BB3F0": 1,
+      "#1D3461": 1,
+      "#A78BFA": 1,
+      "#2D1B69": 1,
+      "#3B2200": 1,
+      "#5CC264": 1,
+      "#1A3320": 1,
+      "rgba(0,0,0,0.55)": 1,
+      "rgba(15,26,46,0.92)": 1,
+      "rgba(255,255,255,0.08)": 1,
+      "rgba(255,255,255,0.25)": 1
+    }
+  }
+}

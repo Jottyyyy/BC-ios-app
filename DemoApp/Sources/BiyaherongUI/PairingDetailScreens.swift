@@ -256,6 +256,7 @@ struct PairingDetailScreen: View {
             }
             .buttonStyle(PuzzlePressStyle())
         }
+        .padding(.horizontal, PairingDetail.playerActionsPaddingHorizontal)
         .padding(.top, PairingDetail.playerActionsPaddingTop)
         .padding(.bottom, PairingDetail.playerActionsPaddingBottom)
     }
@@ -468,7 +469,9 @@ struct PairingDetailScreen: View {
                         y: PairingDetail.generateBtnShadowOffsetHeight)
         }
         .buttonStyle(PuzzlePressStyle())
+        .padding(.horizontal, PairingDetail.generateWrapPaddingHorizontal)
         .padding(.top, PairingDetail.generateWrapPaddingTop)
+        .padding(.bottom, PairingDetail.generateWrapPaddingBottom)
     }
 
     // MARK: - Tab C: Standings

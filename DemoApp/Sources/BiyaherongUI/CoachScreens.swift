@@ -285,7 +285,7 @@ struct CoachColourScreen: View {
             store.start(level: level, userColor: colour, resume: resume)
         } label: {
             VStack(spacing: CoachPlay.colorCardGap) {
-                Text(colour == .white ? CoachStrings.whiteChip : CoachStrings.blackChip)
+                Text(colour == .white ? CoachStrings.kingWhite : CoachStrings.kingBlack)
                     .font(.system(size: colour == .white ? CoachPlay.kingWFontSize
                                                          : CoachPlay.kingBFontSize))
                     .foregroundStyle(colour == .white ? CoachPlay.kingWColor : CoachPlay.kingBColor)

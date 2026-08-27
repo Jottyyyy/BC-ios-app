@@ -139,6 +139,14 @@ struct PairingListScreen: View {
         }
         .padding(.horizontal, PairingList.listPaddingHorizontal)
         .padding(.top, PairingList.listPaddingTop)
+        // The one that matters, and it was missing. `list: { paddingHorizontal: 14, paddingTop: 10,
+        // paddingBottom: 90 }` (`tournaments/index.tsx:212`) — the 90 is what holds the scroll
+        // content clear of the FAB floating over it in the same ZStack. Without it the last thing in
+        // the ScrollView sits UNDER the New Tournament button, and the last thing in this ScrollView
+        // is the long-press hint. A client reported it as "walang way na mag delete": the hint
+        // explaining the only delete gesture was never visible. The browser applied all three
+        // paddings from the start (`.pgl-list`), so nothing here could see it.
+        .padding(.bottom, PairingList.listPaddingBottom)
     }
 
     private func card(_ t: PairingDocument.Tournament) -> some View {

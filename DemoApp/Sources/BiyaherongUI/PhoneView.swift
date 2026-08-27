@@ -72,6 +72,8 @@ struct PhoneApp: View {
     /// That lift happened; the tab bar removal took its last door; the screen is gone.
     @StateObject private var coachStore = CoachStore()
     @State private var showCoach = false
+    /// Tutorial Videos. The last of the Home tiles to get a destination.
+    @State private var showVideos = false
     /// The Opening Tree, presented the same way and for the same reason: three screens of its own,
     /// reached from the Home tile. The tile has existed since the screen was written and its
     /// callback was never passed — this is the destination it was waiting for.
@@ -257,6 +259,18 @@ struct PhoneApp: View {
                     .background(CoachSelect.containerBackgroundColor)
                     .transition(.move(edge: .bottom))
                 }
+                if showVideos {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        VideoLibraryScreen(premium: premium,
+                                           onExit: { showVideos = false },
+                                           onPaywall: { openPaywall() })
+                    }
+                    .background(VideoList.containerBackgroundColor)
+                    .transition(.move(edge: .bottom))
+                }
                 // The paywall sits ABOVE the three pushed routes — a gate hit inside Play vs Coach
                 // has to be able to cover it — but BELOW the login gate, which must stay last.
                 if showPaywall {
@@ -316,10 +330,8 @@ struct PhoneApp: View {
         withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { loginStore.signIn() }
     }
 
-    /// Only the callbacks with a real destination today are wired; the rest are the empty closures
-    /// the screen is designed around and stay that way until those screens exist. `onVideos` is the
-    /// last one left — `onOpeningTrainer` got its screen in round 4, and `onSearch` / `onDonate`
-    /// were removed with the controls that raised them.
+    /// **Every callback now has a destination.** `onVideos` was the last one left; Tutorial Videos
+    /// closed it, and `onSearch` / `onDonate` were removed with the controls that raised them.
     ///
     /// Every wired destination goes through `gated`, so a user who has not started the trial gets
     /// the paywall instead. `onAvatar` and `onMembership` deliberately do not: one leads to Sign
@@ -347,6 +359,16 @@ struct PhoneApp: View {
                    onAnalysis: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showAnalysis = true
+                       }
+                   },
+                   // `gated`, like every other destination. The first draft left it open on the
+                   // argument that this screen IS a paywall for a non-subscriber — but the web demo
+                   // gated it, so the two languages disagreed about who may open the screen, and
+                   // `trial_gate_check.js` caught it. A trial user is not turned away: the trial
+                   // grants the entitlement, so they land on the catalogue.
+                   onVideos: gated {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showVideos = true
                        }
                    },
                    onOpeningTrainer: gated {

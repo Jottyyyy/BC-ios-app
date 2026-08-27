@@ -415,7 +415,9 @@ const ST = require(path.join(JS, 'opening-store.js'));
 
   // -- the regression guard, first. Both languages, both sources. --------------
   for (const site of ['lichess', 'chesscom']) {
-    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site},`)
+    // No trailing comma any more: `startDownload` used to take the typed tree name as a second
+    // argument, and there is no typed tree name.
+    expect(new RegExp(`case \\.${site}:\\s*\\n\\s*startDownload\\(site: \\.${site}\\)`)
       .test(code(SCREENS_SRC)), `picking ${site} starts a download in Swift, not an apology`);
   }
   // `errNetwork` may still be SET — a download really can fail — but only from a `catch`. Set
@@ -533,6 +535,49 @@ const ST = require(path.join(JS, 'opening-store.js'));
     && /contains\(status\) \? nil : \.draw/.test(DOWN_CODE),
     'as is the Swift one');
 
+  // -- the tree names itself ----------------------------------------------------
+  //
+  // The port had grown a "Tree name" field the RN form never had, so every download made the user
+  // invent a label for a thing that already has one. `analysis-board/openingtree.tsx:531` is
+  //
+  //     const name = `${username} · ${playerColor}`
+  //
+  // and a client asked for exactly that back. The rule is one pure function per language rather
+  // than a string built at each call site, because there are three call sites — paste, download,
+  // and the Swift tail — and two of them would eventually drift.
+  {
+    const MET = require(path.join(JS, 'opening-metrics.js'));
+    eq(MET.STRINGS.autoNameTemplate, swString(MET_SRC, 'OpeningStrings', 'autoNameTemplate'),
+      'both languages hold the same name template');
+    eq(MET.STRINGS.autoNamePasted, swString(MET_SRC, 'OpeningStrings', 'autoNamePasted'),
+      'and the same word for a source with no account behind it');
+
+    eq(MET.autoName('hikaru', 'white'), 'hikaru · white', 'an account and a side');
+    eq(MET.autoName('  Hikaru  ', 'both'), 'Hikaru · both', 'the username is trimmed');
+    eq(MET.autoName('', 'black'), 'Pasted games · black', 'and a paste says so');
+    expect(MET.autoName('a', 'white') !== MET.autoName('a', 'black'),
+      'two trees for one account, one per side, must not share a name — which is the whole reason '
+      + 'the colour is in it and not only in the meta line underneath');
+
+    // The field, and the error for leaving it blank, are gone from BOTH languages.
+    for (const [src, what] of [[MET_SRC, 'Swift'], [read(JS, 'opening-metrics.js'), 'JS']]) {
+      for (const gone of ['nameLabel', 'namePlaceholder', 'errNoName']) {
+        expect(!new RegExp(`\\b${gone}\\b`).test(src),
+          `${what} no longer carries ${gone} — the form has no name field to label, fill or refuse`);
+      }
+    }
+    expect(!/@State private var name\b/.test(code(SCREENS_SRC)),
+      'and the Swift form holds no name of its own');
+
+    // The one Swift site that decides it, and the guard that keeps a pasted tree from being named
+    // after a username left behind in the form by a source the user switched away from.
+    expect(/OpeningStrings\.autoName\(username: source\.needsUsername \? username : ""/
+      .test(code(SCREENS_SRC)),
+      'the Swift names the tree in `finish`, reading the username only when the source has one');
+    expect(/colour: colour\.rawValue/.test(code(SCREENS_SRC)),
+      'and passes the colour as its raw lower-case value, which is what the RN\'s playerColor is');
+  }
+
   // -- the colour rule ----------------------------------------------------------
   //
   // The online path reads the colour off the GAME and lets the picker filter, where the RN screen
@@ -557,26 +602,46 @@ const ST = require(path.join(JS, 'opening-store.js'));
   expect(/\.reversed\(\)/.test(DOWN_CODE),
     'and the Swift reverses too — oldest-first would build every tree from the user’s first month');
 
-  // -- the transport is in ONE file ---------------------------------------------
+  // -- the transport is in a NAMED SET of files ---------------------------------
   //
-  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and
-  // VideoPlayer". Neither exists yet and this download reached the client first, so
-  // OpeningDownloader is that rule's first inhabitant — and it stays the ONLY one.
+  // Spec §0.1: "the only URLSession calls in the entire app live in ContentClient and VideoPlayer".
+  // OpeningDownloader reached the client ahead of both and was this rule's first inhabitant;
+  // ContentClient landed with Tutorial Videos on 2026-08-26 and is its second.
+  //
+  // The list is EXACT, not a ceiling. "At most two" would let a third arrive by having one of these
+  // deleted, which is the kind of accounting that passes while the property it protects is gone —
+  // the whole point is that adding a networked file is a decision somebody made on purpose, in this
+  // file, with the spec updated beside it. VideoPlayer is not here: AVPlayer streams the media
+  // itself, so the app never writes that request.
   expect(!/URLSession|URLRequest/.test(DOWN_CODE),
     'the parity core opens no socket — it only describes the request');
   expect(/URLSession/.test(LOADER_SRC), 'OpeningDownloader is where the transport lives');
   const uiFiles = fs.readdirSync(UI).filter((f) => f.endsWith('.swift'));
   const networked = uiFiles.filter((f) =>
     /URLSession|URLRequest/.test(code(fs.readFileSync(path.join(UI, f), 'utf8'))));
-  eq(networked.join(','), 'OpeningDownloader.swift',
-    'and it is the ONLY file in BiyaherongUI that does');
+  expect(/URLSession/.test(read(UI, 'ContentClient.swift')),
+    'ContentClient is where the Tutorial Videos transport lives');
+  eq(networked.sort().join(','), 'ContentClient.swift,OpeningDownloader.swift',
+    'and those two are the ONLY files in BiyaherongUI that open a connection');
   expect(uiFiles.length > 20, `swept ${uiFiles.length} UI files — the sweep is not vacuous`);
 
-  // Same rule in the browser: one file with `fetch`, and it is the twin.
+  // Same rule in the browser, and the same two names.
   const jsFiles = fs.readdirSync(JS).filter((f) => f.endsWith('.js'));
+  // `\bfetch\b`, not `fetch\(`. `content-client.js` passed this sweep on its first draft because it
+  // called the function through a local alias — so a file that genuinely opened a connection was
+  // invisible to the rule whose whole job is to count them.
+  //
+  // STRINGS have to go too, and that is not hypothetical either: the looser pattern immediately
+  // named `opening-metrics.js`, whose crime is the label `'Games to fetch'`. `code()` strips
+  // comments; this strips quoted text as well, so what is left is identifiers.
+  const identifiers = (src) => code(src)
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``');
   const fetching = jsFiles.filter((f) =>
-    /\bfetch\(|XMLHttpRequest/.test(code(fs.readFileSync(path.join(JS, f), 'utf8'))));
-  eq(fetching.join(','), 'opening-download.js', 'exactly one web-demo file fetches');
+    /\bfetch\b|XMLHttpRequest/.test(identifiers(fs.readFileSync(path.join(JS, f), 'utf8'))));
+  eq(fetching.sort().join(','), 'content-client.js,opening-download.js',
+    'exactly those two web-demo files fetch');
   expect(jsFiles.length > 20, `swept ${jsFiles.length} JS files — the sweep is not vacuous`);
 
   // -- and cancellation is real -------------------------------------------------

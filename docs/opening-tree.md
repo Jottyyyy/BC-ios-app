@@ -81,6 +81,35 @@ Two things the walk does that look like bugs and are not, both faithful to `addG
 `OpeningSource.isOnline` is the single source of truth for which is which, in both languages, and
 `replay_opening_tree.js` §7 asserts the two sets are identical.
 
+## The tree names itself
+
+There is **no Tree name field**, and there never was one in the RN form. It builds a name and saves
+without asking (`analysis-board/openingtree.tsx:531`):
+
+```js
+const name = `${username} · ${playerColor}`;
+```
+
+The port had grown a text box the original did not have, and refused to build until it was filled.
+A client asked for it back — *"automatic name ng tree eh yung account name na hahanapan ng tira"* —
+so trees now read `hikaru · white` and `magnuscarlsen · both`.
+
+Three things about that string are decisions rather than formatting:
+
+- **The colour is in the name**, not only in the meta line beneath it. Two trees for one account, one
+  per side, would otherwise be indistinguishable in the list. Asserted directly:
+  `autoName('a', 'white') !== autoName('a', 'black')`.
+- **Paste PGN and My Coach games read `Pasted games · both`.** They are the offline port's own
+  sources, so no account exists to name them after. Deriving one from the PGN's `[White]`/`[Black]`
+  headers was considered and rejected — a guess, wrong the moment a PGN holds more than one player's
+  games, and used by nothing downstream.
+- **The username is read only when the source has one.** Typing a username for Lichess and then
+  switching to Paste PGN leaves it behind in the form; naming the pasted tree after an account whose
+  games are not in it would be a quiet lie.
+
+One pure function per language decides it — `OpeningStrings.autoName` and `MET.autoName` — because
+there are three call sites (paste, download, and the Swift tail) and two of them would drift.
+
 ## The download, and the bug it fixes
 
 The two online sources were **drawn but never wired**. Picking one validated the username and then

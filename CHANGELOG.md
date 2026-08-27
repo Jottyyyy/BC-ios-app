@@ -88,6 +88,247 @@ not side-to-move-relative, which is the flip `StockfishBridge` owns.
 
 `web-demo/` not updated — C++ the browser build does not have, behind a `LocalEngine` it keeps.
 
+### 2026-08-26 (fixed) — The Videos tile was dead on tap: four route names had lost their quotes
+
+Reported straight after the feature landed: *"bakit hindi nagpaplay yung video sa web demo?"*
+
+It was worse than not playing. **The screen could not open at all.** The Tutorial Videos block in
+`app.js` shipped with four bare identifiers where string literals belonged:
+
+```js
+current = videos;                                  // 'videos'
+if (current !== videos) return;                    // 'videos'
+onExit: function () { current = home; render(); }  // 'home'
+global.open(video.videoURL, _blank);               // window.open(…, '_blank')
+```
+
+All four were eaten by a shell-escaping fault while the block was being inserted — `'` in a
+`node -e` command that bash unwrapped — and the last line carried a second, independent fault:
+there is no `global` in that file, every other reference says `window`.
+
+**Nothing caught it, and the reasons are worth keeping.** `node --check` passes every one: they are
+syntactically perfect JavaScript referring to variables nobody declared. Every JS self-test passed,
+because none of them drives the router. And a `ReferenceError` thrown inside a click handler goes to
+the console and nowhere else — the screen simply does nothing, which reads as a dead button rather
+than as a crash.
+
+**New gate, `web_shell_check.js` §6:** `current` is compared or assigned against a string literal,
+never a bare word that happens to name a route. Mutation-tested 3/3, and the harness prints
+`node --check: PASSES` beside each kill, because that is the point.
+
+**And the deeper reason nothing played: there is nothing to play.** No manifest is published
+(`AWS_BUCKET` empty) and `tutorial_videos` has 0 rows, so the honest state is a notice — which is
+correct and completely undemonstrable, since a notice looks identical whether the screen works or
+not.
+
+So the notice now carries a **Load sample catalogue** button, in the browser demo only. It runs
+`web-demo/js/video-sample.js` **through the real parser**, so what appears is the actual screen and
+not a mock: four rows, real streams, one of them deliberately categorised `"Tactics"` so the
+unknown-category deviation is visible rather than only documented. The app has no such button and
+`manifestURL` stays empty in both languages.
+
+Videos also play **in** the screen now — a `<video>` element in the demo, matching the app's
+`AVPlayerViewController` — rather than opening a tab.
+
+Gates: js_goldens 35,628 across 86 suites (WebShell 218 → 223).
+
+### 2026-08-26 (added) — Tutorial Videos, the last unwired tile
+
+`onVideos` was the only Home callback without a destination. It has one now: a premium catalogue,
+grouped by phase of the game, streamed from the content bucket. `web-demo/` updated.
+
+The client asked for three things and all three are in: **it works**, **it says it needs internet**,
+and **it says it needs a subscription**.
+
+**The refusal ORDER is the product decision**, and it is asserted rather than assumed:
+
+    not premium     ->  paywall
+    not configured  ->  "Videos are not published yet"
+    offline         ->  "Online Feature"
+    loading / failed / empty / list
+
+Premium is tested first. A user who is offline *and* has no subscription sees the paywall — the
+entitlement is decided on-device by StoreKit and is knowable with the radio off, so it is the answer
+we are certain of, and sending somebody to find wifi for a screen they could not open with wifi
+would be a wasted trip. `replay_videos.js` pins that order in both languages.
+
+**"Not published" is deliberately not a connection error.** When the app has nowhere to look, telling
+the user to check their wifi sends them to fix the one thing that is working. The gate asserts that
+copy mentions neither internet nor wifi, so a rewording cannot blur the two.
+
+**It reads a published manifest, not the Laravel API — and that is not a shortcut.**
+`GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no account
+and no token, by design**: it signs in with Apple on the device, never talks to the backend, and
+there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that endpoint would
+produce a permanent 401 that looks exactly like a broken feature. Spec §0.1 already settled it:
+*"Content = static files on R2/S3. No API. No accounts. No sync."*
+
+**Neither prerequisite exists yet, and the code says so instead of pretending.** `AWS_BUCKET` is
+empty in the Laravel `.env` and `tutorial_videos` has **0 rows** — checked, not assumed. So
+`manifestURL` is empty in both languages and the screen reads *"Videos are not published yet."*
+Three steps turn it on, and `tools/content/generate_video_manifest.php` is step one: it runs the
+**same query** the controller runs, so the manifest and the API cannot describe different
+catalogues. It was run against the real Laravel app and DB to prove it works.
+
+**Nothing was transcribed.** `extract_video_styles.js` is the sixth extractor on the same
+`rn_ast.js` machine (35 style keys for the list, 21 for the player, plus `CATEGORY_ORDER` and
+`CATEGORY_META`), and `gen_video_metrics.js` emits both languages from it — 214 Swift constants and
+5 category styles. After two transcription bugs shipped in one day, hand-typing 56 style blocks was
+not a defensible option.
+
+**Two deviations, both deliberate:**
+
+- **An unknown category is visible.** The RN renders `CATEGORY_ORDER.filter(...)`, so a video whose
+  category is not one of the five is grouped and then **silently dropped** — the admin sees it saved
+  and visible, the app shows a catalogue missing it. Both ports fold the unknown into
+  `Uncategorized`: wrong section beats no section.
+- **The player is `AVPlayerViewController`.** The RN builds 21 style keys of custom transport because
+  `expo-av` gave it nothing usable. The system player has all of it plus AirPlay, PiP, the lock
+  screen and the accessibility stack. `VideoPlayer` from spec §0.1 will never be written, and the
+  spec now says so.
+
+**The networking allow-list grew, on purpose.** Spec §0.1 always named `ContentClient` as one of the
+two files permitted to open a connection; §12 now holds each language to an EXACT pair —
+`ContentClient.swift`/`OpeningDownloader.swift` and `content-client.js`/`opening-download.js`. Exact
+rather than "at most two", because a ceiling would let a third arrive by having one of these deleted.
+
+**That sweep had a hole, and this feature found it.** It matched a literal `fetch(`, and the first
+draft of `content-client.js` called the function through a local alias — so a file that genuinely
+opened a connection was invisible to the rule whose whole job is to count them. It matches the
+identifier now, with strings stripped: the looser pattern immediately named `opening-metrics.js`,
+whose crime was the label `'Games to fetch'`.
+
+Two more caught by existing gates while wiring: `nav_icons_check.js` refused a hand-rolled `‹` back
+button, and `trial_gate_check.js` caught the Swift leaving `onVideos` ungated while the web demo
+gated it — the two languages disagreeing about who may open the screen.
+
+Gates: js_goldens **35,616 across 86 suites** (ReplayVideos 100, VideoLibrary 27, ContentClient 6);
+swift_lint 142 files; swift_symbol_check 3,750 refs, with `Video*` added to its allow-list. Nothing
+compiled here.
+
+### 2026-08-26 (changed) — The Opening Tree names itself; the Tree name field is gone
+
+Client: *"Pwede ba tanggalin na yung tree name. Automatic name ng tree eh yung account name na
+hahanapan ng tira."* Done — and it turns out this was a **restoration**, not a request. The RN form
+never had a name field. It builds one and saves without asking
+(`analysis-board/openingtree.tsx:531`):
+
+```js
+const name = `${username} · ${playerColor}`;
+```
+
+The port had grown a **TREE NAME** text box, so every download made the user invent a label for a
+thing that already has one — and refused to build until they did (`errNoName`, *"Give the tree a
+name."*). Gone from both languages, along with `nameLabel` and `namePlaceholder`. `web-demo/`
+updated.
+
+Trees now read `hikaru · white`, `magnuscarlsen · both`.
+
+**The colour is part of the name, not just the meta line underneath.** Two trees for one account —
+one per side — would otherwise be impossible to tell apart in the list. That is why the RN puts it
+there too, and it is asserted rather than assumed: `autoName('a', 'white') !== autoName('a', 'black')`.
+
+**Paste PGN and My Coach games are the offline port's own** — the RN form offers Lichess and
+Chess.com only — so there is no account to name them after. They read `Pasted games · both`.
+Deriving a name from the PGN's `[White]`/`[Black]` headers was considered and rejected: it is a
+guess, it is wrong the moment a PGN holds more than one player's games, and nothing downstream uses
+it. A tree named for something that is not in it is worse than one named plainly.
+
+**One edge case worth the guard it got.** A user who types a username for Lichess and then switches
+to Paste PGN leaves that username behind in the form. Naming the pasted tree after an account whose
+games are not in it would be a quiet lie, so the username is read only when the source actually has
+one — `source.needsUsername ? username : ""` in Swift, `''` at the JS paste site.
+
+The rule is one pure function per language (`OpeningStrings.autoName` / `MET.autoName`) rather than a
+string built at each call site, because there are three call sites — paste, download, and the Swift
+tail — and two of them would eventually drift. `replay_opening_tree.js` pins the template, the
+trimming, the paste fallback, the colour distinction, and the absence of the field in both languages.
+Mutation-tested 5/5, including the leftover-username case and a capitalised colour.
+
+Gates: js_goldens 35,384 across 83 suites (ReplayOpeningTree 577 → 592, Openings 23 → 28). Nothing
+compiled here.
+
+### 2026-08-26 (fixed) — Choose Your Side said each colour twice, and lost the king
+
+Client, on a TestFlight build: *"2x nasabi black and white. Pagandahin lang natin."* The card read
+
+    ⬜ White          ← 44pt
+    White             ← 17pt
+    You move first    ← 11pt
+
+`play.tsx:1524-1526` is a king glyph, then the name, then the hint:
+
+```jsx
+<Text style={styles.kingW}>♔</Text>
+<Text style={styles.colorNameW}>White</Text>
+<Text style={styles.colorHintW}>You move first</Text>
+```
+
+The top line had been transcribed as `'⬜ White'` / `'⬛ Black'` — the word repeated at 44pt, and the
+king gone. Now `♔` / `♚`, and renamed `kingWhite` / `kingBlack` after the RN elements they render,
+which is also what `CoachPlay.kingWFontSize` has been styling all along. `web-demo/` updated.
+
+**Both languages had it**, which is why every gate stayed green: the twin agreed with itself and only
+the RN source disagreed — the exact failure `CLAUDE.md` warns about, *"two hand-typed copies agreeing
+with each other is not verification."* The extraction cannot help here either; it carries
+StyleSheets, not JSX text. So `replay_coach.js` asserts the property instead: the glyph is a single
+character, it is the chess king at that code point, and **it may not contain the colour's name**,
+because the line below already prints it. Mutation-tested — restoring `'⬜ White'` fails four ways.
+
+Same screenshot confirmed the previous fix on a real device: the banner read
+`Unfinished game · 4 moves as White` and the card read `Jaden Pogi goes first`, both correct.
+
+Gates: js_goldens 35,303 across 82 suites (ReplayCoach 324 → 338).
+### 2026-08-26 (fixed) — Deleting a tournament was possible, and its instructions were behind a button
+
+Client: *"doon daw sa tournament walang way na mag delete ng tournament na ginawa."* There is a way,
+and it was already ported whole — long-press a card, confirm in a modal, `PairingStore.remove`. So
+was the line that tells you, `"Long press a card to delete"`, sitting in the same ScrollView.
+`web-demo/` needed no change; it was already right. Three lines of Swift, all of them extracted
+constants nobody had applied.
+
+**The cause is one missing modifier.** `tournaments/index.tsx:212` is
+`list: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 90 }`. The Swift applied two of the
+three:
+
+```swift
+.padding(.horizontal, PairingList.listPaddingHorizontal)
+.padding(.top, PairingList.listPaddingTop)
+// listPaddingBottom = 90 — extracted, generated, never applied
+```
+
+That 90 is what holds the scroll content clear of the "New Tournament" button floating over it in
+the same `ZStack`. Without it the **last** thing in the ScrollView sits under the button — and the
+last thing in this ScrollView is the hint. The feature was there; its only documentation was not
+visible.
+
+Two more of the same defect, found by sweeping for it: `PairingDetail.playerActions` had lost its
+horizontal padding, and `generateWrap` had lost horizontal **and** bottom.
+
+**Why no gate saw it.** The browser applies all three — `.pgl-list` is a three-value `padding`
+shorthand — so `web-demo/` looked right, and the browser is where this checkout tests.
+`metrics_key_check.js` and `swift_source_keys.js` verify that every constant REFERENCE resolves;
+neither can notice a constant nobody references. And a blanket unused-constant rule is useless here:
+99 layout constants are unused in the pairing metrics alone, nearly all of them legitimately — the
+share card and the free-tier banner are not ported at all.
+
+**New gate, `tools/qa/swift_padding_check.js`:** if the Swift applies ANY of a block's
+`*Padding<Side>` constants it must apply ALL of them. Referencing one is the proof the block is
+rendered, which is exactly what an unused-constant census cannot establish — so an unported block is
+silent by construction and a block that quietly lost a side fails. 62 rendered blocks across seven
+metrics files, mutation-tested 3/3.
+
+Its first draft passed while the bug was still in the tree: it matched `.listPaddingBottom` by member
+name, and `PuzzleStreakHome.listPaddingBottom` exists too. Block names repeat across screens, so the
+match is enum-qualified now.
+
+**Still open, same class, not fixed here:** `generateWrapBorderTopWidth` / `BorderTopColor` are
+extracted and unapplied, so the Generate Round footer is missing the 1px divider the RN draws above
+it. Borders are outside this gate's rule on purpose — a margin or border often becomes something
+else in SwiftUI, so "unapplied" does not imply "wrong" there.
+
+Gates: js_goldens 35,353 across 83 suites. Nothing compiled here.
+
 ### 2026-08-26 (fixed) — Every interpolating string in Play vs Coach printed its parameter name
 
 Client: the coach ratings are missing. They were not missing — every card read **`ELO (n)`**. And it
