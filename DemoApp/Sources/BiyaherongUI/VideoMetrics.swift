@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import BiyaherongCoachCore
 
 /// Extracted from `app/(app)/user/tutorial-videos/index.tsx` by tools/metrics/extract_video_styles.js.
 public enum VideoList {

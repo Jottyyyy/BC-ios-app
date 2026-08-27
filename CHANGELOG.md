@@ -9,6 +9,42 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-27 (fixed) — Tutorial Videos did not compile: a missing import and a macOS-only modifier
+
+`origin/main` was pulled onto the Mac (11 commits: Tutorial Videos, the Opening Tree naming itself,
+the tournament delete hint, Choose Your Side, and the four unquoted route names). As with every
+merge authored on the Windows checkout, where there is no Swift compiler, it did not build. Two
+errors, both in the new Videos code, both structural rather than logical:
+
+**`VideoMetrics.swift` never imported the Core.** `VideoCategoryStyle.meta` falls back through
+`VideoLibrary.uncategorized`, but the file imported only SwiftUI — *cannot find 'VideoLibrary' in
+scope*. `AnalysisMetrics.swift` and `PuzzleMetrics.swift`, the two other generated metrics files
+that reach into the Core, both import it; this one was the outlier. The file is **generated**, so
+the fix is in `tools/metrics/gen_video_metrics.js`, which now emits `import BiyaherongCoachCore`.
+Regenerating produced exactly that one added line and left `web-demo/js/video-metrics.js`
+byte-identical, which is the evidence that the generator is still deterministic.
+
+**`VideoLibraryScreen` presented the player with `.fullScreenCover`, which macOS does not have.**
+This module has no sheet and no cover anywhere for exactly that reason — `PromotionOverlay` set the
+precedent and the whole Analysis Board followed it. It is now an `.overlay`, gated on `playing`.
+Nothing about how it looks changes: `VideoPlayerScreen` already fills the frame and paints an opaque
+`VideoPlay.rootBackgroundColor`, so it covers precisely what the cover covered.
+
+Green after the fixes: `swift build` on all three packages, `StockfishSmoke` (**SMOKE OK** — depth
+22, 2.48M nodes, and `Ra8#` found in the rook endgame, so the engine still runs after the merge),
+`swift_lint` (143), `swift_symbol_check` (3753 refs / 159 types), `swift_enum_payload_check`,
+`swift_padding_check`, `metrics_key_check` (1294), `swift_source_keys`, `swift_layout_check` (448),
+and every replay suite including the new `replay_videos` (100) and `replay_opening_tree` (593).
+
+**`js_goldens.js` and `ParityRunner` still cannot run on this Mac**, unchanged from 48 and 49 and
+for the same reason: `../BYAHERONG-COACH-LARAVEL` has no `app/Services/ChessEngine.php` — its
+`app/Services` holds only `GooglePlayService.php` — so `generate_goldens.php` skips the `san_parse`
+and `pgn_tokens` goldens and both gates hard-fail on the missing file. Every other golden
+regenerated. This is an environment gap, not a regression: nothing in this merge touches the
+notation core.
+
+`web-demo/` not updated beyond the regenerated `video-metrics.js`, which did not change.
+
 ### 2026-08-26 (changed) — 1.0.6 (49) shipped: the first build with a Stockfish that runs
 
 Delivery UUID `7b99982d-5ba6-4b10-b955-31bb481819d3`. VERIFY SUCCEEDED before the upload,

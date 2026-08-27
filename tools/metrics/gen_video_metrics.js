@@ -245,6 +245,7 @@ if (typeof module !== 'undefined' && module.exports) { module.exports = BiyaVide
 const swiftFile = `${header('swift')}
 
 import SwiftUI
+import BiyaherongCoachCore
 
 ${swiftBody}
 

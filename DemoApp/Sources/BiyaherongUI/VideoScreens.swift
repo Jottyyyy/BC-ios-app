@@ -43,8 +43,13 @@ struct VideoLibraryScreen: View {
         .background(VideoList.containerBackgroundColor.ignoresSafeArea())
         .task { await loadIfNeeded() }
         .onDisappear { task?.cancel(); task = nil }
-        .fullScreenCover(item: $playing) { video in
-            VideoPlayerScreen(video: video, onExit: { playing = nil })
+        // An overlay rather than a `.fullScreenCover`: that modifier does not exist on macOS, and
+        // this module has no sheet or cover anywhere — `PromotionOverlay` set the precedent. The
+        // player already paints an opaque full-bleed background, so it covers what a cover would.
+        .overlay {
+            if let video = playing {
+                VideoPlayerScreen(video: video, onExit: { playing = nil })
+            }
         }
     }
 
