@@ -9,11 +9,13 @@ import Foundation
 ///
 /// ## Where the bytes come from
 ///
-/// A static JSON manifest on the content bucket — spec §0.1: *"Content = static files on R2/S3. No
-/// API. No accounts. No sync."* The RN app reads the same rows from `GET /api/tutorial-videos`
-/// behind a Sanctum token; this app has no account and no token by design, so it reads a published
-/// file instead. `tools/content/generate_video_manifest.php` writes that file from the same query
-/// the controller runs, so the two cannot describe different catalogues.
+/// A JSON manifest, fetched from Laravel's public `/api/content/tutorial-videos`. The RN app reads
+/// the same rows from `GET /api/tutorial-videos` behind a Sanctum token; this app has no account
+/// and no token by design, so Laravel publishes the catalogue a second time with no auth at all,
+/// off the same query — one controller, two doors, one shelf.
+///
+/// Spec §0.1 asked for a static file on a bucket instead. `tools/content/generate_video_manifest.php`
+/// still writes one and this parser accepts either; the deviation is in `PORTING_NOTES.md`.
 ///
 /// See `docs/tutorial-videos.md`.
 public enum VideoLibrary {

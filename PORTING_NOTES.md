@@ -18,20 +18,45 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 The last unwired Home tile. Full write-up in `docs/tutorial-videos.md`; this records only what
 deviates or was decided.
 
-### DECISION: a published manifest, not the Laravel API
+### DECISION: a public Laravel route, not the authenticated API — and not a bucket file
 
 `GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no
 account and no token, by design** — it signs in with Apple on the device, never talks to the Laravel
 backend, and there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that
 endpoint would produce a permanent 401 indistinguishable from a broken feature.
 
-Spec §0.1 had already settled it: *"Content = static files on R2/S3. No API. No accounts. No sync."*
-`tools/content/generate_video_manifest.php` runs the SAME query the controller runs, so the manifest
-and the API cannot describe different catalogues.
+The catalogue is read from `GET /api/content/tutorial-videos` instead: the same controller, the same
+shared query, no auth at all.
 
-**Neither prerequisite exists.** `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos`
-has 0 rows — both checked, not assumed. `manifestURL` is therefore empty in both languages and the
-screen says *"Videos are not published yet."* rather than inventing an address that would 404.
+### DEVIATION: this is not the static file spec §0.1 asked for
+
+Spec §0.1 says *"Content = static files on R2/S3. **No API. No accounts. No sync.**"*, and the first
+implementation obeyed it: `tools/content/generate_video_manifest.php` writes the manifest, somebody
+uploads it, `manifestURL` points at it. That still works and the script is still here.
+
+It was replaced as the default for one reason, and it is an operational one rather than a technical
+one. **The file has to be regenerated and re-uploaded by hand after every upload in the admin
+panel.** Miss that step and the app shows a catalogue that stopped matching the shelf — and it looks
+completely fine doing it, which is the worst shape a bug can take. A route cannot go stale.
+
+The spec's objection was to *accounts and sync*, both of which this route is free of: no token, no
+session, no write path, no state on the device. What survives of §0.1 is the property that mattered
+— the app still holds no account and still talks to nothing that could reject it.
+
+Checked, not assumed, at the time of the change: production had 5 visible videos and a working
+bucket (thumbnails served), the local dev database had 0 rows, and `/api/content/tutorial-videos`
+returned 404 until the backend change was deployed.
+
+Two things came out of building it that are worth keeping:
+
+- **`Access-Control-Allow-Origin` set on the response does not survive.** Laravel's `HandleCors` is
+  global middleware, so its response pass runs after every route middleware and overwrites the
+  header. With exactly one configured origin and no patterns, php-cors stamps that origin onto every
+  `api/*` response regardless of who asked. The browser preview is allowed by an origin pattern in
+  `config/cors.php`, which is the only place that can decide it.
+- **`is_visible` defaults to `false`.** `DashboardController::store` writes
+  `boolean('is_visible', false)` and the manifest query filters on it, so a video that was uploaded
+  but never toggled is absent from the app with nothing anywhere explaining why.
 
 ### DEVIATION: an unknown category is visible
 

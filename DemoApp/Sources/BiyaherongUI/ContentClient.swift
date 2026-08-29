@@ -13,31 +13,33 @@ import BiyaherongCoachCore
 /// no opinions, over a parser in the parity core.** Nothing here knows what a video is —
 /// `VideoLibrary.parse` does, and it is Foundation-only and replayed in JavaScript.
 ///
-/// ## Why a file on a bucket and not the Laravel API
+/// ## Why the public route and not the authenticated API
 ///
 /// The RN app reads the same rows from `GET /api/tutorial-videos`, which sits inside
 /// `Route::middleware('auth:sanctum')`. **This app has no account and no token, by design** — it
 /// signs in with Apple on the device and never talks to the Laravel backend, and no
-/// `/api/auth/apple` endpoint exists that could mint one. Spec §0.1 settles it: *"Content = static
-/// files on R2/S3. No API. No accounts. No sync."*
+/// `/api/auth/apple` endpoint exists that could mint one. Pointing the screen at that path would
+/// 401 forever, which on a phone is indistinguishable from a broken feature.
 ///
-/// `tools/content/generate_video_manifest.php` writes that file from the same query the controller
-/// runs, so the two cannot describe different catalogues.
+/// So Laravel publishes the same catalogue with no auth at all, at `/api/content/tutorial-videos`.
+/// One controller, one shared query, two doors — they cannot describe different catalogues.
 @MainActor
 public enum ContentClient {
 
     /// Where the manifest lives.
     ///
-    /// **Empty until somebody publishes one.** `AWS_BUCKET` is unset in the Laravel `.env` and the
-    /// `tutorial_videos` table has no rows, so there is no address to hard-code and inventing one
-    /// would produce a screen that fails in a way nobody could diagnose. Empty is handled: the list
-    /// says the catalogue is not published yet, which is true, instead of blaming the network.
+    /// **A deviation from spec §0.1** — *"Content = static files on R2/S3. No API. No accounts. No
+    /// sync."* — taken deliberately and written up in `PORTING_NOTES.md`. The spec's objection was
+    /// to accounts and sync, and this route has neither: no token, no session, no write path. What
+    /// it does have is the thing a bucket file does not, which is that it cannot go stale. The
+    /// static file has to be regenerated and re-uploaded by hand after every upload in the admin
+    /// panel, and a catalogue that quietly stops matching the shelf is worse than one that was
+    /// never published, because nothing about it looks wrong.
     ///
-    /// To turn the feature on:
-    ///   1. `php tools/content/generate_video_manifest.php`
-    ///   2. upload `build/tutorial-videos.json` to the content bucket, publicly readable
-    ///   3. put its URL here
-    public static let manifestURL = ""
+    /// `tools/content/generate_video_manifest.php` still writes that file for anyone who would
+    /// rather serve it from a bucket. Point this at its URL instead and nothing else changes —
+    /// `VideoLibrary.parse` accepts both, because they are the same bytes.
+    public static let manifestURL = "https://biyaherongchesscoach.com/api/content/tutorial-videos"
 
     /// `true` once `manifestURL` names somewhere to look.
     public static var isConfigured: Bool {

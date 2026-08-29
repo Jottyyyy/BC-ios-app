@@ -7,13 +7,23 @@
  *
  * Then upload the file to the content bucket and point `ContentClient.manifestURL` at it.
  *
- * ## Why a file and not the API
+ * ## This is now the ALTERNATIVE, not the default
  *
- * Spec §0.1: *"Content = static files on R2/S3. No API. No accounts. No sync."* The RN app reads the
- * same rows from `GET /api/tutorial-videos`, which sits inside `Route::middleware('auth:sanctum')`
- * and therefore needs a Sanctum token. **This app has no account and no token, by design** — it
- * signs in with Apple locally and never talks to the Laravel backend at all, and there is no
- * `/api/auth/apple` endpoint that could give it one. A published file needs neither.
+ * `ContentClient.manifestURL` points at Laravel's public `/api/content/tutorial-videos`, which
+ * serves these exact bytes live. That route cannot go stale; this file can, and silently, because a
+ * stale catalogue looks exactly like a current one. Use this script if you would rather serve the
+ * catalogue from a bucket or a CDN than from the app server — the app parses both identically — and
+ * re-run it after every change in the admin panel.
+ *
+ * Run it on a machine whose `.env` points at the PRODUCTION database. It reads the DB through
+ * Laravel, so a local checkout with an empty `tutorial_videos` writes an empty manifest.
+ *
+ * ## Why neither of them is the authenticated API
+ *
+ * The RN app reads the same rows from `GET /api/tutorial-videos`, which sits inside
+ * `Route::middleware('auth:sanctum')` and therefore needs a Sanctum token. **The iOS app has no
+ * account and no token, by design** — it signs in with Apple locally and never talks to the Laravel
+ * backend at all, and there is no `/api/auth/apple` endpoint that could give it one.
  *
  * ## Why it reads the database rather than being written by hand
  *

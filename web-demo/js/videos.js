@@ -212,8 +212,19 @@
       body.appendChild(notice(STR.STR.onlineGlyph, STR.STR.onlineTitle, STR.STR.offlineBody,
                               STR.STR.offlineSub, STR.STR.retry, cb.onRetry));
     } else if (state.error) {
-      body.appendChild(notice(STR.STR.emptyGlyph, STR.STR.errorTitle, STR.STR.errorBody,
-                              null, STR.STR.retry, cb.onRetry));
+      var errBox = notice(STR.STR.emptyGlyph, STR.STR.errorTitle, STR.STR.errorBody,
+                          null, STR.STR.retry, cb.onRetry);
+      // Demo only, and on THIS branch deliberately. The catalogue is a live route now, so a
+      // checkout whose backend has not been deployed yet gets a 404 here -- an honest failure with
+      // nothing whatsoever to look at, on the one platform this repo is previewed on. The app has
+      // no such button; see web-demo/js/video-sample.js.
+      if (cb.onLoadSample) {
+        var sampleBtn = el('button', 'vid-cta', SAMPLE_CTA);
+        sampleBtn.onclick = cb.onLoadSample;
+        errBox.appendChild(sampleBtn);
+        errBox.appendChild(el('div', 'vid-sample-note', SAMPLE_NOTE));
+      }
+      body.appendChild(errBox);
     } else if (state.loading) {
       body.appendChild(el('div', 'vid-notice-body', STR.STR.loading));
     } else if (!state.videos || !state.videos.length) {
