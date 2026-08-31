@@ -1,7 +1,8 @@
 # Tutorial Videos
 
-**Home → Tutorial Videos.** A catalogue of coaching videos, grouped by phase of the game, streamed
-from the content bucket. Premium only, and **the one screen in this app that does not work offline**.
+**Home → Tutorial Videos.** A catalogue of coaching videos, grouped by phase of the game, listed
+from a public Laravel route and streamed from the content bucket. Premium only, and **the one screen
+in this app that does not work offline**.
 
 It is the last Home tile to get a destination — `onVideos` was the only callback left unwired.
 
@@ -41,15 +42,24 @@ wifi, so a future rewording cannot blur the two.
 
 ## Where the list comes from, and why not the API
 
-Spec §0.1: *"Content = static files on R2/S3. **No API. No accounts. No sync.**"*
-
 The RN app reads the same rows from `GET /api/tutorial-videos`, which sits inside
 `Route::middleware('auth:sanctum')` and needs a Sanctum token. **This app has no account and no
 token, by design.** It signs in with Apple on the device, never talks to the Laravel backend, and
 there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that endpoint would
 produce a permanent 401 that looks exactly like a broken feature.
 
-So the catalogue is a **published JSON file** on the content bucket:
+So Laravel publishes the same catalogue a second time, **with no auth at all**:
+
+```
+GET https://biyaherongchesscoach.com/api/content/tutorial-videos
+```
+
+One controller, one shared query, two doors — `TutorialVideoController::catalogue()` feeds both, so
+they cannot describe different shelves. Spec §0.1 said *"Content = static files on R2/S3. **No API.
+No accounts. No sync.**"* and this is a deviation from it, taken with the client and written up in
+`PORTING_NOTES.md`: the spec's objection was to accounts and sync, and this route has neither.
+
+Either way the bytes are the same:
 
 ```json
 { "videos": [
@@ -62,41 +72,52 @@ So the catalogue is a **published JSON file** on the content bucket:
 `VideoLibrary.parse` also accepts a bare `[…]`, because a hand-published file is very likely to be
 the array on its own and refusing it would be pedantry with a blank screen attached.
 
-## Turning it on — three steps, and none of them are done yet
+## Turning it on
+
+**Two steps, and there is no publish step among them.**
+
+1. Upload videos at `/admin/dashboard` and **toggle each one visible**. The column defaults to
+   `false` (`DashboardController::store` — `boolean('is_visible', false)`) and the manifest query
+   filters on it, so an uploaded-but-not-toggled video is missing from the app with nothing anywhere
+   saying why. This is the single most likely cause of an empty catalogue.
+2. Deploy the Laravel side. `/api/content/tutorial-videos` is a route, so it exists only once the
+   backend carrying it is live. Before that the app gets a 404 and says *"Could not load videos"* —
+   honest, and deliberately not the *"not published yet"* state.
+
+That is all. Upload a video, toggle it visible, and it is in the app.
+
+### Serving it from a bucket instead
+
+If you would rather keep the app server out of the path:
 
 ```bash
 LARAVEL_ROOT=/path/to/BYAHERONG-COACH-LARAVEL php tools/content/generate_video_manifest.php
 # -> build/tutorial-videos.json
 ```
 
-1. Run that. It executes **the same query** `TutorialVideoController@index` runs — same scope, same
-   order, same columns — so the manifest and the API can never describe different catalogues. It
-   reports the per-category counts and names anything it skipped.
-2. Upload `build/tutorial-videos.json` to the content bucket, publicly readable.
-3. Put its URL in **two** places: `ContentClient.manifestURL` (Swift) and `MANIFEST_URL` in
-   `web-demo/js/content-client.js`. `replay_videos.js` asserts the two match.
+Run it **on a machine whose `.env` points at the production database** — it reads the DB through
+Laravel, so a local checkout with an empty `tutorial_videos` writes an empty manifest. Upload the
+file publicly, then put its URL in **two** places: `ContentClient.manifestURL` (Swift) and
+`MANIFEST_URL` in `web-demo/js/content-client.js`. `replay_videos.js` asserts the two match and that
+whichever URL is there is `https://`.
 
-**Neither prerequisite exists today**, and the code says so rather than pretending:
-
-- `AWS_BUCKET` is **empty** in the Laravel `.env` and `.env.example`, and `CLOUDFLARE_R2_PUBLIC_URL`
-  is unset — there is no bucket to publish to.
-- `tutorial_videos` has **0 rows**. Nobody has uploaded a video in the admin panel.
-
-Until then the screen says *"Videos are not published yet."* — which is true, and is not a network
-error.
+The cost is that this one goes stale silently: re-run and re-upload after **every** change in the
+admin panel, or the app shows a catalogue that stopped matching the shelf and looks fine doing it.
 
 ## Seeing it work on Windows
 
-The honest state today is *"Videos are not published yet"* — no manifest, no rows. That is correct
-and completely undemonstrable: a notice looks the same whether the screen works or not.
+The demo fetches the real catalogue, so with the backend deployed you see your actual videos. Two
+things still leave you looking at a notice: a checkout whose Laravel side is not deployed yet (404),
+and a machine with no connection. A notice looks the same whether the screen works or not.
 
-So that notice carries a **Load sample catalogue** button, in the browser demo only. It loads
+So the not-published **and** could-not-load notices both carry a **Load sample catalogue** button,
+in the browser demo only. It loads
 `web-demo/js/video-sample.js` **through the real parser**, so what appears is the actual screen
 rather than a mock of it — sections in category order, chips, thumbnails, and a card that really
 plays when you click it. One of the four rows is deliberately categorised `"Tactics"`, which is not
 one of the five, so the deviation below is something you can see rather than only read about.
 
-The app has no such button. `ContentClient.manifestURL` is empty in both languages and
+The app has no such button. `ContentClient.manifestURL` names the real route in both languages and
 `replay_videos.js` asserts they match; nothing in the sample is reachable from Swift.
 
 The media are Blender Foundation open movies (CC BY 3.0) — the standard public test streams, used as
@@ -167,8 +188,9 @@ node tools/qa/js_goldens.js
 node tools/qa/swift_lint.js && node tools/qa/swift_symbol_check.js
 ```
 
-In the browser: open `web-demo/index.html`, **Home → Tutorial Videos**. With no manifest published
-you should see *"Videos are not published yet"* — that is the correct state today, not a failure.
-Sign out to a free account and the same tile shows the paywall instead.
+In the browser: open `web-demo/index.html`, **Home → Tutorial Videos**. With the Laravel side
+deployed you should see the real catalogue. Before that deploy you get *"Could not load videos"* and
+a **Load sample catalogue** button — press it to see the screen itself. Switch to a free account and
+the same tile shows the paywall instead.
 
 On a Mac: `cd DemoApp && swift build`, then run the demo and open the tile.

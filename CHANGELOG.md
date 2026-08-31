@@ -9,6 +9,67 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-29 (changed) — The video catalogue is a live route, not a file somebody has to remember to upload
+
+Reported with two screenshots: the admin panel at `biyaherongchesscoach.com/admin/dashboard` showing
+**five videos, every visibility toggle on, thumbnails rendering** — and the app beside it saying
+*"Videos are not published yet."*
+
+Both screens were telling the truth. The catalogue was designed to be a static JSON manifest on the
+content bucket (spec §0.1: *"Content = static files on R2/S3. No API. No accounts. No sync."*), and
+nobody had ever published one, so `ContentClient.manifestURL` was empty and the screen said so.
+
+**Two of the three things this feature was waiting for had quietly arrived.** The previous entry
+recorded `AWS_BUCKET` empty and `tutorial_videos` at 0 rows; both were read from the **local** `.env`
+and the local database. Production had neither problem — a working bucket serving public thumbnails,
+and five visible rows. Only the manifest was missing.
+
+**And the documented way to publish one could not work from here.** `generate_video_manifest.php`
+reads the database through Laravel, and the local `.env` points at a local Postgres with 0 rows:
+running it on this checkout writes an empty catalogue, correctly and uselessly. The rows are on the
+production server.
+
+So the catalogue moved to **`GET /api/content/tutorial-videos`** — public, no auth, served by
+`TutorialVideoController` off the same query the authenticated `/api/tutorial-videos` uses, now
+extracted into `catalogue()` so neither can drift from the other. Upload a video in the admin panel,
+toggle it visible, and it is in the app. There is no publish step to forget.
+
+**This is a deviation from spec §0.1 and is recorded in `PORTING_NOTES.md`.** The spec's objection
+was to accounts and sync; this route has neither — no token, no session, no write path, nothing
+stored on the device. What it has that a bucket file does not is that it cannot go stale, and a
+stale catalogue is the worst shape this bug could take: the app shows a shelf that stopped matching
+reality and looks completely fine doing it. `generate_video_manifest.php` still writes the static
+file for anyone who would rather serve it from a CDN, and the parser accepts both.
+
+**Two things the build taught us, both now in `PORTING_NOTES.md`:**
+
+- **A CORS header set on the response does not survive.** The first draft set
+  `Access-Control-Allow-Origin: *` in the controller. Verified against a running server, the client
+  received `https://biyaherongchesscoach.com` instead: `HandleCors` is global middleware, so its
+  response pass runs after every route middleware, and with exactly one configured origin and no
+  patterns php-cors stamps that origin onto every `api/*` response regardless of who asked. The
+  browser preview is allowed by an origin pattern in `config/cors.php` — loopback only — which also
+  restores the echo-back behaviour that file always meant to have. An unrelated origin now gets no
+  grant at all, where before it got a header naming somebody else's site.
+- **The web-demo self-test was about to start making real HTTP requests.** `videos(null)` returned
+  early while no URL was configured. With one configured, Node's global `fetch` takes over and the
+  gate reaches the network — failing on a plane and passing for the wrong reason everywhere else. It
+  now takes an injected transport.
+
+**`web-demo/` updated.** It fetches the real catalogue. The **Load sample catalogue** button now also
+appears on the *could not load* notice, not just *not published* — before the backend deploy lands
+the preview gets a 404, and Windows is the only platform this repo is previewed on.
+
+Gate: `js_goldens.js` green, 35,629 assertions across 86 suites; `swift_lint`, `swift_symbol_check`
+and `swift_enum_payload_check` all OK. `replay_videos.js` now asserts the URL is `https://` and ends
+in `/api/content/tutorial-videos` — the path check is the one that matters, because pointing this at
+`/api/tutorial-videos` would 401 forever and look exactly like a broken feature.
+
+**The Laravel change is a separate repo and a separate PR** (`feat/public-video-manifest` in
+`BYAHERONG-COACH-LARAVEL`) and **must be deployed first**; until it is, the app gets a 404 and says
+*"Could not load videos"*.
+
+
 ### 2026-08-26 (fixed) — The Videos tile was dead on tap: four route names had lost their quotes
 
 Reported straight after the feature landed: *"bakit hindi nagpaplay yung video sa web demo?"*

@@ -663,10 +663,10 @@
         if (video && video.videoURL) { videoState.playing = video; render(); }
       },
       onClosePlayer: function () { videoState.playing = null; render(); },
-      // Demo only. No manifest is published yet — AWS_BUCKET is empty and tutorial_videos has no
-      // rows — so the honest state is a notice, and a notice is indistinguishable from a broken
-      // screen. This loads js/video-sample.js THROUGH the real parser, so what appears is the
-      // actual screen rather than a mock of it.
+      // Demo only. The catalogue is a live Laravel route now, so this is no longer the only way
+      // to see the screen — but it is still the way to see it with no network, or before the
+      // backend change has been deployed. Loads js/video-sample.js THROUGH the real parser, so
+      // what appears is the actual screen rather than a mock of it.
       onLoadSample: function () {
         videoState.videos = BiyaVideoLibrary.parse(BiyaVideoSample.manifestText());
         videoState.error = null;

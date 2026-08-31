@@ -198,12 +198,16 @@ for (const [name, mod, floor] of [['video-library.js', LIB, 25], ['content-clien
 {
   eq(CC.MANIFEST_URL, swString(CC_SWIFT, 'manifestURL'),
     'both languages point at the same manifest');
-  expect(CC.MANIFEST_URL === '',
-    'which is nowhere yet — AWS_BUCKET is unset and tutorial_videos has no rows, and a placeholder '
-    + 'URL would 404 in a way nobody could diagnose');
-  expect(!CC.isConfigured(), 'so the JS reports it unconfigured');
+  expect(/^https:\/\//.test(CC.MANIFEST_URL),
+    'over TLS — a catalogue is a list of URLs the app will fetch and play, and in plaintext anyone '
+    + 'on the network chooses what those are');
+  expect(/\/api\/content\/tutorial-videos$/.test(CC.MANIFEST_URL),
+    'and at the PUBLIC route. /api/tutorial-videos is inside auth:sanctum and this app holds no '
+    + 'token by design, so that path 401s forever and reads on a phone as a broken feature');
+  expect(CC.isConfigured(), 'so the JS reports it configured');
   expect(/case notConfigured/.test(code(CC_SWIFT)),
-    'and the Swift has a failure case for it that is NOT a network error');
+    'and the Swift KEEPS a failure case for an empty URL that is NOT a network error. Unreachable '
+    + 'in shipping config, and it stays: blanking the URL must not send the user to fix their wifi');
 
   // The distinction that keeps "no videos yet" from reading as "something broke".
   expect(CC.looksLikeCatalogue('{"videos":[]}'), 'an empty catalogue IS a catalogue in the JS');
