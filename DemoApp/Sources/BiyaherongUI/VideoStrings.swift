@@ -58,12 +58,13 @@ public enum VideoStrings {
     public static let errorTitle = "Could not load videos"
     public static let errorBody = "Check your connection and try again."
 
-    /// The catalogue has no address yet.
+    /// The catalogue has no address.
     ///
-    /// Spec §0.1 reads the list from a published manifest on the content bucket, and nobody has
-    /// published one — `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos` has no rows.
-    /// This is deliberately NOT phrased as a connection problem: telling a user to check their wifi
-    /// when the app has nowhere to look would send them to fix the one thing that is working.
+    /// **Unreachable in shipping config** — `ContentClient.manifestURL` names the published route —
+    /// and kept anyway, because the branch is what stops a blanked URL from being reported as a
+    /// network fault. This is deliberately NOT phrased as a connection problem: telling a user to
+    /// check their wifi when the app has nowhere to look would send them to fix the one thing that
+    /// is working.
     public static let notConfiguredTitle = "Videos are not published yet"
     public static let notConfiguredBody =
         "The catalogue has not been set up. Please check back after the next update."

@@ -39,8 +39,8 @@ persisted itself after its file had been removed would write the deleted progres
 
 ## Test builds: no login screen, no paywall
 
-**Every build is a test build unless the app target says otherwise.** `BiyaherongBuild.isTestBuild`
-defaults to `true`, and in that mode:
+**Every build is a REAL build unless the app target opts out.** `BiyaherongBuild.isTestBuild`
+defaults to `false`; `BIYA_TESTBUILD` turns it on, and in that mode:
 
 - `LoginStore.init` opens a session at launch, so **the login screen never appears** — the app boots
   straight to Home;
@@ -52,7 +52,8 @@ defaults to `true`, and in that mode:
 All three are needed together. There is no Sign in with Apple capability on the App ID yet and no
 subscription product in App Store Connect, so any one of them alone still leaves a wall.
 
-`ios-appstore` sets `BIYA_APPSTORE`, which turns all three back into the real thing.
+`BIYA_TESTBUILD` is set in exactly two places: `configs: Debug` in `ios/project.yml`, so Xcode Run
+stays openable, and the two CI **test** workflows. Every archive — Release — is the real thing.
 
 ### Why the switch is NOT a `#if` in this package
 
@@ -69,26 +70,31 @@ a Codemagic CLI feature either. Fixing only that would have changed nothing.
 
 So the `#if` lives in **`ios/App/BiyaherongApp.swift`** — a real Xcode target, where the setting does
 apply — and its `init()` hands a Bool to the package before any view exists.
-`tools/qa/replay_login.js` asserts that **no file in the package branches on `BIYA_APPSTORE`**, so
+`tools/qa/replay_login.js` asserts that **no file in the package branches on either condition**, so
 the inert form cannot come back.
 
-### Why the default is "testable"
+### Why the default is "real"
 
-The two failure directions are not symmetric:
+It was "testable", for a good reason that still holds: a build nobody can open, with no error to
+explain it, had happened three times and cost three days. What changed is what "a build told
+nothing" came to mean.
 
-- **Default testable** → a submission build that forgot to opt in. Caught loudly: `ios-appstore`
-  reads the effective build settings and **refuses to build** unless `BIYA_APPSTORE` really reached
-  the compiler, before anything is signed or uploaded.
-- **Default real** → a test build nobody can open, with no error to explain it. That has now
-  happened three times and cost three days.
+`tools/ship/ship_testflight.sh` — the documented one-command ship — sets **no build settings at
+all**. Under the old sense that made the repo's flagship ship path produce a build with a granted
+subscription and a sign-in performing no Apple authentication, silently, every time. Forgetting a
+flag should cost a tester an inconvenience; it should never cost the product its revenue.
 
-A loud failure in the rare workflow beats a silent one in the daily workflow.
+So the default flipped and the old convenience was kept where it was actually wanted — the Debug
+configuration. And every path now **asserts instead of assuming**, reading the effective build
+settings back rather than trusting its own `sed`:
 
-| Workflow | `BIYA_APPSTORE` | Login | Subscription |
-|---|---|---|---|
-| `ios-free-unsigned` | no | skipped | granted |
-| `ios-testflight` | no | skipped | granted |
-| **`ios-appstore`** | **sed into `project.yml` before `xcodegen`** | real Apple sheet | real StoreKit |
+| Workflow | `BIYA_TESTBUILD` | Login | Subscription | Refuses when |
+|---|---|---|---|---|
+| `ios-free-unsigned` | **sed in** before `xcodegen` | skipped | granted | it is absent |
+| `ios-testflight` | **sed in** before `xcodegen` | skipped | granted | it is absent |
+| **`ios-appstore`** | **nothing** — the default | real Apple sheet | real StoreKit | it is present |
+| **`ship_testflight.sh`** | **nothing** — the default | real Apple sheet | real StoreKit | it is present |
+| Xcode Run (Debug) | `configs: Debug` | skipped | granted | — |
 
 ## The thing that changed about "100% offline" — twice
 
@@ -121,9 +127,10 @@ that sent nothing, and nothing in this repo can check them. See `PORTING_NOTES.m
 | `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
 | `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
 | `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
-| `DemoApp/…/BuildMode.swift` | `BiyaherongBuild.isTestBuild` — the switch, defaulting to `true` |
-| `ios/App/BiyaherongApp.swift` | the **only** `#if BIYA_APPSTORE`, in a real Xcode target |
-| `codemagic.yaml` | `ios-appstore` seds the flag into `project.yml`, and refuses to build without it |
+| `DemoApp/…/BuildMode.swift` | `BiyaherongBuild.isTestBuild` — the switch, defaulting to `false` |
+| `ios/App/BiyaherongApp.swift` | the **only** `#if BIYA_TESTBUILD`, in a real Xcode target |
+| `codemagic.yaml` | the two test workflows sed the flag in; all three read the settings back |
+| `tools/ship/ship_testflight.sh` | refuses to upload a build carrying the test flag |
 | `web-demo/js/login.js` | the twin: same state machine, same lists, `SIMULATED_AUTH = true` |
 | `web-demo/js/app.js` | `confirmDeleteAccount()` + `eraseAccountData()` |
 

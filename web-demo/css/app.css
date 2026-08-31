@@ -2697,6 +2697,71 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .pw-restore:active,
 .pw-back:active { opacity: var(--pw-pressed); }
 
+/* ---- the Monthly / Yearly toggle. RN premium/index.tsx:1072-1101. ---- */
+
+.pw-plans {
+  display: flex;
+  gap: var(--pw-plan-row-gap);
+  margin-bottom: var(--pw-plan-row-bottom);
+}
+
+.pw-plan {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--pw-plan-card-padding);
+  border: var(--pw-plan-card-border-width) solid var(--pw-c-plan-border);
+  border-radius: var(--pw-plan-card-radius);
+  background: var(--pw-c-plan-card);
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity .12s ease;
+}
+
+.pw-plan[aria-pressed="true"] {
+  border-color: var(--pw-c-plan-border-selected);
+  background: var(--pw-c-plan-card-selected);
+}
+
+.pw-plan:active { opacity: var(--pw-pressed); }
+
+.pw-plan-label {
+  font-size: var(--pw-t-plan-label-size);
+  font-weight: 600;
+  color: var(--pw-c-plan-label);
+  margin-bottom: var(--pw-plan-label-bottom);
+}
+
+.pw-plan[aria-pressed="true"] .pw-plan-label { color: var(--pw-c-plan-label-selected); }
+
+.pw-plan-price {
+  font-size: var(--pw-t-plan-price-size);
+  font-weight: 700;
+  color: var(--pw-c-plan-price);
+}
+
+.pw-plan[aria-pressed="true"] .pw-plan-price { color: var(--pw-c-plan-price-selected); }
+
+.pw-plan-period {
+  font-size: var(--pw-t-plan-period-size);
+  color: var(--pw-c-plan-period);
+  margin-top: var(--pw-plan-period-top);
+}
+
+.pw-plan[aria-pressed="true"] .pw-plan-period { color: var(--pw-c-plan-period-selected); }
+
+.pw-badge {
+  margin-top: var(--pw-badge-top);
+  padding: var(--pw-badge-padding-v) var(--pw-badge-padding-h);
+  border-radius: var(--pw-badge-radius);
+  background: var(--pw-c-badge-fill);
+  color: var(--pw-c-badge-ink);
+  font-size: var(--pw-t-badge-size);
+  font-weight: 700;
+  text-align: center;
+}
+
 /* ---- the App Review disclosure. Required verbatim, and the only URLs in the app. ---- */
 
 .pw-legal {
@@ -2705,10 +2770,26 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   gap: var(--pw-row-gap);
 }
 
+/* Every product on the screen, priced, with its period in words. */
+.pw-disclosure-title {
+  font-size: var(--pw-t-disclosure-title-size);
+  font-weight: 700;
+  color: var(--pw-c-title);
+  margin-bottom: var(--pw-disclosure-title-bottom);
+}
+
+.pw-disclosure-line {
+  font-size: var(--pw-t-disclosure-line-size);
+  line-height: var(--pw-t-disclosure-line-height);
+  color: var(--pw-c-heading);
+  margin-bottom: var(--pw-disclosure-line-bottom);
+}
+
 .pw-disclosure {
   font-size: var(--pw-t-legal-size);
   line-height: var(--pw-t-legal-line-height);
   color: var(--pw-c-legal);
+  margin-top: var(--pw-disclosure-body-top);
 }
 
 .pw-links {

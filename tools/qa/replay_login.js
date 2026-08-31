@@ -467,29 +467,35 @@ function run() {
     const buildMode = read(UIDIR, 'BuildMode.swift');
     expect(!!buildMode, 'BuildMode.swift exists');
     const bm = code(buildMode || '');
-    expect(/public private\(set\) static var isTestBuild = true/.test(bm),
-      'the default is a TESTABLE build — a build nobody can open is the failure that keeps '
-      + 'happening, and it is silent; the opposite failure is caught loudly by ios-appstore');
+    expect(/public private\(set\) static var isTestBuild = false/.test(bm),
+      'the default FAILS CLOSED. It was `true`, so that a build nobody could open — the failure '
+      + 'that kept happening, silently — could not recur. But "a build told nothing" stopped '
+      + 'meaning a tester\'s build and started meaning whatever ship_testflight.sh produces, and '
+      + 'that script sets nothing: the documented one-command ship was uploading a giveaway');
     expect(/public static func configure\(isTestBuild: Bool\)/.test(bm),
       'and the app target sets it through configure(isTestBuild:)');
 
     // THE assertion this whole section exists for: an inert `#if` must never come back.
     const pkg = fs.readdirSync(UIDIR).filter((f) => f.endsWith('.swift'));
     const inert = pkg.filter((f) =>
-      /#if\s+!?\s*BIYA_APPSTORE/.test(code(fs.readFileSync(path.join(UIDIR, f), 'utf8'))));
+      /#if\s+!?\s*BIYA_(APPSTORE|TESTBUILD)/.test(code(fs.readFileSync(path.join(UIDIR, f), 'utf8'))));
     eq(inert.join(','), '',
-      'NO file in the BiyaherongUI package may branch on BIYA_APPSTORE — a compilation condition '
-      + 'set on the Xcode project never reaches a package target, so such a `#if` is inert and '
-      + 'compiles the same way in every build');
+      'NO file in the BiyaherongUI package may branch on either build condition — a compilation '
+      + 'condition set on the Xcode project never reaches a package target, so such a `#if` is '
+      + 'inert and compiles the same way in every build');
 
     // The app target, where it genuinely applies.
     const appMain = fs.readFileSync(
       path.join(ROOT, 'ios', 'App', 'BiyaherongApp.swift'), 'utf8');
     const am = code(appMain);
-    expect(/#if BIYA_APPSTORE[\s\S]{0,200}configure\(isTestBuild: false\)/.test(am),
-      'the app target turns the REAL sign-in and StoreKit on under BIYA_APPSTORE');
-    expect(/#else[\s\S]{0,200}configure\(isTestBuild: true\)[\s\S]{0,40}#endif/.test(am),
-      'and every other build is a test build');
+    expect(/#if BIYA_TESTBUILD[\s\S]{0,200}configure\(isTestBuild: true\)/.test(am),
+      'the app target opts INTO the open build under BIYA_TESTBUILD');
+    expect(/#else[\s\S]{0,200}configure\(isTestBuild: false\)[\s\S]{0,40}#endif/.test(am),
+      'and every other build is a REAL one — forgetting the flag now costs a tester an '
+      + 'inconvenience instead of costing the product its revenue');
+    expect(!/BIYA_APPSTORE/.test(am),
+      'the old opt-into-charging condition is gone, not merely unused — leaving it would give a '
+      + 'future editor two flags with opposite senses to confuse');
     expect(/init\(\)/.test(am),
       'set from init(), before the view tree exists, so every reader sees the right value');
 
@@ -521,24 +527,47 @@ function run() {
     };
     const iFree = at('ios-free-unsigned'), iTf = at('ios-testflight'), iAs = at('ios-appstore');
     expect(iFree < iTf && iTf < iAs, 'the three workflows are in the documented order');
-    const sets = (block) => /SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/.test(block);
+    const sets = (block) => /SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD/.test(block);
 
-    expect(!sets(ci.slice(iFree, iTf)),
-      'ios-free-unsigned sets no compilation condition — a test build must not depend on plumbing');
-    expect(!sets(ci.slice(iTf, iAs)), 'ios-testflight sets none either; that is the inversion');
-    expect(sets(ci.slice(iAs)),
-      'ios-appstore opts in by rewriting project.yml before xcodegen — the mechanism this repo has '
-      + 'proved works, unlike passing a setting through the Codemagic CLI');
-    expect(/REFUSING: BIYA_APPSTORE did NOT reach the compiler/.test(ci.slice(iAs)),
-      'and REFUSES to build if it did not arrive, which is what makes the default safe');
+    expect(sets(ci.slice(iFree, iTf)),
+      'ios-free-unsigned opts INTO the open build by rewriting project.yml before xcodegen — the '
+      + 'mechanism this repo has proved works, unlike passing a setting through the Codemagic CLI');
+    expect(sets(ci.slice(iTf, iAs)), 'ios-testflight opts in too; it is named TEST BUILD');
+    expect(!sets(ci.slice(iAs)),
+      'ios-appstore sets NOTHING — the checked-in default is already the submission behaviour, '
+      + 'which is the entire point of inverting the flag');
+
+    // Every workflow asserts, none assumes. The two test ones refuse on absence, the submission
+    // one refuses on presence, and all three read the EFFECTIVE settings rather than the file.
+    expect(/REFUSING: BIYA_TESTBUILD did NOT reach the compiler/.test(ci.slice(iFree, iTf)),
+      'ios-free-unsigned REFUSES if the open build did not arrive — the original silent failure');
+    expect(/REFUSING: BIYA_TESTBUILD did NOT reach the compiler/.test(ci.slice(iTf, iAs)),
+      'ios-testflight refuses on the same absence');
+    expect(/REFUSING: BIYA_TESTBUILD reached the compiler on a SUBMISSION build/.test(ci.slice(iAs)),
+      'and ios-appstore refuses on its PRESENCE — contamination is the only way it can go wrong now');
+    expect((ci.match(/-showBuildSettings/g) || []).length === 3,
+      'all three read back the effective build settings; none trusts its own sed');
     expect(/applesignin/.test(ci.slice(iAs)),
       'ios-appstore also checks the entitlement survived signing — the failure with no other symptom');
 
     const proj = fs.readFileSync(path.join(ROOT, 'ios', 'project.yml'), 'utf8');
     expect(/SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""/.test(proj),
-      'ios/project.yml ships the testable default');
-    expect(!/SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/.test(proj),
-      'and does not hard-code BIYA_APPSTORE — only the submission workflow seds it in');
+      'ios/project.yml ships the REAL default in `base`');
+    expect(!/^\s{8}SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD/m.test(proj),
+      'and never hard-codes the test flag at base level — that would make every archive a giveaway');
+    expect(/configs:[\s\S]{0,600}Debug:\s*\n\s+SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD/
+      .test(proj),
+      'the open build survives where it was actually wanted: `configs: Debug`, so Xcode Run is '
+      + 'still openable while Release — every archive — charges');
+
+    // ship_testflight.sh is the reason the default was inverted at all: it sets no build settings,
+    // so under the old sense it uploaded a build with a granted subscription and a fake sign-in.
+    const ship = fs.readFileSync(
+      path.join(ROOT, 'tools', 'ship', 'ship_testflight.sh'), 'utf8');
+    expect(/BIYA_TESTBUILD/.test(ship),
+      'ship_testflight.sh knows about the flag at all — it did not, which was the whole hole');
+    expect(/-showBuildSettings/.test(ship),
+      'and reads the EFFECTIVE settings back, the same way it refuses to trust EXPORT SUCCEEDED');
   }
 
   //     And the browser twin declares itself a stub, so it can never be read as the real thing.

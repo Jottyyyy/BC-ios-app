@@ -18,20 +18,84 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 The last unwired Home tile. Full write-up in `docs/tutorial-videos.md`; this records only what
 deviates or was decided.
 
-### DECISION: a published manifest, not the Laravel API
+### DECISION: a public Laravel route, not the authenticated API — and not a bucket file
 
 `GET /api/tutorial-videos` sits inside `Route::middleware('auth:sanctum')`. **This app has no
 account and no token, by design** — it signs in with Apple on the device, never talks to the Laravel
 backend, and there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that
 endpoint would produce a permanent 401 indistinguishable from a broken feature.
 
-Spec §0.1 had already settled it: *"Content = static files on R2/S3. No API. No accounts. No sync."*
-`tools/content/generate_video_manifest.php` runs the SAME query the controller runs, so the manifest
-and the API cannot describe different catalogues.
+The catalogue is read from `GET /api/content/tutorial-videos` instead: the same controller, the same
+shared query, no auth at all.
 
-**Neither prerequisite exists.** `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos`
-has 0 rows — both checked, not assumed. `manifestURL` is therefore empty in both languages and the
-screen says *"Videos are not published yet."* rather than inventing an address that would 404.
+### DEVIATION: this is not the static file spec §0.1 asked for
+
+Spec §0.1 says *"Content = static files on R2/S3. **No API. No accounts. No sync.**"*, and the first
+implementation obeyed it: `tools/content/generate_video_manifest.php` writes the manifest, somebody
+uploads it, `manifestURL` points at it. That still works and the script is still here.
+
+It was replaced as the default for one reason, and it is an operational one rather than a technical
+one. **The file has to be regenerated and re-uploaded by hand after every upload in the admin
+panel.** Miss that step and the app shows a catalogue that stopped matching the shelf — and it looks
+completely fine doing it, which is the worst shape a bug can take. A route cannot go stale.
+
+The spec's objection was to *accounts and sync*, both of which this route is free of: no token, no
+session, no write path, no state on the device. What survives of §0.1 is the property that mattered
+— the app still holds no account and still talks to nothing that could reject it.
+
+Checked, not assumed, at the time of the change: production had 5 visible videos and a working
+bucket (thumbnails served), the local dev database had 0 rows, and `/api/content/tutorial-videos`
+returned 404 until the backend change was deployed.
+
+Two things came out of building it that are worth keeping:
+
+- **`Access-Control-Allow-Origin` set on the response does not survive.** Laravel's `HandleCors` is
+  global middleware, so its response pass runs after every route middleware and overwrites the
+  header. With exactly one configured origin and no patterns, php-cors stamps that origin onto every
+  `api/*` response regardless of who asked. The browser preview is allowed by an origin pattern in
+  `config/cors.php`, which is the only place that can decide it.
+- **`is_visible` defaults to `false`.** `DashboardController::store` writes
+  `boolean('is_visible', false)` and the manifest query filters on it, so a video that was uploaded
+  but never toggled is absent from the app with nothing anywhere explaining why.
+
+### DECISION: the receipt is the identity
+
+The catalogue route was public, and one `curl` returned every video URL in it. The app has no
+account and no Sanctum token — that is the whole architecture — so there was nothing to authorise
+against and nothing to check.
+
+Except there was. StoreKit hands the app a `Transaction.jwsRepresentation`: the transaction, signed
+by Apple, carrying the certificate chain that proves it. `AppleTransactionVerifier` checks that
+signature against **Apple Root CA - G3, pinned by SHA-256 fingerprint**, then checks the payload is
+for this bundle, one of our products, unrevoked and unexpired. No account, no session, no secret on
+the server, and no call to Apple.
+
+The fingerprint was **extracted, not transcribed** — downloaded from
+`https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`, hashed, and confirmed self-signed
+with CN "Apple Root CA - G3". The certificate is committed as a test fixture and
+`AppleTransactionVerifierTest` recomputes the hash from it, so a typo in that hex string is a
+failing test rather than a server that trusts the wrong root — or none.
+
+**Why not the App Store Server API.** `Get Transaction Info` answers the same question
+authoritatively and needs an issuer ID, a key ID and a `.p8` on the server: three secrets to
+provision, rotate and leak, for a question the JWS already answers. The trade-off is that a JWS is
+a **snapshot** — a refund after it was issued is invisible until the device sends a newer one, which
+StoreKit does on renewal and revocation. For a catalogue read that is the right trade, and the
+Server API can be added on top later without changing anything here.
+
+**POST for a read.** The receipt is kilobytes of certificate chain, which is a body's job; nginx's
+default header buffers are not generous enough to make a header a safe habit, and a URL is worse.
+
+### DEVIATION: half of the protection, and it is written down as half
+
+The client chose to leave the Android app untouched for now. Android reads the same `video_url`
+columns from the public bucket, so the bucket stays public — which means **a leaked link still
+plays, forever**. What this change closes is *enumeration*: the list is no longer free.
+
+That is a real improvement and an incomplete one, and it is recorded as incomplete rather than
+described as "video protection". Finishing it is small once Android is in scope: make the bucket
+private and return `Storage::disk('s3')->temporaryUrl(...)` from the `video_path` column that
+already exists. The verification half — the half with the cryptography in it — is done.
 
 ### DEVIATION: an unknown category is visible
 
@@ -3012,6 +3076,66 @@ pre-flight check that would have shown it:
 ```
 codesign -d --entitlements :- Payload/Biyaherong.app | grep applesignin
 ```
+
+### DECISION: the build flag fails CLOSED, and its sense is inverted
+
+`BiyaherongBuild.isTestBuild` defaulted to `true`, so a build told nothing was an open one. The
+argument was sound and is preserved verbatim in `docs/account.md`: the failure that kept recurring
+was a build nobody could open, silently, and a loud failure in the rare workflow beats a silent one
+in the daily workflow.
+
+What it missed is that **`tools/ship/ship_testflight.sh` sets no build settings at all.** The repo's
+documented one-command ship was therefore, every single time, uploading a build that granted the
+subscription to everyone and performed no Apple authentication. Nothing looked wrong, because
+nothing was wrong from the build's point of view.
+
+So `#if BIYA_APPSTORE` became `#if BIYA_TESTBUILD`, the default became `false`, and the old
+convenience moved to `configs: Debug` in `ios/project.yml` — Xcode Run is still fully open, every
+archive is real. The asymmetry the original argument rested on is now handled by making **every**
+path assert rather than assume: the two CI test workflows refuse when the flag is absent, and
+`ios-appstore` and `ship_testflight.sh` refuse when it is present, all four reading the effective
+build settings back rather than trusting their own `sed`.
+
+Forgetting a flag should cost a tester an inconvenience. It should never cost the product its
+revenue.
+
+### DEVIATION: `Save {n}%` is rendered; the RN only rendered `BEST VALUE`
+
+Spec §3.2 describes the yearly card as carrying the badge **"plus the computed saving `Save {n}%`"**.
+`app/(app)/user/premium/index.tsx:646-651` renders only `BEST VALUE`; there is no saving anywhere in
+that file. The two disagree, and the RN source wins on questions of fact — so this is recorded as a
+deviation rather than dressed up as a port.
+
+It is kept because the number is *derived*, not written down: `PremiumStore.yearlySavingsPercent`
+computes it from the two real `Product.price` values and returns nil when either tier is missing or
+the arithmetic would not be true, in which case the line simply does not appear. That satisfies the
+rule the whole paywall is built around — no price on this screen is ever a literal.
+
+While extracting the toggle back out of the RN we also caught a transcription risk in the spec's own
+prose: the sub-line under each price is `planToggleSub` at **12pt**, not the 11pt of `planPriceSub`,
+which is a different style on a different card. Two hand-typed copies agreeing with each other is
+not verification.
+
+### DEVIATION: the paywall's Privacy Policy link is `/privacy-policy`, not `/privacy`
+
+The RN shipped `https://biyaherongchesscoach.com/privacy` and spec §3.2 wrote the same string down.
+**Both are wrong.** The Laravel route is `/privacy-policy` (`routes/web.php`); `/privacy` returns
+404, verified live. App Review clicks that link on every auto-renewing-subscription submission, so
+this was a rejection sitting in the code waiting for a submission to happen.
+
+This is the "do not reproduce a latent bug — port the intent" rule applied to a URL. A redirect from
+`/privacy` is added on the Laravel side as well, because builds already in the wild carry the old
+string and cannot be fixed from here.
+
+### DEVIATION: yearly sits at a higher service level than monthly
+
+`ios/Biyaherong.storekit` gives yearly `groupNumber: 1` and monthly `2`, so moving monthly → yearly
+is an upgrade that takes effect immediately rather than a deferred crossgrade. The RN had no local
+StoreKit configuration to copy, and App Store Connect must be set up to match.
+
+Its `_storefront` also moved `PHL` → `USA`. The prices we control are the **USD base** ($1.99 /
+$19.99); leaving the storefront on `PHL` would have rendered them as `₱1.99`, and the converted peso
+figure is not something this repo can verify. Do not write down a number you cannot check.
 
 ### DEVIATION: a compile-time simulated sign-in, for one workflow only
 

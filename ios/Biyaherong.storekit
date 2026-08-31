@@ -8,8 +8,8 @@
     "_billingIssuesEnabled" : false,
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_locale" : "en_PH",
-    "_storefront" : "PHL",
+    "_locale" : "en_US",
+    "_storefront" : "USA",
     "_storeKitErrors" : [
     ],
     "_timeRate" : 0
@@ -26,9 +26,39 @@
           ],
           "codeOffers" : [
           ],
-          "displayPrice" : "199.00",
+          "displayPrice" : "19.99",
           "familyShareable" : false,
           "groupNumber" : 1,
+          "internalID" : "21550201",
+          "introductoryOffer" : {
+            "displayPrice" : "0.00",
+            "internalID" : "21550202",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "Unlimited puzzles, all five coaches, unlimited Game Reviews and 30-round tournaments.",
+              "displayName" : "Biyaherong Plus",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.prince24pogi.biyaherongchessapp.plus.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Biyaherong Plus Yearly",
+          "subscriptionGroupID" : "21550001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+          ]
+        },
+        {
+          "adHocOffers" : [
+          ],
+          "codeOffers" : [
+          ],
+          "displayPrice" : "1.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
           "internalID" : "21550101",
           "introductoryOffer" : {
             "displayPrice" : "0.00",

@@ -87,6 +87,10 @@ Feature- and subsystem-level documentation for this repo.
 - [`shipping-to-testflight.md`](shipping-to-testflight.md) — **one command** to build, verify and
   upload a TestFlight build (`tools/ship/ship_testflight.sh`), the one-time signing/API-key setup,
   and the several ways Apple's tooling reports success while silently doing nothing. **Complete.**
+- [`app-store-handoff.md`](app-store-handoff.md) — the operational checklist for whoever has the Mac
+  and the App Store Connect login: the exact product IDs and prices, the order the steps have to
+  happen in, and why a mistyped product ID is a rejection rather than an error message. Ends with a
+  self-contained brief to hand an assistant. **Start here to submit.**
 
 _More docs get added here as features are built._
 

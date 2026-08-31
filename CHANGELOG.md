@@ -9,6 +9,215 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (docs) — The App Store submission checklist lives in the repo now
+
+The handoff for whoever does the submission was a shared link, which turned out to be the wrong
+container for it twice over: a private artifact shows *"Page not found"* to anyone not signed in —
+the same message it shows for a URL that does not exist — and half of a pasted brief is worse than
+none, because the half that gets cut is the values the other half refers to as "above".
+
+So it is [`docs/app-store-handoff.md`](docs/app-store-handoff.md): arrives with `git pull`, needs no
+login, and is versioned alongside the values it quotes. It carries the exact product IDs, the USD
+prices, the order the steps have to happen in, and the reason a mistyped product ID is a rejection
+rather than an error message — every screen is behind the paywall, so an empty product list leaves
+a reviewer with literally nothing to look at.
+
+It ends with a self-contained brief to paste into an assistant, which is what the shared link was
+really for. Listed in `docs/README.md` as **Start here to submit**.
+
+No code changed. The one thing in it that could go stale is the deployed-backend check, so the doc
+gives the command rather than only the claim.
+
+
+### 2026-08-31 (changed) — The video catalogue takes a receipt now, not nothing
+
+`curl https://biyaherongchesscoach.com/api/content/tutorial-videos` returned every video URL in the
+library, to anybody. The paywall was in the app's UI and nowhere else.
+
+The app has no account and no Sanctum token, which is the whole architecture and the reason the
+route was public in the first place — there was nothing to authorise against. Except there was:
+StoreKit hands the app a `Transaction.jwsRepresentation`, the transaction **signed by Apple**, with
+the certificate chain that proves it. That signature is an identity, and a better one than a token.
+
+`App\Services\AppleTransactionVerifier` (new, in the Laravel repo) checks it **without calling
+Apple**: ES256 only, the `x5c` chain verified leaf ← intermediate ← root, and the root pinned to
+**Apple Root CA - G3 by SHA-256 fingerprint** — then the payload checked for this bundle, one of our
+two products, unrevoked, unexpired. The fingerprint was downloaded and hashed rather than typed from
+memory; the certificate is committed as a fixture and the test recomputes it.
+
+`GET` is gone — the route is now `POST` with `{"jws": …}`, because the receipt is kilobytes of
+certificate chain and that is a body's job, not a header's. The response is `no-store`: the old
+`public, max-age=300` would have let a proxy hand an authorised body to somebody who showed nothing.
+
+**A 401 is not a broken catalogue**, and the new `ContentClient.Failure.notSubscribed` keeps it
+separate from `offline` and `unreadable`. Both screens send it to the **paywall**: the server holds
+the content, so when it and StoreKit disagree the server wins, and "check your connection" would be
+the wrong instruction twice over.
+
+**This is half the protection, and it is documented as half.** The client chose to leave the Android
+app untouched; Android reads the same `video_url` columns, so the bucket stays public and a leaked
+link still plays forever. What closes today is *enumeration*. Finishing it is small once Android is
+in scope — private bucket, `temporaryUrl()` off the `video_path` column that already exists — and the
+cryptographic half is done.
+
+**Tests.** 27 new PHP tests, and they use a REAL certificate chain rather than a mock: the suite
+generates a root, an intermediate and a leaf with OpenSSL, signs a genuine ES256 JWS, and then
+attacks it — tampered payload, another app's bundle, another product, expired, revoked, `alg: none`,
+a one-certificate chain, and the one that matters most, **a perfectly self-consistent chain rooted
+somewhere that is not Apple**. A mocked verifier would have proved none of it. Laravel suite 21
+failed / 40 passed → 21 failed / 60 passed; the 21 are stock starter-kit failures that predate this.
+
+`replay_videos.js` 101 → 117, pinning the transport in both languages: POST, the `jws` key, the 401
+mapping, the distinctness of `notSubscribed` from `offline`, no caching, and that both screens route
+a refused receipt to the paywall. Two of the new assertions were mutation-checked. Gate green at
+**35,814** assertions across 86 suites.
+
+**`web-demo/` updated.** A browser has no StoreKit, so the real catalogue is now unreachable from the
+demo — which is the feature working. `videos.js` stays faithful and routes a refused receipt to the
+paywall; `app.js` translates that to could-not-load first, because in a browser "no receipt" is true
+of every visitor and says nothing about the screen, and that state is the one carrying **Load sample
+catalogue**.
+
+Companion PR on `BYAHERONG-COACH-LARAVEL`: the verifier, the route, and the tests.
+
+
+### 2026-08-31 (changed) — The paywall was switched off in every build we could ship, and there was no yearly plan
+
+Asked to get the app hosted and make sure nothing is reachable without paying, at $1.99/month and
+$19.99/year. The content-protection question turned out not to be the urgent one.
+
+**`tools/ship/ship_testflight.sh` was uploading a build that gives the product away.**
+`PremiumStore.recompute()` grants `.premium(trial: false)` whenever `BiyaherongBuild.isTestBuild`,
+that flag defaulted to `true`, and the ship script sets no build settings at all — so the repo's
+documented one-command ship produced, every time, a build with a granted subscription and a sign-in
+performing no Apple authentication. Only the `ios-appstore` CI workflow was ever correct.
+
+The old default was not careless; `docs/account.md` argues for it and the argument still holds. The
+failure it prevented was a build nobody could open, silently, which had happened three times. What
+it missed is that "a build told nothing" had stopped meaning *a tester's build* and started meaning
+*whatever the ship script produces*. Forgetting a flag should cost a tester an inconvenience; it
+must never cost the product its revenue.
+
+So `#if BIYA_APPSTORE` became `#if BIYA_TESTBUILD` and the default became `false` — **and the old
+convenience was kept where it was actually wanted**, `configs: Debug` in `ios/project.yml`. Open the
+project, press Run, and the app is still fully open against the local StoreKit configuration. Every
+**archive** is real. The asymmetry the original argument rested on is gone because all four paths now
+**assert instead of assume**, reading the effective build settings back rather than trusting their
+own `sed`: the two CI test workflows refuse when the flag is absent, `ios-appstore` and
+`ship_testflight.sh` refuse when it is present.
+
+**Added the yearly tier.** There was one product. `PremiumStore.Plan` now declares `.monthly` and
+`.yearly`, `load()` fetches both, and — the bug that would have shipped otherwise —
+`refresh()` no longer filters entitlements to a single product ID, which would have locked out every
+yearly subscriber the moment that tier existed.
+
+The Monthly/Yearly toggle was **re-extracted from the RN source** rather than designed:
+`app/(app)/user/premium/index.tsx:1072-1101`. It had been deliberately omitted while there was only
+one product, and the header comment said so. Extracting rather than transcribing immediately earned
+its keep — the sub-line under each price is `planToggleSub` at **12pt**, not the 11pt of
+`planPriceSub`, which is a different style on a different card, and spec §3.2's prose would have led
+straight into that. Default selection is yearly, per the spec and per every subscription screen.
+
+**Deleted a hand-typed constant that never worked.** `subscriptionGroupID = "biyaherong.plus"` — App
+Store Connect assigns a *numeric* group ID, so `Product.SubscriptionInfo.status(for:)` never matched.
+Being a `try?`, it failed silently and quietly demoted `willAutoRenew` to a heuristic. It now comes
+off a loaded product.
+
+**Fixed a link that App Review clicks on every subscription submission.** The paywall pointed at
+`https://biyaherongchesscoach.com/privacy`. **Verified live: 404.** The route is `/privacy-policy`.
+Both the RN and spec §3.2 carried the short form; a latent bug, ported as the intent instead.
+
+**Trial eligibility is now asked once, for the group.** `isEligibleForIntroOffer` is a property of
+the subscription *group*, not of a product: someone who used the trial on monthly cannot have it
+again on yearly. Asking per row would have promised a second free trial the App Store will not
+honour, and the user would have found out at the payment sheet.
+
+The 7-day trial requiring card details up front — the client's specific ask — needs no code at all.
+That is Apple's own behaviour for an introductory offer, and collecting card details ourselves is
+forbidden by Guideline 3.1.1.
+
+**`web-demo/` updated.** The toggle renders, is clickable, and drives the price note; both rows show
+the same `(App Store price)` placeholder because a browser has no `Product.displayPrice` and
+inventing two prices is precisely the bug the RN shipped. The disclosure card now lists every tier
+with its period in words, as App Review expects.
+
+**Gates.** `js_goldens.js` green at **35,779** assertions across 86 suites. `replay_premium.js` grew
+423 → 585 and now also checks `ios/Biyaherong.storekit` against `PremiumStore.Plan` — a product ID
+typo is not a compile error and not a crash, it is a row that says "Loading…" forever with nothing
+else on screen to explain it; mutation-checked. `replay_login.js` 481 → 488, rewritten to pin the
+inverted arrangement including the ship script's new guard. No separate `build_mode_check.js` was
+added as planned: `replay_login.js` already owned this section and now asserts all of it, and a
+second file repeating the same claims would be worse than none.
+
+**Still required, and none of it can be done from this repo** — see `docs/subscription.md`: enable
+In-App Purchase on the App ID and *recreate* the profile, create both products with IDs matching
+`PremiumStore.Plan`, set the prices, add the trial to **both**, enable billing grace, and submit the
+IAPs *with* the build. Because the app is fully gated, an unconfigured product means the reviewer
+sees "Store Unavailable" with nothing else to look at — a rejection with no code involved.
+
+Companion PR on `BYAHERONG-COACH-LARAVEL`: the `/privacy` redirect and the ₱99/₱999 copy.
+
+
+### 2026-08-29 (changed) — The video catalogue is a live route, not a file somebody has to remember to upload
+
+Reported with two screenshots: the admin panel at `biyaherongchesscoach.com/admin/dashboard` showing
+**five videos, every visibility toggle on, thumbnails rendering** — and the app beside it saying
+*"Videos are not published yet."*
+
+Both screens were telling the truth. The catalogue was designed to be a static JSON manifest on the
+content bucket (spec §0.1: *"Content = static files on R2/S3. No API. No accounts. No sync."*), and
+nobody had ever published one, so `ContentClient.manifestURL` was empty and the screen said so.
+
+**Two of the three things this feature was waiting for had quietly arrived.** The previous entry
+recorded `AWS_BUCKET` empty and `tutorial_videos` at 0 rows; both were read from the **local** `.env`
+and the local database. Production had neither problem — a working bucket serving public thumbnails,
+and five visible rows. Only the manifest was missing.
+
+**And the documented way to publish one could not work from here.** `generate_video_manifest.php`
+reads the database through Laravel, and the local `.env` points at a local Postgres with 0 rows:
+running it on this checkout writes an empty catalogue, correctly and uselessly. The rows are on the
+production server.
+
+So the catalogue moved to **`GET /api/content/tutorial-videos`** — public, no auth, served by
+`TutorialVideoController` off the same query the authenticated `/api/tutorial-videos` uses, now
+extracted into `catalogue()` so neither can drift from the other. Upload a video in the admin panel,
+toggle it visible, and it is in the app. There is no publish step to forget.
+
+**This is a deviation from spec §0.1 and is recorded in `PORTING_NOTES.md`.** The spec's objection
+was to accounts and sync; this route has neither — no token, no session, no write path, nothing
+stored on the device. What it has that a bucket file does not is that it cannot go stale, and a
+stale catalogue is the worst shape this bug could take: the app shows a shelf that stopped matching
+reality and looks completely fine doing it. `generate_video_manifest.php` still writes the static
+file for anyone who would rather serve it from a CDN, and the parser accepts both.
+
+**Two things the build taught us, both now in `PORTING_NOTES.md`:**
+
+- **A CORS header set on the response does not survive.** The first draft set
+  `Access-Control-Allow-Origin: *` in the controller. Verified against a running server, the client
+  received `https://biyaherongchesscoach.com` instead: `HandleCors` is global middleware, so its
+  response pass runs after every route middleware, and with exactly one configured origin and no
+  patterns php-cors stamps that origin onto every `api/*` response regardless of who asked. The
+  browser preview is allowed by an origin pattern in `config/cors.php` — loopback only — which also
+  restores the echo-back behaviour that file always meant to have. An unrelated origin now gets no
+  grant at all, where before it got a header naming somebody else's site.
+- **The web-demo self-test was about to start making real HTTP requests.** `videos(null)` returned
+  early while no URL was configured. With one configured, Node's global `fetch` takes over and the
+  gate reaches the network — failing on a plane and passing for the wrong reason everywhere else. It
+  now takes an injected transport.
+
+**`web-demo/` updated.** It fetches the real catalogue. The **Load sample catalogue** button now also
+appears on the *could not load* notice, not just *not published* — before the backend deploy lands
+the preview gets a 404, and Windows is the only platform this repo is previewed on.
+
+Gate: `js_goldens.js` green, 35,629 assertions across 86 suites; `swift_lint`, `swift_symbol_check`
+and `swift_enum_payload_check` all OK. `replay_videos.js` now asserts the URL is `https://` and ends
+in `/api/content/tutorial-videos` — the path check is the one that matters, because pointing this at
+`/api/tutorial-videos` would 401 forever and look exactly like a broken feature.
+
+**The Laravel change is a separate repo and a separate PR** (`feat/public-video-manifest` in
+`BYAHERONG-COACH-LARAVEL`) and **must be deployed first**; until it is, the app gets a 404 and says
+*"Could not load videos"*.
+
 ### 2026-08-27 (changed) — 1.0.6 (50) shipped: the teammates' Tutorial Videos, built on a Mac
 
 Delivery UUID `61ddfa91-ba8f-42cc-b525-a9116b42424d`. VERIFY SUCCEEDED before the upload,

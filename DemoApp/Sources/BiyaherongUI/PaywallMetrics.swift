@@ -9,12 +9,19 @@ import SwiftUI
 //
 // ## Where the design comes from
 //
-// The layout is the port spec's §3.2, extracted from the RN paywall — minus the parts a
-// monthly-only product does not have (the Monthly/Yearly plan toggle, the `BEST VALUE` badge and
-// the `Save {n}%` computation), plus the trial copy, which has no counterpart anywhere: the RN app
-// never offered one. The cap and lock copy is `components/UpgradePrompt.tsx:26-50` verbatim, minus
-// its hard-coded `₱99` — every price on this screen comes from `Product.displayPrice`, because the
-// original managed to show three different prices in one session.
+// The layout is the port spec's §3.2, extracted from the RN paywall, plus the trial copy, which
+// has no counterpart anywhere: the RN app never offered one. The cap and lock copy is
+// `components/UpgradePrompt.tsx:26-50` verbatim, minus its hard-coded `₱99` — every price on this
+// screen comes from `Product.displayPrice`, because the original managed to show three different
+// prices in one session.
+//
+// The plan toggle and its badge were omitted while there was only a monthly product. They came
+// back with the yearly tier, and every number in `PaywallPlanLayout` / `PaywallPlanType` below was
+// re-extracted from `app/(app)/user/premium/index.tsx:1072-1101` rather than taken from the spec
+// prose — which is how we caught that the sub-line is **12pt** (`planToggleSub`), not the 11pt of
+// `planPriceSub`, a different style on a different card. The spec also describes a `Save {n}%`
+// beside the badge that the RN never actually renders; it is kept, computed from the two real
+// `Product.price` values, and PORTING_NOTES.md records the disagreement.
 
 // MARK: - Palette
 
@@ -23,6 +30,20 @@ enum PaywallPalette {
     static let card = Theme.card
     static let cardBorder = Theme.c(0xFDB022, 0.2)
     static let activeCardBorder = Theme.c(0xFDB022, 0.3)
+
+    // Plan toggle — `planToggleBtn` / `planToggleBtnActive`, RN index.tsx:1073-1082.
+    static let planCard = Theme.card
+    static let planCardSelected = Theme.c(0x1E3050)
+    static let planBorder = Theme.c(0xFDB022, 0.2)
+    static let planBorderSelected = Theme.gold
+    static let planLabel = Theme.mutedForeground
+    static let planLabelSelected = Theme.gold
+    static let planPrice = Theme.foreground
+    static let planPriceSelected = Theme.gold
+    static let planPeriod = Theme.mutedForeground
+    static let planPeriodSelected = Theme.foreground
+    static let badgeFill = Theme.c(0xFDB022, 0.15)
+    static let badgeInk = Theme.gold
 
     static let title = Theme.gold
     static let body = Theme.mutedForeground
@@ -82,11 +103,30 @@ enum PaywallLayout {
     static let logoSize: CGFloat = 30
     static let pressed: Double = 0.82
 
+    // Plan toggle and the badge — RN `premium/index.tsx:1072-1101`.
+    static let planRowGap: CGFloat = 12          // planToggleRow.gap
+    static let planRowBottom: CGFloat = 16       // planToggleRow.marginBottom
+    static let planCardRadius: CGFloat = 16      // planToggleBtn.borderRadius
+    static let planCardPadding: CGFloat = 16     // planToggleBtn.padding
+    static let planCardBorderWidth: CGFloat = 2  // planToggleBtn.borderWidth
+    static let planLabelBottom: CGFloat = 4      // planToggleLabel.marginBottom
+    static let planPeriodTop: CGFloat = 2        // planToggleSub.marginTop
+    static let badgeTop: CGFloat = 8             // saveBadge.marginTop
+    static let badgePaddingH: CGFloat = 10       // saveBadge.paddingHorizontal
+    static let badgePaddingV: CGFloat = 4        // saveBadge.paddingVertical
+    static let badgeRadius: CGFloat = 8          // saveBadge.borderRadius
+
+    // The per-tier price lines above the legal paragraph — RN `index.tsx:1155-1166`.
+    static let disclosureTitleBottom: CGFloat = 6  // disclosureTitle.marginBottom
+    static let disclosureLineBottom: CGFloat = 2   // disclosureLine.marginBottom
+    static let disclosureBodyTop: CGFloat = 8      // disclosureBody.marginTop
+
     // Values the view needs that carry no design meaning; named so no body does arithmetic.
     static let none: CGFloat = 0
     static let hidden: Double = 0
     static let shown: Double = 1
 }
+
 
 // MARK: - Type
 
@@ -102,6 +142,17 @@ enum PaywallType {
     static let activePillSize: CGFloat = 12
     static let daysPillSize: CGFloat = 13
     static let restoreSize: CGFloat = 14
+    // Plan toggle — RN `index.tsx:1083-1101`.
+    static let planLabelSize: CGFloat = 13       // planToggleLabel.fontSize
+    static let planPriceSize: CGFloat = 28       // planTogglePrice.fontSize
+    static let planPeriodSize: CGFloat = 12      // planToggleSub.fontSize — NOT planPriceSub's 11
+    static let badgeSize: CGFloat = 10           // saveBadgeText.fontSize
+    // The per-tier price lines. The legal paragraph below them already uses legalSize/-LineHeight,
+    // which match `disclosureBody`'s 11/16.
+    static let disclosureTitleSize: CGFloat = 14 // disclosureTitle.fontSize
+    static let disclosureLineSize: CGFloat = 12  // disclosureLine.fontSize
+    static let disclosureLineHeight: CGFloat = 18 // disclosureLine.lineHeight
+
     static let restoreLinkSize: CGFloat = 13
     static let legalSize: CGFloat = 11
     static let legalLineHeight: CGFloat = 16
@@ -131,6 +182,18 @@ enum PaywallStrings {
     static let subscribeCta = "Subscribe"
     static let trialNote = "7 days free, then {price} per month. Cancel anytime."
     static let priceNote = "{price} per month. Cancel anytime."
+    static let trialNoteYearly = "7 days free, then {price} per year. Cancel anytime."
+    static let priceNoteYearly = "{price} per year. Cancel anytime."
+
+    // Plan toggle — labels and sub-lines verbatim from RN premium/index.tsx:628, 74-79.
+    static let planMonthly = "Monthly"
+    static let planYearly = "Yearly"
+    static let perMonth = "per month"
+    static let perYear = "per year"
+    static let bestValue = "BEST VALUE"
+    /// Spec §3.2 asks for this beside the badge; the RN never renders it. The number is computed
+    /// from the two real `Product.price` values and the row is dropped when it cannot be.
+    static let savePercent = "Save {n}%"
     static let loading = "Loading…"
     static let restoreLink = "Restore Purchases"
     static let restoreButton = "Already paid? Restore"
@@ -182,6 +245,13 @@ enum PaywallStrings {
     You've used your {limit} free Game Reviews today. Upgrade to Premium for unlimited reviews!
     """
     static let roundsCap = "Free users can create up to {n} rounds. Upgrade to Premium for more."
+
+    /// The per-tier price lines above the legal paragraph, verbatim from RN
+    /// `premium/index.tsx:716-720`. App Review wants the price and period of every product on the
+    /// screen stated in text, not only inside the plan cards.
+    static let disclosureTitle = "Biyaherong Plus"
+    static let disclosureMonthly = "Premium Monthly — {price} per month"
+    static let disclosureYearly = "Premium Yearly — {price} per year"
 
     /// Required verbatim by App Review on any auto-renewing subscription.
     static let disclosure = """
@@ -251,6 +321,9 @@ enum PaywallLinks {
     static let all: [PaywallLink] = [
         PaywallLink(label: "Terms of Use (EULA)",
                     url: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"),
-        PaywallLink(label: "Privacy Policy", url: "https://biyaherongchesscoach.com/privacy")
+        // `/privacy` 404s. It is what the RN shipped and what spec §3.2 wrote down, and both were
+        // wrong: the Laravel route is `/privacy-policy` (routes/web.php). App Review clicks this
+        // on every auto-renewing-subscription submission, so it was a rejection waiting to happen.
+        PaywallLink(label: "Privacy Policy", url: "https://biyaherongchesscoach.com/privacy-policy")
     ]
 }

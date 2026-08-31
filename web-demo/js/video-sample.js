@@ -2,20 +2,21 @@
  *
  * ## Why this exists
  *
- * The real catalogue is a manifest published to the content bucket, and there is not one yet:
- * `AWS_BUCKET` is empty in the Laravel `.env` and `tutorial_videos` has zero rows. So the screen's
- * honest state today is "Videos are not published yet", which is correct and completely
- * undemonstrable — you cannot tell a working screen from a broken one when both show a notice.
+ * The real catalogue is a live Laravel route, `/api/content/tutorial-videos`. Two things still
+ * stop a browser from reaching it: a checkout whose backend has not been deployed yet gets a 404,
+ * and a machine with no connection gets nothing. Both leave the one platform this repo is previewed
+ * on — a browser on Windows — with a notice and no way to tell a working screen from a broken one.
  *
- * This checkout is tested in a browser on Windows. So the not-published notice offers a **Load
- * sample catalogue** button, and this is what it loads: four rows in exactly the manifest shape,
- * pointing at real files that really stream. Clicking one really plays it.
+ * So the not-published and could-not-load notices both offer a **Load sample catalogue** button,
+ * and this is what it loads: four rows in exactly the manifest shape, pointing at real files that
+ * really stream. Clicking one really plays it.
  *
  * ## What it is NOT
  *
- * It is not a fallback, and it is not in the app. `ContentClient.manifestURL` is empty in BOTH
- * languages and `replay_videos.js` asserts they match; nothing here is reachable from Swift, and
- * nothing here loads unless somebody presses that button. The default state stays the true one.
+ * It is not in the app, and it is not automatic. `ContentClient.manifestURL` names the real route
+ * in BOTH languages and `replay_videos.js` asserts they match; nothing here is reachable from
+ * Swift, and nothing here loads unless somebody presses that button. The default state stays the
+ * true one — a fetch of the real catalogue, and whatever that honestly returns.
  *
  * ## Attribution
  *

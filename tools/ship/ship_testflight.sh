@@ -83,6 +83,24 @@ rm -rf "$ARCHIVE" "$EXPORT"
 say "Generating the Xcode project"
 ( cd "$IOS" && xcodegen generate >/dev/null )
 
+# This script sets NO build settings, which used to mean it shipped the app's fail-open default:
+# a granted subscription and a sign-in performing no Apple authentication. That is the hole the
+# BIYA_TESTBUILD inversion closed, and this is the assertion that keeps it closed. Same principle
+# as verify_entitlements below - on this pipeline an exit code is not evidence, so read the
+# EFFECTIVE settings back out of xcodebuild rather than trusting the file.
+say "Verifying this is a REAL build (no BIYA_TESTBUILD)"
+FLAGS=$( cd "$IOS" && xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
+    -configuration Release -showBuildSettings 2>/dev/null \
+    | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true )
+echo "    ${FLAGS:-(none)}"
+case "$FLAGS" in
+  *BIYA_TESTBUILD*)
+    fail "BIYA_TESTBUILD reached the compiler - this build would grant the subscription to
+    everyone and fake the sign-in. Release must not carry it; only 'configs: Debug' in
+    ios/project.yml and the two codemagic TEST workflows may set it." ;;
+  *) echo "    ok - real sign-in, real StoreKit" ;;
+esac
+
 say "Archiving (SIGNED - an unsigned archive cannot carry an entitlement)"
 ( cd "$IOS" && xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
     -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \

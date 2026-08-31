@@ -255,6 +255,51 @@ function run() {
   eq(P.SESSION.snapshotKey, swStr(store, 'PremiumStore', 'snapshotKey'), 'the snapshot key');
   eq(P.SESSION.usageKey, swStr(store, 'PremiumStore', 'usageKey'), 'the usage key');
 
+  // 4b. The two tiers, and the local StoreKit configuration that has to name the same products.
+  //
+  //     A product ID that does not match is not a compile error and not a crash: `Product.products`
+  //     simply returns fewer products, the row shows "Loading…" forever, and — because the app is
+  //     fully gated — there is nothing else on screen to suggest what went wrong. Worth a gate.
+  const planIDs = [...code(store).matchAll(/case \.(monthly|yearly):\s*return "([^"]+)"/g)]
+    .map((m) => ({ plan: m[1], id: m[2] }));
+  eq(planIDs.length, 2, 'PremiumStore.Plan declares exactly two tiers');
+  planIDs.forEach(({ plan, id }) => {
+    expect(id.endsWith('.plus.' + plan),
+      `${plan}'s product ID ends in .plus.${plan} — the suffix the App Store Connect record uses`);
+    expect(id.startsWith('com.prince24pogi.biyaherongchessapp.'),
+      'and is namespaced by PRODUCT_BUNDLE_IDENTIFIER; App Store Connect scopes products per app '
+      + 'record, so changing the bundle ID orphans every one of them');
+  });
+  expect(/guard Plan\.matching\(transaction\.productID\) != nil/.test(code(store)),
+    'ANY tier in the group entitles — filtering to one product ID would lock out every yearly '
+    + 'subscriber the moment that tier existed');
+  expect(!/static let subscriptionGroupID/.test(code(store)),
+    'the subscription group ID is NOT a hand-typed constant. It was "biyaherong.plus"; App Store '
+    + 'Connect assigns a numeric one, so the status lookup never matched — and being a `try?` it '
+    + 'failed silently and demoted willAutoRenew to a guess');
+  expect(/products\.values\.first\?\.subscription\?\.subscriptionGroupID/.test(code(store)),
+    'it comes off a loaded product instead');
+
+  const kit = JSON.parse(fs.readFileSync(path.join(ROOT, 'ios', 'Biyaherong.storekit'), 'utf8'));
+  const groups = kit.subscriptionGroups || [];
+  eq(groups.length, 1, 'one subscription group locally, so StoreKit treats the tiers as one ladder');
+  const kitSubs = groups[0].subscriptions || [];
+  eq(kitSubs.length, 2, 'and both tiers are configured for the Debug scheme');
+  planIDs.forEach(({ plan, id }) => {
+    const sub = kitSubs.find((s) => s.productID === id);
+    expect(!!sub, `Biyaherong.storekit configures ${plan} as ${id}`);
+    if (!sub) return;
+    eq(sub.recurringSubscriptionPeriod, plan === 'monthly' ? 'P1M' : 'P1Y',
+      `${plan} recurs over the period its name promises`);
+    eq(sub.introductoryOffer && sub.introductoryOffer.paymentMode, 'free',
+      `${plan} carries the free trial — eligibility is per GROUP, so a tier without one would be `
+      + 'a row that silently cannot offer what the CTA above it promises');
+    eq(sub.introductoryOffer && sub.introductoryOffer.subscriptionPeriod, 'P1W',
+      `${plan}'s trial is one week, matching Entitlement.trialDays`);
+  });
+  expect(kitSubs.every((s) => s.subscriptionGroupID === groups[0].id),
+    'every tier names its own group');
+
   // 5. The paywall's numbers and colours.
   Object.keys(P.LAYOUT).forEach((k) => {
     near(P.LAYOUT[k], swNum(metrics, 'PaywallLayout', k), 'PaywallLayout.' + k);

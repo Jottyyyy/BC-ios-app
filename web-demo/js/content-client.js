@@ -20,20 +20,27 @@
     ? require('./video-library.js')
     : global.BiyaVideoLibrary;
 
-  /* Where the manifest lives.
+  /* Where the manifest lives. Must stay byte-identical to ContentClient.swift's manifestURL --
+   * replay_videos.js asserts it.
    *
-   * EMPTY until somebody publishes one. AWS_BUCKET is unset in the Laravel .env and the
-   * tutorial_videos table has no rows, so there is no address to hard-code and inventing one would
-   * produce a screen that fails in a way nobody could diagnose. Empty is handled: the list says the
-   * catalogue is not published yet, which is true, instead of blaming the network.
+   * The PUBLIC Laravel route, not /api/tutorial-videos: that one is inside auth:sanctum and this
+   * app holds no token, so it would 401 forever. Both are served by TutorialVideoController off one
+   * shared query, so the two doors cannot describe different catalogues.
    *
-   *   1. php tools/content/generate_video_manifest.php
-   *   2. upload build/tutorial-videos.json to the content bucket, publicly readable
-   *   3. put its URL here AND in ContentClient.swift
+   * A deviation from spec §0.1 ("static files on R2/S3. No API."), recorded in PORTING_NOTES.md.
+   * tools/content/generate_video_manifest.php still writes the static file if you would rather
+   * serve it from a bucket -- point this there instead and nothing else changes.
    */
-  var MANIFEST_URL = '';
+  var MANIFEST_URL = 'https://biyaherongchesscoach.com/api/content/tutorial-videos';
 
-  var FAILURE = { notConfigured: 'notConfigured', offline: 'offline', unreadable: 'unreadable' };
+  var FAILURE = {
+    notConfigured: 'notConfigured',
+    offline: 'offline',
+    unreadable: 'unreadable',
+    /* The server read the receipt and said no: lapsed, refunded, or never bought. NOT an error the
+       user can retry their way out of, and not a network fault — the screen shows the paywall. */
+    notSubscribed: 'notSubscribed'
+  };
 
   function isConfigured() { return String(MANIFEST_URL).trim() !== ''; }
 
@@ -48,8 +55,14 @@
   }
 
   /* Resolves to { videos } or { error }. Never throws: the screen has a state for each error and
-     none for an exception. */
-  function videos(fetchImpl) {
+     none for an exception.
+
+     `receipt` is a StoreKit signed transaction. A browser cannot produce one — there is no
+     StoreKit here — so in the demo this is always empty and the server always answers 401. That is
+     not a bug to paper over: it is exactly what an unauthenticated caller now gets, and the demo
+     is more honest for showing it. The "Load sample catalogue" button is how the screen itself
+     stays demonstrable. */
+  function videos(receipt, fetchImpl) {
     // Written as a literal `fetch(` call rather than passing the function along, because the
     // §12 sweep looks for that call and a file that reaches the network through an indirection is
     // one the allow-list cannot see. The injectable parameter is for the self-test.
@@ -57,8 +70,15 @@
       || (typeof fetch === 'function' ? function (u, opts) { return fetch(u, opts); } : null);
     if (!isConfigured()) return Promise.resolve({ error: FAILURE.notConfigured });
     if (!doFetch) return Promise.resolve({ error: FAILURE.offline });
+    if (!receipt) return Promise.resolve({ error: FAILURE.notSubscribed });
 
-    return doFetch(MANIFEST_URL, { cache: 'no-cache' }).then(function (res) {
+    return doFetch(MANIFEST_URL, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ jws: receipt })
+    }).then(function (res) {
+      if (res.status === 401) return { error: FAILURE.notSubscribed };
       if (!res.ok) return { error: FAILURE.unreadable };
       return res.text().then(function (text) {
         var list = LIB.parse(text);
@@ -81,12 +101,31 @@
     var passed = 0, failures = [];
     function expect(c, w) { c ? passed++ : failures.push(w); }
 
-    expect(!isConfigured(), 'no manifest is published yet, and the code says so rather than '
-      + 'pretending an address exists');
-    expect(MANIFEST_URL === '', 'the URL is empty, not a placeholder that would 404 confusingly');
+    expect(isConfigured(), 'the manifest has an address, so the screen fetches instead of '
+      + 'reporting that nothing is published');
+    expect(/^https:\/\/[^\/]+\/api\/content\/tutorial-videos$/.test(MANIFEST_URL),
+      'and it is the PUBLIC route over TLS — /api/tutorial-videos is behind auth:sanctum and this '
+      + 'app holds no token, so that path would 401 forever');
 
+    // Exercised through an INJECTED transport, never the real `fetch`. Node has a global one, so
+    // now that a URL is configured this line would otherwise put a live HTTP request inside the
+    // gate — which fails on a plane and passes for the wrong reason everywhere else. selfTest()
+    // returns synchronously and this resolves in a microtask, so it is a smoke path, not an
+    // assertion; the parse behaviour it would check is asserted directly below.
     var done = [];
-    videos(null).then(function (r) { done.push(r); });
+    videos('a.receipt.signature', function () {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: function () { return Promise.resolve('{"videos":[]}'); }
+      });
+    }).then(function (r) { done.push(r); });
+
+    // No receipt is refused without touching the network at all — the server would say 401 anyway,
+    // and a request nobody can satisfy is a round trip spent to learn what we already knew.
+    var noReceipt = [];
+    videos('', function () { throw new Error('must not reach the network'); })
+      .then(function (r) { noReceipt.push(r); });
 
     // `looksLikeCatalogue` is the whole difference between "no videos" and "that was an error page".
     expect(looksLikeCatalogue('{"videos":[]}'), 'an empty wrapped catalogue IS a catalogue');
