@@ -9,6 +9,31 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (changed) — 1.0.6 (51) built, signed and validated by Apple, but NOT uploaded
+
+`tools/ship/ship_testflight.sh --dry-run` on the Mac, working through
+[`docs/app-store-handoff.md`](docs/app-store-handoff.md). Everything the script can prove locally is
+proved; nothing was sent to TestFlight.
+
+* **`BIYA_TESTBUILD` did not reach the compiler** — the guard read the effective settings back and
+  reported *"ok - real sign-in, real StoreKit"*. This is the first build to exercise the flag
+  inversion that came in from `origin/main`, and it behaves as `ios/project.yml` says it should:
+  Release inherits the empty default and therefore charges.
+* `com.apple.developer.applesignin` decoded back out of **both** the archive and the signed `.ipa`.
+* **VERIFY SUCCEEDED with no errors** from `altool --validate-app`. 82 MB, 1.0.6 (51), kept at
+  `~/BiyaherongBuilds/export-1.0.6-51/Biyaherong.ipa`.
+
+Build number bumped 50 → 51 by the script, which is the only thing allowed to move it. The number is
+committed even though nothing was uploaded: a file **behind** the App Store Connect record is what
+gets the next upload rejected as a duplicate, and a file ahead costs nothing.
+
+**This build is not submittable yet, and the reason is not in this repo.** The In-App Purchase
+capability, the regenerated provisioning profile and the two subscription products are all App Store
+Connect work that has not been done. Until the products exist and are submitted *with* the build,
+`Product.products(for:)` returns empty and every screen behind `PhoneView.locked` is unreachable.
+
+`web-demo/` not updated — a build, not a behaviour change.
+
 ### 2026-08-31 (fixed) — The checked-in xcodeproj still had the old compilation flag after the merge
 
 `origin/main` inverted the sense of `SWIFT_ACTIVE_COMPILATION_CONDITIONS`: empty now means a REAL
