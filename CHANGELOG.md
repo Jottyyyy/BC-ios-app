@@ -9,6 +9,18 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (fixed) — The checked-in xcodeproj still had the old compilation flag after the merge
+
+`origin/main` inverted the sense of `SWIFT_ACTIVE_COMPILATION_CONDITIONS`: empty now means a REAL
+build, and `ios/project.yml` opts the Debug config into the open build with `BIYA_TESTBUILD`.
+`Biyaherong.xcodeproj` is generated from that file but is committed, and the copy in the tree had
+been generated before the change — it carried `SWIFT_ACTIVE_COMPILATION_CONDITIONS = ""` on Debug.
+Opening it and pressing Run would therefore have produced a real build (login screen, paywall, daily
+caps) where the file says a developer gets an open one. Regenerated with `xcodegen generate`; the
+diff is exactly the one line, which is the evidence that nothing else had drifted.
+
+`web-demo/` not updated — a generated Xcode artifact catching up to a change already logged above.
+
 ### 2026-08-31 (docs) — The App Store submission checklist lives in the repo now
 
 The handoff for whoever does the submission was a shared link, which turned out to be the wrong
