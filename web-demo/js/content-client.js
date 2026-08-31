@@ -33,7 +33,14 @@
    */
   var MANIFEST_URL = 'https://biyaherongchesscoach.com/api/content/tutorial-videos';
 
-  var FAILURE = { notConfigured: 'notConfigured', offline: 'offline', unreadable: 'unreadable' };
+  var FAILURE = {
+    notConfigured: 'notConfigured',
+    offline: 'offline',
+    unreadable: 'unreadable',
+    /* The server read the receipt and said no: lapsed, refunded, or never bought. NOT an error the
+       user can retry their way out of, and not a network fault — the screen shows the paywall. */
+    notSubscribed: 'notSubscribed'
+  };
 
   function isConfigured() { return String(MANIFEST_URL).trim() !== ''; }
 
@@ -48,8 +55,14 @@
   }
 
   /* Resolves to { videos } or { error }. Never throws: the screen has a state for each error and
-     none for an exception. */
-  function videos(fetchImpl) {
+     none for an exception.
+
+     `receipt` is a StoreKit signed transaction. A browser cannot produce one — there is no
+     StoreKit here — so in the demo this is always empty and the server always answers 401. That is
+     not a bug to paper over: it is exactly what an unauthenticated caller now gets, and the demo
+     is more honest for showing it. The "Load sample catalogue" button is how the screen itself
+     stays demonstrable. */
+  function videos(receipt, fetchImpl) {
     // Written as a literal `fetch(` call rather than passing the function along, because the
     // §12 sweep looks for that call and a file that reaches the network through an indirection is
     // one the allow-list cannot see. The injectable parameter is for the self-test.
@@ -57,8 +70,15 @@
       || (typeof fetch === 'function' ? function (u, opts) { return fetch(u, opts); } : null);
     if (!isConfigured()) return Promise.resolve({ error: FAILURE.notConfigured });
     if (!doFetch) return Promise.resolve({ error: FAILURE.offline });
+    if (!receipt) return Promise.resolve({ error: FAILURE.notSubscribed });
 
-    return doFetch(MANIFEST_URL, { cache: 'no-cache' }).then(function (res) {
+    return doFetch(MANIFEST_URL, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ jws: receipt })
+    }).then(function (res) {
+      if (res.status === 401) return { error: FAILURE.notSubscribed };
       if (!res.ok) return { error: FAILURE.unreadable };
       return res.text().then(function (text) {
         var list = LIB.parse(text);
@@ -93,12 +113,19 @@
     // returns synchronously and this resolves in a microtask, so it is a smoke path, not an
     // assertion; the parse behaviour it would check is asserted directly below.
     var done = [];
-    videos(function () {
+    videos('a.receipt.signature', function () {
       return Promise.resolve({
         ok: true,
+        status: 200,
         text: function () { return Promise.resolve('{"videos":[]}'); }
       });
     }).then(function (r) { done.push(r); });
+
+    // No receipt is refused without touching the network at all — the server would say 401 anyway,
+    // and a request nobody can satisfy is a round trip spent to learn what we already knew.
+    var noReceipt = [];
+    videos('', function () { throw new Error('must not reach the network'); })
+      .then(function (r) { noReceipt.push(r); });
 
     // `looksLikeCatalogue` is the whole difference between "no videos" and "that was an error page".
     expect(looksLikeCatalogue('{"videos":[]}'), 'an empty wrapped catalogue IS a catalogue');

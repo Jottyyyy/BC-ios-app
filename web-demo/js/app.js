@@ -634,12 +634,23 @@
     if (!BiyaContentClient.isConfigured()) return;
     videoState.loading = true;
     render();
-    BiyaContentClient.videos().then(function (r) {
+    // The browser has no StoreKit and therefore no receipt, so this always refuses before it
+    // reaches the network — which is the correct answer, and a useless screen to look at.
+    BiyaContentClient.videos('').then(function (r) {
       // Dropped if the user has left, the same guard `openingForm !== form` gives the download.
       if (current !== 'videos') return;
       videoState.loading = false;
       videoState.loaded = true;
-      videoState.error = r.error || null;
+      var error = r.error || null;
+      // DEMO ONLY. In the app, notSubscribed means the server refused a real receipt and the
+      // paywall is right. Here it means "this is a browser", which is true of every visitor and
+      // says nothing about the screen — so the demo shows the could-not-load state instead,
+      // because that is the one carrying the "Load sample catalogue" button. videos.js itself is
+      // faithful; this translation lives in the shell, where the sample button already lives.
+      if (error === BiyaContentClient.FAILURE.notSubscribed) {
+        error = BiyaContentClient.FAILURE.unreadable;
+      }
+      videoState.error = error;
       videoState.videos = r.videos || [];
       render();
     });

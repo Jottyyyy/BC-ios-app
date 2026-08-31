@@ -211,6 +211,11 @@
     } else if (state.error === CC.FAILURE.offline) {
       body.appendChild(notice(STR.STR.onlineGlyph, STR.STR.onlineTitle, STR.STR.offlineBody,
                               STR.STR.offlineSub, STR.STR.retry, cb.onRetry));
+    } else if (state.error === CC.FAILURE.notSubscribed) {
+      // The SERVER read the receipt and said no, while the device believed otherwise — StoreKit is
+      // a cache and can be a moment behind a lapse or a refund. The server holds the content, so it
+      // wins, and the honest screen is the paywall rather than an error nobody can act on.
+      body.appendChild(paywall(cb.onPaywall));
     } else if (state.error) {
       var errBox = notice(STR.STR.emptyGlyph, STR.STR.errorTitle, STR.STR.errorBody,
                           null, STR.STR.retry, cb.onRetry);

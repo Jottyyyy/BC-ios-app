@@ -53,6 +53,9 @@ public enum ContentClient {
         case offline
         /// It landed and was not a catalogue — a 404, an HTML error page, a truncated file.
         case unreadable
+        /// The server read the receipt and said no: lapsed, refunded, or never bought. The device
+        /// believed otherwise, which is possible — StoreKit is cached and can be a moment behind.
+        case notSubscribed
 
         public var isOffline: Bool { self == .offline }
     }
@@ -64,20 +67,32 @@ public enum ContentClient {
     /// longer budget because it streams hundreds of games.
     static let timeout: TimeInterval = 15
 
-    /// Pull the catalogue.
+    /// Pull the catalogue, proving the subscription with `receipt`.
+    ///
+    /// The receipt is a StoreKit signed transaction — `PremiumStore.currentReceipt()`. The server
+    /// verifies Apple's signature on it and refuses without one, so this is the app's whole
+    /// authentication story: no account, no token, no session, just a thing Apple signed.
+    ///
+    /// **POST, for a GET-shaped operation.** The receipt is a few kilobytes of certificate chain,
+    /// which is a body's job — nginx's default header buffers are not generous enough to make a
+    /// header a safe habit, and a URL is worse. Nothing is being created; the verb is transport.
     ///
     /// Cancellation is the caller's: leaving the screen tears the `Task` down, and a cancelled fetch
     /// says nothing rather than reporting a failure the user did not cause.
-    public static func videos() async throws -> [VideoLibrary.Video] {
+    public static func videos(receipt: String) async throws -> [VideoLibrary.Video] {
         guard isConfigured else { throw Failure.notConfigured }
         guard let url = URL(string: manifestURL) else { throw Failure.notConfigured }
+        guard !receipt.isEmpty else { throw Failure.notSubscribed }
 
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
-        // A manifest is republished whenever the admin panel changes, and a stale one is a
-        // catalogue missing the video somebody just added. Revalidating costs one round trip on a
-        // screen that is already making one.
-        request.cachePolicy = .reloadRevalidatingCacheData
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["jws": receipt])
+        // Never cached. The response is now personal to a receipt, and the server says `no-store`
+        // for the same reason.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         let data: Data
         let response: URLResponse
@@ -92,8 +107,12 @@ public enum ContentClient {
             throw Failure.offline
         }
 
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw Failure.unreadable
+        if let http = response as? HTTPURLResponse {
+            // 401 is the server saying the receipt did not entitle — an expired subscription, or a
+            // device that never had one. It is NOT a broken catalogue and must not be reported as
+            // one: the screen has to send the user to the paywall, not to check their wifi.
+            if http.statusCode == 401 { throw Failure.notSubscribed }
+            if !(200...299).contains(http.statusCode) { throw Failure.unreadable }
         }
 
         let videos = VideoLibrary.parse(data)

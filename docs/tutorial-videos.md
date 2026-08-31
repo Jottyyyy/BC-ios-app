@@ -48,16 +48,46 @@ token, by design.** It signs in with Apple on the device, never talks to the Lar
 there is no `/api/auth/apple` endpoint that could mint one. Wiring the screen to that endpoint would
 produce a permanent 401 that looks exactly like a broken feature.
 
-So Laravel publishes the same catalogue a second time, **with no auth at all**:
+So Laravel serves the same catalogue through a second door, one that takes a **receipt** instead
+of a token:
 
 ```
-GET https://biyaherongchesscoach.com/api/content/tutorial-videos
+POST https://biyaherongchesscoach.com/api/content/tutorial-videos
+{ "jws": "<StoreKit signed transaction>" }
 ```
 
 One controller, one shared query, two doors — `TutorialVideoController::catalogue()` feeds both, so
 they cannot describe different shelves. Spec §0.1 said *"Content = static files on R2/S3. **No API.
 No accounts. No sync.**"* and this is a deviation from it, taken with the client and written up in
 `PORTING_NOTES.md`: the spec's objection was to accounts and sync, and this route has neither.
+
+### The receipt is the identity
+
+The app has no account, so there is nothing to authorise — except that StoreKit already hands it
+something Apple signed. `PremiumStore.currentReceipt()` returns the newest
+`Transaction.jwsRepresentation` for one of our products; `ContentClient` posts it; and
+`App\Services\AppleTransactionVerifier` on the backend checks the signature against **Apple's root
+CA, pinned by SHA-256 fingerprint**, then checks the payload is for this bundle, one of our two
+products, unrevoked and unexpired. No account, no token, no session, and no call to Apple.
+
+It is a POST for a read, deliberately: the receipt is a few kilobytes of certificate chain, which is
+a body's job. nginx's default header buffers are not generous enough to make a header a safe habit.
+
+**A 401 is not a broken catalogue.** It means the server read a receipt and said no — lapsed,
+refunded, or never bought — while the device believed otherwise, which is possible because StoreKit
+is a cache. `ContentClient.Failure.notSubscribed` keeps that separate from `offline` and
+`unreadable`, and both screens send it to the **paywall**: the server holds the content, so when the
+two disagree the server wins, and "check your connection" would be the wrong instruction twice over.
+
+### What this does and does not protect
+
+**It closes catalogue enumeration.** One `curl` used to return every video URL. Now it returns 401.
+
+**It does not yet protect the files.** The bucket is still public, because the Android app reads the
+same `video_url` columns and making the bucket private would break it. A link that leaks still
+plays, forever. Closing that is a small follow-up once the Android side is in scope: make the bucket
+private and return `Storage::disk('s3')->temporaryUrl(...)` built from the `video_path` column that
+is already there. The verification half — the hard half — is done.
 
 Either way the bytes are the same:
 
@@ -188,9 +218,15 @@ node tools/qa/js_goldens.js
 node tools/qa/swift_lint.js && node tools/qa/swift_symbol_check.js
 ```
 
-In the browser: open `web-demo/index.html`, **Home → Tutorial Videos**. With the Laravel side
-deployed you should see the real catalogue. Before that deploy you get *"Could not load videos"* and
-a **Load sample catalogue** button — press it to see the screen itself. Switch to a free account and
-the same tile shows the paywall instead.
+In the browser: open `web-demo/index.html`, **Home → Tutorial Videos**. A browser has no StoreKit
+and therefore no receipt, so the real catalogue is **not reachable from the demo at all** — that is
+the feature working, not a bug. You get *"Could not load videos"* and a **Load sample catalogue**
+button; press it to see the screen itself, sections, thumbnails and a card that really plays.
+Switch to a free account and the same tile shows the paywall instead.
+
+(`videos.js` is faithful and routes a refused receipt to the paywall like the app does. The demo
+shell translates it to could-not-load first, because in a browser "no receipt" is true of every
+visitor and says nothing about the screen. The translation is in `app.js`, where the sample button
+already lives.)
 
 On a Mac: `cd DemoApp && swift build`, then run the demo and open the tile.

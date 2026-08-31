@@ -58,6 +58,45 @@ Two things came out of building it that are worth keeping:
   `boolean('is_visible', false)` and the manifest query filters on it, so a video that was uploaded
   but never toggled is absent from the app with nothing anywhere explaining why.
 
+### DECISION: the receipt is the identity
+
+The catalogue route was public, and one `curl` returned every video URL in it. The app has no
+account and no Sanctum token — that is the whole architecture — so there was nothing to authorise
+against and nothing to check.
+
+Except there was. StoreKit hands the app a `Transaction.jwsRepresentation`: the transaction, signed
+by Apple, carrying the certificate chain that proves it. `AppleTransactionVerifier` checks that
+signature against **Apple Root CA - G3, pinned by SHA-256 fingerprint**, then checks the payload is
+for this bundle, one of our products, unrevoked and unexpired. No account, no session, no secret on
+the server, and no call to Apple.
+
+The fingerprint was **extracted, not transcribed** — downloaded from
+`https://www.apple.com/certificateauthority/AppleRootCA-G3.cer`, hashed, and confirmed self-signed
+with CN "Apple Root CA - G3". The certificate is committed as a test fixture and
+`AppleTransactionVerifierTest` recomputes the hash from it, so a typo in that hex string is a
+failing test rather than a server that trusts the wrong root — or none.
+
+**Why not the App Store Server API.** `Get Transaction Info` answers the same question
+authoritatively and needs an issuer ID, a key ID and a `.p8` on the server: three secrets to
+provision, rotate and leak, for a question the JWS already answers. The trade-off is that a JWS is
+a **snapshot** — a refund after it was issued is invisible until the device sends a newer one, which
+StoreKit does on renewal and revocation. For a catalogue read that is the right trade, and the
+Server API can be added on top later without changing anything here.
+
+**POST for a read.** The receipt is kilobytes of certificate chain, which is a body's job; nginx's
+default header buffers are not generous enough to make a header a safe habit, and a URL is worse.
+
+### DEVIATION: half of the protection, and it is written down as half
+
+The client chose to leave the Android app untouched for now. Android reads the same `video_url`
+columns from the public bucket, so the bucket stays public — which means **a leaked link still
+plays, forever**. What this change closes is *enumeration*: the list is no longer free.
+
+That is a real improvement and an incomplete one, and it is recorded as incomplete rather than
+described as "video protection". Finishing it is small once Android is in scope: make the bucket
+private and return `Storage::disk('s3')->temporaryUrl(...)` from the `video_path` column that
+already exists. The verification half — the half with the cryptography in it — is done.
+
 ### DEVIATION: an unknown category is visible
 
 The RN renders `CATEGORY_ORDER.filter(cat => grouped[cat]?.length > 0)`, so a video whose category

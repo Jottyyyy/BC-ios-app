@@ -202,9 +202,54 @@ for (const [name, mod, floor] of [['video-library.js', LIB, 25], ['content-clien
     'over TLS — a catalogue is a list of URLs the app will fetch and play, and in plaintext anyone '
     + 'on the network chooses what those are');
   expect(/\/api\/content\/tutorial-videos$/.test(CC.MANIFEST_URL),
-    'and at the PUBLIC route. /api/tutorial-videos is inside auth:sanctum and this app holds no '
+    'and at the content route. /api/tutorial-videos is inside auth:sanctum and this app holds no '
     + 'token by design, so that path 401s forever and reads on a phone as a broken feature');
   expect(CC.isConfigured(), 'so the JS reports it configured');
+
+  // ── The receipt gate ──────────────────────────────────────────────────────────────────────────
+  //
+  // The catalogue used to be public: one `curl` returned every video URL. The caller now proves a
+  // live subscription with a StoreKit signed transaction, which the backend checks against Apple's
+  // pinned root. These assertions exist because none of it compiles here, and because a transport
+  // that quietly stopped sending the receipt would still work perfectly — until the server was
+  // fixed, at which point every user would lose the screen at once.
+  expect(/httpMethod = "POST"/.test(code(CC_SWIFT)),
+    'the Swift POSTs. The receipt is kilobytes of certificate chain, which is a body\'s job — '
+    + 'nginx default header buffers are not generous enough to make a header a safe habit');
+  expect(/method: 'POST'/.test(code(fs.readFileSync(path.join(JS, 'content-client.js'), 'utf8'))), 'and so does the JS');
+  expect(/"jws": receipt/.test(code(CC_SWIFT)) || /\["jws": receipt\]/.test(code(CC_SWIFT)),
+    'the Swift sends the receipt under the key the controller reads');
+  expect(/jws: receipt/.test(code(fs.readFileSync(path.join(JS, 'content-client.js'), 'utf8'))), 'and the JS sends the same key');
+  expect(/func videos\(receipt: String\)/.test(code(CC_SWIFT)),
+    'and the receipt is a REQUIRED parameter, not an optional the caller can forget');
+
+  expect(/statusCode == 401/.test(code(CC_SWIFT)),
+    'a 401 is read specially by the Swift');
+  expect(/status === 401/.test(code(fs.readFileSync(path.join(JS, 'content-client.js'), 'utf8'))), 'and by the JS');
+  expect(/case notSubscribed/.test(code(CC_SWIFT)),
+    'both languages have a notSubscribed outcome — the server refusing a receipt is NOT a broken '
+    + 'catalogue and must not be reported as one');
+  expect(typeof CC.FAILURE.notSubscribed === 'string', 'the JS names it too');
+  expect(CC.FAILURE.notSubscribed !== CC.FAILURE.offline,
+    'and it is distinct from offline: sending somebody to check their wifi when their subscription '
+    + 'lapsed is the wrong instruction twice over');
+
+  // Refusing without a receipt costs no round trip in either language.
+  eq(CC.videos('') instanceof Promise, true, 'the JS returns a promise even when it refuses early');
+
+  // Neither language may cache an authorised response. The server says no-store for the same
+  // reason: a proxy holding this body would serve it to somebody who showed no receipt.
+  expect(/reloadIgnoringLocalCacheData/.test(code(CC_SWIFT)),
+    'the Swift does not reuse a cached catalogue');
+  expect(!/max-age/.test(code(CC_SWIFT)), 'and asks for no shared caching');
+  expect(/cache: 'no-store'/.test(code(fs.readFileSync(path.join(JS, 'content-client.js'), 'utf8'))), 'the JS says no-store');
+
+  // The screens agree about what a refused receipt means.
+  expect(/failure == \.notSubscribed[\s\S]{0,240}VideoPaywall/.test(code(SCREENS_SWIFT)),
+    'the Swift screen sends a refused receipt to the PAYWALL, not to an error the user cannot act '
+    + 'on — the server holds the content, so when it and StoreKit disagree the server wins');
+  expect(/FAILURE\.notSubscribed[\s\S]{0,400}paywall\(/.test(code(fs.readFileSync(path.join(JS, 'videos.js'), 'utf8'))),
+    'and the JS screen does the same');
   expect(/case notConfigured/.test(code(CC_SWIFT)),
     'and the Swift KEEPS a failure case for an empty URL that is NOT a network error. Unreachable '
     + 'in shipping config, and it stays: blanking the URL must not send the user to fix their wifi');
