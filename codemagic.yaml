@@ -27,14 +27,36 @@ workflows:
       - name: Install XcodeGen & generate the Xcode project
         script: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
-          cd ios && xcodegen generate
-      # NO build settings are passed for the sign-in or the subscription, and that is deliberate.
-      # The app's DEFAULT is the testable one — see ios/project.yml's
-      # SWIFT_ACTIVE_COMPILATION_CONDITIONS. Only `ios-appstore` opts into the real behaviour.
-      #
-      # This used to set BIYA_TEST_BUILD here. Testing then depended on that setting reaching the
-      # compiler, and when it silently did not, the result was a build nobody could open and no
-      # error anywhere. Inverting it removed the dependency rather than debugging it.
+          cd ios
+          # Opt INTO the open build. The app's default is now the real one — an archive that is
+          # told nothing charges — so a tester's build has to ask, where a submission build did
+          # before. Rewriting project.yml before generating is the mechanism this repo has proved
+          # works; passing the setting through the Codemagic CLI is not reliable, and the last
+          # time it silently failed to arrive it cost three test cycles.
+          sed -i '' "s/^        SWIFT_ACTIVE_COMPILATION_CONDITIONS: .*/        SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD/" project.yml
+          grep -n "SWIFT_ACTIVE_COMPILATION_CONDITIONS" project.yml
+          xcodegen generate
+      - name: REFUSE to build unless the TEST behaviour is compiled in
+        # The mirror of ios-appstore's guard, and it exists for the original reason the default
+        # used to be fail-open: a test build that quietly became a real one is a build nobody can
+        # open — no Sign in with Apple capability on this unsigned .ipa, no purchasable product —
+        # and no error anywhere to say why. Read back the EFFECTIVE settings, because the failure
+        # being guarded against is precisely "the setting did not arrive".
+        script: |
+          cd ios
+          FLAGS=$(xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
+            -configuration Release -showBuildSettings 2>/dev/null \
+            | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true)
+          echo "$FLAGS"
+          case "$FLAGS" in
+            *BIYA_TESTBUILD*) echo "BIYA_TESTBUILD present — open build, as this workflow intends" ;;
+            *)
+              echo "REFUSING: BIYA_TESTBUILD did NOT reach the compiler."
+              echo "This build would show a real Sign in with Apple that cannot work in an"
+              echo "unsigned .ipa, behind a paywall with nothing purchasable. Nobody could open it."
+              echo "Check the sed against ios/project.yml's SWIFT_ACTIVE_COMPILATION_CONDITIONS."
+              exit 1 ;;
+          esac
       - name: Archive WITHOUT code signing
         script: |
           xcodebuild -project "$XCODE_PROJECT" \
@@ -100,7 +122,27 @@ workflows:
           # the spec before generating the project.
           sed -i '' "s/^        CURRENT_PROJECT_VERSION: .*/        CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
           grep -n "CURRENT_PROJECT_VERSION" project.yml
+          # Opt INTO the open build — this workflow is named TEST BUILD and means it. See the
+          # matching comment in ios-free-unsigned for why the sense of this flag is inverted.
+          sed -i '' "s/^        SWIFT_ACTIVE_COMPILATION_CONDITIONS: .*/        SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD/" project.yml
+          grep -n "SWIFT_ACTIVE_COMPILATION_CONDITIONS" project.yml
           xcodegen generate
+      - name: REFUSE to build unless the TEST behaviour is compiled in
+        # Same guard, same reason: a TestFlight build that silently became real is one testers
+        # meet a paywall on, with no product in App Store Connect to buy.
+        script: |
+          cd ios
+          FLAGS=$(xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
+            -configuration Release -showBuildSettings 2>/dev/null \
+            | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true)
+          echo "$FLAGS"
+          case "$FLAGS" in
+            *BIYA_TESTBUILD*) echo "BIYA_TESTBUILD present — open build, as this workflow intends" ;;
+            *)
+              echo "REFUSING: BIYA_TESTBUILD did NOT reach the compiler."
+              echo "Testers would meet a paywall with nothing purchasable behind it."
+              exit 1 ;;
+          esac
       - name: Fail fast if the Stockfish networks are missing from the clone
         # Same failure shape as the icon check below: the build SUCCEEDS without them. The app
         # falls back to LocalEngine (AnalysisVM checks StockfishRuntime.isStarted), so what ships
@@ -175,10 +217,9 @@ workflows:
           cd ios
           sed -i '' "s/^        CURRENT_PROJECT_VERSION: .*/        CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
           grep -n "CURRENT_PROJECT_VERSION" project.yml
-          # Turn the REAL sign-in and REAL StoreKit on. Rewriting project.yml before generating is
-          # the same mechanism as the line above, and it is the one this repo has actually proved
-          # works — unlike passing a build setting through the Codemagic CLI.
-          sed -i '' "s/^        SWIFT_ACTIVE_COMPILATION_CONDITIONS: .*/        SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_APPSTORE/" project.yml
+          # NOTHING is rewritten for the sign-in or the subscription, and that is the point of the
+          # inversion: the checked-in default IS the submission behaviour. This workflow used to
+          # sed BIYA_APPSTORE in here; it no longer has to opt into charging for the product.
           grep -n "SWIFT_ACTIVE_COMPILATION_CONDITIONS" project.yml
           xcodegen generate
       - name: Fail fast if the Stockfish networks are missing from the clone
@@ -196,18 +237,14 @@ workflows:
         script: |
           test -f ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png || {
             echo "AppIcon missing from the repo — upload would be rejected ITMS-90713"; exit 1; }
-      - name: REFUSE to build unless the real sign-in is compiled in
-        # THE guard, and the reason inverting the default is safe.
+      - name: REFUSE to build if the TEST behaviour leaked in
+        # THE guard. It now asserts an ABSENCE, which is the whole gain from inverting the flag:
+        # a submission build is correct by default and this only has to catch contamination —
+        # a stray sed, a hand-edited project.yml, a merge that dragged the test setting along.
         #
-        # The app ships its TEST behaviour by default — simulated sign-in, granted subscription —
-        # so a submission build is only correct if BIYA_APPSTORE actually reached the compiler. It
-        # is read back out of the EFFECTIVE build settings rather than assumed from the sed above,
-        # because the failure being guarded against is precisely "the setting did not arrive".
-        #
-        # Before the inversion that failure produced a test build nobody could open, silently, and
-        # it took three cycles to notice. Now it stops the submission build here, before anything
-        # is signed or uploaded — a loud failure in the rare workflow instead of a silent one in
-        # the daily workflow.
+        # Still read back out of the EFFECTIVE build settings rather than trusted from the file,
+        # because "the setting is not what the file says" is exactly the failure mode this repo
+        # has been bitten by, in both directions.
         script: |
           cd ios
           FLAGS=$(xcodebuild -project Biyaherong.xcodeproj -scheme Biyaherong \
@@ -215,13 +252,14 @@ workflows:
             | grep SWIFT_ACTIVE_COMPILATION_CONDITIONS || true)
           echo "$FLAGS"
           case "$FLAGS" in
-            *BIYA_APPSTORE*) echo "BIYA_APPSTORE present — real sign-in and real StoreKit" ;;
-            *)
-              echo "REFUSING: BIYA_APPSTORE did NOT reach the compiler."
+            *BIYA_TESTBUILD*)
+              echo "REFUSING: BIYA_TESTBUILD reached the compiler on a SUBMISSION build."
               echo "This build would ship a sign-in performing no Apple authentication AND a"
-              echo "subscription granted without a purchase — two App Review rejections."
-              echo "Check the sed against ios/project.yml's SWIFT_ACTIVE_COMPILATION_CONDITIONS."
+              echo "subscription granted without a purchase — two App Review rejections, and"
+              echo "every user would get the product for free."
+              echo "Nothing in this workflow should set it. Check ios/project.yml."
               exit 1 ;;
+            *) echo "clean — real sign-in and real StoreKit" ;;
           esac
       - name: Fetch signing profiles (managed by the App Store Connect key)
         script: xcode-project use-profiles

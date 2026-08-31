@@ -64,7 +64,12 @@ struct PaywallScreen: View {
         VStack(spacing: PaywallLayout.cardGap) {
             hero
             benefitsCard
-            if store.loadState == .failed { failureCard } else { cta }
+            if store.loadState == .failed {
+                failureCard
+            } else {
+                planPicker
+                cta
+            }
             disclosureCard
             restore
         }
@@ -107,6 +112,80 @@ struct PaywallScreen: View {
         }
     }
 
+    // MARK: Plan toggle
+
+    /// Monthly / Yearly, extracted from RN `premium/index.tsx:609-651`. Selecting a card only
+    /// moves `store.selectedPlan`; nothing is purchased until the CTA below is tapped.
+    private var planPicker: some View {
+        HStack(spacing: PaywallLayout.planRowGap) {
+            ForEach(PremiumStore.Plan.allCases) { plan in
+                planCard(plan)
+            }
+        }
+        .padding(.bottom, PaywallLayout.planRowBottom)
+    }
+
+    private func planCard(_ plan: PremiumStore.Plan) -> some View {
+        let selected = store.selectedPlan == plan
+        return Button { store.selectedPlan = plan } label: {
+            VStack(spacing: PaywallLayout.none) {
+                Text(planLabel(plan))
+                    .font(Theme.nunito(PaywallType.planLabelSize, .semiBold))
+                    .foregroundStyle(selected ? PaywallPalette.planLabelSelected
+                                              : PaywallPalette.planLabel)
+                    .padding(.bottom, PaywallLayout.planLabelBottom)
+                Text(store.displayPrice(for: plan) ?? PaywallStrings.loading)
+                    .font(Theme.nunito(PaywallType.planPriceSize, .bold))
+                    .foregroundStyle(selected ? PaywallPalette.planPriceSelected
+                                              : PaywallPalette.planPrice)
+                Text(planPeriod(plan))
+                    .font(Theme.nunito(PaywallType.planPeriodSize, .regular))
+                    .foregroundStyle(selected ? PaywallPalette.planPeriodSelected
+                                              : PaywallPalette.planPeriod)
+                    .padding(.top, PaywallLayout.planPeriodTop)
+                if plan == .yearly { yearlyBadge }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(PaywallLayout.planCardPadding)
+            .background(selected ? PaywallPalette.planCardSelected : PaywallPalette.planCard,
+                        in: RoundedRectangle(cornerRadius: PaywallLayout.planCardRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: PaywallLayout.planCardRadius)
+                    .strokeBorder(selected ? PaywallPalette.planBorderSelected
+                                           : PaywallPalette.planBorder,
+                                  lineWidth: PaywallLayout.planCardBorderWidth))
+        }
+        .buttonStyle(DimButtonStyle(pressedOpacity: PaywallLayout.pressed))
+    }
+
+    /// `BEST VALUE`, and beneath it the saving — but only when both tiers resolved and the
+    /// arithmetic says something true. A percentage that cannot be computed is simply absent.
+    private var yearlyBadge: some View {
+        VStack(spacing: PaywallLayout.none) {
+            Text(PaywallStrings.bestValue)
+                .font(Theme.nunito(PaywallType.badgeSize, .bold))
+                .foregroundStyle(PaywallPalette.badgeInk)
+            if let percent = store.yearlySavingsPercent {
+                Text(PaywallStrings.fill(PaywallStrings.savePercent, ["n": String(percent)]))
+                    .font(Theme.nunito(PaywallType.badgeSize, .bold))
+                    .foregroundStyle(PaywallPalette.badgeInk)
+            }
+        }
+        .padding(.horizontal, PaywallLayout.badgePaddingH)
+        .padding(.vertical, PaywallLayout.badgePaddingV)
+        .background(PaywallPalette.badgeFill,
+                    in: RoundedRectangle(cornerRadius: PaywallLayout.badgeRadius))
+        .padding(.top, PaywallLayout.badgeTop)
+    }
+
+    private func planLabel(_ plan: PremiumStore.Plan) -> String {
+        plan == .monthly ? PaywallStrings.planMonthly : PaywallStrings.planYearly
+    }
+
+    private func planPeriod(_ plan: PremiumStore.Plan) -> String {
+        plan == .monthly ? PaywallStrings.perMonth : PaywallStrings.perYear
+    }
+
     private var cta: some View {
         VStack(spacing: PaywallLayout.rowGap) {
             Button { Task { await store.purchase() } } label: {
@@ -136,7 +215,13 @@ struct PaywallScreen: View {
 
     private var priceNote: String {
         let price = store.displayPrice ?? ""
-        let template = store.trialEligible ? PaywallStrings.trialNote : PaywallStrings.priceNote
+        let yearly = store.selectedPlan == .yearly
+        let template: String
+        if store.trialEligible {
+            template = yearly ? PaywallStrings.trialNoteYearly : PaywallStrings.trialNote
+        } else {
+            template = yearly ? PaywallStrings.priceNoteYearly : PaywallStrings.priceNote
+        }
         return PaywallStrings.fill(template, ["price": price])
     }
 
@@ -164,11 +249,30 @@ struct PaywallScreen: View {
     /// with a URL. See `PaywallLinks`.
     private var disclosureCard: some View {
         VStack(alignment: .leading, spacing: PaywallLayout.rowGap) {
+            // Every product on the screen, priced and with its period spelled out. App Review
+            // wants this in text, not only inside the plan cards; a tier whose price did not
+            // resolve is omitted rather than shown with an empty price.
+            Text(PaywallStrings.disclosureTitle)
+                .font(Theme.nunito(PaywallType.disclosureTitleSize, .bold))
+                .foregroundStyle(PaywallPalette.title)
+                .padding(.bottom, PaywallLayout.disclosureTitleBottom)
+            ForEach(PremiumStore.Plan.allCases) { plan in
+                if let price = store.displayPrice(for: plan) {
+                    Text(PaywallStrings.fill(disclosureTemplate(plan), ["price": price]))
+                        .font(Theme.nunito(PaywallType.disclosureLineSize, .regular))
+                        .foregroundStyle(PaywallPalette.heading)
+                        .lineSpacing(PaywallType.extraLeading(
+                            target: PaywallType.disclosureLineHeight,
+                            size: PaywallType.disclosureLineSize))
+                        .padding(.bottom, PaywallLayout.disclosureLineBottom)
+                }
+            }
             Text(PaywallStrings.disclosure)
                 .font(Theme.nunito(PaywallType.legalSize, .regular))
                 .foregroundStyle(PaywallPalette.legal)
                 .lineSpacing(PaywallType.extraLeading(target: PaywallType.legalLineHeight,
                                                       size: PaywallType.legalSize))
+                .padding(.top, PaywallLayout.disclosureBodyTop)
             HStack(spacing: PaywallLayout.rowGap) {
                 ForEach(PaywallLinks.all, id: \.url) { link in
                     if let url = URL(string: link.url) {
@@ -180,6 +284,10 @@ struct PaywallScreen: View {
                 Spacer(minLength: PaywallLayout.none)
             }
         }
+    }
+
+    private func disclosureTemplate(_ plan: PremiumStore.Plan) -> String {
+        plan == .monthly ? PaywallStrings.disclosureMonthly : PaywallStrings.disclosureYearly
     }
 
     private var restore: some View {

@@ -42,23 +42,32 @@ targets:
         product: BiyaherongUI
     settings:
       base:
+        # EMPTY on purpose, and this is the app's REAL behaviour: Apple sign-in performs a real
+        # authentication and the subscription is resolved from StoreKit. An archive that is told
+        # nothing is therefore a build that charges — which is the only safe way round, because
+        # the thing forgetting the flag used to cost was the revenue.
+        #
+        # This line reads EMPTY and means REAL. `BIYA_TESTBUILD` is the opt-in to the open build
+        # (session opened directly, subscription granted). It is set in exactly two ways:
+        #
+        #   * `configs: Debug` below — so `xcodegen generate`, open, Run still lands in a fully
+        #     open app against the local Biyaherong.storekit. Archives are Release and unaffected.
+        #   * codemagic.yaml's two TEST workflows, which rewrite this line before `xcodegen
+        #     generate` — the same mechanism used for CURRENT_PROJECT_VERSION, and the one this
+        #     repo has actually proved works. Passing a build setting through the Codemagic CLI is
+        #     not reliable, and silently failing to arrive is what cost three test cycles.
+        #
+        # Do not put BIYA_TESTBUILD here by hand: it would make every archive a giveaway. Both
+        # ship paths read the EFFECTIVE settings back and refuse if they find it.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
         # MUST match the existing App Store Connect record exactly (Apple ID 6762338466,
         # "Biyaherong Chess Coach", team Deniel Causo). This is the bundle ID the earlier
         # Expo/React-Native build shipped under, so uploading with it updates that app
         # instead of silently creating a second one. Do not "tidy" this string.
-        # EMPTY on purpose, and this is the app's TEST behaviour: the sign-in opens the session
-        # directly and the subscription is granted, so any build anybody makes — CI, Xcode, a
-        # sideload — can actually be opened and used.
         #
-        # `BIYA_APPSTORE` turns the real Sign in with Apple and real StoreKit back on, and ONLY
-        # codemagic.yaml's `ios-appstore` sets it, by rewriting this line before `xcodegen
-        # generate` — the same mechanism it already uses for CURRENT_PROJECT_VERSION, because
-        # passing a build setting through the Codemagic CLI is not reliable and silently failing
-        # to arrive is what cost three test cycles.
-        #
-        # Do not put BIYA_APPSTORE here by hand. That would make every build a submission build,
-        # and the whole point of the default is that a tester never depends on plumbing.
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+        # It is also the namespace for every StoreKit product ID (see PremiumStore.Plan).
+        # Changing it orphans the subscription — the products resolve to nothing and the paywall
+        # is permanently "Store Unavailable".
         PRODUCT_BUNDLE_IDENTIFIER: com.prince24pogi.biyaherongchessapp
         PRODUCT_NAME: Biyaherong
         # This app ships into the EXISTING "Biyaherong Chess Coach" App Store Connect record,
@@ -159,6 +168,16 @@ targets:
         # `ios-free-unsigned` workflow archives with CODE_SIGNING_ALLOWED=NO, so entitlements are
         # never applied there and the sign-in cannot work in that .ipa. Use `ios-testflight`.
         CODE_SIGN_ENTITLEMENTS: Biyaherong.entitlements
+      configs:
+        # Local development only. `xcodegen generate`, open, press Run — Debug — and the app is
+        # fully open: no login screen, no paywall, the local StoreKit configuration wired by the
+        # scheme below. This is the convenience the old fail-open default existed to provide, kept
+        # in the one place it was actually wanted.
+        #
+        # Release inherits `base` and stays REAL, so every archive charges. Nothing in this file
+        # can make a submission build give itself away.
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: BIYA_TESTBUILD
 
 # A SHARED scheme must exist on disk. Xcode silently auto-creates one when you open the
 # project locally, but a headless `xcodebuild -scheme Biyaherong` (Codemagic) fails with
