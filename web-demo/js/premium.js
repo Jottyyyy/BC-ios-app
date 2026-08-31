@@ -498,6 +498,19 @@ var BiyaPremium = (function () {
     card: '#1A2942',
     cardBorder: 'rgba(253, 176, 34, .2)',
     activeCardBorder: 'rgba(253, 176, 34, .3)',
+    /* Plan toggle — RN premium/index.tsx:1073-1093. */
+    planCard: '#1A2942',
+    planCardSelected: '#1E3050',
+    planBorder: 'rgba(253, 176, 34, .2)',
+    planBorderSelected: '#FDB022',
+    planLabel: '#8BA3C7',
+    planLabelSelected: '#FDB022',
+    planPrice: '#FFFFFF',
+    planPriceSelected: '#FDB022',
+    planPeriod: '#8BA3C7',
+    planPeriodSelected: '#FFFFFF',
+    badgeFill: 'rgba(253, 176, 34, .15)',
+    badgeInk: '#FDB022',
     title: '#FDB022',
     body: '#8BA3C7',
     heading: '#FFFFFF',
@@ -543,6 +556,22 @@ var BiyaPremium = (function () {
     warnPadding: 16,
     headerHeight: 52,
     logoSize: 30,
+    /* Plan toggle and badge — RN premium/index.tsx:1072-1101. */
+    planRowGap: 12,
+    planRowBottom: 16,
+    planCardRadius: 16,
+    planCardPadding: 16,
+    planCardBorderWidth: 2,
+    planLabelBottom: 4,
+    planPeriodTop: 2,
+    badgeTop: 8,
+    badgePaddingH: 10,
+    badgePaddingV: 4,
+    badgeRadius: 8,
+    /* The per-tier price lines — RN index.tsx:1155-1166. */
+    disclosureTitleBottom: 6,
+    disclosureLineBottom: 2,
+    disclosureBodyTop: 8,
     pressed: 0.82
   };
 
@@ -559,6 +588,13 @@ var BiyaPremium = (function () {
     daysPillSize: 13,
     restoreSize: 14,
     restoreLinkSize: 13,
+    planLabelSize: 13,
+    planPriceSize: 28,
+    planPeriodSize: 12,
+    badgeSize: 10,
+    disclosureTitleSize: 14,
+    disclosureLineSize: 12,
+    disclosureLineHeight: 18,
     legalSize: 11,
     legalLineHeight: 16
   };
@@ -576,6 +612,17 @@ var BiyaPremium = (function () {
     subscribeCta: 'Subscribe',
     trialNote: '7 days free, then {price} per month. Cancel anytime.',
     priceNote: '{price} per month. Cancel anytime.',
+    trialNoteYearly: '7 days free, then {price} per year. Cancel anytime.',
+    priceNoteYearly: '{price} per year. Cancel anytime.',
+    planMonthly: 'Monthly',
+    planYearly: 'Yearly',
+    perMonth: 'per month',
+    perYear: 'per year',
+    bestValue: 'BEST VALUE',
+    savePercent: 'Save {n}%',
+    disclosureTitle: 'Biyaherong Plus',
+    disclosureMonthly: 'Premium Monthly — {price} per month',
+    disclosureYearly: 'Premium Yearly — {price} per year',
     loading: 'Loading…',
     restoreLink: 'Restore Purchases',
     restoreButton: 'Already paid? Restore',
@@ -637,7 +684,9 @@ var BiyaPremium = (function () {
   var LINKS = [
     { label: 'Terms of Use (EULA)',
       url: 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' },
-    { label: 'Privacy Policy', url: 'https://biyaherongchesscoach.com/privacy' }
+    /* `/privacy` 404s — the Laravel route is `/privacy-policy`. Both the RN app and spec §3.2
+       wrote the short form, and App Review clicks this link on every subscription submission. */
+    { label: 'Privacy Policy', url: 'https://biyaherongchesscoach.com/privacy-policy' }
   ];
 
   /** Mirrors `PaywallGlyph` — named so no renderer carries a bare emoji literal. */
@@ -654,6 +703,12 @@ var BiyaPremium = (function () {
     simulatedPrice: '(App Store price)',
     simulateCancel: 'Simulate: turn off auto-renew'
   };
+
+  /* Which tier the toggle has selected. Yearly by default, matching PremiumStore.selectedPlan and
+     spec §3.2's "Default selection: yearly". Module state rather than store state: the browser has
+     no StoreKit, so this is chrome, and putting it in the store would put a demo concern in the
+     twin of a shipped type. */
+  var selectedPlan = 'yearly';
 
   var BENEFITS = [
     { emoji: '♟️', text: 'Unlimited puzzles — no daily caps' },
@@ -799,6 +854,14 @@ var BiyaPremium = (function () {
     view.appendChild(root);
 
     function rerender() { render(view, onClose); }
+    /* Selecting a tier buys nothing — it moves the selection and redraws, exactly as the Swift
+       does. The CTA below is still the only thing that transacts. */
+    root.querySelectorAll('[data-plan]').forEach(function (btn) {
+      btn.onclick = function () {
+        selectedPlan = btn.getAttribute('data-plan');
+        rerender();
+      };
+    });
     root.querySelectorAll('[data-act]').forEach(function (btn) {
       btn.onclick = function () {
         var act = btn.getAttribute('data-act');
@@ -809,6 +872,37 @@ var BiyaPremium = (function () {
         rerender();
       };
     });
+  }
+
+  /* Monthly / Yearly. The browser has no `Product.displayPrice`, so BOTH rows show the same
+     placeholder — the alternative is inventing two prices, which is the exact bug the RN app
+     shipped. The `Save {n}%` line is absent for the same reason: with no real prices there is no
+     honest percentage, and the Swift drops it under exactly the same condition. */
+  function planRow(plan) {
+    var selected = selectedPlan === plan;
+    var label = plan === 'monthly' ? STRINGS.planMonthly : STRINGS.planYearly;
+    var period = plan === 'monthly' ? STRINGS.perMonth : STRINGS.perYear;
+    return '<button class="pw-plan" type="button" data-plan="' + plan + '"'
+      + ' aria-pressed="' + (selected ? 'true' : 'false') + '">'
+      + '<span class="pw-plan-label">' + label + '</span>'
+      + '<span class="pw-plan-price">' + DEMO.simulatedPrice + '</span>'
+      + '<span class="pw-plan-period">' + period + '</span>'
+      + (plan === 'yearly' ? '<span class="pw-badge">' + STRINGS.bestValue + '</span>' : '')
+      + '</button>';
+  }
+
+  function planToggle() {
+    return el('div', 'pw-plans', planRow('monthly') + planRow('yearly'));
+  }
+
+  /* Every product on the screen, priced and with its period spelled out — App Review wants this
+     in text, not only inside the cards. RN premium/index.tsx:713-720. */
+  function disclosureLines() {
+    return '<div class="pw-disclosure-title">' + STRINGS.disclosureTitle + '</div>'
+      + '<div class="pw-disclosure-line">'
+      + fill(STRINGS.disclosureMonthly, { price: DEMO.simulatedPrice }) + '</div>'
+      + '<div class="pw-disclosure-line">'
+      + fill(STRINGS.disclosureYearly, { price: DEMO.simulatedPrice }) + '</div>';
   }
 
   function renderOffer(body, store) {
@@ -834,13 +928,18 @@ var BiyaPremium = (function () {
 
     /* The browser has no `Product.displayPrice`, so the simulated store shows a placeholder rather
        than a hard-coded peso figure — hard-coding one is the exact bug the RN app had. */
+    body.appendChild(planToggle());
+
     body.appendChild(el('div', 'pw-actions',
       '<button class="pw-cta" type="button" data-act="trial">' + STRINGS.trialCta + '</button>'
-      + '<div class="pw-price">' + fill(STRINGS.trialNote, { price: DEMO.simulatedPrice })
+      + '<div class="pw-price">'
+      + fill(selectedPlan === 'yearly' ? STRINGS.trialNoteYearly : STRINGS.trialNote,
+             { price: DEMO.simulatedPrice })
       + '</div>'));
 
     body.appendChild(el('div', 'pw-legal',
-      '<div class="pw-disclosure">' + STRINGS.disclosure + '</div>'
+      disclosureLines()
+      + '<div class="pw-disclosure">' + STRINGS.disclosure + '</div>'
       + '<div class="pw-links">' + linkRow() + '</div>'));
 
     body.appendChild(el('div', 'pw-actions',

@@ -32,12 +32,35 @@ import UIKit
 @MainActor
 final class PremiumStore: ObservableObject {
 
-    /// Must match App Store Connect exactly, and App Store Connect is namespaced per app record —
-    /// so this prefix has to agree with `PRODUCT_BUNDLE_IDENTIFIER` in `ios/project.yml`.
-    static let monthlyProductID = "com.prince24pogi.biyaherongchessapp.plus.monthly"
-    /// The subscription group. One group, one product today; a yearly tier would join it here so
-    /// StoreKit handles the upgrade/downgrade itself.
-    static let subscriptionGroupID = "biyaherong.plus"
+    /// The tiers, in one subscription group so StoreKit handles upgrade and downgrade itself.
+    ///
+    /// Each `productID` must match App Store Connect **exactly**. App Store Connect namespaces
+    /// products per app record, so the prefix has to agree with `PRODUCT_BUNDLE_IDENTIFIER` in
+    /// `ios/project.yml` — change the bundle ID and every product here resolves to nothing, which
+    /// on this screen means a permanent "Store Unavailable" and, because the app is fully gated,
+    /// nothing else to look at.
+    enum Plan: String, CaseIterable, Identifiable, Sendable {
+        case monthly
+        case yearly
+
+        var id: String { rawValue }
+
+        var productID: String {
+            switch self {
+            case .monthly: return "com.prince24pogi.biyaherongchessapp.plus.monthly"
+            case .yearly:  return "com.prince24pogi.biyaherongchessapp.plus.yearly"
+            }
+        }
+
+        static var allProductIDs: [String] { allCases.map(\.productID) }
+
+        static func matching(_ productID: String) -> Plan? {
+            allCases.first { $0.productID == productID }
+        }
+    }
+
+    /// Kept because a lot of prose and one test still name it. New code should use `Plan`.
+    static var monthlyProductID: String { Plan.monthly.productID }
 
     enum LoadState: Equatable {
         case idle
@@ -47,7 +70,12 @@ final class PremiumStore: ObservableObject {
     }
 
     @Published private(set) var access: Entitlement.Access = .free
-    @Published private(set) var product: Product?
+    /// Every tier StoreKit could resolve. A tier missing here is a tier that cannot be bought.
+    @Published private(set) var products: [Plan: Product] = [:]
+    /// Which row the paywall has selected. Yearly by default: it is the better value for the user
+    /// and the better outcome for the business, and preselecting the cheaper-per-month plan is
+    /// what every subscription screen does. One line to change if that ever stops being true.
+    @Published var selectedPlan: Plan = .yearly
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var purchasing = false
     /// Whether to advertise the free trial. StoreKit is the authority on eligibility — an Apple
@@ -72,9 +100,30 @@ final class PremiumStore: ObservableObject {
         snapshot.expiresAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000.0) }
     }
     var willAutoRenew: Bool { snapshot.willAutoRenew }
+    /// The selected tier's `Product`, or nil while the store is still answering.
+    var product: Product? { products[selectedPlan] }
+
     /// `Product.displayPrice` or nothing. Never a hard-coded currency — the RN app managed to show
     /// three different prices in one session.
     var displayPrice: String? { product?.displayPrice }
+
+    func displayPrice(for plan: Plan) -> String? { products[plan]?.displayPrice }
+
+    /// How much cheaper a year is than twelve months, as a whole percent, or nil.
+    ///
+    /// Computed from the two `Product.price` values rather than written down, for the same reason
+    /// the prices themselves are: App Store Connect owns them, they differ per storefront, and a
+    /// transcribed number is a number that goes stale silently. Nil whenever either tier is
+    /// missing or the arithmetic would not make sense, and the badge simply does not appear.
+    var yearlySavingsPercent: Int? {
+        guard let monthly = products[.monthly]?.price,
+              let yearly = products[.yearly]?.price else { return nil }
+        let twelve = monthly * 12
+        guard twelve > 0, yearly < twelve else { return nil }
+        let fraction = (twelve - yearly) / twelve
+        let percent = (fraction * 100 as NSDecimalNumber).intValue
+        return percent > 0 ? percent : nil
+    }
 
     init(storage: CoachGame.Storage = SecureStorage.make()) {
         self.storage = storage
@@ -90,22 +139,43 @@ final class PremiumStore: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// Fetches the product so the paywall can show a real price. Purely cosmetic — the entitlement
+    /// Fetches both tiers so the paywall can show real prices. Purely cosmetic — the entitlement
     /// does not depend on it, so a failure here never locks anyone out.
     func load() async {
         loadState = .loading
         do {
-            let products = try await Product.products(for: [Self.monthlyProductID])
-            product = products.first
-            loadState = product == nil ? .failed : .loaded
-            if let subscription = product?.subscription, subscription.introductoryOffer != nil {
-                trialEligible = await subscription.isEligibleForIntroOffer
-            } else {
-                trialEligible = false
+            let resolved = try await Product.products(for: Plan.allProductIDs)
+            var byPlan: [Plan: Product] = [:]
+            for product in resolved {
+                if let plan = Plan.matching(product.id) { byPlan[plan] = product }
             }
+            products = byPlan
+            // Loaded if ANY tier resolved. One missing tier is a hole in the offer, not a dead
+            // screen — the other row still sells, and the failure card would hide a working one.
+            loadState = byPlan.isEmpty ? .failed : .loaded
+            // Fall back to a tier that actually exists, so the CTA is never wired to nothing.
+            if byPlan[selectedPlan] == nil, let first = Plan.allCases.first(where: { byPlan[$0] != nil }) {
+                selectedPlan = first
+            }
+            trialEligible = await Self.introOfferEligible(among: byPlan.values)
         } catch {
             loadState = .failed
         }
+    }
+
+    /// Is this Apple Account eligible for the introductory offer?
+    ///
+    /// Asked ONCE and applied to every row, because eligibility is a property of the subscription
+    /// **group**, not of a product: a customer who has used the free trial on monthly cannot have
+    /// it again on yearly. Asking per row would promise a second trial the App Store will not
+    /// honour, and the user would find out at the payment sheet.
+    private static func introOfferEligible(among products: some Collection<Product>) async -> Bool {
+        for product in products {
+            guard let subscription = product.subscription,
+                  subscription.introductoryOffer != nil else { continue }
+            return await subscription.isEligibleForIntroOffer
+        }
+        return false
     }
 
     /// Watches for renewals, revocations and purchases made on another device, for the app's life.
@@ -131,7 +201,9 @@ final class PremiumStore: ObservableObject {
             // `.unverified` is treated as no entitlement at all — a failed signature is not a
             // subscription, whatever the payload claims.
             guard case .verified(let transaction) = result else { continue }
-            guard transaction.productID == Self.monthlyProductID else { continue }
+            // ANY tier in the group entitles. Filtering to one product ID would have locked out
+            // every yearly subscriber the moment that tier existed.
+            guard Plan.matching(transaction.productID) != nil else { continue }
             // A refunded transaction is revoked. Offline we learn this late; that is one of the
             // two accepted holes.
             guard transaction.revocationDate == nil else { continue }
@@ -148,7 +220,13 @@ final class PremiumStore: ObservableObject {
         // had, and a brand-new subscription is assumed to renew — the wrong guess costs a bounded
         // seven days, where the opposite wrong guess locks out someone who paid.
         var renews = snapshot.willAutoRenew || bestExpiry != nil
-        if let statuses = try? await Product.SubscriptionInfo.status(for: Self.subscriptionGroupID),
+        // The group ID comes from a loaded product, never from a constant. It used to be the
+        // hand-typed string "biyaherong.plus"; App Store Connect assigns a NUMERIC group ID, so
+        // that lookup never matched, and because it is a `try?` it failed silently and quietly
+        // demoted this to the guess above. A value that cannot be verified locally should not be
+        // typed locally — extract it.
+        if let groupID = products.values.first?.subscription?.subscriptionGroupID,
+           let statuses = try? await Product.SubscriptionInfo.status(for: groupID),
            let first = statuses.first,
            case .verified(let info) = first.renewalInfo {
             renews = info.willAutoRenew
@@ -161,7 +239,12 @@ final class PremiumStore: ObservableObject {
 
     @discardableResult
     func purchase() async -> Bool {
-        guard let product else { return false }
+        await purchase(selectedPlan)
+    }
+
+    @discardableResult
+    func purchase(_ plan: Plan) async -> Bool {
+        guard let product = products[plan] else { return false }
         purchasing = true
         defer { purchasing = false }
         do {

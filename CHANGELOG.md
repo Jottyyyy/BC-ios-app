@@ -9,6 +9,83 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (changed) — The paywall was switched off in every build we could ship, and there was no yearly plan
+
+Asked to get the app hosted and make sure nothing is reachable without paying, at $1.99/month and
+$19.99/year. The content-protection question turned out not to be the urgent one.
+
+**`tools/ship/ship_testflight.sh` was uploading a build that gives the product away.**
+`PremiumStore.recompute()` grants `.premium(trial: false)` whenever `BiyaherongBuild.isTestBuild`,
+that flag defaulted to `true`, and the ship script sets no build settings at all — so the repo's
+documented one-command ship produced, every time, a build with a granted subscription and a sign-in
+performing no Apple authentication. Only the `ios-appstore` CI workflow was ever correct.
+
+The old default was not careless; `docs/account.md` argues for it and the argument still holds. The
+failure it prevented was a build nobody could open, silently, which had happened three times. What
+it missed is that "a build told nothing" had stopped meaning *a tester's build* and started meaning
+*whatever the ship script produces*. Forgetting a flag should cost a tester an inconvenience; it
+must never cost the product its revenue.
+
+So `#if BIYA_APPSTORE` became `#if BIYA_TESTBUILD` and the default became `false` — **and the old
+convenience was kept where it was actually wanted**, `configs: Debug` in `ios/project.yml`. Open the
+project, press Run, and the app is still fully open against the local StoreKit configuration. Every
+**archive** is real. The asymmetry the original argument rested on is gone because all four paths now
+**assert instead of assume**, reading the effective build settings back rather than trusting their
+own `sed`: the two CI test workflows refuse when the flag is absent, `ios-appstore` and
+`ship_testflight.sh` refuse when it is present.
+
+**Added the yearly tier.** There was one product. `PremiumStore.Plan` now declares `.monthly` and
+`.yearly`, `load()` fetches both, and — the bug that would have shipped otherwise —
+`refresh()` no longer filters entitlements to a single product ID, which would have locked out every
+yearly subscriber the moment that tier existed.
+
+The Monthly/Yearly toggle was **re-extracted from the RN source** rather than designed:
+`app/(app)/user/premium/index.tsx:1072-1101`. It had been deliberately omitted while there was only
+one product, and the header comment said so. Extracting rather than transcribing immediately earned
+its keep — the sub-line under each price is `planToggleSub` at **12pt**, not the 11pt of
+`planPriceSub`, which is a different style on a different card, and spec §3.2's prose would have led
+straight into that. Default selection is yearly, per the spec and per every subscription screen.
+
+**Deleted a hand-typed constant that never worked.** `subscriptionGroupID = "biyaherong.plus"` — App
+Store Connect assigns a *numeric* group ID, so `Product.SubscriptionInfo.status(for:)` never matched.
+Being a `try?`, it failed silently and quietly demoted `willAutoRenew` to a heuristic. It now comes
+off a loaded product.
+
+**Fixed a link that App Review clicks on every subscription submission.** The paywall pointed at
+`https://biyaherongchesscoach.com/privacy`. **Verified live: 404.** The route is `/privacy-policy`.
+Both the RN and spec §3.2 carried the short form; a latent bug, ported as the intent instead.
+
+**Trial eligibility is now asked once, for the group.** `isEligibleForIntroOffer` is a property of
+the subscription *group*, not of a product: someone who used the trial on monthly cannot have it
+again on yearly. Asking per row would have promised a second free trial the App Store will not
+honour, and the user would have found out at the payment sheet.
+
+The 7-day trial requiring card details up front — the client's specific ask — needs no code at all.
+That is Apple's own behaviour for an introductory offer, and collecting card details ourselves is
+forbidden by Guideline 3.1.1.
+
+**`web-demo/` updated.** The toggle renders, is clickable, and drives the price note; both rows show
+the same `(App Store price)` placeholder because a browser has no `Product.displayPrice` and
+inventing two prices is precisely the bug the RN shipped. The disclosure card now lists every tier
+with its period in words, as App Review expects.
+
+**Gates.** `js_goldens.js` green at **35,779** assertions across 86 suites. `replay_premium.js` grew
+423 → 585 and now also checks `ios/Biyaherong.storekit` against `PremiumStore.Plan` — a product ID
+typo is not a compile error and not a crash, it is a row that says "Loading…" forever with nothing
+else on screen to explain it; mutation-checked. `replay_login.js` 481 → 488, rewritten to pin the
+inverted arrangement including the ship script's new guard. No separate `build_mode_check.js` was
+added as planned: `replay_login.js` already owned this section and now asserts all of it, and a
+second file repeating the same claims would be worse than none.
+
+**Still required, and none of it can be done from this repo** — see `docs/subscription.md`: enable
+In-App Purchase on the App ID and *recreate* the profile, create both products with IDs matching
+`PremiumStore.Plan`, set the prices, add the trial to **both**, enable billing grace, and submit the
+IAPs *with* the build. Because the app is fully gated, an unconfigured product means the reviewer
+sees "Store Unavailable" with nothing else to look at — a rejection with no code involved.
+
+Companion PR on `BYAHERONG-COACH-LARAVEL`: the `/privacy` redirect and the ₱99/₱999 copy.
+
+
 ### 2026-08-29 (changed) — The video catalogue is a live route, not a file somebody has to remember to upload
 
 Reported with two screenshots: the admin panel at `biyaherongchesscoach.com/admin/dashboard` showing

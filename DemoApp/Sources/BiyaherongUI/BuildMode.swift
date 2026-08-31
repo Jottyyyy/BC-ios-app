@@ -16,13 +16,25 @@ import StockfishEngine
 /// setting does apply, and it calls `configure(isTestBuild:)` from its `init` — before any view
 /// exists, so every reader below sees the right value.
 ///
-/// ## Why the default is `true`
+/// ## Why the default is `false`
 ///
-/// A build that is not told otherwise is a **testable** one. The failure this repo kept hitting was
-/// a build nobody could open and no error to say why; the opposite failure — a submission build
-/// that forgot to opt in — is caught loudly by `ios-appstore`, which refuses to build unless
-/// `BIYA_APPSTORE` really reached the compiler. A silent failure in the daily workflow is worse
-/// than a loud one in the rare workflow.
+/// It was `true` for a good reason, and that reason still holds: the failure this repo kept hitting
+/// was a build nobody could open and no error to say why, so a build that is not told otherwise
+/// should be openable. What changed is that "not told otherwise" stopped meaning "a tester's
+/// build" and started meaning "whatever `tools/ship/ship_testflight.sh` produces" — and that script
+/// sets no flag, so the repo's documented one-command ship was uploading a build that **grants the
+/// subscription to everyone and performs no Apple authentication**. A silent failure in the daily
+/// workflow is bad; silently giving the product away is worse, because nothing looks wrong.
+///
+/// So the default is now the safe one and the old convenience is preserved where it was actually
+/// needed, which is the Debug configuration: `ios/project.yml` sets `BIYA_TESTBUILD` under
+/// `configs: Debug`, so opening the project in Xcode and pressing Run still lands in a fully open
+/// app, against the local `Biyaherong.storekit`. Only **archives** — Release — are real.
+///
+/// Both ship paths now assert rather than assume. `ios-appstore` and `ship_testflight.sh` read the
+/// EFFECTIVE build settings back and refuse if `BIYA_TESTBUILD` is present; the CI test workflows
+/// refuse if it is absent. `tools/qa/build_mode_check.js` pins the whole arrangement, because none
+/// of it compiles on Windows.
 ///
 /// ## What it switches
 ///
@@ -35,8 +47,11 @@ import StockfishEngine
 @MainActor
 public enum BiyaherongBuild {
 
-    /// `true` unless the app target says otherwise. Read by the three sites named above.
-    public private(set) static var isTestBuild = true
+    /// `false` unless the app target opts in. Read by the three sites named above.
+    ///
+    /// Fail CLOSED: a caller that never runs `configure` — a unit test, a preview, a host that
+    /// forgot — gets the real gates rather than a free subscription.
+    public private(set) static var isTestBuild = false
 
     /// Called once, from the app target's `init`, before the view tree is built.
     public static func configure(isTestBuild: Bool) {

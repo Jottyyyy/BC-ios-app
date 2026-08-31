@@ -1,7 +1,12 @@
-# subscription — one monthly plan, a 7-day trial, and no server
+# subscription — two plans, a 7-day trial, and no server
 
-A single auto-renewing **monthly** subscription with a **7-day free trial**, verified entirely
-**on-device by StoreKit 2**. No backend, no accounts, no receipt POST.
+Two auto-renewing subscriptions in one group — **monthly** and **yearly**, `$1.99` and `$19.99` as
+the USD base price Apple converts per storefront — each with a **7-day free trial**, verified
+entirely **on-device by StoreKit 2**. No backend, no accounts, no receipt POST.
+
+The trial requires a payment method and converts automatically: that is Apple's own behaviour for
+an introductory offer, and it is the client's requirement met without a line of code. The app must
+**not** collect card details itself — Guideline 3.1.1 forbids it for digital content.
 
 **Nothing in the app is usable until that trial is started.** Home draws — the six cards, the
 quote, the offer banner — so the user can see what they are buying, and every tile, every content
@@ -134,7 +139,14 @@ nowhere — the RN client never enforced it, the PHP controller did, and there i
 - **The invented cap (`reviewsPerDay = 3`) lives in `Entitlement`.** The number is borrowed, not
   guessed: the RN app gated the Analysis Board at 3 saved sessions and 3 pinned GM games.
 - **Prices are never hard-coded.** `Product.displayPrice` only — the original showed three different
-  prices in one session.
+  prices in one session. The same rule covers the **`Save {n}%`** badge on the yearly row: it is
+  computed from the two real `Product.price` values and simply does not render when either tier is
+  missing. Spec §3.2 asks for that line; the RN never actually rendered it (only `BEST VALUE`), and
+  `PORTING_NOTES.md` records the disagreement.
+- **Trial eligibility is asked once, for the GROUP.** `isEligibleForIntroOffer` is a property of the
+  subscription group, not of a product — someone who used the free trial on monthly cannot have it
+  again on yearly. Asking per row would promise a second trial the App Store will not honour, and
+  the user would discover that at the payment sheet.
 - **`daysRemaining` rounds *up*** over calendar days: the server truncated a float, so 27.9 days
   read "27 days remaining" and anything inside the last day read "0".
 
@@ -233,9 +245,15 @@ list, the paywall can only render "Store Unavailable", and — because nothing i
 without an entitlement — there is no way for a tester to see any of it.
 
 So `PremiumStore.recompute()` grants `.premium(trial: false)` whenever `BiyaherongBuild.isTestBuild`
-— which is **every build except one**. `ios-appstore` is the exception: it sets `BIYA_APPSTORE` and
-refuses to build if that did not reach the compiler, because a subscription granted without a
-purchase is its own App Review rejection quite apart from the sign-in.
+— which is now **only** the Debug configuration and the two CI test workflows. The default is
+`false`: an archive that is told nothing charges.
+
+That default used to be the other way round, and the reason it changed is worth keeping.
+`tools/ship/ship_testflight.sh` sets no build settings at all, so under the old sense the repo's
+documented one-command ship uploaded a build with a granted subscription and a simulated sign-in,
+silently, every time. Both ship paths now read the effective build settings back and **refuse** if
+the test flag is present; the two test workflows refuse if it is absent. See
+[`account.md`](account.md).
 
 The switch is a runtime Bool handed down from the app target, not a `#if` in this package: a
 compilation condition set on the Xcode project never reaches a SwiftPM package's targets, which is
@@ -243,12 +261,32 @@ why two earlier attempts at this had no effect on the device at all. See [`accou
 
 ## Before this can ship
 
-Four things must happen in **App Store Connect**, and none of them can be done from this repo:
+These must happen in **App Store Connect** and the Developer portal, and none of them can be done
+from this repo:
 
-1. Create the subscription group and the monthly product, with the product ID matching
-   `PremiumStore.monthlyProductID` **exactly** — it is namespaced under the app record.
-2. Add the **7-day free trial** introductory offer.
-3. Set the price.
-4. **Enable the billing grace period**, so a card that fails does not end the subscription instantly.
+1. **Enable In-App Purchase on the App ID**, then **delete and recreate the provisioning profile**.
+   A profile snapshots the App ID's capabilities when it is minted; it cannot be refreshed into
+   having a new one. Nothing in this repo verifies IAP is enabled, unlike the triple-checked Sign in
+   with Apple entitlement.
+2. Create the subscription group and **both** products, with IDs matching `PremiumStore.Plan`
+   **exactly** — `…plus.monthly` and `…plus.yearly`, namespaced under the app record.
+   `replay_premium.js` checks the local `Biyaherong.storekit` against the Swift, but nothing here
+   can see App Store Connect.
+3. Set the prices: **$1.99** and **$19.99** USD as the base, Apple converting per storefront. In the
+   Philippines that lands near ₱119 and ₱1,190 — above the ₱99 the old RN app charged, which is a
+   product decision, not an accident.
+4. Add the **7-day free trial** introductory offer **to both products**.
+5. **Enable the billing grace period**, so a card that fails does not end the subscription instantly.
+   `Entitlement.graceDays = 7` assumes it.
+6. **Submit both IAPs for review alongside the build that contains them** — not after. Because the
+   app is fully gated, an unconfigured product means `Product.products(for:)` returns empty, the
+   reviewer sees "Store Unavailable", and there is literally nothing else to look at. That is a
+   rejection with no code involved.
+7. **App Review notes**: say the app is subscription-only, that a sandbox account is needed, and
+   that Sign in with Apple is the only sign-in.
 
-The IAP must also be submitted for review alongside the first build that contains it.
+### If the store will not load
+
+`loadState == .failed` still renders the disclosure card and **Restore Purchases**, so both legal
+links stay reachable and an existing subscriber can recover without a working product listing. It is
+a bad screen, not a dead end.

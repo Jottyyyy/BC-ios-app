@@ -109,7 +109,8 @@ is in the effective build settings, and after signing it checks that
 `docs/subscription.md` has listed these since the paywall landed. None can be done from this repo,
 and **this is the highest-risk item after the fake login**:
 
-1. Create the subscription group and monthly product, ID matching `PremiumStore.monthlyProductID`.
+1. Create the subscription group and **both** products, IDs matching `PremiumStore.Plan` exactly:
+   `…plus.monthly` ($1.99) and `…plus.yearly` ($19.99), USD base, Apple converting per storefront.
 2. Add the **7-day free trial** introductory offer.
 3. Set the price.
 4. Enable the **billing grace period**.

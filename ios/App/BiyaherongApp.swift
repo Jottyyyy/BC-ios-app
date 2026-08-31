@@ -16,13 +16,20 @@ struct BiyaherongApp: App {
     /// This file is a real Xcode target, so the setting does apply, and the value is handed to the
     /// package at runtime.
     ///
-    /// Not set → a TEST build: no login screen, no paywall, everything open. `BIYA_APPSTORE` is
-    /// set only by codemagic.yaml's `ios-appstore`, which refuses to build if it did not arrive.
+    /// Not set → a REAL build: Apple sign-in, StoreKit entitlement, paywall. `BIYA_TESTBUILD`
+    /// opts into the open one, and is set in exactly three places — `configs: Debug` in
+    /// `ios/project.yml` (so local Xcode Run stays openable) and the two CI test workflows.
+    ///
+    /// The sense of this flag was inverted deliberately. It used to read `#if BIYA_APPSTORE`, so
+    /// forgetting the flag shipped a build that granted the subscription and faked the sign-in —
+    /// which is exactly what `tools/ship/ship_testflight.sh` did, silently, because it sets no
+    /// build settings at all. Forgetting a flag must cost a tester an inconvenience, never cost
+    /// the product its revenue. See BuildMode.swift for the whole argument.
     init() {
-        #if BIYA_APPSTORE
-        BiyaherongBuild.configure(isTestBuild: false)
-        #else
+        #if BIYA_TESTBUILD
         BiyaherongBuild.configure(isTestBuild: true)
+        #else
+        BiyaherongBuild.configure(isTestBuild: false)
         #endif
     }
 
