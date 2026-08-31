@@ -9,6 +9,58 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (changed) — The video catalogue takes a receipt now, not nothing
+
+`curl https://biyaherongchesscoach.com/api/content/tutorial-videos` returned every video URL in the
+library, to anybody. The paywall was in the app's UI and nowhere else.
+
+The app has no account and no Sanctum token, which is the whole architecture and the reason the
+route was public in the first place — there was nothing to authorise against. Except there was:
+StoreKit hands the app a `Transaction.jwsRepresentation`, the transaction **signed by Apple**, with
+the certificate chain that proves it. That signature is an identity, and a better one than a token.
+
+`App\Services\AppleTransactionVerifier` (new, in the Laravel repo) checks it **without calling
+Apple**: ES256 only, the `x5c` chain verified leaf ← intermediate ← root, and the root pinned to
+**Apple Root CA - G3 by SHA-256 fingerprint** — then the payload checked for this bundle, one of our
+two products, unrevoked, unexpired. The fingerprint was downloaded and hashed rather than typed from
+memory; the certificate is committed as a fixture and the test recomputes it.
+
+`GET` is gone — the route is now `POST` with `{"jws": …}`, because the receipt is kilobytes of
+certificate chain and that is a body's job, not a header's. The response is `no-store`: the old
+`public, max-age=300` would have let a proxy hand an authorised body to somebody who showed nothing.
+
+**A 401 is not a broken catalogue**, and the new `ContentClient.Failure.notSubscribed` keeps it
+separate from `offline` and `unreadable`. Both screens send it to the **paywall**: the server holds
+the content, so when it and StoreKit disagree the server wins, and "check your connection" would be
+the wrong instruction twice over.
+
+**This is half the protection, and it is documented as half.** The client chose to leave the Android
+app untouched; Android reads the same `video_url` columns, so the bucket stays public and a leaked
+link still plays forever. What closes today is *enumeration*. Finishing it is small once Android is
+in scope — private bucket, `temporaryUrl()` off the `video_path` column that already exists — and the
+cryptographic half is done.
+
+**Tests.** 27 new PHP tests, and they use a REAL certificate chain rather than a mock: the suite
+generates a root, an intermediate and a leaf with OpenSSL, signs a genuine ES256 JWS, and then
+attacks it — tampered payload, another app's bundle, another product, expired, revoked, `alg: none`,
+a one-certificate chain, and the one that matters most, **a perfectly self-consistent chain rooted
+somewhere that is not Apple**. A mocked verifier would have proved none of it. Laravel suite 21
+failed / 40 passed → 21 failed / 60 passed; the 21 are stock starter-kit failures that predate this.
+
+`replay_videos.js` 101 → 117, pinning the transport in both languages: POST, the `jws` key, the 401
+mapping, the distinctness of `notSubscribed` from `offline`, no caching, and that both screens route
+a refused receipt to the paywall. Two of the new assertions were mutation-checked. Gate green at
+**35,814** assertions across 86 suites.
+
+**`web-demo/` updated.** A browser has no StoreKit, so the real catalogue is now unreachable from the
+demo — which is the feature working. `videos.js` stays faithful and routes a refused receipt to the
+paywall; `app.js` translates that to could-not-load first, because in a browser "no receipt" is true
+of every visitor and says nothing about the screen, and that state is the one carrying **Load sample
+catalogue**.
+
+Companion PR on `BYAHERONG-COACH-LARAVEL`: the verifier, the route, and the tests.
+
+
 ### 2026-08-31 (changed) — The paywall was switched off in every build we could ship, and there was no yearly plan
 
 Asked to get the app hosted and make sure nothing is reachable without paying, at $1.99/month and

@@ -178,6 +178,33 @@ final class PremiumStore: ObservableObject {
         return false
     }
 
+    /// The newest signed transaction for one of our products, straight from StoreKit.
+    ///
+    /// This is the **receipt Apple signed**, and it is what the content server checks instead of a
+    /// token — this app has no account to authenticate with, so the signature is the identity. See
+    /// `ContentClient` and `App\Services\AppleTransactionVerifier` on the backend.
+    ///
+    /// Read fresh on every call rather than cached: StoreKit reissues these on renewal and
+    /// revocation, and a stale one is either a needless rejection or a grant that outlives its
+    /// subscription. `.unverified` is skipped for the same reason the entitlement skips it — a
+    /// failed signature is not a receipt, whatever the payload claims — and the server would refuse
+    /// it anyway, which is the point of sending the signature rather than a claim.
+    func currentReceipt() async -> String? {
+        var newest: (expiry: Date, jws: String)?
+
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else { continue }
+            guard Plan.matching(transaction.productID) != nil else { continue }
+            guard transaction.revocationDate == nil else { continue }
+            guard let expiry = transaction.expirationDate else { continue }
+            if newest == nil || expiry > newest!.expiry {
+                newest = (expiry, result.jwsRepresentation)
+            }
+        }
+
+        return newest?.jws
+    }
+
     /// Watches for renewals, revocations and purchases made on another device, for the app's life.
     /// This is how an offline user in grace is restored the moment they reconnect.
     func startObserving() {

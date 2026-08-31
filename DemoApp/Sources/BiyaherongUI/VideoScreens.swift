@@ -63,6 +63,12 @@ struct VideoLibraryScreen: View {
                         message: VideoStrings.offlineBody,
                         sub: VideoStrings.offlineSub,
                         retry: VideoStrings.retry) { retry() }
+        } else if failure == .notSubscribed {
+            // The SERVER read the receipt and said no, while the device believed otherwise —
+            // StoreKit is a cache and can be a moment behind a lapse or a refund. The server is the
+            // one holding the content, so it wins, and the honest screen is the paywall rather than
+            // an error the user cannot act on.
+            VideoPaywall(onSubscribe: onPaywall)
         } else if failure != nil {
             VideoNotice(glyph: VideoStrings.emptyGlyph,
                         title: VideoStrings.errorTitle,
@@ -121,7 +127,7 @@ struct VideoLibraryScreen: View {
         loading = true
         defer { loading = false; loaded = true }
         do {
-            videos = try await ContentClient.videos()
+            videos = try await ContentClient.videos(receipt: await premium.currentReceipt() ?? "")
             failure = nil
         } catch is CancellationError {
             // The user left. Nothing to say and nowhere to say it.
