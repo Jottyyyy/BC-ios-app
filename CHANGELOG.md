@@ -9,6 +9,26 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-08-31 (docs) — The App Store submission checklist lives in the repo now
+
+The handoff for whoever does the submission was a shared link, which turned out to be the wrong
+container for it twice over: a private artifact shows *"Page not found"* to anyone not signed in —
+the same message it shows for a URL that does not exist — and half of a pasted brief is worse than
+none, because the half that gets cut is the values the other half refers to as "above".
+
+So it is [`docs/app-store-handoff.md`](docs/app-store-handoff.md): arrives with `git pull`, needs no
+login, and is versioned alongside the values it quotes. It carries the exact product IDs, the USD
+prices, the order the steps have to happen in, and the reason a mistyped product ID is a rejection
+rather than an error message — every screen is behind the paywall, so an empty product list leaves
+a reviewer with literally nothing to look at.
+
+It ends with a self-contained brief to paste into an assistant, which is what the shared link was
+really for. Listed in `docs/README.md` as **Start here to submit**.
+
+No code changed. The one thing in it that could go stale is the deployed-backend check, so the doc
+gives the command rather than only the claim.
+
+
 ### 2026-08-31 (changed) — The video catalogue takes a receipt now, not nothing
 
 `curl https://biyaherongchesscoach.com/api/content/tutorial-videos` returned every video URL in the
