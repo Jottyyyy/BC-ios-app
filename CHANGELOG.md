@@ -9,7 +9,31 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
-### 2026-08-31 (changed) — 1.0.6 (51) built, signed and validated by Apple, but NOT uploaded
+### 2026-09-02 (changed) — 1.0.6 (51) uploaded: the first REAL build to reach App Store Connect
+
+Delivery UUID `b60230eb-c50c-45fe-85f9-d6ccde12276a`. 85,636,903 bytes, `UPLOAD SUCCEEDED with no
+errors`. The `.ipa` was the one built and validated on 2026-08-31 — not rebuilt, so every guard that
+passed then still describes this artifact exactly. Re-verified immediately before sending:
+`1.0.6 (51)`, `com.apple.developer.applesignin` present in the **signed** binary, and zero
+`BIYA_TESTBUILD` strings in the Mach-O.
+
+**This is the first build in this project's history that actually charges.** Builds 47 through 50
+were all test builds — `BiyaherongBuild.isTestBuild` true, no login, no paywall, every cap lifted —
+and the CHANGELOG entry for 50 says in as many words *"Do not submit this build to App Review"*.
+That warning nearly cost the submission: App Store Connect had auto-attached **1.0.6 (50)** to the
+draft, because it was the only build it had. A reviewer would have found an app where nothing is
+gated and the two subscriptions being submitted alongside it are unreachable.
+
+Uploaded with `xcrun altool --upload-app` directly rather than `tools/ship/ship_testflight.sh`, for
+two reasons: the script bumps `CURRENT_PROJECT_VERSION` on entry, so re-running it would have
+produced 52 and left 51 stranded; and it refuses to run while Xcode is open, which it was. The
+script's value is its guards, and those had already passed against this exact file on 2026-08-31 —
+re-running them by hand (version, entitlement decode, test-flag scan) is what the block above
+records. Both subscriptions reached **Ready to Submit** the same day.
+
+`web-demo/` not updated — a release.
+
+### 2026-08-31 (changed) — 1.0.6 (51) built, signed and validated by Apple; upload deferred
 
 `tools/ship/ship_testflight.sh --dry-run` on the Mac, working through
 [`docs/app-store-handoff.md`](docs/app-store-handoff.md). Everything the script can prove locally is
