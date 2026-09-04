@@ -28,7 +28,11 @@ struct PaywallScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PaywallPalette.screenBg.ignoresSafeArea())
-        .task { await store.load() }
+        // `PhoneApp` now asks at launch, so by the time this screen opens the prices are usually
+        // already here. Re-ask only if that has not happened or did not work — otherwise opening the
+        // paywall would replace real prices with "Loading…" for the length of a round trip.
+        // The Retry button in the failure card calls `load()` directly and is unaffected.
+        .task { if store.loadState != .loaded { await store.load() } }
     }
 
     // MARK: Header

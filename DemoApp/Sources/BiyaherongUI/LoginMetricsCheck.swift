@@ -80,7 +80,7 @@ public func biyaherongLoginMetricsCheck() -> LoginMetricsCheckResult {
     // MARK: - The band budget
 
     let fixed = LoginLayout.fixedHeight()
-    expectNear(fixed, 413, "fixed bands total")
+    expectNear(fixed, 469, "fixed bands total")
     // The whole point of the budget: it must fit the SHORTEST phone the app supports, with the
     // flexible band still at or above its floor. A login screen that scrolls is a bug.
     expect(fixed + LoginLayout.minSpacer <= LoginLayout.shortestSupportedHeight,
@@ -201,8 +201,19 @@ public func biyaherongLoginMetricsCheck() -> LoginMetricsCheckResult {
     expect(LoginSession.isSignedIn(LoginSession.appleProvider), "\"apple\" is signed in")
     expect(LoginSession.providers.contains(LoginSession.appleProvider),
            "apple is in the provider list")
+    // The second provider. A guest session is a REAL session — the predicate accepts it — because
+    // the alternative was a third state every downstream reader would have had to learn.
+    expect(LoginSession.isSignedIn(LoginSession.guestProvider), "\"guest\" is signed in too")
+    expect(LoginSession.providers.contains(LoginSession.guestProvider),
+           "guest is in the provider list")
+    expect(LoginSession.guestProvider != LoginSession.appleProvider,
+           "and it is distinguishable, so Profile can say which one opened the session")
     expectEqual(LoginSession.providerLabel("apple"), LoginStrings.appleProviderLabel,
                 "provider label for apple")
+    expectEqual(LoginSession.providerLabel("guest"), LoginStrings.guestProviderLabel,
+                "provider label for a guest")
+    expect(LoginSession.providerLabel("guest") != LoginStrings.noProviderLabel,
+           "a guest is not shown as signed out — the em dash means no session at all")
     expectEqual(LoginSession.providerLabel(nil), LoginStrings.noProviderLabel,
                 "provider label when signed out")
     expectEqual(LoginSession.providerLabel("google"), LoginStrings.noProviderLabel,
@@ -257,6 +268,25 @@ public func biyaherongLoginMetricsCheck() -> LoginMetricsCheckResult {
     // Apple's required wording. Not "Sign in with Apple", not a translation.
     expectEqual(LoginStrings.appleButton, "Continue with Apple", "the Apple button's wording")
     expect(!LoginStrings.reassurance.isEmpty, "the reassurance line exists")
+    expect(!LoginStrings.guestButton.isEmpty, "the guest button has a label")
+    expect(LoginStrings.guestButton != LoginStrings.appleButton, "and it is not the Apple one")
+    expect(LoginLayout.guestButtonHeight >= 44,
+           "the guest button clears Apple's 44pt minimum target — a way past a broken sign-in "
+           + "that is hard to hit is not one")
+    expect(LoginLayout.guestButtonHeight < LoginLayout.buttonHeight,
+           "and is still the quieter of the two: Apple is the offer, this is the escape")
+    // The failure alert's message, and the branch inside it.
+    expectEqual(LoginAuth.failureMessage(code: nil), LoginStrings.authFailedBody,
+                "with no code from Apple the message is the body alone")
+    expectEqual(LoginAuth.failureMessage(code: ""), LoginStrings.authFailedBody,
+                "an empty code adds nothing")
+    expect(LoginAuth.failureMessage(code: "AuthorizationError 1000").contains("1000"),
+           "a real code is carried into the message — the diagnosis build 51 did not have")
+    expect(LoginAuth.failureMessage(code: "AuthorizationError 1000")
+        .hasPrefix(LoginStrings.authFailedBody),
+           "and it is appended to the body, not substituted for it")
+    expect(LoginStrings.authFailedCode.contains("{code}"),
+           "the code template has a slot to fill")
     expectEqual(LoginStrings.defaultDisplayName, "Biyahero", "the player's display name")
     expect(!LoginStrings.defaultDisplayName.isEmpty,
            "the display name is non-empty, so the profile avatar has an initial to draw")

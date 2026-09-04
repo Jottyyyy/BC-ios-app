@@ -103,10 +103,20 @@
    *
    * Home stays reachable so the offer has something to sell against, and Profile because it owns
    * Sign out: walling it strands a user who signed in with the wrong account, and Restore lives on
-   * the paywall they would then be unable to leave.                                              */
-  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1 };
+   * the paywall they would then be unable to leave.
+   *
+   * THREE things are open now, not two. The Analysis Board joined them: docs/subscription.md's
+   * free-vs-premium table has always listed it as free, the round-4 gate walled it anyway, and the
+   * table was the one telling the truth. It is also what a reviewer can evaluate when the
+   * subscription cannot be bought at all.
+   *
+   * And `locked()` has a third term: a store that could not be reached does not wall anybody. See
+   * `storeUnavailable` in premium.js.                                                            */
+  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1, analysis: 1 };
   function locked() {
-    return BiyaLogin.shared().isSignedIn() && !BiyaPremium.shared().isPremium();
+    return BiyaLogin.shared().isSignedIn()
+      && !BiyaPremium.shared().isPremium()
+      && !BiyaPremium.shared().storeUnavailable();
   }
   function isOpenRoute(id) { return !!OPEN_ROUTES[id]; }
 
@@ -737,9 +747,11 @@
       // Only the actions with a real destination in this demo are wired; the rest are the empty
       // callbacks the screen is designed around (§12).
       //
-      // The trial gate, twin of `PhoneApp.gated` in PhoneView.swift. `avatar` and `membership` are
-      // deliberately outside it: one leads to Sign out, the other IS the offer.
-      if (locked() && action !== 'avatar' && action !== 'membership') { goPaywall(); return; }
+      // The trial gate, twin of `PhoneApp.gated` in PhoneView.swift. `avatar`, `membership` and
+      // `analysis` are deliberately outside it: one leads to Sign out, one IS the offer, and the
+      // Analysis Board is free for everyone. The exemption list here must agree with OPEN_ROUTES
+      // above, or the render backstop bounces the user straight back out on the next paint.
+      if (locked() && action !== 'avatar' && action !== 'membership' && action !== 'analysis') { goPaywall(); return; }
       if (action === 'puzzles') { current = 'puzzles'; render(); }
       else if (action === 'playCoach') { current = 'play'; render(); }
       else if (action === 'analysis') { current = 'analysis'; render(); }

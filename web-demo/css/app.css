@@ -2221,8 +2221,27 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   margin-top: -2px;
 }
 
+/* The second way in: an OUTLINE, not a fill, and shorter than Apple's. The hierarchy is
+   deliberate — Apple's button is the offer, this one is the escape — but it is not hidden.
+   Mirror of `LoginGuestButton` in LoginScreen.swift. */
+.lg-guest {
+  display: block;
+  width: 100%;
+  margin-top: var(--lg-guest-gap);
+  height: var(--lg-guest-h);
+  border: var(--lg-guest-border-w) solid var(--lg-guest-border);
+  border-radius: var(--lg-btn-radius);
+  background: transparent;
+  color: var(--lg-guest-color);
+  font-family: inherit;
+  font-size: var(--lg-guest-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Dim on press, no scale — the same feedback `DimButtonStyle` gives in Swift. */
 .lg-apple:active,
+.lg-guest:active,
 .lg-legal-link:active,
 .lg-sheet-close:active {
   opacity: var(--lg-pressed);

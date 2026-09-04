@@ -82,6 +82,17 @@ final class PremiumStore: ObservableObject {
     /// Account that has already used the introductory offer is not offered it again — so this errs
     /// toward the plain "Subscribe" label rather than promising a trial that will not appear.
     @Published private(set) var trialEligible = false
+    /// How long the free trial is, **in days, read from the offer StoreKit returned** — not typed
+    /// into a sentence.
+    ///
+    /// The copy used to say "7-Day" inside the string itself, with nothing checking that against the
+    /// product. App Store Connect owns the real duration; if it is ever set to anything else, a
+    /// hardcoded 7 stops being a rounding error and becomes a Guideline 3.1.2 misrepresentation —
+    /// *"clearly indicate how long the free trial lasts and the price billed once the free trial is
+    /// over"*. Same rule the prices already follow, for the same reason.
+    ///
+    /// `Entitlement.trialDays` is the fallback, and the value before the store answers.
+    @Published private(set) var trialDays: Int = Entitlement.trialDays
     /// Set after a restore that found nothing, so the paywall can say so rather than doing nothing.
     @Published var lastRestoreFoundNothing = false
 
@@ -94,6 +105,14 @@ final class PremiumStore: ObservableObject {
     static let usageKey = "biya.store.usage.v1"
 
     var isPremium: Bool { access.isPremium }
+
+    /// The App Store was asked and had nothing to sell — a wrong product ID, an in-app purchase not
+    /// yet approved, or no network on a device with no cached entitlement.
+    ///
+    /// The shell reads this to decide NOT to wall anybody (`PhoneApp.locked`). A person who cannot
+    /// reach the store cannot buy, and a paywall in front of someone who cannot buy is just a dead
+    /// app. `.idle` and `.loading` are deliberately not this: they mean "not asked yet".
+    var storeUnavailable: Bool { loadState == .failed }
     var isInTrial: Bool { if case .premium(let t) = access { return t } else { return false } }
     var graceDaysLeft: Int { if case .grace(let d) = access { return d } else { return 0 } }
     var expiresAt: Date? {
@@ -158,9 +177,41 @@ final class PremiumStore: ObservableObject {
                 selectedPlan = first
             }
             trialEligible = await Self.introOfferEligible(among: byPlan.values)
+            trialDays = Self.trialDays(among: byPlan.values) ?? Entitlement.trialDays
         } catch {
             loadState = .failed
         }
+    }
+
+    /// The introductory offer's length in days, read off the product.
+    ///
+    /// Nil when no tier carries a free trial, in which case the caller keeps `Entitlement.trialDays`
+    /// — the copy still has a number to put in the sentence, and `trialEligible` is what decides
+    /// whether that sentence is shown at all.
+    private static func trialDays(among products: some Collection<Product>) -> Int? {
+        for product in products {
+            guard let offer = product.subscription?.introductoryOffer,
+                  offer.paymentMode == .freeTrial,
+                  let days = days(offer.period) else { continue }
+            return days
+        }
+        return nil
+    }
+
+    /// A `SubscriptionPeriod` as whole days. The month and year figures are Apple's own billing
+    /// conventions, and they only ever appear here — a trial is configured in days or weeks in
+    /// practice, and `P1W` is what `ios/Biyaherong.storekit` declares.
+    private static func days(_ period: Product.SubscriptionPeriod) -> Int? {
+        let perUnit: Int
+        switch period.unit {
+        case .day: perUnit = 1
+        case .week: perUnit = 7
+        case .month: perUnit = 30
+        case .year: perUnit = 365
+        @unknown default: return nil
+        }
+        let total = perUnit * period.value
+        return total > 0 ? total : nil
     }
 
     /// Is this Apple Account eligible for the introductory offer?

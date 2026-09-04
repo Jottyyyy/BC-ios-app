@@ -239,6 +239,14 @@ var BiyaPremium = (function () {
       expiresAt: function () { return snap.expiresAtMs; },
       willAutoRenew: function () { return snap.willAutoRenew; },
 
+      /* The App Store was asked and had nothing to sell. The shell reads this to decide NOT to
+       * wall anybody: someone who cannot reach the store cannot buy, and a paywall in front of
+       * someone who cannot buy is a dead app, not a business model.
+       *
+       * The Swift asks `loadState == .failed`. A browser has no StoreKit at all, so `?storefail`
+       * IS the failed load here — the same switch that makes the paywall draw its failure card. */
+      storeUnavailable: function () { return storeFailRequested(); },
+
       /** Applies what a refresh saw. The clock floor only ever moves forward. */
       apply: function (next, signedAtMs) {
         snap = Object.assign(emptySnapshot(), next);
