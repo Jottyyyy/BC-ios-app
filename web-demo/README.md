@@ -94,6 +94,26 @@ Home ang app root — lahat ng iba ay bubukas mula sa isang tile at may back but
 
 ---
 
+## 🔓 Bago (2026-09-04): opsyonal na ang sign in, libre na ang Analysis Board
+
+Na-reject ang **1.0.7 (51)** ng Apple noong Sept 2 dahil nag-error daw ang login. Ang error na iyon
+ay **galing mismo sa Apple**, hindi sa app natin — pero fatal ito dahil walang ibang daan papasok.
+Tatlong bagay ang binago, at makikita mo silang lahat dito sa browser:
+
+1. **"Continue without an account"** sa unang screen, sa ilalim ng Apple button. Pindutin mo iyon at
+   diretso ka na sa Home. Sa Profile, ang "Signed in with" ay magsasabing **No account**.
+2. **Libre na ang Analysis Board para sa lahat**, bayad man o hindi. Ilagay mo ang **Subscription**
+   picker sa **Free**: lahat ng tile ay pupunta sa paywall — **maliban** sa Analysis, na bubukas.
+   (Nananatiling 3 kada araw ang Game Review para sa libre.)
+3. **Kapag hindi maabot ang App Store, walang hinaharangan.** Buksan ang `index.html?storefail` —
+   sa halip na sarado ang app, bubukas ang free tier.
+
+Nakalagay na rin ngayon ang **7-day free trial** sa lahat ng lock card at modal: kung gaano katagal
+ang libre, magkano pagkatapos, at kung kailan ka sisingilin. Habang nasa trial ka, sinasabi ng plan
+card ang **eksaktong petsa** ng unang singil.
+
+---
+
 ## 🔧 Saan baguhin ang bawat bagay
 
 | Gusto mong baguhin | I-edit ang file |

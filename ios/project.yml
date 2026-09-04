@@ -76,20 +76,29 @@ targets:
         # 38-42 — hence 1.0.6, which is the first version to carry a REAL Sign in with Apple
         # (builds 38-42 all shipped the simulated button, which is why they never needed the
         # com.apple.developer.applesignin entitlement and this one does).
-        MARKETING_VERSION: "1.0.6"
+        #
+        # 1.0.7 (51) was SUBMITTED AND REJECTED on 2026-09-02 under Guideline 2.1(a). 1.0.8 is the
+        # answer to it: sign-in is optional, the Analysis Board is free, and a store that cannot be
+        # reached no longer walls the app. See docs/app-review-response.md.
+        MARKETING_VERSION: "1.0.8"
         # Build number, unique per version string. Version 1.0.4 already reached build 37 in
         # App Store Connect, so continuing at 38 keeps the sequence monotonic across the whole
         # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
         # CI overwrites it with $BUILD_NUMBER (see codemagic.yaml).
         #
         # KEEP THIS IN SYNC WITH WHAT WAS ACTUALLY DELIVERED. Builds 38-42 are consumed in App
-        # Store Connect, all under 1.0.5; 42 shipped 2026-08-17. 43 is the first build of 1.0.6
-        # and has NOT been delivered yet. The number keeps climbing across version trains rather
-        # than resetting to 1, which is what the paragraph above means by monotonic. Earlier uploads each passed
-        # CURRENT_PROJECT_VERSION on the xcodebuild command line and left this line reading "38",
-        # so the file said 38 while the record was already at 40 — the next person to trust it
-        # would have been rejected as a duplicate. The next manual upload must use 44 or higher.
-        CURRENT_PROJECT_VERSION: "47"
+        # Store Connect, all under 1.0.5; 42 shipped 2026-08-17. The number keeps climbing across
+        # version trains rather than resetting to 1, which is what the paragraph above means by
+        # monotonic. Earlier uploads each passed CURRENT_PROJECT_VERSION on the xcodebuild command
+        # line and left this line reading "38", so the file said 38 while the record was already at
+        # 40 — the next person to trust it would have been rejected as a duplicate.
+        #
+        # AND IT DRIFTED AGAIN, exactly as that paragraph warned. This line read "47" while App
+        # Review was looking at **1.0.7 (51)**: builds 48-51 and the 1.0.7 version bump happened
+        # outside this history, so the file understated the record by four. 52 is therefore the
+        # floor, not a suggestion — a lower number is refused as a duplicate. `ship_testflight.sh`
+        # and CI stamp this themselves; do not bump it by hand for those paths.
+        CURRENT_PROJECT_VERSION: "52"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone

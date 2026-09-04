@@ -6,6 +6,17 @@ opening book, and PGN import/export. **It makes no network requests at all** —
 screen did HTTP analysis, HTTP game review and a Lichess masters lookup; all three are replaced by code and
 data that ship inside the app.
 
+**It is free for everyone, subscriber or not** — the one Home tile with no gate on it. `PhoneView`'s
+`onAnalysis` is not wrapped in `gated`, and `analysis` is in the browser's `OPEN_ROUTES`; both halves
+are required, and `tools/qa/trial_gate_check.js` asserts both, because exempting the tile without
+exempting the route would let a user in and then have the render backstop throw them out on the next
+paint. `docs/subscription.md`'s free-tier table had listed the board as free since the paywall
+landed — the round-4 trial gate walled it anyway, and the table was the one telling the truth.
+
+The **Game Review** inside it is the exception, and keeps the free tier's 3-per-day allowance
+(`PremiumStore.consumeReview()`); its cap overlay now names the trial and the price, like every other
+upsell. See [`subscription.md`](subscription.md).
+
 Ported from `app/(app)/user/analysis-board/board.tsx` (6,865 lines) in the sibling
 `../BYAHERONG-COACH-FRONTEND` repo — **from its real StyleSheet numbers, not from prose** (see *Extract,
 don't transcribe* below).

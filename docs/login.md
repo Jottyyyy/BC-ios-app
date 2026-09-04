@@ -1,7 +1,8 @@
 # login — the app's first screen
 
 A dark-navy, **never-scrolling**, single-viewport gate: the Biyaherong brand mark under a gold ring and
-glow, the app name and tagline, one **Continue with Apple** button, and a bundled Privacy · Terms sheet.
+glow, the app name and tagline, a **Continue with Apple** button with **Continue without an account**
+under it, and a bundled Privacy · Terms sheet.
 Faint chess pieces drift behind it. It is the first thing the app shows, and after the first sign-in it is
 never shown again until the user signs out from Profile.
 
@@ -13,10 +14,19 @@ App Store rejection. It now raises Apple's own sheet through `ASAuthorizationCon
 where it was. `LoginStore` did not change at all — the store, the persistence and the fail-closed read were
 already the right shape.
 
-Two consequences. Apple's servers answer the sign-in, so **the first launch needs a connection**, and the
+Two consequences. Apple's servers answer the sign-in, so **that sign-in needs a connection**, and the
 in-app privacy sheet was reworded from "100% offline" to say so. And a real Sign in with Apple obliges
 in-app **account deletion** under Guideline 5.1.1(v), which ships with it. Both are covered in
 [`account.md`](account.md).
+
+**And it is OPTIONAL.** Under the Apple button sits **Continue without an account** — an outline
+button, 44pt, quieter but never hidden — and the sign-in failure alert offers the same action as its
+first button. Build **1.0.7 (51)** was rejected under Guideline 2.1(a) when Apple's own sheet failed
+on the reviewer's device with an alert this repo does not contain, and the app had no other way in.
+The same guideline that obliges account deletion also says an app with no significant account-based
+features must not require a login at all, and this one has no account server. So *the first launch
+no longer needs a connection either.* See [`account.md`](account.md) and
+[`app-review-response.md`](app-review-response.md).
 
 The **login feature** still makes no network call of its own — `replay_login.js` fails the build on a
 `URLSession` or any URL in these files — but the **app** no longer can claim that: the Opening Tree's
