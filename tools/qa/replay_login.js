@@ -224,6 +224,8 @@ function run() {
     + swNum(metrics, 'LoginLayout', 'titleTaglineGap')
     + Math.round(swNum(metrics, 'LoginType', 'taglineSize') * swNum(metrics, 'LoginType', 'lineHeightRatio'))
     + swNum(metrics, 'LoginLayout', 'buttonHeight')
+    + swNum(metrics, 'LoginLayout', 'guestTopGap')
+    + swNum(metrics, 'LoginLayout', 'guestButtonHeight')
     + swNum(metrics, 'LoginLayout', 'reassureTopGap')
     + Math.round(swNum(metrics, 'LoginType', 'reassureSize') * swNum(metrics, 'LoginType', 'lineHeightRatio'))
     + swNum(metrics, 'LoginLayout', 'footerTopGap')
@@ -269,8 +271,24 @@ function run() {
   eq(L.SESSION.storageKey, swStr(metrics, 'LoginSession', 'storageKey'), 'LoginSession.storageKey');
   eq(L.SESSION.appleProvider, swStr(metrics, 'LoginSession', 'appleProvider'),
     'LoginSession.appleProvider');
-  expect(/static let providers:\s*\[String\]\s*=\s*\[appleProvider\]/.test(code(metrics)),
-    'the Swift provider list is exactly [appleProvider], like the JS');
+  eq(L.SESSION.guestProvider, swStr(metrics, 'LoginSession', 'guestProvider'),
+    'LoginSession.guestProvider');
+  expect(/static let providers:\s*\[String\]\s*=\s*\[appleProvider, guestProvider\]/
+    .test(code(metrics)),
+  'the Swift provider list is exactly [appleProvider, guestProvider], like the JS');
+  eq(L.SESSION.providers.join(','), 'apple,guest',
+    'and the JS list is the same two, in the same order');
+  // Both are real sessions. The guest one is not a bypass of the gate and not a third state: the
+  // predicate accepts it, so everything downstream — the shell, Profile, Sign out — is unchanged.
+  expect(L.isSignedIn(L.SESSION.guestProvider),
+    'a stored "guest" reads as signed in, like a stored "apple"');
+  expect(!L.isSignedIn('anything-else'), 'and anything else still fails closed');
+  eq(L.providerLabel(L.SESSION.guestProvider),
+    swStr(metrics, 'LoginStrings', 'guestProviderLabel'),
+    'a guest session shows its own Profile label, not the signed-out em dash');
+  expect(/guard isSignedIn\(raw\) else \{ return LoginStrings\.noProviderLabel \}/
+    .test(code(metrics)),
+  'and the Swift label function branches the same way: signed out first, then which provider');
   const signIn = funcBody(store, 'signIn') || '';
   const signOut = funcBody(store, 'signOut') || '';
   expect(/guard LoginSession\.isSignedIn\(provider\)/.test(code(signIn)),
@@ -298,16 +316,74 @@ function run() {
 
   // 9. Copy. The two long legal bodies are compared in full — they are the likeliest thing in the
   //    feature to be edited in one language only.
-  ['title', 'tagline', 'appleButton', 'reassurance', 'privacy', 'terms', 'legalSeparator',
-    'defaultDisplayName', 'appleProviderLabel', 'noProviderLabel', 'accountCard', 'signedInWith',
-    'signOut', 'sheetClose', 'privacyTitle', 'termsTitle', 'authFailed',
+  ['title', 'tagline', 'appleButton', 'guestButton', 'reassurance', 'privacy', 'terms',
+    'legalSeparator', 'defaultDisplayName', 'appleProviderLabel', 'guestProviderLabel',
+    'noProviderLabel', 'accountCard', 'signedInWith',
+    'signOut', 'sheetClose', 'privacyTitle', 'termsTitle', 'authFailed', 'authFailedCode',
     'deleteAccount', 'deleteTitle', 'deleteConfirm', 'deleteCancel'].forEach((k) => {
     eq(L.STRINGS[k], swStr(metrics, 'LoginStrings', k), 'LoginStrings.' + k);
   });
-  ['privacyBody', 'termsBody', 'deleteBody'].forEach((k) => {
+  ['privacyBody', 'termsBody', 'deleteBody', 'authFailedBody'].forEach((k) => {
     eq(L.STRINGS[k], swMultiline(metrics, 'LoginStrings', k), 'LoginStrings.' + k);
   });
   eq(L.STRINGS.appleButton, 'Continue with Apple', "Apple's required button wording, verbatim");
+
+  // 9a. THE WAY IN THAT CANNOT FAIL.
+  //
+  //     Build 1.0.7 (51) was rejected under Guideline 2.1(a) — "the app displays error upon login".
+  //     The alert App Review screenshotted, "Could Not Connect", appears NOWHERE in this repo: it is
+  //     Apple's own, from a sign-in service running in another process against Apple's servers. It
+  //     was fatal only because there was no second door, and requiring the first one was a 5.1.1(v)
+  //     problem in its own right — "if your app doesn't include significant account-based features,
+  //     let people use it without a login", and this app has an account server nowhere.
+  //
+  //     So: the door exists, it is on the screen and not only in the failure alert, and the alert
+  //     leads to it. Asserted in both languages, because a mirror that lost it would leave the
+  //     browser looking fine while the shipped app stayed walled.
+  {
+    const scr = code(screen);
+    expect(/struct LoginGuestButton: View/.test(scr), 'the Swift has a guest button at all');
+    expect(/LoginGuestButton\(action: \{ continueWithoutAccount\(\) \}\)/.test(scr),
+      'and the login screen draws it, below Apple\'s — not buried in a menu');
+    expect(/onSignedIn\(LoginSession\.guestProvider\)/.test(scr),
+      'it opens a real guest session rather than skipping the gate');
+    expect(/Button\(LoginStrings\.guestButton\) \{[\s\S]{0,120}continueWithoutAccount\(\)/.test(scr),
+      'and the FAILURE ALERT offers the same way out — build 51\'s alert had one button and it led '
+      + 'back to the same wall');
+    expect(/message: \{[\s\S]{0,80}Text\(appleAuth\.failureMessage\)/.test(scr),
+      'the alert explains itself, and carries the code Apple gave us');
+    const guestJs = code(fs.readFileSync(path.join(JS, 'login.js'), 'utf8'));
+    expect(/el\('button', 'lg-guest'/.test(guestJs), 'the browser draws the guest button too');
+    expect(/shared\(\)\.signIn\(SESSION\.guestProvider\)/.test(guestJs),
+      'and signs in with the same provider');
+
+    // The message, composed in the shared decision half so both languages say the same sentence.
+    eq(L.authFailureMessage(null), L.STRINGS.authFailedBody, 'no code from Apple: the body alone');
+    eq(L.authFailureMessage('AuthorizationError 1000'),
+      L.STRINGS.authFailedBody + '\n\n'
+        + L.STRINGS.authFailedCode.replace('{code}', 'AuthorizationError 1000'),
+      'a code is appended, never substituted for the body');
+    expect(/static func failureMessage\(code: String\?\) -> String/.test(code(metrics)),
+      'the Swift composes it in LoginAuth, beside the rest of the decision half');
+    expect(/guard let code, !code\.isEmpty else \{ return LoginStrings\.authFailedBody \}/
+      .test(code(metrics)), 'with the same empty-code branch');
+
+    // The diagnostic itself: build 51 could not be diagnosed because the delegate read `.canceled`
+    // and discarded the NSError. A cancel still carries no code — it is not a failure.
+    const aa = code(read(UI, 'LoginAppleAuth.swift'));
+    expect(/@Published private\(set\) var failureCode: String\?/.test(aa),
+      'LoginAppleAuth keeps the code Apple reported');
+    expect(/let ns = error as NSError/.test(aa),
+      'read from the NSError it was handed, which is exactly what used to be thrown away');
+    expect(/self\.failureCode = cancelled \? nil : detail/.test(aa),
+      'and a CANCEL carries none — backing out of Apple\'s sheet is not a fault');
+    // The presentation anchor. `ASPresentationAnchor()` is a UIWindow with no windowScene, so it is
+    // a last resort and not a default — App Review tested 1.0.7 on an iPad.
+    expect(/activationState == \.foregroundActive/.test(aa),
+      'the anchor prefers a window from a FOREGROUND ACTIVE scene');
+    expect(/\?\? ASPresentationAnchor\(\)/.test(aa) && (aa.match(/\?\?/g) || []).length >= 4,
+      'and the detached window is the last rung of a ladder, not the only fallback');
+  }
 
   // 9b. ACCOUNT DELETION's two lists. Guideline 5.1.1(v) needs the erase list; Apple's rule that
   //     deleting an account must not forfeit a paid subscription needs the KEEP list, and that one
@@ -352,7 +428,7 @@ function run() {
     });
 
     // The browser mirrors it as a MODAL, not a route: trial_gate_check.js asserts OPEN_ROUTES is
-    // exactly home/login/paywall/profile, and a delete-account route would break that.
+    // exactly home/login/paywall/profile/analysis, and a delete-account route would break that.
     const appJs = code(fs.readFileSync(path.join(JS, 'app.js'), 'utf8'));
     expect(/function confirmDeleteAccount\(\)/.test(appJs), 'the browser confirms before erasing');
     expect(/function eraseAccountData\(\)/.test(appJs), 'and has an eraser driven by ACCOUNT_DATA');
@@ -588,7 +664,7 @@ function run() {
 
   const css = fs.readFileSync(path.join(ROOT, 'web-demo', 'css', 'app.css'), 'utf8');
   expect(/\/\* ---- Login/.test(css), 'app.css has a Login section');
-  ['.lg-view', '.lg-logo', '.lg-apple', '.lg-sheet-card', '.lg-signout'].forEach((sel) => {
+  ['.lg-view', '.lg-logo', '.lg-apple', '.lg-guest', '.lg-sheet-card', '.lg-signout'].forEach((sel) => {
     expect(css.indexOf('\n' + sel) >= 0 || css.indexOf(sel + ' {') >= 0,
       'app.css styles ' + sel);
   });

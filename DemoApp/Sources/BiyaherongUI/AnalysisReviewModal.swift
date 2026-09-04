@@ -29,6 +29,9 @@ struct AnalysisReviewModal: View {
     let onClose: () -> Void
     /// Shown only in the `.capped` state. Defaulted, so every existing call site is unchanged.
     var onUpgrade: (() -> Void)?
+    /// The subscription's terms, for the `.capped` state — `PremiumStore.offerNote`, composed by
+    /// the host. This overlay is an upsell and named neither the trial nor the price.
+    var offerNote: String?
 
     var body: some View {
         GeometryReader { geo in
@@ -278,6 +281,14 @@ struct AnalysisReviewModal: View {
                                                          style: .continuous))
                 }
                 .buttonStyle(.plain)
+                // Under the button, the terms of what it starts — the same sentence the paywall's
+                // CTA and every other lock card carry.
+                if let offerNote {
+                    Text(offerNote)
+                        .font(Theme.nunito(AnalysisReview.hintSize))
+                        .foregroundStyle(AnalysisReview.hintColor)
+                        .multilineTextAlignment(.center)
+                }
             }
             Button(action: onClose) {
                 Text("Close")

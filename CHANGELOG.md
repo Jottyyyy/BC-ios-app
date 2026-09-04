@@ -9,6 +9,103 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-04 (fixed) — App Review could not get into the app, and three separate things made that possible
+
+Build **1.0.7 (51)** was rejected on 2026-09-02 under **Guideline 2.1(a)** — *"The app displays
+error upon login."* iPhone 17 Pro Max and iPad Air 11-inch (M3), iOS/iPadOS 26.6, connection active.
+The screenshot shows **"Could Not Connect / Make sure you are connected to Wi-Fi or your mobile
+network."** over Apple's own Sign in with Apple sheet.
+
+**That alert is not ours, and three independent things say so.** The string exists nowhere in this
+repo — no Swift, no JS, and no `.strings`/`.xcstrings`/`.lproj` files at all. Every string on the
+login path is Taglish (ours is *"Hindi natuloy ang sign in. Subukan ulit."*). The whole app has two
+`.alert(` call sites and no `UIAlertController`, one of which is the delete-account confirm. And
+`replay_login.js` §10 fails the build if any login file contains the token `URLSession`, so the
+login screen cannot open a connection and therefore cannot report one failing. It is
+AuthenticationServices reporting a failure from Apple's identity service, which runs in another
+process — [widely reported](https://developer.apple.com/forums/thread/808187) and
+[unreproducible](https://developer.apple.com/forums/thread/804240) on iOS 26 review devices,
+including on the same iPad Air.
+
+Apple's side is not ours to fix. **The dependence on it was, and so were two others.**
+
+**1 · Signing in is optional.** `LoginSession.guestProvider` is a *real persisted session*, in
+`providers` beside `"apple"`, so nothing downstream learns a third state — the shell finds itself
+signed in, Profile shows "No account", Sign out still works. `LoginGuestButton` is on the screen,
+under Apple's, and **the failure alert's first button is the same door**; build 51's alert had one
+button and it led back to the same wall.
+
+This is not a workaround dressed as a feature. **Guideline 5.1.1(v)** says an app with no significant
+account-based features must let people in without a login, and this app has no account server:
+`signIn(_:)` writes one string to `UserDefaults`. The sheet was gating a local flag. A consequence
+worth naming — **the first launch no longer needs a connection**, and the privacy sheet was reworded
+in both languages to say sign-in is optional.
+
+Two hardenings shipped with it, in case any part of it *was* ours. `presentationAnchor` now prefers a
+window from a `.foregroundActive` scene; the old fallback, `ASPresentationAnchor()`, is a `UIWindow`
+with **no `windowScene`** and was one `isKeyWindow` miss from being used — on an iPad. And
+`didCompleteWithError` no longer discards the `NSError`: it tested `.canceled` and threw the rest
+away, which is exactly why this could not be diagnosed. The alert carries the domain and code now. A
+cancel still carries none.
+
+**2 · The Analysis Board is free for everyone.** `docs/subscription.md`'s free-tier table has listed
+it as free since the paywall landed; the round-4 trial gate walled it anyway, so the table and the
+app disagreed and the table was right. Client's decision. It also means a reviewer who cannot buy
+anything still has the app's most complex screen — board, embedded Stockfish, move tree, ECO book,
+PGN, position editor — working offline with no account. **Game Review keeps its 3/day free
+allowance**; `reviewGate` is untouched.
+
+**3 · A store that will not load walls nobody.** `PhoneApp.locked` gained `!premium.storeUnavailable`
+(`loadState == .failed`), and `PhoneApp` now asks the store at launch, since `loadState` cannot leave
+`.idle` until somebody asks. A wrong product ID or an unapproved IAP used to mean "Store Unavailable"
+with every screen shut behind it — what `app-store-handoff.md` called *"a rejection with no code
+involved"*, which stopped being hypothetical. Not a hole: entitlements resolve from the device's own
+transaction cache, so a subscriber is unaffected; a non-subscriber drops to the **free tier**, every
+`DailyLimits` cap intact.
+
+**And the 7-day trial is said out loud now** — the client's other ask: *"yung 7 days free trial
+ipakita mo sa mga modal tsaka palang sila madedeckan kapag naka 7 days na sila para alam nila."*
+
+It was said in exactly two strings, both on the paywall. The lock card behind every daily cap, the
+Game Review cap in both places it appears, and the Tutorial Videos paywall all said "Premium Feature"
+and "Subscribe Now" and nothing about money. `PaywallStrings.offerNote(...)` composes it once — how
+long, what it converts to, that it can be cancelled — and `PremiumStore.offerNote` hands it to all
+five. The legal card names the offer. And because a trial auto-renews, `willAutoRenew` alone called
+its end "Next Renewal Date"; there are three states now, and beside the date: *"You have not been
+charged yet. Billing starts on {date}."*
+
+**The length comes off the product.** `PremiumStore.trialDays` reads `introductoryOffer.period`
+(`P1W` → 7), falling back to `Entitlement.trialDays`. A 7 typed inside a sentence cannot follow App
+Store Connect, and copy that outlives the product it describes is a Guideline 3.1.2
+misrepresentation rather than a typo — the same rule prices have always followed. That also killed a
+`?? ""` which rendered *"7 days free, then  per month."* whenever a price had not resolved, on the
+screen App Review reads most carefully.
+
+The plan cards are deliberately untouched: Apple requires the billed amount to be *"the most
+prominent pricing element"* with trial text *"in a subordinate position and size"*, and a badge per
+row would also imply two trials when eligibility belongs to the subscription **group**.
+
+**`web-demo/` updated** — the guest button and `.lg-guest`, the third term in `locked()`, `analysis`
+in `OPEN_ROUTES`, the offer sentence on the lock card (`.pw-lock-offer` reuses two custom properties
+that were already set and read, so no new `--pw-*`), the disclosure line and the in-trial rows.
+
+**Shipping.** `MARKETING_VERSION` → **1.0.8**, `CURRENT_PROJECT_VERSION` → **52**. The file said
+`1.0.6 (47)` while App Review was looking at `1.0.7 (51)`: builds 48–51 happened outside this
+history, exactly the drift the comment beside that line already warned about. New
+**`docs/app-review-response.md`** carries the reply to paste into App Store Connect and the App
+Review Notes for the resubmission — no demo account is needed any more.
+
+**Gates.** `js_goldens.js` green at **35,937** assertions across 86 suites, up from 35,814, and every
+suite grew rather than relaxing: `replay_login.js` 488 → 532 (the guest door in both languages, the
+failure-message composition, the anchor ladder), `trial_gate_check.js` 39 → 55 (the three-term
+predicate, the new open set, and that the Analysis Board is exempt in **both** the tile handler and
+`OPEN_ROUTES` — either half alone is worse than neither), `replay_premium.js` 585 → 617 (the trial
+length as a parameter, read from a *free*-trial offer, on all five upsell surfaces).
+`PaywallMetricsCheck.swift` and `premium.js selfTest` both stopped asserting the literal
+`"Start Your 7-Day Free Trial"` and now assert the composition that produces it. No ported algorithm
+changed, so `ParityRunner` is untouched.
+
+
 ### 2026-08-31 (docs) — The App Store submission checklist lives in the repo now
 
 The handoff for whoever does the submission was a shared link, which turned out to be the wrong

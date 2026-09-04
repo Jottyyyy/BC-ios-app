@@ -6,10 +6,42 @@ does.
 
 ## What it does
 
-**Sign in with Apple is real.** It used to be simulated — `LoginStore.signIn(_:)` wrote a string and
-published, with no `AuthenticationServices` call anywhere. The repo knew: `PORTING_NOTES.md` recorded
-it as *"an App Store rejection… a development state, not a shippable one."* It now raises Apple's own
-sheet through `ASAuthorizationController`, and only a genuine success opens the session.
+**Sign in with Apple is real, and it is OPTIONAL.** It used to be simulated — `LoginStore.signIn(_:)`
+wrote a string and published, with no `AuthenticationServices` call anywhere. The repo knew:
+`PORTING_NOTES.md` recorded it as *"an App Store rejection… a development state, not a shippable
+one."* It now raises Apple's own sheet through `ASAuthorizationController`, and only a genuine
+success opens an Apple session.
+
+### The second door, and why it had to exist
+
+Build **1.0.7 (51)** was rejected under **Guideline 2.1(a)** — *"The app displays error upon login"* —
+with a screenshot of **"Could Not Connect / Make sure you are connected to Wi-Fi or your mobile
+network."** over Apple's own sheet. That string is nowhere in this repo (ours are Taglish, the app has
+two `.alert(` sites, and `replay_login.js` bans `URLSession` in every login file), so it is AuthKit
+reporting a failure from Apple's identity service — a widely reported, unreproducible one on iOS 26
+review devices. Full account, and the reply to Apple: [`app-review-response.md`](app-review-response.md).
+
+Apple's side is not ours to fix. The dependence on it was:
+
+- `LoginSession.guestProvider` (`"guest"`) is a **real persisted session**, in `providers` beside
+  `"apple"`, so nothing downstream learns a third state — the shell finds itself signed in, Profile
+  shows **No account**, Sign out still works, and one tap comes back to the gate.
+- `LoginGuestButton` sits **on the screen**, under Apple's: an outline rather than a fill, 44pt
+  rather than 54, so it is quieter but never hidden.
+- **The failure alert's first button is that same door.** Build 51's alert had one button and it led
+  back to the same wall.
+
+It is also what Guideline 5.1.1(v) asks for on its own terms — *"if your app doesn't include
+significant account-based features, let people use it without a login"* — and this app has no
+account server at all.
+
+**Two hardenings shipped with it.** `LoginAppleAuth.presentationAnchor` now prefers a window from a
+`.foregroundActive` scene; the old fallback, `ASPresentationAnchor()`, is a `UIWindow` with **no
+`windowScene`** and was one `isKeyWindow` miss from being used — on an iPad, which is what App Review
+tested. And `didCompleteWithError` no longer discards the `NSError`: it read `.canceled` and threw
+the rest away, which is exactly why the rejection could not be diagnosed. `LoginAuth.failureMessage`
+appends the domain and code, so the next screenshot carries the answer. A **cancel** still carries
+none — backing out of Apple's sheet is not a fault.
 
 **It asks for no scopes.** `requestedScopes = []`, deliberately. The app shows
 `LoginStrings.defaultDisplayName` and persists nothing but the provider string, so a name or an email
@@ -120,11 +152,11 @@ that sent nothing, and nothing in this repo can check them. See `PORTING_NOTES.m
 
 | File | What it holds |
 |---|---|
-| `DemoApp/…/LoginAppleAuth.swift` | the real `ASAuthorizationController` call — **the only file in the package that imports `AuthenticationServices`** |
+| `DemoApp/…/LoginAppleAuth.swift` | the real `ASAuthorizationController` call — **the only file in the package that imports `AuthenticationServices`** — plus the anchor ladder and the captured error code |
 | `DemoApp/…/AccountDeletion.swift` | the eraser. Deliberately does **not** import StoreKit |
 | `DemoApp/…/LoginMetrics.swift` | the pure layer: `LoginAuth` (the state machine), `LoginAccountData` (both lists), the copy |
 | `DemoApp/…/LoginStore.swift` | unchanged — the session, the persistence and the fail-closed read |
-| `DemoApp/…/LoginScreen.swift` | raises the request; the failure alert |
+| `DemoApp/…/LoginScreen.swift` | raises the request; `LoginGuestButton`; the failure alert and its way out |
 | `DemoApp/…/PhoneView.swift` | `ProfilePhone`'s Account card and the confirm |
 | `ios/Biyaherong.entitlements` | `com.apple.developer.applesignin` |
 | `DemoApp/…/BuildMode.swift` | `BiyaherongBuild.isTestBuild` — the switch, defaulting to `false` |
@@ -143,6 +175,11 @@ one.** `replay_login.js` compares the full 12-entry transition table, then asser
 explicitly: the Swift file has the real call, no other Swift file imports the framework (an
 exhaustive directory scan), the browser has neither, and the browser carries a `SIMULATED_AUTH` flag
 that the Swift must not.
+
+**The guest door needed no new state in that table** — it bypasses the Apple state machine entirely,
+which is why adding it left all twelve transitions untouched. What the gate does compare is the
+provider list, the label branch, and `LoginAuth.failureMessage(code:)`, whose one decision (append
+the code only when Apple gave one) is composed in the shared half rather than at each call site.
 
 That gate previously **banned** `ASAuthorization` outright — it was what kept the simulation honest.
 It is an allowlist of one now. The networking bans were not weakened: they still apply to every login

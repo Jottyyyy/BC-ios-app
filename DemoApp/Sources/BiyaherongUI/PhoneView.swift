@@ -119,7 +119,22 @@ struct PhoneApp: View {
     /// `isSignedIn` is half of it because the login gate is the ZStack's LAST sibling and covers
     /// the paywall: raising a paywall behind the login screen would be invisible, and would put a
     /// second wall in front of the first one.
-    private var locked: Bool { loginStore.isSignedIn && !premium.isPremium }
+    /// …unless the App Store could not be reached at all, in which case nothing is walled.
+    ///
+    /// `loadState` is `.failed` only after `Product.products(for:)` has actually run and come back
+    /// empty — a wrong product ID, an in-app purchase not yet approved, or no network on a device
+    /// with no cached entitlement. In every one of those cases the user CANNOT buy, and walling
+    /// them is not a paywall, it is a dead app: `docs/app-store-handoff.md` calls that outcome
+    /// "a rejection with no code involved", and it very nearly was one.
+    ///
+    /// `.idle` and `.loading` deliberately still lock, so the app never flickers open at launch
+    /// while the store is being asked. And this costs the product nothing real: entitlements are
+    /// read from the device's own transaction cache and resolve in Airplane Mode, so a genuine
+    /// subscriber is unaffected, while a non-subscriber lands on the FREE TIER — every
+    /// `DailyLimits` cap and every per-feature gate still in force — rather than on everything.
+    private var locked: Bool {
+        loginStore.isSignedIn && !premium.isPremium && !premium.storeUnavailable
+    }
 
     /// The two destinations a locked user keeps. **Home**, so the offer has something to sell
     /// against; and **Profile**, because it owns Sign out — walling it strands a user who signed in
@@ -207,7 +222,8 @@ struct PhoneApp: View {
                         #endif
                         AnalysisBoardScreen(onClose: { showAnalysis = false },
                                             reviewGate: { premium.consumeReview() },
-                                            onPaywall: { openPaywall() })
+                                            onPaywall: { openPaywall() },
+                                            offerNote: premium.offerNote)
                     }
                     .background(AnalysisPalette.screenBg)
                     .transition(.move(edge: .bottom))
@@ -295,7 +311,7 @@ struct PhoneApp: View {
                         #if os(macOS)
                         statusBar
                         #endif
-                        LoginScreen(onSignedIn: { signIn() })
+                        LoginScreen(onSignedIn: { provider in signIn(provider) })
                     }
                     .background(LoginPalette.screenBg)
                     .transition(.opacity)
@@ -309,6 +325,12 @@ struct PhoneApp: View {
         .task {
             premium.startObserving()
             await premium.refresh()
+            // Asked at LAUNCH, not only when the paywall opens. `locked` reads `storeUnavailable`,
+            // which is `loadState == .failed`, and `loadState` cannot leave `.idle` until somebody
+            // asks — so without this line the "don't wall a user who cannot buy" rule would only
+            // take effect after they had already been walled and pushed to the paywall once.
+            // It also makes the paywall's prices appear instantly instead of after a spinner.
+            await premium.load()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -324,10 +346,16 @@ struct PhoneApp: View {
         withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showPaywall = false }
     }
 
-    /// The simulated sign-in, animated here rather than inside `LoginScreen` — the screen raises the
+    /// Opens the session, animated here rather than inside `LoginScreen` — the screen raises the
     /// event, the host owns the transition, the same split every other route on this shell uses.
-    private func signIn() {
-        withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { loginStore.signIn() }
+    ///
+    /// The provider comes from the screen because there are two now: Apple's, and the guest one that
+    /// Guideline 5.1.1(v) requires of an app with no account-based features. Nothing below this line
+    /// distinguishes them — a session is a session.
+    private func signIn(_ provider: String) {
+        withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) {
+            loginStore.signIn(provider)
+        }
     }
 
     /// **Every callback now has a destination.** `onVideos` was the last one left; Tutorial Videos
@@ -356,7 +384,17 @@ struct PhoneApp: View {
                            showPuzzles = true
                        }
                    },
-                   onAnalysis: gated {
+                   // NOT gated, and the only Home tile that is not. `docs/subscription.md`'s
+                   // free-vs-premium table has listed "Analysis Board · engine · move tree · PGN ·
+                   // book" as free since the paywall landed; the round-4 trial gate then walled it
+                   // anyway, so the table and the app disagreed and the table was right. This is
+                   // the client's decision — the board is free whether or not you pay — and it is
+                   // also what gives App Review a complete, working screen to evaluate when the
+                   // subscription cannot be bought at all.
+                   //
+                   // Game Review, reached from inside the board's ☰, keeps its 3/day free
+                   // allowance: `reviewGate` above is untouched.
+                   onAnalysis: {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showAnalysis = true
                        }

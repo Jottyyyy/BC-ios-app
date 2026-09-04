@@ -44,8 +44,9 @@ enum LoginArt {
 // MARK: - The screen
 
 struct LoginScreen: View {
-    /// Raised when the simulated sign-in succeeds. The host owns the transition to the dashboard.
-    let onSignedIn: () -> Void
+    /// Raised when a session opens, with the provider that opened it — `LoginSession.appleProvider`
+    /// or `LoginSession.guestProvider`. The host owns the transition to the dashboard.
+    let onSignedIn: (String) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var entered = false
@@ -132,11 +133,23 @@ struct LoginScreen: View {
                 // An alert, not a band: this screen's height budget is asserted against the
                 // shortest supported phone, and a login screen that scrolls is a bug. An alert
                 // costs no layout at all.
+                //
+                // The FIRST button is the way out. App Review's 1.0.7 rejection was an alert with
+                // one button on it, and that button led back to the same wall; this one leads into
+                // the app. `sheetClose` is the cancel role, so it is still the one Escape picks.
                 .alert(LoginStrings.authFailed,
                        isPresented: Binding(get: { LoginAuth.showsError(appleAuth.phase) },
                                             set: { if !$0 { appleAuth.dismissError() } })) {
+                    Button(LoginStrings.guestButton) {
+                        appleAuth.dismissError()
+                        continueWithoutAccount()
+                    }
                     Button(LoginStrings.sheetClose, role: .cancel) { appleAuth.dismissError() }
+                } message: {
+                    Text(appleAuth.failureMessage)
                 }
+            LoginGuestButton(action: { continueWithoutAccount() })
+                .padding(.top, LoginLayout.guestTopGap)
             Text(LoginStrings.reassurance)
                 .font(Theme.nunito(LoginType.reassureSize, .medium))
                 .foregroundStyle(LoginPalette.reassure)
@@ -179,10 +192,19 @@ struct LoginScreen: View {
     /// gate exactly where it was, and a failure surfaces the alert. The haptic moved inside the
     /// success branch — it used to fire on the tap, which would now celebrate a cancel.
     private func signIn() {
-        appleAuth.start { _ in
+        appleAuth.start { provider in
             Haptics.play(.success)
-            onSignedIn()
+            onSignedIn(provider)
         }
+    }
+
+    /// The second way in, and the one that cannot fail: it calls nothing, waits for nothing, and
+    /// reaches nothing. There is no account server behind the Apple button either — see
+    /// `LoginSession.guestProvider` for why requiring it was both the rejection and a 5.1.1(v)
+    /// problem of its own.
+    private func continueWithoutAccount() {
+        Haptics.play(.success)
+        onSignedIn(LoginSession.guestProvider)
     }
 
     private func openLegal(_ topic: LoginLegalTopic) {
@@ -225,6 +247,35 @@ struct LoginAppleButton: View {
         }
         .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
         .accessibilityLabel(Text(LoginStrings.appleButton))
+    }
+}
+
+/// The way in that does not go through anybody's servers.
+///
+/// An OUTLINE, not a fill, and shorter than the Apple button: the hierarchy is deliberate — Apple's
+/// is the offer, this is the escape. What it is not is hidden. Apple's own Guideline 5.1.1(v) asks
+/// for exactly this when an app has no significant account-based features, and this one has none at
+/// all, so burying it in a menu would be complying with the letter and missing the point.
+///
+/// Nunito rather than the system font, unlike `LoginAppleButton`: that one matches Apple's own
+/// control by rule, this one is the app's, so it uses the app's face.
+struct LoginGuestButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(LoginStrings.guestButton)
+                .font(Theme.nunito(LoginType.guestLabelSize, .semiBold))
+                .foregroundStyle(LoginPalette.guestLabel)
+                .frame(maxWidth: .infinity)
+                .frame(height: LoginLayout.guestButtonHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: LoginLayout.buttonRadius, style: .continuous)
+                        .strokeBorder(LoginPalette.guestBorder,
+                                      lineWidth: LoginLayout.guestBorderWidth))
+        }
+        .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+        .accessibilityLabel(Text(LoginStrings.guestButton))
     }
 }
 

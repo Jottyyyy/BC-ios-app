@@ -49,6 +49,12 @@ and an entitlements plist does not belong in the bundle; both get `buildPhase: n
 **Correction to what this doc first said:** step 2 does *not* make signing fail. Codesign takes the
 entitlements the **profile** allows and silently drops the rest, so the build succeeds, installs, and
 looks fine — and then Apple's sheet runs to the very end and stops on **"Sign Up Not Completed"**.
+
+> **That is not what 1.0.7 (51) hit.** App Review saw **"Could Not Connect"**, which is a different
+> alert at a different stage — and the sheet rendered at all, which a dropped entitlement prevents.
+> The entitlement is fine; Apple's identity service was not. See
+> [`app-review-response.md`](app-review-response.md). The check below is still worth running on every
+> build, because the two failures look nothing alike and only one of them is ours.
 That is what happened on build 43: *"the signed .ipa loses `com.apple.developer.applesignin` because
 the provisioning profile does not carry it."* There is no compile error and no runtime crash to
 follow; the only symptom is the sheet refusing at the last step.
@@ -120,9 +126,13 @@ and **this is the highest-risk item after the fake login**:
 6. Submit the IAP for review **alongside** the build.
 7. Bump `CURRENT_PROJECT_VERSION` past 41 for a manual upload (CI auto-stamps it).
 
-The trial gate means nothing in the app opens without a subscription. So if the product is not
-configured, `Product.products(for:)` returns empty, the reviewer sees "Store Unavailable", and there
-is literally nothing else for them to look at. That is a rejection with no code involved.
+This used to end: *"the trial gate means nothing in the app opens without a subscription, so an
+unconfigured product leaves the reviewer with literally nothing to look at — a rejection with no code
+involved."* **1.0.8 defused it.** `PhoneApp.locked` has a third term, so a `Product.products(for:)`
+that comes back empty drops the app to its free tier instead of walling it, and the Analysis Board is
+ungated regardless. The steps above are still required — an unconfigured product is a product nobody
+can buy — but they are no longer a rejection on their own. See
+[`app-review-response.md`](app-review-response.md).
 
 ## What is genuinely already right
 

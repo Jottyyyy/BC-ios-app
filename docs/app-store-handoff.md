@@ -3,6 +3,23 @@
 **For whoever has the Mac and the App Store Connect login.** The code is finished, merged and the
 backend is deployed. What is left is the subscription setup in App Store Connect and a build.
 
+> ## ⚠ Read this first: 1.0.7 (51) was rejected
+>
+> On **2026-09-02**, Guideline **2.1(a)** — *"The app displays error upon login."* The reviewer's
+> screenshot showed **"Could Not Connect"** over Apple's own Sign in with Apple sheet, which is
+> **Apple's alert, not ours** — that string exists nowhere in this repo. It was fatal only because
+> the app had no other way in.
+>
+> **1.0.8 is the answer.** Sign-in is optional, the Analysis Board is free for everyone, and a store
+> that cannot be reached no longer walls anything. The reply to send Apple and the App Review Notes
+> to paste into the submission form are in
+> [`app-review-response.md`](app-review-response.md) — **use them; do not write your own.**
+>
+> Two things about the numbers below. `MARKETING_VERSION` is now **1.0.8** and
+> `CURRENT_PROJECT_VERSION` **52** — builds 48–51 and the 1.0.7 bump happened outside this repo, so
+> the file understated the record by four. And **no demo account is needed any more**; a sandbox
+> Apple Account still is, for the subscription.
+
 This is the operational companion to [`app-store-readiness.md`](app-store-readiness.md) (what the
 submission needs that is not a feature), [`subscription.md`](subscription.md) (how the paywall
 works) and [`shipping-to-testflight.md`](shipping-to-testflight.md) (the ship script and its traps).
@@ -101,29 +118,49 @@ Sign in with a sandbox Apple Account and check every one of these:
 
 - the paywall lists **both** plans, with real prices from the App Store
 - the yearly row shows **BEST VALUE** and a saving computed from the two prices
-- the trial line states its duration and what it converts to
+- the trial line states its duration and what it converts to — **and so does every lock card**, the
+  Game Review cap and the Tutorial Videos paywall
+- the legal card carries the **Free trial: 7 days** line, and the duration in it matches what you
+  configured in step 2 (it is read from the product, not typed)
+- while in the trial, the plan card says **Free Trial Ends** with the date, and names the first charge
 - purchasing unlocks the app, and **Restore Purchases** brings it back
 - both legal links open — Terms of Use and Privacy Policy
 - Tutorial Videos loads the real catalogue
+
+And the three things 1.0.8 exists to prove, which need no sandbox account at all:
+
+- **Continue without an account** on the first screen reaches Home
+- the **Analysis** tile opens the board with no subscription
+- with the products deliberately unconfigured, the app opens the free tier rather than a wall
 
 ### 5. Submit
 
 **Submit both in-app purchases together with the build**, not afterwards.
 
-Review notes should say: the app is subscription-only, a sandbox account is required, and Sign in
-with Apple is the only sign-in method.
+**Review notes: copy them from [`app-review-response.md`](app-review-response.md).** They are no
+longer "the app is subscription-only and needs a demo account" — that was true of 1.0.7 and is what
+left the reviewer with nothing when the sign-in failed. The notes now say that signing in is
+optional, that no demo account is needed, that the Analysis Board is free and offline, and that a
+sandbox Apple Account is required only for the subscription.
+
+If this is the resubmission after the 2.1(a) rejection, **also reply to the message in App Store
+Connect** — that reply is in the same document.
 
 ---
 
-## Why the product IDs matter more than the prices
+## Why the product IDs still matter more than the prices
 
-Every screen in this app is behind the paywall — `PhoneView.locked` gates every Home tile, and only
-Home and Profile stay open. If a product ID is wrong, or the IAP is not submitted alongside the
-build, `Product.products(for:)` returns an empty list, the paywall can only render *"Store
-Unavailable"*, and **there is nothing else in the app for a reviewer to look at.**
+This section used to end *"there is nothing else in the app for a reviewer to look at — a rejection
+with no code involved."* **1.0.8 defused that**: `PhoneApp.locked` now has a third term, so a
+`Product.products(for:)` that comes back empty drops the app to its free tier instead of walling it,
+and the Analysis Board is ungated regardless. A reviewer facing a broken product list still has a
+working app.
 
-That is a rejection with no code involved, and it is the highest-risk item in the whole submission.
-A wrong price is a support ticket; a wrong product ID is a rejection.
+The product IDs are still the highest-risk item, for the reason underneath the old one: a wrong ID
+means **nobody can subscribe**, silently, and the only symptom is a paywall that says "Store
+Unavailable" forever. A wrong price is a support ticket; a wrong product ID is a product with no
+revenue. And the IAPs still have to be reviewed, which only happens if they are submitted **with**
+the build.
 
 ---
 
@@ -153,10 +190,13 @@ Xcode and admin access to App Store Connect. The code is finished and merged, an
 backend is already deployed — nothing needs to be written. I need help getting it
 built and submitted.
 
-Repo: https://github.com/Jottyyyy/BC-ios-app  (read docs/app-store-handoff.md first,
-then CLAUDE.md, docs/subscription.md, docs/app-store-readiness.md and
-docs/shipping-to-testflight.md — they cover all of this and record traps this project
-has already hit.)
+Repo: https://github.com/Jottyyyy/BC-ios-app  (read docs/app-store-handoff.md and
+docs/app-review-response.md first, then CLAUDE.md, docs/subscription.md,
+docs/app-store-readiness.md and docs/shipping-to-testflight.md — they cover all of
+this and record traps this project has already hit.)
+
+CONTEXT: version 1.0.7 (build 51) was REJECTED on 2026-09-02 under Guideline
+2.1(a). This is the resubmission, 1.0.8, build 52 or higher.
 
 FIXED VALUES — must match exactly:
   Bundle ID (NEVER change): com.prince24pogi.biyaherongchessapp
@@ -205,20 +245,34 @@ WHAT I NEED, IN THIS ORDER:
 5. Sandbox test before submitting:
    - the paywall lists BOTH plans with real App Store prices
    - the yearly row shows "BEST VALUE" and a computed saving
-   - the trial line states the duration and what it converts to
+   - the trial line states the duration and what it converts to, and so does
+     every lock card, the Game Review cap and the Tutorial Videos paywall
+   - the legal card carries the "Free trial: 7 days" line, and the number in it
+     matches what you configured in step 3 (it is read from the product)
+   - while in the trial, the plan card says "Free Trial Ends" with the date
    - purchase unlocks the app, and Restore Purchases brings it back
    - both legal links open (Terms of Use, Privacy Policy)
    - Tutorial Videos loads the real catalogue
+   And the three things 1.0.8 exists to prove, which need no sandbox account:
+   - "Continue without an account" on the first screen reaches Home
+   - the Analysis tile opens the board with no subscription
+   - with the products unconfigured, the app opens the free tier, not a wall
 
 6. Submit BOTH in-app purchases together with the build, not afterwards.
-   Review notes: the app is subscription-only, a sandbox account is required, and
-   Sign in with Apple is the only sign-in method.
+   Review notes: copy them VERBATIM from docs/app-review-response.md. Do not
+   write your own -- 1.0.7 (51) was rejected under Guideline 2.1(a) and that
+   document is the reply to it. Short version: signing in is OPTIONAL and no
+   demo account is needed; a sandbox Apple Account is required only for the
+   subscription; the Analysis Board is free, offline and needs no account.
+   If this is the resubmission, also REPLY to the App Review message in App
+   Store Connect -- that reply is in the same document.
 
-WHY THE PRODUCT IDs MATTER MORE THAN THE PRICES:
-Every screen is behind the paywall. If a product ID is wrong or the IAP isn't
-submitted with the build, Product.products(for:) returns empty, the reviewer sees
-"Store Unavailable", and there is nothing else in the app to look at. That's an
-automatic rejection with no code involved.
+WHY THE PRODUCT IDs STILL MATTER MORE THAN THE PRICES:
+A wrong ID means nobody can subscribe, silently, and the only symptom is a
+paywall that says "Store Unavailable" forever. It is no longer a rejection on its
+own -- 1.0.8 drops to the free tier rather than walling the app when the store
+cannot be reached -- but it is a product with no revenue, and the IAPs still have
+to be reviewed, which only happens if they are submitted WITH the build.
 
 TRAPS ALREADY RECORDED IN THIS REPO:
 - Never run `xcodegen generate` with Xcode open.

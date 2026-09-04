@@ -23,6 +23,17 @@ final class LoginAppleAuth: NSObject, ObservableObject {
     /// languages cannot come to disagree about what a cancel does.
     @Published private(set) var phase: LoginAuthPhase = .idle
 
+    /// The domain and code Apple reported, or `nil` when the failure carried none.
+    ///
+    /// This did not exist for build 1.0.7 (51), and its absence is why that rejection could not be
+    /// diagnosed: App Review screenshotted an alert reading *"Could Not Connect"*, a string that
+    /// appears nowhere in this repo, and the delegate below had tested for `.canceled` and thrown
+    /// the rest of the `NSError` away. The next screenshot carries the code.
+    @Published private(set) var failureCode: String?
+
+    /// What the alert shows. Composed by `LoginAuth`, so the browser twin renders the same sentence.
+    var failureMessage: String { LoginAuth.failureMessage(code: failureCode) }
+
     /// Raised once, on success. This type never touches storage — `LoginStore` owns the session,
     /// and keeping it that way is why the store needed no change at all.
     private var onSuccess: ((String) -> Void)?
@@ -37,6 +48,7 @@ final class LoginAppleAuth: NSObject, ObservableObject {
     func start(onSuccess: @escaping (String) -> Void) {
         guard !LoginAuth.isBusy(phase) else { return }
         self.onSuccess = onSuccess
+        failureCode = nil
         phase = LoginAuth.next(phase, .start)
         // Decided by the APP TARGET — see `BiyaherongBuild`. A `#if` here would be inert,
         // because a project-level compilation condition never reaches a SwiftPM package target.
@@ -69,6 +81,7 @@ final class LoginAppleAuth: NSObject, ObservableObject {
     func dismissError() {
         guard phase == .failed else { return }
         phase = .idle
+        failureCode = nil
     }
 
     fileprivate func finish(_ event: LoginAuthEvent) {
@@ -100,7 +113,17 @@ extension LoginAppleAuth: ASAuthorizationControllerDelegate {
         // Backing out of Apple's sheet is a choice, not a fault, and `LoginAuth.next` is where that
         // distinction is written down. Everything else is a real failure and earns a message.
         let cancelled = (error as? ASAuthorizationError)?.code == .canceled
-        Task { @MainActor in self.finish(cancelled ? .cancelled : .failed) }
+        // Read BEFORE hopping actors: the error is what we were handed, and the whole point is that
+        // it used to be discarded here. The domain is trimmed to its last component because
+        // "com.apple.AuthenticationServices.AuthorizationError 1000" in an alert is a wall of text
+        // that says the same thing as "AuthorizationError 1000".
+        let ns = error as NSError
+        let detail = (ns.domain.split(separator: ".").last.map(String.init) ?? ns.domain)
+            + " " + String(ns.code)
+        Task { @MainActor in
+            self.failureCode = cancelled ? nil : detail
+            self.finish(cancelled ? .cancelled : .failed)
+        }
     }
 }
 
@@ -110,11 +133,23 @@ extension LoginAppleAuth: ASAuthorizationControllerPresentationContextProviding 
         for controller: ASAuthorizationController
     ) -> ASPresentationAnchor {
         // The system calls this on the main thread, which is what makes the assumption sound.
+        //
+        // The ladder matters, and the last rung is the one to be afraid of: `ASPresentationAnchor()`
+        // is a brand-new `UIWindow` with **no `windowScene`**, so anchoring Apple's sheet to it asks
+        // the system to present inside a window that belongs to nothing. It is a fallback, not a
+        // default, and before this change it was one `isKeyWindow` miss away — a real possibility on
+        // iPad (which is where App Review tested 1.0.7), during scene activation, or in any
+        // multi-window state.
+        //
+        // So: the key window of a scene that is actually FOREGROUND ACTIVE, then any key window at
+        // all, then any window of a foreground scene, and only then the detached one.
         MainActor.assumeIsolated {
-            UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap(\.windows)
-                .first(where: \.isKeyWindow)
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            let foreground = scenes.filter { $0.activationState == .foregroundActive }
+            return foreground.flatMap(\.windows).first(where: \.isKeyWindow)
+                ?? scenes.flatMap(\.windows).first(where: \.isKeyWindow)
+                ?? foreground.flatMap(\.windows).first
+                ?? scenes.flatMap(\.windows).first
                 ?? ASPresentationAnchor()
         }
     }
