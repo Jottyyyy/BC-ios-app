@@ -222,7 +222,8 @@ struct PhoneApp: View {
                         #endif
                         AnalysisBoardScreen(onClose: { showAnalysis = false },
                                             reviewGate: { premium.consumeReview() },
-                                            onPaywall: { openPaywall() })
+                                            onPaywall: { openPaywall() },
+                                            offerNote: premium.offerNote)
                     }
                     .background(AnalysisPalette.screenBg)
                     .transition(.move(edge: .bottom))

@@ -2869,6 +2869,16 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   color: var(--pw-c-body);
 }
 
+/* Under the lock card's button: the terms of the thing that button starts. The card used to say
+   "Premium Feature", the cap it hit and "See What You Get", naming neither the trial nor the
+   price. Same sentence the paywall's CTA carries — see `offerNote` in js/premium.js. No new
+   custom properties: both of these are already set and already read above. */
+.pw-lock-offer {
+  font-size: var(--pw-t-legal-size);
+  color: var(--pw-c-body);
+  text-align: center;
+}
+
 /* The brand mark, in the paywall header on the offer state. It used to be `app-icon.png` in a
    `border-radius: 50%` circle — the last gold knight left in the app, and the only true circular
    crop of it. The Swift paywall had already been drawing the collage in a squircle, so this was a

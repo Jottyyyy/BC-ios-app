@@ -128,6 +128,16 @@ final class PremiumStore: ObservableObject {
 
     func displayPrice(for plan: Plan) -> String? { products[plan]?.displayPrice }
 
+    /// The one sentence every upsell surface shows: how long the trial runs, what it converts to,
+    /// and that it can be cancelled. Ready to draw, so a lock card does not have to know about
+    /// tiers or eligibility to say the true thing. See `PaywallStrings.offerNote`.
+    var offerNote: String {
+        PaywallStrings.offerNote(trialEligible: trialEligible,
+                                 yearly: selectedPlan == .yearly,
+                                 days: trialDays,
+                                 price: displayPrice)
+    }
+
     /// How much cheaper a year is than twelve months, as a whole percent, or nil.
     ///
     /// Computed from the two `Product.price` values rather than written down, for the same reason

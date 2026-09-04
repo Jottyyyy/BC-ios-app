@@ -51,7 +51,7 @@ struct VideoLibraryScreen: View {
     @ViewBuilder
     private var content: some View {
         if !premium.isPremium {
-            VideoPaywall(onSubscribe: onPaywall)
+            VideoPaywall(onSubscribe: onPaywall, offerNote: premium.offerNote)
         } else if !ContentClient.isConfigured {
             VideoNotice(glyph: VideoStrings.emptyGlyph,
                         title: VideoStrings.notConfiguredTitle,
@@ -68,7 +68,7 @@ struct VideoLibraryScreen: View {
             // StoreKit is a cache and can be a moment behind a lapse or a refund. The server is the
             // one holding the content, so it wins, and the honest screen is the paywall rather than
             // an error the user cannot act on.
-            VideoPaywall(onSubscribe: onPaywall)
+            VideoPaywall(onSubscribe: onPaywall, offerNote: premium.offerNote)
         } else if failure != nil {
             VideoNotice(glyph: VideoStrings.emptyGlyph,
                         title: VideoStrings.errorTitle,
@@ -233,6 +233,10 @@ struct VideoNotice: View {
 /// The RN paywall, verbatim (`index.tsx:203-232`).
 struct VideoPaywall: View {
     let onSubscribe: () -> Void
+    /// The subscription's terms — `PremiumStore.offerNote`. This screen said "Subscribe Now" and
+    /// named neither the trial nor the price; it is the same upsell as every lock card, so it now
+    /// carries the same sentence.
+    var offerNote: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -263,6 +267,13 @@ struct VideoPaywall: View {
                                 in: RoundedRectangle(cornerRadius: VideoList.subscribeButtonBorderRadius))
             }
             .buttonStyle(.plain)
+            if let offerNote {
+                Text(offerNote)
+                    .font(Theme.nunito(VideoList.paywallSubtextFontSize))
+                    .foregroundStyle(VideoList.paywallSubtextColor)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, VideoList.paywallSubtextMarginBottom)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, VideoList.paywallContainerPaddingHorizontal)

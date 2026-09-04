@@ -210,24 +210,17 @@ struct PaywallScreen: View {
         }
     }
 
-    /// The trial is only promised when StoreKit says this Apple Account can actually have it.
+    /// The trial is only promised when StoreKit says this Apple Account can actually have it, and
+    /// its LENGTH comes off the product rather than out of the sentence.
     private var ctaLabel: String {
         if store.purchasing { return PaywallStrings.loading }
         if store.product == nil { return PaywallStrings.loading }
-        return store.trialEligible ? PaywallStrings.trialCta : PaywallStrings.subscribeCta
+        return PaywallStrings.cta(trialEligible: store.trialEligible, days: store.trialDays)
     }
 
-    private var priceNote: String {
-        let price = store.displayPrice ?? ""
-        let yearly = store.selectedPlan == .yearly
-        let template: String
-        if store.trialEligible {
-            template = yearly ? PaywallStrings.trialNoteYearly : PaywallStrings.trialNote
-        } else {
-            template = yearly ? PaywallStrings.priceNoteYearly : PaywallStrings.priceNote
-        }
-        return PaywallStrings.fill(template, ["price": price])
-    }
+    /// The same sentence every lock card in the app now shows — composed once, in `PaywallStrings`.
+    /// This used to build it here with `?? ""`, which rendered "7 days free, then  per month."
+    private var priceNote: String { store.offerNote }
 
     private var failureCard: some View {
         card(fill: PaywallPalette.failFill, border: PaywallPalette.failBorder,
@@ -271,6 +264,19 @@ struct PaywallScreen: View {
                         .padding(.bottom, PaywallLayout.disclosureLineBottom)
                 }
             }
+            // The offer itself, in the binding text. Only when this Apple Account can actually have
+            // it — the paragraph below describes a renewal that, for a trial user, does not begin
+            // for another week, and said so without ever mentioning the week.
+            if store.trialEligible {
+                Text(PaywallStrings.fill(PaywallStrings.disclosureTrial,
+                                         ["days": String(store.trialDays)]))
+                    .font(Theme.nunito(PaywallType.disclosureLineSize, .regular))
+                    .foregroundStyle(PaywallPalette.heading)
+                    .lineSpacing(PaywallType.extraLeading(
+                        target: PaywallType.disclosureLineHeight,
+                        size: PaywallType.disclosureLineSize))
+                    .padding(.bottom, PaywallLayout.disclosureLineBottom)
+            }
             Text(PaywallStrings.disclosure)
                 .font(Theme.nunito(PaywallType.legalSize, .regular))
                 .foregroundStyle(PaywallPalette.legal)
@@ -292,6 +298,13 @@ struct PaywallScreen: View {
 
     private func disclosureTemplate(_ plan: PremiumStore.Plan) -> String {
         plan == .monthly ? PaywallStrings.disclosureMonthly : PaywallStrings.disclosureYearly
+    }
+
+    /// Three states, not two. A trial is auto-renewing, so `willAutoRenew` alone would have called
+    /// its end date a renewal.
+    private var trialOrRenewalRow: String {
+        if store.isInTrial { return PaywallStrings.trialEndsRow }
+        return store.willAutoRenew ? PaywallStrings.renewalRow : PaywallStrings.expiresRow
     }
 
     private var restore: some View {
@@ -360,8 +373,17 @@ struct PaywallScreen: View {
                             .background(PaywallPalette.daysPill, in: Capsule())
                             .frame(maxWidth: .infinity)
                     }
-                    row(PaywallGlyph.calendar,
-                        store.willAutoRenew ? PaywallStrings.renewalRow : PaywallStrings.expiresRow)
+                    // In a trial the date is not a renewal, it is the FIRST CHARGE, and calling it
+                    // "Next Renewal Date" hides the one fact a trial user needs.
+                    row(PaywallGlyph.calendar, trialOrRenewalRow)
+                    if store.isInTrial {
+                        Text(PaywallStrings.fill(PaywallStrings.trialChargeNote,
+                                                 ["date": PaywallStrings.dateText(msOf(expiry))]))
+                            .font(Theme.nunito(PaywallType.legalSize, .medium))
+                            .foregroundStyle(PaywallPalette.body)
+                            .lineSpacing(PaywallType.extraLeading(
+                                target: PaywallType.legalLineHeight, size: PaywallType.legalSize))
+                    }
                 }
                 row(PaywallGlyph.renew,
                     store.willAutoRenew ? PaywallStrings.autoRenewOn : PaywallStrings.autoRenewOff)
@@ -450,6 +472,13 @@ struct PremiumLockCard: View {
     let onSeePlans: () -> Void
     /// Daily caps reset; a hard feature gate does not. Only the former gets the reset note.
     var showsResetNote = false
+    /// What the subscription actually costs and when — `PremiumStore.offerNote`.
+    ///
+    /// This card is the app's upsell, and it used to say "Premium Feature", the cap it hit, and
+    /// "See What You Get", with the trial and the price mentioned nowhere. That is the surface the
+    /// client asked to fix in as many words. Optional so a caller with no store in scope still
+    /// compiles, but every caller in the app passes it.
+    var offerNote: String?
 
     var body: some View {
         VStack(spacing: PaywallLayout.rowGap) {
@@ -478,6 +507,14 @@ struct PremiumLockCard: View {
                                 in: RoundedRectangle(cornerRadius: PaywallLayout.ctaRadius))
             }
             .buttonStyle(DimButtonStyle(pressedOpacity: PaywallLayout.pressed))
+            // Under the button, in the legal size: the terms of the thing the button starts. It is
+            // the same sentence the paywall's CTA carries, so the two cannot disagree.
+            if let offerNote {
+                Text(offerNote)
+                    .font(Theme.nunito(PaywallType.legalSize, .medium))
+                    .foregroundStyle(PaywallPalette.body)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding(PaywallLayout.cardPadding)
         .frame(maxWidth: .infinity)
