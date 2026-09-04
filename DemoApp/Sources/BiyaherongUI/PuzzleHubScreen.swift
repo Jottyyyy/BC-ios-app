@@ -163,7 +163,8 @@ struct PuzzleHubScreen: View {
                                     self.capMessage = nil
                                     onPaywall()
                                 },
-                                showsResetNote: capResets)
+                                showsResetNote: capResets,
+                                offerNote: premium.offerNote)
             }
         }
     }

@@ -31,18 +31,21 @@ Feature- and subsystem-level documentation for this repo.
   screen that shows a board.**
 - [`web-demo.md`](web-demo.md) — the browser rebuild that runs on Windows (Play / Puzzles / Profile + the
   reusable `<chess-board>` component).
-- [`subscription.md`](subscription.md) — one monthly plan with a 7-day trial, verified **on-device by
-  StoreKit 2 with no server**: the **trial gate** that makes every tap without an entitlement land on
-  the offer, the trial/expiry/grace state machine, the daily caps a *lapsed* subscriber returns to,
-  the paywall, and the two holes (refunds, clock rollback) that are accepted rather than defended.
-- [`login.md`](login.md) — the app's first screen: the brand hero, one **simulated** "Continue with Apple"
-  button, a persisted fail-closed session, and the bundled Privacy · Terms sheet. **The sign-in performs no
-  Apple authentication and no network call** — read this before wiring a real one.
+- [`subscription.md`](subscription.md) — monthly and yearly plans with a 7-day trial, verified
+  **on-device by StoreKit 2 with no server**: the **trial gate** that makes almost every tap without
+  an entitlement land on the offer (Profile and the Analysis Board excepted), the rule that a store
+  which cannot be reached walls nobody, the trial/expiry/grace state machine, the daily caps a
+  *lapsed* subscriber returns to, the paywall, and the two holes (refunds, clock rollback) that are
+  accepted rather than defended.
+- [`login.md`](login.md) — the app's first screen: the brand hero, a real **Continue with Apple**
+  button with **Continue without an account** under it, a persisted fail-closed session, and the
+  bundled Privacy · Terms sheet. **Signing in is optional** — Guideline 5.1.1(v), and the answer to
+  the 1.0.7 rejection.
 - [`home-screen.md`](home-screen.md) — the landing dashboard: four bands, a never-scrolling 3×2 grid of six
   equal cards, the Sky/Colorful themes, and the hourly Taglish quote.
-- [`analysis-board.md`](analysis-board.md) — the offline analysis screen: move tree, local engine, ECO book,
-  game review, persistence, Setup Position, PGN import/export, and the pure metrics layer extracted from the
-  real RN StyleSheet.
+- [`analysis-board.md`](analysis-board.md) — the offline analysis screen, and the one that is **free
+  for everyone**: move tree, local engine, ECO book, game review, persistence, Setup Position, PGN
+  import/export, and the pure metrics layer extracted from the real RN StyleSheet.
 - [`tutorial-videos.md`](tutorial-videos.md) — the one screen that does not work offline: a
   premium catalogue streamed from the content bucket. Why it reads a published manifest and not the
   Laravel API (this app has no account and no token, by design), the order the four refusals are
@@ -87,6 +90,10 @@ Feature- and subsystem-level documentation for this repo.
 - [`shipping-to-testflight.md`](shipping-to-testflight.md) — **one command** to build, verify and
   upload a TestFlight build (`tools/ship/ship_testflight.sh`), the one-time signing/API-key setup,
   and the several ways Apple's tooling reports success while silently doing nothing. **Complete.**
+- [`app-review-response.md`](app-review-response.md) — **the 2.1(a) rejection of 1.0.7 (51) and the
+  answer to it.** Why the "Could Not Connect" alert was Apple's own and not ours, the three single
+  points of failure that made it fatal, and the reply + App Review Notes to paste into App Store
+  Connect. **Read this with `app-store-handoff.md` before resubmitting.**
 - [`app-store-handoff.md`](app-store-handoff.md) — the operational checklist for whoever has the Mac
   and the App Store Connect login: the exact product IDs and prices, the order the steps have to
   happen in, and why a mistyped product ID is a rejection rather than an error message. Ends with a

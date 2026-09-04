@@ -241,8 +241,62 @@ public func biyaherongPaywallMetricsCheck() -> PaywallMetricsCheckResult {
 
     // MARK: - Copy
 
-    expectEqual(PaywallStrings.trialCta, "Start Your 7-Day Free Trial",
-                "the CTA names the trial length")
+    expectEqual(PaywallStrings.cta(trialEligible: true, days: Entitlement.trialDays),
+                "Start Your 7-Day Free Trial", "the CTA names the trial length")
+    expectEqual(PaywallStrings.cta(trialEligible: false, days: Entitlement.trialDays),
+                PaywallStrings.subscribeCta,
+                "and an Apple Account that cannot have the trial is not promised one")
+    // The number is FILLED, never typed. A literal in the sentence cannot follow App Store Connect,
+    // and copy that outlives the product it describes is a Guideline 3.1.2 misrepresentation.
+    for (name, s) in [("trialCta", PaywallStrings.trialCta),
+                      ("trialNote", PaywallStrings.trialNote),
+                      ("trialNoteYearly", PaywallStrings.trialNoteYearly),
+                      ("disclosureTrial", PaywallStrings.disclosureTrial)] {
+        expect(s.contains("{days}"), "\(name) takes the trial length as a parameter")
+    }
+    // `disclosureTrial` is excluded from this one: its "24 hours" is Apple's cancellation deadline,
+    // a fixed rule of the App Store rather than anything App Store Connect can change.
+    for (name, s) in [("trialCta", PaywallStrings.trialCta),
+                      ("trialNote", PaywallStrings.trialNote),
+                      ("trialNoteYearly", PaywallStrings.trialNoteYearly)] {
+        expect(!s.contains(where: \.isNumber), "\(name) contains no digit of its own")
+    }
+
+    // The one sentence every upsell surface shows.
+    expectEqual(PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 7,
+                                         price: "$1.99"),
+                "7 days free, then $1.99 per month. Cancel anytime.", "monthly, eligible")
+    expectEqual(PaywallStrings.offerNote(trialEligible: true, yearly: true, days: 7,
+                                         price: "$19.99"),
+                "7 days free, then $19.99 per year. Cancel anytime.", "yearly, eligible")
+    expectEqual(PaywallStrings.offerNote(trialEligible: false, yearly: false, days: 7,
+                                         price: "$1.99"),
+                "$1.99 per month. Cancel anytime.",
+                "no trial to offer — and no mention of one")
+    expectEqual(PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 14,
+                                         price: "$1.99"),
+                "14 days free, then $1.99 per month. Cancel anytime.",
+                "a different trial length follows the product rather than the sentence")
+    // The bug this replaced: `?? ""` rendered "7 days free, then  per month." — a sentence with a
+    // hole where the number goes, on the screen App Review reads most carefully.
+    expect(PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 7, price: nil)
+        .contains(PaywallStrings.loading),
+           "a price that has not resolved says so instead of leaving a gap")
+    expect(!PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 7, price: nil)
+        .contains("then  per"), "and never renders the gap itself")
+    for (name, s) in [("trialNote", PaywallStrings.trialNote),
+                      ("trialNoteYearly", PaywallStrings.trialNoteYearly),
+                      ("priceNote", PaywallStrings.priceNote),
+                      ("priceNoteYearly", PaywallStrings.priceNoteYearly)] {
+        expect(s.contains("Cancel anytime"), "\(name) says the subscription can be cancelled")
+        expect(s.contains("{price}"), "\(name) names the price that will be billed")
+    }
+    expect(PaywallStrings.disclosureTrial.contains("24 hours"),
+           "the trial disclosure names the cancellation deadline")
+    expect(PaywallStrings.trialChargeNote.contains("{date}"),
+           "and the in-trial note names the DATE the first charge lands")
+    expect(PaywallStrings.trialEndsRow != PaywallStrings.renewalRow,
+           "a trial's end is not called a renewal")
     expect(PaywallStrings.disclosure.contains("automatically renews"),
            "the App Review disclosure is present")
     expect(PaywallStrings.disclosure.contains("24 hours"), "and names the 24-hour window")

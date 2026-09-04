@@ -5,6 +5,91 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The 2.1(a) rejection of 1.0.7 (51), and what it changed (2026-09-04)
+
+Full account and the reply to Apple: `docs/app-review-response.md`. Recorded here are only the
+deviations and invented values.
+
+### DEVIATION: signing in is OPTIONAL, and a guest session is a real session
+
+**Original:** the RN app's `(auth)/login.tsx` is a username/password form against a Laravel API, and
+signing in is mandatory because the whole app is server-backed. This port kept the mandatory shape
+long after the server went away.
+
+**Here:** `LoginSession.guestProvider = "guest"` joins `"apple"` in `providers`, so a guest session
+satisfies `isSignedIn` and **nothing downstream learns a third state**. `LoginGuestButton` sits under
+Apple's on the login screen, and the sign-in failure alert offers the same action as its first
+button.
+
+**Why.** Two reasons, and the guideline one is the stronger:
+
+1. **Guideline 5.1.1(v)** — *"If your app doesn't include significant account-based features, let
+   people use it without a login."* This app has no account server. `LoginStore.signIn(_:)` writes
+   one string to `UserDefaults`; there was nothing to sign in **to**.
+2. Build 1.0.7 (51) was rejected under **2.1(a)** when Apple's own sign-in service failed on the
+   reviewer's device — an alert (*"Could Not Connect"*) whose text exists nowhere in this repo — and
+   the app had no other way in.
+
+**Consequence for the offline claim:** the first launch no longer needs a connection. The privacy
+sheet was reworded again, in both languages, to say sign-in is optional. `~90% offline` is unchanged
+as a claim; what changed is that the one unavoidable online moment became avoidable.
+
+### DEVIATION: a store that cannot be reached does not wall the app
+
+**Original:** the PHP backend decided entitlement, so "the store is unreachable" had no analogue.
+
+**Here:** `PhoneApp.locked` gained a third term, `!premium.storeUnavailable` (`loadState == .failed`).
+A user whose `Product.products(for:)` came back empty **cannot buy**, and a paywall in front of
+somebody who cannot buy is a dead app rather than a business model. They drop to the **free tier** —
+every `DailyLimits` cap and every per-feature gate still in force — not to everything.
+
+`.idle` and `.loading` deliberately still lock (they mean *not asked yet*), which is why `PhoneApp`
+now calls `load()` at launch rather than only when the paywall opens.
+
+**Accepted cost:** a non-subscriber who blocks the App Store gets the free tier instead of a wall.
+That is a smaller hole than the two already accepted below (refunds, clock rollback): the free tier
+is capped, and a real subscriber is unaffected either way because entitlements resolve from the
+device's own transaction cache.
+
+### DEVIATION: the Analysis Board is ungated
+
+`docs/subscription.md`'s free-vs-premium table has listed *"Analysis Board · engine · move tree · PGN
+· book"* as free since the paywall landed. The round-4 trial gate walled it anyway, so the table and
+the app disagreed; the client's ruling is that the table was right. **Game Review keeps its 3/day
+free allowance.**
+
+### INVENTED: the guest button's four numbers, and its copy
+
+No RN counterpart exists — the original had no guest path. Invented, and asserted in
+`tools/qa/replay_login.js` in both languages:
+
+| Constant | Value | Reason |
+|---|---|---|
+| `LoginLayout.guestButtonHeight` | 44 | Apple's minimum target. A way past a broken sign-in that is hard to hit is not one. |
+| `LoginLayout.guestTopGap` | 12 | Close enough to read as the same band as Apple's button. |
+| `LoginLayout.guestBorderWidth` | 1 | An outline, not a fill, so Apple's stays the loudest control. |
+| `LoginType.guestLabelSize` | 15 | Below the 17 of Apple's label, above the 13 of the reassurance line. |
+
+Its two colours are **not** invented: `LoginPalette.guestLabel` and `guestBorder` alias
+`Theme.mutedForeground` and `Theme.border`.
+
+`LoginStrings.guestButton` is **English** — "Continue without an account" — like every other button
+in this app (`Sign out`, `Delete account`, `Restore Purchases`). Taglish is the voice of its
+sentences, not of its controls, and this control is the one an App Store reviewer has to find.
+
+### The trial length stopped being a constant in a sentence
+
+`Entitlement.trialDays = 7` remains, as the fallback and as the value before the store answers, but
+the copy no longer contains a 7. `PremiumStore.trialDays` derives from the loaded product's
+`introductoryOffer.period` (`P1W` → 7). The month and year figures in that conversion (30, 365) are
+Apple's billing conventions and appear in exactly one function.
+
+**Why it matters:** a hardcoded duration that stops matching App Store Connect is not a rounding
+error, it is a Guideline 3.1.2 misrepresentation — *"clearly indicate how long the free trial lasts
+and the price billed once the free trial is over."* Same rule prices have always followed.
+
+---
+
 ## Resolved decisions (July 2026)
 
 | # | Decision | Choice | Consequence |

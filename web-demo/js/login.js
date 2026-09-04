@@ -58,6 +58,10 @@ var BiyaLogin = (function () {
     appleShadow: 'rgba(0, 0, 0, .35)',
     /* Extracted: `legalLink` in the RN app's (auth)/login.tsx. */
     legal: '#3A5070',
+    /* The guest button borrows Theme.mutedForeground and Theme.border rather than inventing a
+       colour — this screen has no RN original to extract a guest button from. */
+    guestLabel: '#8BA3C7',
+    guestBorder: 'rgba(74, 159, 232, .12)',
     sheetScrim: 'rgba(0, 0, 0, .55)',
     sheetFill: '#1A2942',
     sheetBorder: 'rgba(74, 159, 232, .12)',
@@ -83,6 +87,11 @@ var BiyaLogin = (function () {
     buttonShadowRadius: 14,
     buttonShadowY: 6,
     pressedButton: 0.82,
+    /* The second way in: an outline, not a fill, and 44 rather than 54 — Apple's button stays the
+       loudest thing in the band, but this still clears Apple's 44pt minimum target. */
+    guestTopGap: 12,
+    guestButtonHeight: 44,
+    guestBorderWidth: 1,
     reassureTopGap: 14,
     footerTopGap: 18,
     footerBottomPadding: 22,
@@ -119,6 +128,8 @@ var BiyaLogin = (function () {
       + LAYOUT.titleTaglineGap
       + line(TYPE.taglineSize)
       + LAYOUT.buttonHeight
+      + LAYOUT.guestTopGap
+      + LAYOUT.guestButtonHeight
       + LAYOUT.reassureTopGap
       + line(TYPE.reassureSize)
       + LAYOUT.footerTopGap
@@ -188,7 +199,13 @@ var BiyaLogin = (function () {
     /* Same biya.<area>.<thing>.v1 shape as biya.coach.takeback.v1. */
     storageKey: 'biya.auth.session.v1',
     appleProvider: 'apple',
-    providers: ['apple']
+    /* A session opened WITHOUT signing in to anything. There is no account server here and never
+       was, so requiring Apple's sheet bought the product nothing and cost it everything: build
+       1.0.7 (51) was rejected under Guideline 2.1(a) when that sheet failed on the reviewer's
+       device, and Guideline 5.1.1(v) says an app with no significant account-based features must
+       let people in without a login anyway. A REAL persisted session, not a bypass. */
+    guestProvider: 'guest',
+    providers: ['apple', 'guest']
   };
 
   function isSignedIn(raw) {
@@ -197,8 +214,8 @@ var BiyaLogin = (function () {
   }
 
   function providerLabel(raw) {
-    return isSignedIn(raw) && raw === SESSION.appleProvider
-      ? STRINGS.appleProviderLabel : STRINGS.noProviderLabel;
+    if (!isSignedIn(raw)) return STRINGS.noProviderLabel;
+    return raw === SESSION.appleProvider ? STRINGS.appleProviderLabel : STRINGS.guestProviderLabel;
   }
 
   /* -- what "delete my account" erases, and what it does not (mirrors LoginAccountData).
@@ -247,24 +264,48 @@ var BiyaLogin = (function () {
   function authShowsError(phase) { return phase === 'failed'; }
   function authIsBusy(phase) { return phase === 'requesting'; }
 
+  /* What the failure alert says. Composed here, in the shared decision half, rather than at each
+   * call site — and the one decision inside it is that the code is appended only when Apple gave
+   * us one.
+   *
+   * That suffix exists because of build 1.0.7 (51): App Review reported an alert reading "Could Not
+   * Connect", a string that appears nowhere in this repo, and the Swift delegate tested for
+   * `.canceled` and discarded the rest of the NSError. A screenshot now carries the diagnosis. */
+  function authFailureMessage(code) {
+    if (code === null || code === undefined || code === '') return STRINGS.authFailedBody;
+    return STRINGS.authFailedBody + '\n\n' + STRINGS.authFailedCode.replace('{code}', code);
+  }
+
   /* -- copy. Taglish, matching the original app's voice. The button label is Apple's required
    *    wording and stays English. -- */
   var STRINGS = {
     title: 'Biyaherong Coach',
     tagline: 'Kabiyahe mo sa pag improve!',
     appleButton: 'Continue with Apple',
-    reassurance: 'Walang password — i-tap lang at maglaro na!',
+    /* English, like every other BUTTON in this app. Taglish is the voice of its sentences, not of
+       its controls — and this control is the one an App Store reviewer has to be able to find. */
+    guestButton: 'Continue without an account',
+    reassurance: 'Opsyonal ang sign in — pwede kang maglaro agad.',
     privacy: 'Privacy',
     terms: 'Terms',
     legalSeparator: '·',
     defaultDisplayName: 'Biyahero',
     appleProviderLabel: 'Apple',
+    /* Beside "Signed in with", for a session opened without Apple. Not the em dash: "—" means
+       signed out, and a guest is signed in. */
+    guestProviderLabel: 'No account',
     noProviderLabel: '—',
     accountCard: 'Account',
     signedInWith: 'Signed in with',
     signOut: 'Sign out',
     sheetClose: 'Sige, salamat!',
     authFailed: 'Hindi natuloy ang sign in. Subukan ulit.',
+    /* English first, then Taglish — the same shape privacyBody uses, and for the same reason: this
+       paragraph has two audiences and one of them is an App Store reviewer. */
+    authFailedBody: 'This came from Apple\'s sign-in service, not from the app. You can continue '
+      + 'without an account — nothing in the app is locked behind signing in.\n\n'
+      + 'Sa Apple nanggaling ito, hindi sa app. Magpatuloy ka na lang nang walang account.',
+    authFailedCode: 'Apple error code: {code}',
     deleteAccount: 'Delete account',
     deleteTitle: 'Burahin ang account?',
     deleteConfirm: 'Burahin',
@@ -275,12 +316,14 @@ var BiyaLogin = (function () {
     privacyTitle: 'Privacy',
     privacyBody: 'Biyaherong Coach works offline. There is no account server and no analytics, '
       + 'and nothing about you is collected or tracked.\n\n'
-      + 'Two things need internet, and only when you ask for them: signing in goes through Apple, '
-      + 'and building an Opening Tree sends the username you type to Lichess or Chess.com so your '
-      + 'games can be downloaded. Everything else — your puzzles, ratings, games and settings — '
-      + 'stays on this device.\n\n'
-      + 'Walang account server at walang analytics. Kailangan lang ng internet kapag nag-sign in '
-      + 'ka o kumukuha ng laro mula sa Lichess o Chess.com.',
+      + 'Signing in is optional, and there is nothing to sign in TO — no account is created '
+      + 'anywhere but on this device.\n\n'
+      + 'Two things need internet, and only if you ask for them: signing in with Apple, if you '
+      + 'choose to, goes through Apple, and building an Opening Tree sends the username you type '
+      + 'to Lichess or Chess.com so your games can be downloaded. Everything else — your puzzles, '
+      + 'ratings, games and settings — stays on this device.\n\n'
+      + 'Walang account server at walang analytics. Opsyonal ang sign in. Kailangan lang ng '
+      + 'internet kapag nag-sign in ka sa Apple o kumukuha ng laro mula sa Lichess o Chess.com.',
     termsTitle: 'Terms',
     termsBody: 'Biyaherong Coach is for learning and enjoying chess. Play fair, be kind, and have '
       + 'fun.\n\nThe app is provided as-is for practice and study. Chess piece artwork is licensed '
@@ -374,7 +417,7 @@ var BiyaLogin = (function () {
 
     /* 2. the band budget */
     var fixed = fixedHeight();
-    expectNear(fixed, 413, 'fixed bands total');
+    expectNear(fixed, 469, 'fixed bands total');
     expect(fixed + LAYOUT.minSpacer <= LAYOUT.shortestSupportedHeight,
       'the fixed bands + the minimum spacer fit an iPhone SE');
     expect(spacerFor(LAYOUT.shortestSupportedHeight) >= LAYOUT.minSpacer,
@@ -399,6 +442,10 @@ var BiyaLogin = (function () {
 
     /* 3. shape */
     expect(LAYOUT.buttonHeight >= 44, "the Apple button clears Apple's 44pt minimum target");
+    expect(LAYOUT.guestButtonHeight >= 44,
+      "the guest button clears it too — a way past a broken sign-in that is hard to hit is not one");
+    expect(LAYOUT.guestButtonHeight < LAYOUT.buttonHeight,
+      'and is still the quieter of the two: Apple is the offer, this is the escape');
     expect(LAYOUT.logoRadius < LAYOUT.logoSize / 2, 'the logo is a squircle, not a circle');
     expect(LAYOUT.entranceScale < 1, 'the hero grows into place');
 
@@ -455,7 +502,14 @@ var BiyaLogin = (function () {
     expect(!isSignedIn('APPLE'), 'the provider check is case-sensitive');
     expect(!isSignedIn(' apple'), 'a padded value is signed out, not trimmed');
     expect(isSignedIn(SESSION.appleProvider), '"apple" is signed in');
+    expect(isSignedIn(SESSION.guestProvider),
+      '"guest" is signed in too — it is a real session, not a bypass of the gate');
+    expect(SESSION.guestProvider !== SESSION.appleProvider,
+      'and it is distinguishable, so Profile can say which one opened the session');
     expectEqual(providerLabel('apple'), STRINGS.appleProviderLabel, 'provider label for apple');
+    expectEqual(providerLabel('guest'), STRINGS.guestProviderLabel, 'provider label for a guest');
+    expect(providerLabel('guest') !== STRINGS.noProviderLabel,
+      'a guest is not shown as signed out — the em dash means no session at all');
     expectEqual(providerLabel(null), STRINGS.noProviderLabel, 'provider label when signed out');
     expectEqual(providerLabel('google'), STRINGS.noProviderLabel, 'provider label for an unknown provider');
     expectEqual(SESSION.storageKey, 'biya.auth.session.v1',
@@ -510,6 +564,20 @@ var BiyaLogin = (function () {
     expectEqual(STRINGS.tagline, 'Kabiyahe mo sa pag improve!', "the original app's tagline");
     expectEqual(STRINGS.appleButton, 'Continue with Apple', "the Apple button's wording");
     expect(STRINGS.reassurance.length > 0, 'the reassurance line exists');
+    expect(STRINGS.guestButton.length > 0, 'the guest button has a label');
+    expect(STRINGS.guestButton !== STRINGS.appleButton, 'and it is not the Apple one');
+
+    /* 9b. the failure message, and the branch inside it */
+    expectEqual(authFailureMessage(null), STRINGS.authFailedBody,
+      'with no code from Apple the message is the body alone');
+    expectEqual(authFailureMessage(''), STRINGS.authFailedBody, 'an empty code adds nothing');
+    expect(authFailureMessage('AuthorizationError 1000').indexOf('1000') > 0,
+      'a real code is carried into the message — the diagnosis build 51 did not have');
+    expect(authFailureMessage('AuthorizationError 1000').indexOf(STRINGS.authFailedBody) === 0,
+      'and it is appended to the body, not substituted for it');
+    expect(STRINGS.authFailedCode.indexOf('{code}') >= 0, 'the code template has a slot to fill');
+    expect(STRINGS.authFailedBody.indexOf('Apple') >= 0,
+      "the body says where the failure came from: Apple's service, not this app");
     expectEqual(STRINGS.defaultDisplayName, 'Biyahero', "the player's display name");
     TOPICS.forEach(function (t) {
       expect(legalTitle(t).length > 0, t + ' sheet has a title');
@@ -584,6 +652,12 @@ var BiyaLogin = (function () {
     s.setProperty('--lg-btn-shadow', LAYOUT.buttonShadowRadius + 'px');
     s.setProperty('--lg-btn-shadow-y', LAYOUT.buttonShadowY + 'px');
     s.setProperty('--lg-pressed', String(LAYOUT.pressedButton));
+    s.setProperty('--lg-guest-gap', LAYOUT.guestTopGap + 'px');
+    s.setProperty('--lg-guest-h', LAYOUT.guestButtonHeight + 'px');
+    s.setProperty('--lg-guest-border-w', LAYOUT.guestBorderWidth + 'px');
+    s.setProperty('--lg-guest-size', TYPE.guestLabelSize + 'px');
+    s.setProperty('--lg-guest-color', PALETTE.guestLabel);
+    s.setProperty('--lg-guest-border', PALETTE.guestBorder);
     s.setProperty('--lg-reassure-gap', LAYOUT.reassureTopGap + 'px');
     s.setProperty('--lg-footer-gap', LAYOUT.footerTopGap + 'px');
     s.setProperty('--lg-footer-bottom', LAYOUT.footerBottomPadding + 'px');
@@ -725,6 +799,18 @@ var BiyaLogin = (function () {
       if (onSignedIn) onSignedIn();
     };
     actions.appendChild(btn);
+
+    // The second way in. The browser's Apple button cannot fail (SIMULATED_AUTH), so this one is
+    // never the only door here the way it is on device — but it is the same door, in the same
+    // place, opening the same provider, which is what the mirror is for.
+    var guest = el('button', 'lg-guest', STRINGS.guestButton);
+    guest.type = 'button';
+    guest.onclick = function () {
+      shared().signIn(SESSION.guestProvider);
+      if (onSignedIn) onSignedIn();
+    };
+    actions.appendChild(guest);
+
     actions.appendChild(el('div', 'lg-reassure', STRINGS.reassurance));
 
     var legal = el('div', 'lg-legal');
@@ -753,6 +839,7 @@ var BiyaLogin = (function () {
     AUTH_PHASES: AUTH_PHASES, AUTH_EVENTS: AUTH_EVENTS, SIMULATED_AUTH: SIMULATED_AUTH,
     ACCOUNT_DATA: ACCOUNT_DATA,
     authNext: authNext, authShowsError: authShowsError, authIsBusy: authIsBusy,
+    authFailureMessage: authFailureMessage,
     legalTitle: legalTitle, legalBody: legalBody,
     createStore: createStore, memoryStorage: memoryStorage, shared: shared,
     selfTest: selfTest,

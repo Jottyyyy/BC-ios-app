@@ -321,6 +321,81 @@ function run() {
   expect(P.STRINGS.disclosure.indexOf('automatically renews') >= 0,
     'the disclosure names auto-renewal');
   expect(P.STRINGS.disclosure.indexOf('24 hours') >= 0, 'and the 24-hour window');
+
+  // 6b. THE TRIAL, SAID OUT LOUD.
+  //
+  //     Apple's rule for an introductory offer is that the purchase flow "clearly indicate how long
+  //     the free trial lasts and the price billed once the free trial is over". Before this it was
+  //     said in exactly two strings, with the 7 typed inside the sentence, and every OTHER upsell
+  //     surface — the lock card behind each daily cap, the Game Review cap, the Tutorial Videos
+  //     paywall — said "Premium Feature" and "Subscribe Now" and nothing at all about money.
+  {
+    // The length is a parameter, in both languages. A literal cannot follow App Store Connect, and
+    // copy that outlives the product it describes is a 3.1.2 misrepresentation rather than a typo.
+    ['trialCta', 'trialNote', 'trialNoteYearly', 'disclosureTrial'].forEach((k) => {
+      expect(P.STRINGS[k].indexOf('{days}') >= 0, `${k} takes the trial length as a parameter`);
+    });
+    // `disclosureTrial` excluded: its "24 hours" is Apple's cancellation deadline, a fixed rule of
+    // the App Store rather than anything App Store Connect can change.
+    ['trialCta', 'trialNote', 'trialNoteYearly'].forEach((k) => {
+      expect(!/\d/.test(P.STRINGS[k]), `${k} contains no digit of its own`);
+    });
+
+    // And it is FILLED from the product, not from the constant. `Entitlement.trialDays` remains the
+    // fallback and the value before the store answers; `introductoryOffer` is the authority.
+    expect(/@Published private\(set\) var trialDays: Int = Entitlement\.trialDays/.test(code(store)),
+      'PremiumStore.trialDays defaults to the constant');
+    expect(/offer\.paymentMode == \.freeTrial/.test(code(store)),
+      'and is read off a FREE-trial introductory offer, not any offer');
+    expect(/trialDays = Self\.trialDays\(among: byPlan\.values\) \?\? Entitlement\.trialDays/
+      .test(code(store)), 'load() takes it from the product and falls back to the constant');
+    expect(/case \.week: perUnit = 7/.test(code(store)),
+      'a P1W offer resolves to 7 days — the period the .storekit file declares');
+
+    // ONE implementation of the sentence. Four copies of this logic would be four chances to drift.
+    expect(/static func offerNote\(trialEligible: Bool, yearly: Bool, days: Int, price: String\?\)/
+      .test(code(metrics)), 'the Swift composes the offer sentence in one place');
+    expect(/price \?\? loading/.test(code(metrics)),
+      'and a price that has not resolved says "Loading…" rather than leaving a gap — `?? ""` used '
+      + 'to render "7 days free, then  per month." on the screen App Review reads most carefully');
+    expect(/private var priceNote: String \{ store\.offerNote \}/.test(code(screen)),
+      "the paywall's own note goes through it too, so the CTA cannot drift from the lock cards");
+
+    // Every upsell surface carries it. This is the client's actual request.
+    expect(/var offerNote: String\?/.test(code(screen)),
+      'PremiumLockCard takes the offer sentence');
+    expect(/if let offerNote \{[\s\S]{0,200}Text\(offerNote\)/.test(code(screen)),
+      'and draws it under the button');
+    [['PuzzleHubScreen.swift', /offerNote: premium\.offerNote/],
+     ['CoachScreens.swift', /offerNote: offerNote/],
+     ['AnalysisReviewModal.swift', /Text\(offerNote\)/],
+     ['VideoScreens.swift', /VideoPaywall\(onSubscribe: onPaywall, offerNote: premium\.offerNote\)/],
+     ['PhoneView.swift', /offerNote: premium\.offerNote/]].forEach(([file, re]) => {
+      expect(re.test(code(read(UI, file))), `${file} passes the offer sentence to its upsell`);
+    });
+    const premiumJs = code(fs.readFileSync(path.join(JS, 'premium.js'), 'utf8'));
+    const appCss = fs.readFileSync(path.join(ROOT, 'web-demo', 'css', 'app.css'), 'utf8');
+    expect(/pw-lock-offer/.test(premiumJs) && /\.pw-lock-offer/.test(appCss),
+      'and the browser lock card draws it, with a rule in app.css to draw it with');
+
+    // The disclosure card names the offer, and only when this Apple Account can have it.
+    expect(/if store\.trialEligible \{[\s\S]{0,300}PaywallStrings\.disclosureTrial/.test(code(screen)),
+      'the legal card names the introductory offer, and only when it is actually on offer');
+    expect(/disclosureTrial/.test(premiumJs), 'and the browser card does too');
+
+    // When the charge lands. The client asked for this in as many words:
+    // "tsaka palang sila madedeckan kapag naka 7 days na sila para alam nila."
+    expect(P.STRINGS.trialChargeNote.indexOf('{date}') >= 0,
+      'the in-trial note names the DATE billing starts');
+    expect(P.STRINGS.trialEndsRow !== P.STRINGS.renewalRow,
+      "a trial's end is not called a renewal — that date is the FIRST CHARGE");
+    expect(/if store\.isInTrial \{ return PaywallStrings\.trialEndsRow \}/.test(code(screen)),
+      'the Swift row has three states, not two');
+    expect(/store\.isInTrial\(\) \? STRINGS\.trialEndsRow/.test(premiumJs),
+      'and so does the browser one');
+    expect(/if store\.isInTrial \{[\s\S]{0,240}PaywallStrings\.trialChargeNote/.test(code(screen)),
+      'and the note is drawn beside it');
+  }
   // The glyph table, so no renderer in either language carries a bare emoji.
   Object.keys(P.GLYPH).forEach((k) => {
     eq(P.GLYPH[k], swStr(screen, 'PaywallGlyph', k), 'PaywallGlyph.' + k);

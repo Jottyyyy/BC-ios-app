@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 /*
- * trial_gate_check.js — nothing is reachable without an entitlement, in either language.
+ * trial_gate_check.js — what is reachable without an entitlement, in either language, and nothing
+ * else.
  *
  *     node tools/qa/trial_gate_check.js
+ *
+ * The open set is THREE things now, and both changes were forced by the same App Store rejection:
+ *
+ *   • **The Analysis Board is free.** docs/subscription.md's free-vs-premium table has listed it as
+ *     free since the paywall landed; the round-4 trial gate walled it anyway, so the table and the
+ *     app disagreed and the table was right. It is also the complete, working screen a reviewer can
+ *     evaluate when the subscription cannot be bought at all.
+ *   • **A store that could not be reached walls nobody.** `locked` has a third term. A wrong product
+ *     ID or an unapproved IAP used to mean "Store Unavailable" with every screen shut behind it —
+ *     what docs/app-store-handoff.md calls "a rejection with no code involved".
  *
  * Why this exists. The gate is one guard at one choke point per language — which is the right
  * shape, and also the reason it is easy to half-land: the guard lives in `PhoneView.swift` and
@@ -41,6 +52,8 @@ const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 const PHONE = read('DemoApp', 'Sources', 'BiyaherongUI', 'PhoneView.swift');
 const APP = read('web-demo', 'js', 'app.js');
 const ENT = read('Sources', 'BiyaherongCoachCore', 'Entitlement.swift');
+const PREMIUM = read('DemoApp', 'Sources', 'BiyaherongUI', 'PremiumStore.swift');
+const PREMIUM_JS = read('web-demo', 'js', 'premium.js');
 
 let passed = 0;
 const failures = [];
@@ -55,10 +68,26 @@ const APP_CODE = code(APP);
 
 // ── 1. "Locked" means the same thing on both sides ──────────────────────────────
 {
-  expect(/private var locked: Bool \{ loginStore\.isSignedIn && !premium\.isPremium \}/
-    .test(PHONE_CODE), 'PhoneApp.locked is signed-in-and-not-premium');
-  expect(/function locked\(\) \{\s*return BiyaLogin\.shared\(\)\.isSignedIn\(\) && !BiyaPremium\.shared\(\)\.isPremium\(\);\s*\}/
-    .test(APP_CODE), 'app.js locked() is the same predicate');
+  expect(/private var locked: Bool \{\s*loginStore\.isSignedIn && !premium\.isPremium && !premium\.storeUnavailable\s*\}/
+    .test(PHONE_CODE), 'PhoneApp.locked is signed-in, not-premium AND the store answered');
+  expect(/function locked\(\) \{\s*return BiyaLogin\.shared\(\)\.isSignedIn\(\)\s*&& !BiyaPremium\.shared\(\)\.isPremium\(\)\s*&& !BiyaPremium\.shared\(\)\.storeUnavailable\(\);\s*\}/
+    .test(APP_CODE), 'app.js locked() is the same three-term predicate');
+
+  // The third term, and why it is not a hole. A store that could not be reached means the user
+  // CANNOT buy — a wrong product ID, an IAP not yet approved, no network on a device with no
+  // cached entitlement — and a paywall in front of someone who cannot buy is a dead app, which
+  // docs/app-store-handoff.md calls "a rejection with no code involved". Entitlements come from the
+  // device's own transaction cache and resolve offline, so a real subscriber is unaffected; a
+  // non-subscriber drops to the FREE TIER, with every DailyLimits cap still in force.
+  expect(/var storeUnavailable: Bool \{ loadState == \.failed \}/.test(code(PREMIUM)),
+    'storeUnavailable is exactly the FAILED load — `.idle` and `.loading` mean "not asked yet" and '
+    + 'must keep the app locked, or it would flicker open at every launch');
+  expect(/storeUnavailable: function \(\) \{ return storeFailRequested\(\); \}/.test(code(PREMIUM_JS)),
+    'and the browser maps it to ?storefail, which is the only failed load a browser can have');
+  // Asked at LAUNCH. `loadState` cannot leave `.idle` until somebody calls load(), so without this
+  // the rule would only take effect after the user had already been walled once.
+  expect(/await premium\.refresh\(\)[\s\S]{0,80}await premium\.load\(\)/.test(PHONE_CODE),
+    'PhoneApp asks the store at launch, not only when the paywall opens');
 
   // Read from the live store, never a cached boolean — the failure the RN app shipped.
   expect(!/var\s+(isLocked|cachedLocked)\b/.test(APP_CODE),
@@ -95,9 +124,9 @@ const APP_CODE = code(APP);
   const jsOpen = APP.match(/var OPEN_ROUTES = \{([^}]*)\}/);
   expect(!!jsOpen, 'app.js declares OPEN_ROUTES');
   const jsKeys = jsOpen ? jsOpen[1].split(',').map((s) => s.split(':')[0].trim()).filter(Boolean) : [];
-  expect(jsKeys.sort().join(',') === 'home,login,paywall,profile',
-    `OPEN_ROUTES is ${jsKeys.join(',')}, expected exactly home + profile + the login gate and the `
-    + 'paywall it routes to');
+  expect(jsKeys.sort().join(',') === 'analysis,home,login,paywall,profile',
+    `OPEN_ROUTES is ${jsKeys.join(',')}, expected home + profile + analysis + the login gate and `
+    + 'the paywall it routes to');
 }
 
 // ── 3. Every wired Home tile goes through the gate ──────────────────────────────
@@ -105,16 +134,21 @@ const APP_CODE = code(APP);
   const home = PHONE_CODE.slice(PHONE_CODE.indexOf('HomeScreen(userName: loginStore.displayName'));
   const wired = [...home.matchAll(/^\s+(on[A-Z]\w*): ?(gated )?/gm)]
     .reduce((acc, m) => { acc[m[1]] = !!m[2]; return acc; }, {});
-  for (const name of ['onPuzzles', 'onAnalysis', 'onPlayCoach', 'onPairing',
+  for (const name of ['onPuzzles', 'onPlayCoach', 'onPairing', 'onVideos',
                       'onOpeningTrainer']) {
     expect(wired[name] === true, `${name} is not wrapped in gated`);
   }
-  // The two deliberate exemptions, and exactly those two.
+  // The THREE deliberate exemptions, and exactly those three.
   expect(wired.onAvatar === false, 'onAvatar stays open — Profile owns Sign out');
   expect(wired.onMembership === false, 'onMembership stays open — it IS the offer');
+  // Stated positively as well as by absence from the list above: a `gated` that crept back onto
+  // this tile would otherwise only show up as an off-by-one in the count below.
+  expect(wired.onAnalysis === false,
+    'onAnalysis stays open — the Analysis Board is free for everyone, paid or not, and '
+    + 'docs/subscription.md has listed it as free since the paywall landed');
   const ungated = Object.keys(wired).filter((k) => !wired[k]);
-  expect(ungated.length === 2,
-    `${ungated.length} ungated Home callbacks (${ungated.join(', ')}), expected 2`);
+  expect(ungated.length === 3,
+    `${ungated.length} ungated Home callbacks (${ungated.join(', ')}), expected 3`);
 
   // Pushed routes are reachable ONLY from those tiles, which is what makes wrapping them enough.
   for (const flag of ['showAnalysis = true', 'showCoach = true', 'showPairing = true',
@@ -123,8 +157,14 @@ const APP_CODE = code(APP);
     expect(hits <= 2, `${flag} is set ${hits} times — a second entry point would bypass the gate`);
   }
 
-  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership'\) \{ goPaywall\(\); return; \}/
-    .test(APP_CODE), 'app.js gates the Home tiles with the same two exemptions');
+  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership' && action !== 'analysis'\) \{ goPaywall\(\); return; \}/
+    .test(APP_CODE), 'app.js gates the Home tiles with the same three exemptions');
+  // The tile exemption and the route exemption must agree. Exempting the tile alone would let the
+  // user in and then have the render backstop throw them out on the very next paint; exempting the
+  // route alone would leave the tile unreachable. Either half on its own is worse than neither.
+  const openRoutes = APP.match(/var OPEN_ROUTES = \{([^}]*)\}/);
+  expect(/action !== 'analysis'/.test(APP_CODE) && !!openRoutes && /\banalysis\s*:/.test(openRoutes[1]),
+    'the Analysis Board is exempt in BOTH places — the Home tile handler and OPEN_ROUTES');
 }
 
 // ── 4. Every destination is raised through the gate, and closes back to Home ────

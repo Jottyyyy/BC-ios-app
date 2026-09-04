@@ -178,11 +178,17 @@ enum PaywallStrings {
     static let heroTitle = "Unlock Full Access"
     static let heroBody = "Train without limits. Get the most out of Biyaherong Chess Coach."
     static let planTitle = "Biyaherong Plus"
-    static let trialCta = "Start Your 7-Day Free Trial"
+    /// `{days}` rather than a typed 7. App Store Connect owns the real duration, and if it is ever
+    /// set to something else a hardcoded number stops being a rounding error and becomes a
+    /// Guideline 3.1.2 misrepresentation — Apple asks the purchase flow to *"clearly indicate how
+    /// long the free trial lasts and the price billed once the free trial is over"*. The number
+    /// comes from `PremiumStore.trialDays`, read off the product's `introductoryOffer`. Same rule
+    /// the prices already follow, for the same reason.
+    static let trialCta = "Start Your {days}-Day Free Trial"
     static let subscribeCta = "Subscribe"
-    static let trialNote = "7 days free, then {price} per month. Cancel anytime."
+    static let trialNote = "{days} days free, then {price} per month. Cancel anytime."
     static let priceNote = "{price} per month. Cancel anytime."
-    static let trialNoteYearly = "7 days free, then {price} per year. Cancel anytime."
+    static let trialNoteYearly = "{days} days free, then {price} per year. Cancel anytime."
     static let priceNoteYearly = "{price} per year. Cancel anytime."
 
     // Plan toggle — labels and sub-lines verbatim from RN premium/index.tsx:628, 74-79.
@@ -207,6 +213,15 @@ enum PaywallStrings {
     static let allSetBody = "Every mode is unlocked. Maglaro na!"
     static let yourPlan = "Your Monthly Subscription"
     static let activeUntil = "Active until {date}"
+    /// While the introductory offer is running. The renewal row would otherwise say "Next Renewal
+    /// Date" over a date that is really the FIRST CHARGE — the one moment a trial user most needs
+    /// named, and the thing the client asked for in as many words: *"tsaka palang sila madedeckan
+    /// kapag naka 7 days na sila para alam nila."*
+    static let trialEndsRow = "Free Trial Ends"
+    static let trialChargeNote = """
+    You have not been charged yet. Billing starts on {date}, and cancelling any time before that \
+    costs you nothing.
+    """
     static let daysRemaining = "{n} days remaining"
     static let oneDayRemaining = "1 day remaining"
     static let renewalRow = "Next Renewal Date"
@@ -252,6 +267,17 @@ enum PaywallStrings {
     static let disclosureTitle = "Biyaherong Plus"
     static let disclosureMonthly = "Premium Monthly — {price} per month"
     static let disclosureYearly = "Premium Yearly — {price} per year"
+    /// The offer, in the binding text rather than only above the button. The card named the price
+    /// and the period of both products and never mentioned the introductory offer at all, while the
+    /// Apple boilerplate below it describes a renewal that does not begin for another week.
+    ///
+    /// "Once per Apple Account" is not padding: eligibility belongs to the subscription GROUP, so a
+    /// customer who used the trial on monthly cannot have it again on yearly, and a reader who
+    /// assumed otherwise would find out at the payment sheet.
+    static let disclosureTrial = """
+    Free trial: {days} days, once per Apple Account. Billing starts automatically when the trial \
+    ends, unless you cancel at least 24 hours before.
+    """
 
     /// Required verbatim by App Review on any auto-renewing subscription.
     static let disclosure = """
@@ -274,6 +300,35 @@ enum PaywallStrings {
 
     static func daysPillText(_ n: Int) -> String {
         n == 1 ? oneDayRemaining : fill(daysRemaining, ["n": String(n)])
+    }
+
+    /// **The one sentence that states the offer** — how long the trial runs, what it converts to,
+    /// and that it can be cancelled.
+    ///
+    /// One implementation, because there were four surfaces and only one of them said any of it:
+    /// the paywall's CTA had the trial line, while the lock card behind every daily cap, the Game
+    /// Review cap and the Tutorial Videos paywall all said "Premium Feature" and "Subscribe Now"
+    /// and nothing else. Four copies of this logic would be four chances to drift; one is checked
+    /// once.
+    ///
+    /// `price` being optional is not a formality. The single call site used to write `?? ""`, which
+    /// rendered *"7 days free, then  per month."* — a sentence with a hole where the number goes,
+    /// on the screen App Review reads most carefully. `loading` at least tells the truth.
+    static func offerNote(trialEligible: Bool, yearly: Bool, days: Int, price: String?) -> String {
+        let template: String
+        if trialEligible {
+            template = yearly ? trialNoteYearly : trialNote
+        } else {
+            template = yearly ? priceNoteYearly : priceNote
+        }
+        return fill(template, ["days": String(days), "price": price ?? loading])
+    }
+
+    /// The CTA label. The trial is only ever promised when StoreKit says this Apple Account can
+    /// actually have it — an ineligible customer offered one would discover otherwise at the
+    /// payment sheet.
+    static func cta(trialEligible: Bool, days: Int) -> String {
+        trialEligible ? fill(trialCta, ["days": String(days)]) : subscribeCta
     }
 
     /// `Sep 12, 2026` — the same frozen month table `HomeMembership.expiryText` uses, and for the

@@ -25,7 +25,10 @@ struct CoachRootScreen: View {
             case .colour(let level):
                 CoachColourScreen(store: store, level: level)
             case .game:
-                CoachGameScreen(store: store, onPaywall: onPaywall)
+                // `premium` for one sentence: the Game Review cap overlay is an upsell, and it used
+                // to name neither the trial nor the price. Passed rather than observed, because the
+                // game screen has no other reason to redraw when the entitlement changes.
+                CoachGameScreen(store: store, offerNote: premium.offerNote, onPaywall: onPaywall)
             }
         }
         .background(CoachSelect.containerBackgroundColor.ignoresSafeArea())
@@ -323,6 +326,9 @@ struct CoachColourScreen: View {
 
 struct CoachGameScreen: View {
     @ObservedObject var store: CoachStore
+    /// What the Game Review cap overlay says the subscription costs — `PremiumStore.offerNote`.
+    /// Defaulted for the same reason `onPaywall` is: previews have no entitlement.
+    var offerNote: String?
     /// Defaulted, so the store's own screens can be previewed without an entitlement.
     var onPaywall: () -> Void = {}
     @State private var selected: Int?
@@ -762,7 +768,8 @@ struct CoachGameScreen: View {
                                 store.reviewBlocked = false
                                 onPaywall()
                             },
-                            showsResetNote: true)
+                            showsResetNote: true,
+                            offerNote: offerNote)
         }
     }
 

@@ -40,6 +40,9 @@ enum LoginType {
     static let titleSize: CGFloat = 30
     static let taglineSize: CGFloat = 14
     static let buttonLabelSize: CGFloat = 17
+    /// The "continue without an account" button. Smaller than Apple's label on purpose: the two are
+    /// equally REACHABLE and deliberately not equally loud.
+    static let guestLabelSize: CGFloat = 15
     static let reassureSize: CGFloat = 13
     static let legalSize: CGFloat = 11
 
@@ -76,6 +79,12 @@ enum LoginPalette {
     static let appleFill = Theme.c(0xFFFFFF)
     static let appleInk = Theme.c(0x000000)
     static let appleShadow = Theme.c(0x000000, 0.35)
+
+    /// The guest button borrows two tokens the app already has rather than inventing a colour: an
+    /// outline in the app's border tint, a label in its muted foreground. Nothing here is a new
+    /// value, which is the point — this screen has no RN original to extract a guest button from.
+    static let guestLabel = Theme.mutedForeground
+    static let guestBorder = Theme.border
 
     /// Extracted: `legalLink` / `legalSep` in `(auth)/login.tsx`.
     static let legal = Theme.c(0x3A5070)
@@ -117,6 +126,13 @@ enum LoginLayout {
     static let buttonShadowRadius: CGFloat = 14
     static let buttonShadowY: CGFloat = 6
     static let pressedButton: Double = 0.82
+
+    /// The second way in. It is an outline rather than a fill so Apple's button stays the loudest
+    /// thing in the band, and 44 rather than 54 for the same reason — but it still clears Apple's
+    /// 44pt minimum target, because a way past a broken sign-in that is hard to hit is not one.
+    static let guestTopGap: CGFloat = 12
+    static let guestButtonHeight: CGFloat = 44
+    static let guestBorderWidth: CGFloat = 1
 
     static let reassureTopGap: CGFloat = 14
     static let footerTopGap: CGFloat = 18
@@ -174,6 +190,8 @@ enum LoginLayout {
             + titleTaglineGap
             + LoginType.line(LoginType.taglineSize)
             + buttonHeight
+            + guestTopGap
+            + guestButtonHeight
             + reassureTopGap
             + LoginType.line(LoginType.reassureSize)
             + footerTopGap
@@ -298,9 +316,22 @@ enum LoginSession {
 
     static let appleProvider = "apple"
 
+    /// A session opened WITHOUT signing in to anything.
+    ///
+    /// There is no account server here and never was — `signIn(_:)` writes one string to
+    /// `UserDefaults` — so requiring Apple's sheet bought the product nothing and cost it
+    /// everything: Guideline 5.1.1(v) says an app with no significant account-based features must
+    /// let people use it without a login, and build 1.0.7 (51) was rejected under 2.1(a) when
+    /// Apple's own sheet failed on the reviewer's device and left the app with no other way in.
+    ///
+    /// It is a REAL persisted session rather than a bypass, exactly like the test-build one, so
+    /// nothing downstream has to learn a third state: the gate finds itself signed in, Profile shows
+    /// the label below, and Sign out still works.
+    static let guestProvider = "guest"
+
     /// The providers a stored value may name. Unknown values are treated as signed out rather than
     /// trusted, so a hand-edited or half-written key fails closed.
-    static let providers: [String] = [appleProvider]
+    static let providers: [String] = [appleProvider, guestProvider]
 
     static func isSignedIn(_ raw: String?) -> Bool {
         guard let raw, !raw.isEmpty else { return false }
@@ -309,7 +340,8 @@ enum LoginSession {
 
     /// What the Profile tab shows beside "Signed in with".
     static func providerLabel(_ raw: String?) -> String {
-        isSignedIn(raw) && raw == appleProvider ? LoginStrings.appleProviderLabel : LoginStrings.noProviderLabel
+        guard isSignedIn(raw) else { return LoginStrings.noProviderLabel }
+        return raw == appleProvider ? LoginStrings.appleProviderLabel : LoginStrings.guestProviderLabel
     }
 }
 
@@ -398,6 +430,21 @@ enum LoginAuth {
 
     /// The request is inert while Apple's sheet is up, so a double tap cannot raise two.
     static func isBusy(_ phase: LoginAuthPhase) -> Bool { phase == .requesting }
+
+    /// What the failure alert says. Composed here rather than at the call site so the browser twin
+    /// can be compared against it, and so the one decision inside it lives with the rest of the
+    /// decision half: **the code is appended only when Apple actually gave us one.**
+    ///
+    /// That suffix exists because of build 1.0.7 (51). App Review reported an alert reading *"Could
+    /// Not Connect"* — a string that appears nowhere in this repo, so it was Apple's own — and there
+    /// was nothing on our side to identify it with, because `didCompleteWithError` tested for
+    /// `.canceled` and discarded the rest of the `NSError`. A screenshot of this alert now carries
+    /// the domain and code, which is the whole diagnosis.
+    static func failureMessage(code: String?) -> String {
+        guard let code, !code.isEmpty else { return LoginStrings.authFailedBody }
+        return LoginStrings.authFailedBody + "\n\n"
+            + LoginStrings.authFailedCode.replacingOccurrences(of: "{code}", with: code)
+    }
 }
 
 // MARK: - Copy
@@ -408,7 +455,11 @@ enum LoginStrings {
     static let title = "Biyaherong Coach"
     static let tagline = "Kabiyahe mo sa pag improve!"
     static let appleButton = "Continue with Apple"
-    static let reassurance = "Walang password — i-tap lang at maglaro na!"
+    /// English, like every other BUTTON in this app ("Sign out", "Delete account", "Restore
+    /// Purchases"). Taglish is the voice of the app's sentences, not of its controls — and this
+    /// particular control is the one an App Store reviewer has to be able to find.
+    static let guestButton = "Continue without an account"
+    static let reassurance = "Opsyonal ang sign in — pwede kang maglaro agad."
 
     static let privacy = "Privacy"
     static let terms = "Terms"
@@ -416,6 +467,9 @@ enum LoginStrings {
 
     static let defaultDisplayName = "Biyahero"
     static let appleProviderLabel = "Apple"
+    /// Beside "Signed in with", for a session opened without Apple. Not the em dash: "—" means
+    /// signed out, and a guest is signed in.
+    static let guestProviderLabel = "No account"
     static let noProviderLabel = "—"
 
     static let accountCard = "Account"
@@ -427,6 +481,20 @@ enum LoginStrings {
     /// Shown only when Apple's sheet reports a real failure. A user-cancelled sign-in shows nothing
     /// at all — see `LoginAuth.next`.
     static let authFailed = "Hindi natuloy ang sign in. Subukan ulit."
+    /// English first, then Taglish — the same shape `privacyBody` uses, and for the same reason:
+    /// this paragraph has two audiences and one of them is an App Store reviewer.
+    ///
+    /// It says where the failure came from because that is the true and useful thing. Apple's sheet
+    /// runs in its own process against Apple's servers; when it fails there is nothing in this app
+    /// to retry and nothing about the device's connection to fix. What there IS, is another way in.
+    static let authFailedBody = """
+    This came from Apple's sign-in service, not from the app. You can continue without an account — \
+    nothing in the app is locked behind signing in.
+
+    Sa Apple nanggaling ito, hindi sa app. Magpatuloy ka na lang nang walang account.
+    """
+    /// The diagnostic suffix, filled by `LoginAuth.failureMessage(code:)`.
+    static let authFailedCode = "Apple error code: {code}"
 
     static let deleteAccount = "Delete account"
     static let deleteTitle = "Burahin ang account?"
@@ -461,13 +529,16 @@ enum LoginStrings {
     Biyaherong Coach works offline. There is no account server and no analytics, and nothing \
     about you is collected or tracked.
 
-    Two things need internet, and only when you ask for them: signing in goes through Apple, and \
-    building an Opening Tree sends the username you type to Lichess or Chess.com so your games \
-    can be downloaded. Everything else — your puzzles, ratings, games and settings — stays on \
-    this device.
+    Signing in is optional, and there is nothing to sign in TO — no account is created anywhere \
+    but on this device.
 
-    Walang account server at walang analytics. Kailangan lang ng internet kapag nag-sign in ka o \
-    kumukuha ng laro mula sa Lichess o Chess.com.
+    Two things need internet, and only if you ask for them: signing in with Apple, if you choose \
+    to, goes through Apple, and building an Opening Tree sends the username you type to Lichess \
+    or Chess.com so your games can be downloaded. Everything else — your puzzles, ratings, games \
+    and settings — stays on this device.
+
+    Walang account server at walang analytics. Opsyonal ang sign in. Kailangan lang ng internet \
+    kapag nag-sign in ka sa Apple o kumukuha ng laro mula sa Lichess o Chess.com.
     """
 
     static let termsTitle = "Terms"

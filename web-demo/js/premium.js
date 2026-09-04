@@ -239,6 +239,14 @@ var BiyaPremium = (function () {
       expiresAt: function () { return snap.expiresAtMs; },
       willAutoRenew: function () { return snap.willAutoRenew; },
 
+      /* The App Store was asked and had nothing to sell. The shell reads this to decide NOT to
+       * wall anybody: someone who cannot reach the store cannot buy, and a paywall in front of
+       * someone who cannot buy is a dead app, not a business model.
+       *
+       * The Swift asks `loadState == .failed`. A browser has no StoreKit at all, so `?storefail`
+       * IS the failed load here — the same switch that makes the paywall draw its failure card. */
+      storeUnavailable: function () { return storeFailRequested(); },
+
       /** Applies what a refresh saw. The clock floor only ever moves forward. */
       apply: function (next, signedAtMs) {
         snap = Object.assign(emptySnapshot(), next);
@@ -471,7 +479,48 @@ var BiyaPremium = (function () {
     eq(forged.access().kind, 'free', 'adding willAutoRenew does not help it either');
 
     /* 10. copy */
-    eq(STRINGS.trialCta, 'Start Your 7-Day Free Trial', 'the trial CTA names the length');
+    eq(ctaLabel(true, CONST.trialDays), 'Start Your 7-Day Free Trial',
+      'the trial CTA names the length');
+    eq(ctaLabel(false, CONST.trialDays), STRINGS.subscribeCta,
+      'and an Apple Account that cannot have the trial is not promised one');
+    /* The number is FILLED, never typed. A literal in the sentence cannot follow App Store Connect,
+       and copy that outlives the product it describes is a 3.1.2 misrepresentation. */
+    ['trialCta', 'trialNote', 'trialNoteYearly', 'disclosureTrial'].forEach(function (k) {
+      expect(STRINGS[k].indexOf('{days}') >= 0, k + ' takes the trial length as a parameter');
+    });
+    /* `disclosureTrial` is excluded: its "24 hours" is Apple's cancellation deadline, a fixed rule
+       of the App Store rather than anything App Store Connect can change. */
+    ['trialCta', 'trialNote', 'trialNoteYearly'].forEach(function (k) {
+      expect(!/\d/.test(STRINGS[k]), k + ' contains no digit of its own');
+    });
+
+    /* The one sentence every upsell surface shows. */
+    eq(offerNote(true, false, 7, '$1.99'), '7 days free, then $1.99 per month. Cancel anytime.',
+      'monthly, eligible');
+    eq(offerNote(true, true, 7, '$19.99'), '7 days free, then $19.99 per year. Cancel anytime.',
+      'yearly, eligible');
+    eq(offerNote(false, false, 7, '$1.99'), '$1.99 per month. Cancel anytime.',
+      'monthly, no trial to offer — and no mention of one');
+    eq(offerNote(false, true, 7, '$19.99'), '$19.99 per year. Cancel anytime.',
+      'yearly, no trial to offer');
+    eq(offerNote(true, false, 14, '$1.99'), '14 days free, then $1.99 per month. Cancel anytime.',
+      'a different trial length follows the product rather than the sentence');
+    /* The bug this replaced: `?? ''` rendered "7 days free, then  per month." — a sentence with a
+       hole where the number goes, on the screen App Review reads most carefully. */
+    expect(offerNote(true, false, 7, null).indexOf(STRINGS.loading) > 0,
+      'a price that has not resolved says so instead of leaving a gap');
+    expect(offerNote(true, false, 7, '').indexOf('then  per') < 0, 'and an empty one does too');
+    ['trialNote', 'trialNoteYearly', 'priceNote', 'priceNoteYearly'].forEach(function (k) {
+      expect(STRINGS[k].indexOf('Cancel anytime') >= 0, k + ' says the subscription can be cancelled');
+      expect(STRINGS[k].indexOf('{price}') >= 0, k + ' names the price that will be billed');
+    });
+    expect(STRINGS.disclosureTrial.indexOf('24 hours') >= 0,
+      'the trial disclosure names the cancellation deadline');
+    expect(STRINGS.trialChargeNote.indexOf('{date}') >= 0,
+      'and the in-trial note names the DATE the first charge lands — the client asked for exactly '
+      + 'this: "tsaka palang sila madedeckan kapag naka 7 days na sila para alam nila"');
+    expect(STRINGS.trialEndsRow !== STRINGS.renewalRow,
+      'a trial\'s end is not called a renewal');
     expect(STRINGS.disclosure.indexOf('automatically renews') >= 0,
       'the App Review disclosure is present');
     expect(STRINGS.disclosure.indexOf('24 hours') >= 0, 'and names the 24-hour window');
@@ -608,11 +657,14 @@ var BiyaPremium = (function () {
     heroTitle: 'Unlock Full Access',
     heroBody: 'Train without limits. Get the most out of Biyaherong Chess Coach.',
     planTitle: 'Biyaherong Plus',
-    trialCta: 'Start Your 7-Day Free Trial',
+    /* `{days}`, not a typed 7. App Store Connect owns the real duration, and a hardcoded number
+       that stops matching it is a Guideline 3.1.2 misrepresentation, not a rounding error. Same
+       rule the prices already follow. The Swift reads it off the product's introductoryOffer. */
+    trialCta: 'Start Your {days}-Day Free Trial',
     subscribeCta: 'Subscribe',
-    trialNote: '7 days free, then {price} per month. Cancel anytime.',
+    trialNote: '{days} days free, then {price} per month. Cancel anytime.',
     priceNote: '{price} per month. Cancel anytime.',
-    trialNoteYearly: '7 days free, then {price} per year. Cancel anytime.',
+    trialNoteYearly: '{days} days free, then {price} per year. Cancel anytime.',
     priceNoteYearly: '{price} per year. Cancel anytime.',
     planMonthly: 'Monthly',
     planYearly: 'Yearly',
@@ -623,6 +675,11 @@ var BiyaPremium = (function () {
     disclosureTitle: 'Biyaherong Plus',
     disclosureMonthly: 'Premium Monthly — {price} per month',
     disclosureYearly: 'Premium Yearly — {price} per year',
+    /* The offer, in the binding text rather than only above the button. "Once per Apple Account" is
+       not padding: eligibility belongs to the subscription GROUP, so someone who used the trial on
+       monthly cannot have it again on yearly. */
+    disclosureTrial: 'Free trial: {days} days, once per Apple Account. Billing starts '
+      + 'automatically when the trial ends, unless you cancel at least 24 hours before.',
     loading: 'Loading…',
     restoreLink: 'Restore Purchases',
     restoreButton: 'Already paid? Restore',
@@ -636,6 +693,12 @@ var BiyaPremium = (function () {
     allSetBody: 'Every mode is unlocked. Maglaro na!',
     yourPlan: 'Your Monthly Subscription',
     activeUntil: 'Active until {date}',
+    /* While the introductory offer is running. "Next Renewal Date" over a date that is really the
+       FIRST CHARGE hides the one fact a trial user needs — the client's ask, verbatim: "tsaka
+       palang sila madedeckan kapag naka 7 days na sila para alam nila." */
+    trialEndsRow: 'Free Trial Ends',
+    trialChargeNote: 'You have not been charged yet. Billing starts on {date}, and cancelling any '
+      + 'time before that costs you nothing.',
     daysRemaining: '{n} days remaining',
     oneDayRemaining: '1 day remaining',
     renewalRow: 'Next Renewal Date',
@@ -729,6 +792,32 @@ var BiyaPremium = (function () {
     return n === 1 ? STRINGS.oneDayRemaining : fill(STRINGS.daysRemaining, { n: n });
   }
 
+  /**
+   * THE ONE SENTENCE that states the offer: how long the trial runs, what it converts to, and that
+   * it can be cancelled.
+   *
+   * One implementation, because there were four upsell surfaces and only one of them said any of
+   * it — the paywall's CTA had the trial line, while the lock card behind every daily cap, the Game
+   * Review cap and the Tutorial Videos paywall all said "Premium Feature" / "Subscribe Now" and
+   * nothing else. That is the surface the client asked to fix.
+   *
+   * `price` may be null. The Swift used to write `?? ''` at its single call site, which rendered
+   * "7 days free, then  per month." — a sentence with a hole where the number goes, on the screen
+   * App Review reads most carefully.
+   */
+  function offerNote(trialEligible, yearly, days, price) {
+    var template;
+    if (trialEligible) template = yearly ? STRINGS.trialNoteYearly : STRINGS.trialNote;
+    else template = yearly ? STRINGS.priceNoteYearly : STRINGS.priceNote;
+    return fill(template, { days: days, price: (price === null || price === undefined || price === '')
+      ? STRINGS.loading : price });
+  }
+
+  /** The CTA label. The trial is only ever promised to an Apple Account that can actually have it. */
+  function ctaLabel(trialEligible, days) {
+    return trialEligible ? fill(STRINGS.trialCta, { days: days }) : STRINGS.subscribeCta;
+  }
+
   /** `Sep 12, 2026` — the same frozen month table the Home banner uses. */
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -777,6 +866,18 @@ var BiyaPremium = (function () {
     return typeof location !== 'undefined' && /(\?|&)storefail\b/.test(location.search);
   }
 
+  /**
+   * The offer sentence for THIS browser: the constant for the length, the placeholder for the
+   * price, and eligibility assumed.
+   *
+   * All three are the honest answers a browser can give. There is no StoreKit here, so no
+   * `introductoryOffer.period` to read and no `isEligibleForIntroOffer` to ask — and inventing a
+   * price is the exact bug the RN app shipped. The Swift reads all three off the product.
+   */
+  function demoOfferNote() {
+    return offerNote(true, selectedPlan === 'yearly', CONST.trialDays, DEMO.simulatedPrice);
+  }
+
   function benefitRows() {
     return BENEFITS.map(function (b) {
       return '<div class="pw-row"><span class="pw-check">' + GLYPH.check + '</span>'
@@ -808,6 +909,10 @@ var BiyaPremium = (function () {
       + '<div class="pw-lock-body">' + message + '</div>'
       + (opts.resets ? '<div class="pw-reset">' + STRINGS.resetsNote + '</div>' : '')
       + '<button class="pw-cta" type="button">' + STRINGS.lockCta + '</button>'
+      // The terms of what that button starts, under it, in the legal size. The Swift's
+      // `PremiumLockCard` takes this as a parameter because it has no store in scope; the browser
+      // can compose it here. Either way it is the same sentence the paywall's CTA carries.
+      + '<div class="pw-lock-offer">' + demoOfferNote() + '</div>'
       + '</div>';
     function close() { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }
     wrap.querySelector('.pw-lock-scrim').onclick = close;
@@ -902,7 +1007,12 @@ var BiyaPremium = (function () {
       + '<div class="pw-disclosure-line">'
       + fill(STRINGS.disclosureMonthly, { price: DEMO.simulatedPrice }) + '</div>'
       + '<div class="pw-disclosure-line">'
-      + fill(STRINGS.disclosureYearly, { price: DEMO.simulatedPrice }) + '</div>';
+      + fill(STRINGS.disclosureYearly, { price: DEMO.simulatedPrice }) + '</div>'
+      // The offer itself, in the binding text. The card named the price and the period of both
+      // products and never mentioned the introductory offer, while the Apple boilerplate under it
+      // describes a renewal that, for a trial user, does not begin for another week.
+      + '<div class="pw-disclosure-line">'
+      + fill(STRINGS.disclosureTrial, { days: CONST.trialDays }) + '</div>';
   }
 
   function renderOffer(body, store) {
@@ -931,11 +1041,9 @@ var BiyaPremium = (function () {
     body.appendChild(planToggle());
 
     body.appendChild(el('div', 'pw-actions',
-      '<button class="pw-cta" type="button" data-act="trial">' + STRINGS.trialCta + '</button>'
-      + '<div class="pw-price">'
-      + fill(selectedPlan === 'yearly' ? STRINGS.trialNoteYearly : STRINGS.trialNote,
-             { price: DEMO.simulatedPrice })
-      + '</div>'));
+      '<button class="pw-cta" type="button" data-act="trial">'
+      + ctaLabel(true, CONST.trialDays) + '</button>'
+      + '<div class="pw-price">' + demoOfferNote() + '</div>'));
 
     body.appendChild(el('div', 'pw-legal',
       disclosureLines()
@@ -963,8 +1071,16 @@ var BiyaPremium = (function () {
       rows += '<div class="pw-until">' + fill(STRINGS.activeUntil, { date: dateText(expiry) })
         + '</div>'
         + (left > 0 ? '<div class="pw-days">' + daysPillText(left) + '</div>' : '')
+        /* Three states, not two. A trial auto-renews, so `willAutoRenew` alone would call its end
+           date a renewal — and that date is really the FIRST CHARGE, the one fact a trial user
+           needs. */
         + '<div class="pw-row"><span>' + GLYPH.calendar + '</span><span>'
-        + (store.willAutoRenew() ? STRINGS.renewalRow : STRINGS.expiresRow) + '</span></div>';
+        + (store.isInTrial() ? STRINGS.trialEndsRow
+          : (store.willAutoRenew() ? STRINGS.renewalRow : STRINGS.expiresRow)) + '</span></div>'
+        + (store.isInTrial()
+          ? '<div class="pw-lock-offer">'
+            + fill(STRINGS.trialChargeNote, { date: dateText(expiry) }) + '</div>'
+          : '');
     }
     rows += '<div class="pw-row"><span>' + GLYPH.renew + '</span><span>'
       + (store.willAutoRenew() ? STRINGS.autoRenewOn : STRINGS.autoRenewOff) + '</span></div>'
@@ -989,6 +1105,7 @@ var BiyaPremium = (function () {
     maxSwissRounds: maxSwissRounds,
     usageKey: usageKey, dayKey: dayKey, used: used, record: record, isAtLimit: isAtLimit,
     remaining: remaining, prune: prune,
+    offerNote: offerNote, ctaLabel: ctaLabel,
     createStore: createStore, memoryStorage: memoryStorage, shared: shared,
     selfTest: selfTest,
     // design

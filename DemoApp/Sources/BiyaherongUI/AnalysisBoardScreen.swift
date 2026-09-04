@@ -32,6 +32,10 @@ struct AnalysisBoardScreen: View {
     /// the macOS demo panel wants.
     var reviewGate: (() -> Bool)?
     var onPaywall: () -> Void = {}
+    /// What the Game Review cap overlay says the subscription costs — `PremiumStore.offerNote`,
+    /// already composed. A plain String for the same reason `reviewGate` is a closure: this module
+    /// stays unaware that subscriptions exist.
+    var offerNote: String?
 
     var body: some View {
         GeometryReader { geo in
@@ -430,7 +434,8 @@ struct AnalysisBoardScreen: View {
                                 summary: vm.reviewSummary,
                                 onCancel: { vm.cancelReview() },
                                 onClose: { vm.dismissReview() },
-                                onUpgrade: { vm.dismissReview(); onPaywall() })
+                                onUpgrade: { vm.dismissReview(); onPaywall() },
+                                offerNote: offerNote)
         }
     }
 

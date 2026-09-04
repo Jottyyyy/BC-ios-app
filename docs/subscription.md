@@ -8,11 +8,18 @@ The trial requires a payment method and converts automatically: that is Apple's 
 an introductory offer, and it is the client's requirement met without a line of code. The app must
 **not** collect card details itself — Guideline 3.1.1 forbids it for digital content.
 
-**Nothing in the app is usable until that trial is started.** Home draws — the six cards, the
-quote, the offer banner — so the user can see what they are buying, and every tile, every content
-tile and every route beyond it lands on the paywall instead. Profile stays open, because it owns
-Sign out. This is the round-4 client decision: *"kada click lagi mong dalhin doon na go for free
-trial."*
+**Almost nothing in the app is usable until that trial is started.** Home draws — the six cards, the
+quote, the offer banner — so the user can see what they are buying, and every tile beyond it lands
+on the paywall instead. This is the round-4 client decision: *"kada click lagi mong dalhin doon na go
+for free trial."*
+
+**Three things stay open**, and the last two were added after the App Store rejected 1.0.7 (51):
+
+- **Profile**, because it owns Sign out.
+- **The Analysis Board**, free for everyone, paid or not. The table below has said so since the
+  paywall landed; the round-4 gate walled it anyway, so the table and the app disagreed and the
+  table was right.
+- **Everything, whenever the App Store cannot be reached at all.** See below.
 
 > **This reverses what the rest of this document was written around.** Until round 4 there was a
 > genuinely playable free tier and the paywall was reached on demand. The caps below are all still
@@ -66,8 +73,8 @@ One guard per language, at the only place every route transition passes through.
 
 | | Swift | Browser |
 |---|---|---|
-| The predicate | `PhoneApp.locked` — `loginStore.isSignedIn && !premium.isPremium` | `app.js` `locked()` — the same two calls |
-| Left open | Home (the root everything is raised over) and Profile, raised from the avatar without `gated` | `OPEN_ROUTES` — plus `login` and `paywall`, which are the routes it sends people *to* |
+| The predicate | `PhoneApp.locked` — `isSignedIn && !isPremium && !storeUnavailable` | `app.js` `locked()` — the same three calls |
+| Left open | Home (the root everything is raised over), Profile (from the avatar) and Analysis, all without `gated` | `OPEN_ROUTES` — plus `login` and `paywall`, which are the routes it sends people *to* |
 | Every destination | a `show*` flag raised in exactly one place, inside `gated` | the Home tile handler |
 | Home tiles | `gated { … }` around every wired destination | one check in `renderHome`'s handler |
 | Mid-session lapse | `visibleTab` re-resolves on every render | `render()` re-checks before the dispatch chain |
@@ -80,8 +87,29 @@ Four things about it are deliberate:
 - **`onAvatar` and `onMembership` are exempt, and nothing else is.** One leads to Sign out; the
   other *is* the offer. Walling Profile would strand a user who signed in with the wrong Apple
   Account, and Restore Purchases lives on the paywall they would then be unable to leave.
-- **The paywall stays dismissible.** Back returns to Home. A locked user can look at the app; they
-  just cannot open any of it.
+- **The paywall stays dismissible.** Back returns to Home. A locked user can look at the app, and
+  open the Analysis Board, and nothing else.
+
+### A store that will not load walls nobody
+
+The third term in `locked` is `!premium.storeUnavailable`, which is `loadState == .failed` — the App
+Store was **asked** and had nothing to sell. A wrong product ID, an in-app purchase not yet approved,
+or no network on a device with no cached entitlement.
+
+In every one of those cases the user *cannot buy*, and a paywall in front of someone who cannot buy
+is not a paywall, it is a dead app. `app-store-handoff.md` names that outcome precisely: **"a
+rejection with no code involved"** — and after 1.0.7 (51) it stopped being hypothetical.
+
+Three details make it safe:
+
+- `.idle` and `.loading` deliberately still lock. They mean *not asked yet*, and treating them as a
+  failure would flicker the whole app open at every launch.
+- `PhoneApp` therefore calls `load()` **at launch**, not only when the paywall opens. Otherwise
+  `loadState` never leaves `.idle` and the rule would only take effect after the user had already
+  been walled once.
+- It is not a subscriber hole. Entitlements come from the device's own transaction cache and resolve
+  in Airplane Mode, so a paying customer is unaffected; a non-subscriber drops to the **free tier**
+  below — with every `DailyLimits` cap and every per-feature gate still in force — not to everything.
 - **The lapse case is handled by re-resolving, not by remembering.** `Transaction.updates` can
   revoke an entitlement while the user is standing inside the Puzzle Hub, so both languages re-check
   on every paint rather than only at tap time.
@@ -100,8 +128,9 @@ tests on Windows) saw an app with no locks on it.
 
 ## Free vs premium
 
-*What a lapsed subscriber returns to. Not reachable without ever having subscribed — see the gate
-above.*
+*What a lapsed subscriber returns to — and what anyone gets when the App Store cannot be reached.
+Otherwise not reachable without having subscribed, except for the Analysis Board row, which is now
+free for everyone. See the gate above.*
 
 | | Free | Premium | Mode key |
 |---|---|---|---|
@@ -110,7 +139,7 @@ above.*
 | Turbo run | **1 / day per mode** (∞ · 3 min · 5 min separately) | unlimited | `rush_0` `rush_3` `rush_5` |
 | Daily puzzle · daily goal | ✓ always free | ✓ | — |
 | Thematic puzzles | 🔒 hard gate | ✓ | — |
-| Analysis Board · engine · move tree · PGN · book | ✓ unlimited | ✓ | — |
+| **Analysis Board · engine · move tree · PGN · book** | **✓ unlimited, and ungated** | ✓ | — |
 | Game Review (**both** entry points) | 3 / day | unlimited | `review` |
 | Play vs Coach | Jaden (1), Jade (2) | all five | `id > 2` |
 | Coach chats | 2 / day | unlimited | `coach` |
@@ -138,6 +167,19 @@ nowhere — the RN client never enforced it, the PHP controller did, and there i
   fails if `"review"` ever appears in it, in either language.
 - **The invented cap (`reviewsPerDay = 3`) lives in `Entitlement`.** The number is borrowed, not
   guessed: the RN app gated the Analysis Board at 3 saved sessions and 3 pinned GM games.
+- **Neither is the trial's LENGTH.** `PremiumStore.trialDays` derives from the loaded product's
+  `introductoryOffer.period` (`P1W` → 7), falling back to `Entitlement.trialDays`. The copy used to
+  type the 7 inside the sentence with nothing checking it against the product; if App Store Connect
+  is ever set to another duration, a literal stops being a rounding error and becomes a Guideline
+  3.1.2 misrepresentation. `replay_premium.js` fails on a digit in `trialCta` / `trialNote*`.
+- **The offer is one sentence, composed once.** `PaywallStrings.offerNote(...)` — how long the trial
+  runs, what it converts to, that it can be cancelled — reaches the paywall's CTA, `PremiumLockCard`
+  (so every daily cap and the thematic gate), the Analysis Board's Game Review cap, Play vs Coach's,
+  and the Tutorial Videos paywall. Before this only the paywall said any of it; the other four said
+  "Premium Feature" and "Subscribe Now" and nothing about money. It also killed a `?? ""` that
+  rendered *"7 days free, then  per month."* whenever a price had not resolved.
+- **The date of the first charge is named.** A trial auto-renews, so `willAutoRenew` alone called its
+  end "Next Renewal Date". `trialEndsRow` and `trialChargeNote` say what actually happens and when.
 - **Prices are never hard-coded.** `Product.displayPrice` only — the original showed three different
   prices in one session. The same rule covers the **`Save {n}%`** badge on the yearly row: it is
   computed from the two real `Product.price` values and simply does not render when either tier is
@@ -231,18 +273,24 @@ real trial, renewal, expiry and billing-retry paths.
 
 In `web-demo/index.html`, set the **Subscription** picker to **Free**:
 
-- every Home tile lands on **"Start Your 7-Day Free Trial"**;
+- every Home tile lands on **"Start Your 7-Day Free Trial"** — except **Analysis**, which opens;
 - Back from the paywall returns to Home;
 - Profile still opens, and **Sign out** still works;
+- every lock card names the trial, the price it converts to, and that it can be cancelled;
+- `?storefail` opens the **free tier** rather than a wall, with Restore and both legal links intact;
 - switching the picker to **Trial**, **Active** or **Grace** opens everything normally;
 - switching it back to **Free** *while standing inside the Puzzle Hub* bounces to the paywall on the
-  next paint — that is the `render()` backstop, and it is the case a tap-time-only gate misses.
+  next paint — that is the `render()` backstop, and it is the case a tap-time-only gate misses;
+- doing the same *while standing inside the Analysis Board* must **not** bounce, which is the half
+  that would break if `analysis` were exempted in the tile handler and not in `OPEN_ROUTES`.
 
 ## Testing before the product exists
 
 Until the four App Store Connect steps below are done, `Product.products(for:)` returns an empty
-list, the paywall can only render "Store Unavailable", and — because nothing in the app opens
-without an entitlement — there is no way for a tester to see any of it.
+list and the paywall can only render "Store Unavailable". That used to leave a tester with no way
+to see any of the app; since 1.0.8 a failed load stops the gate instead (see **A store that will not
+load walls nobody** above), so the free tier is reachable. The test-build grant below still exists
+because the free tier is not the *premium* behaviour anyone is trying to test.
 
 So `PremiumStore.recompute()` grants `.premium(trial: false)` whenever `BiyaherongBuild.isTestBuild`
 — which is now **only** the Debug configuration and the two CI test workflows. The default is
@@ -278,12 +326,14 @@ from this repo:
 4. Add the **7-day free trial** introductory offer **to both products**.
 5. **Enable the billing grace period**, so a card that fails does not end the subscription instantly.
    `Entitlement.graceDays = 7` assumes it.
-6. **Submit both IAPs for review alongside the build that contains them** — not after. Because the
-   app is fully gated, an unconfigured product means `Product.products(for:)` returns empty, the
-   reviewer sees "Store Unavailable", and there is literally nothing else to look at. That is a
-   rejection with no code involved.
-7. **App Review notes**: say the app is subscription-only, that a sandbox account is needed, and
-   that Sign in with Apple is the only sign-in.
+6. **Submit both IAPs for review alongside the build that contains them** — not after. An
+   unconfigured product means `Product.products(for:)` returns empty and the paywall can only say
+   "Store Unavailable". Since 1.0.8 that no longer leaves the reviewer with nothing — the free tier
+   and the Analysis Board open instead — but it is still a screen that cannot sell anything, and
+   the IAPs still have to be reviewed some time.
+7. **App Review notes**: the wording is in [`app-review-response.md`](app-review-response.md). No
+   demo account is needed — sign-in is optional — but a sandbox Apple Account is, for the
+   subscription.
 
 ### If the store will not load
 
