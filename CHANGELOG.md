@@ -9,6 +9,46 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-04 (changed) — 1.0.8 (52) uploaded: the App Review fixes, on a tree that compiles
+
+Delivery UUID `9c6e5c0e-3ec7-43fd-8bfd-63de56e391cd`. 85,662,814 bytes, `UPLOAD SUCCEEDED with no
+errors`, via `tools/ship/ship_testflight.sh 52`. This is the resubmission build for the 2.1(a)
+rejection — the guest door, the free Analysis Board, the store-failure escape hatch and the named
+7-day trial, all from the entry above.
+
+**The build number was passed explicitly, not bumped.** `origin/main` had already set
+`CURRENT_PROJECT_VERSION` to 52 and called it "the floor, not a suggestion". Letting the script
+auto-bump would have produced 53 and stranded the number the CHANGELOG and the version comment both
+name. `52 (unchanged)` is what the run printed.
+
+**Shipped from the branch, because `main` alone does not build.** `origin/main` carries the App
+Review work but not the two compile fixes that came before it —
+`Engine/Sources/CStockfish/biya_stockfish.cpp` (the search callbacks, without which the first search
+kills the process) and the `import AVKit` that Tutorial Videos needs. Merging main *into*
+`fix/stockfish-search-callbacks` is what produced a tree with both. Two conflicts, both resolved
+toward main: the version pair (1.0.6/51 → **1.0.8/52**, keeping main's rewritten drift comment) and
+the CHANGELOG, re-stacked newest-first so 09-04 precedes 09-02.
+
+**Guards, all passed against this exact artifact.** `BIYA_TESTBUILD` did not reach the compiler
+(`(none)` — real sign-in, real StoreKit); `com.apple.developer.applesignin` decoded back out of both
+the archive *and* the signed `.ipa`; `VERIFY SUCCEEDED with no errors` from `altool --validate-app`;
+the Info.plist read back `1.0.8 (52)`.
+
+**Verification before the archive**, since a merge from `origin/main` is written blind on Windows and
+has broken this build before: `swift build` clean at the root and in `DemoApp/`, `swift_lint.js`
+(143 files), `swift_symbol_check.js` (3,829 references, 160 types), `swift_enum_payload_check.js`,
+and the four self-checks — `PaywallMetricsCheck` 130, `LoginMetricsCheck` 181, `HomeMetricsCheck`
+212, `PieceArtCheck` 112.
+
+**`js_goldens.js` could not run on this Mac, and that is a pre-existing gap.** It needs
+`Goldens/san_parse.json`, which `tools/oracle/generate_goldens.php` refuses to write because the
+sibling `../BYAHERONG-COACH-LARAVEL` checkout has no `app/Services/ChessEngine.php` — that clone is
+a trimmed one. Nothing in this merge caused it and nothing in this merge touched a ported algorithm;
+the suite was reported green at 35,937 assertions by the branch that wrote the App Review fixes.
+Anyone with the full Laravel clone should re-run it.
+
+`web-demo/` not updated — a release.
+
 ### 2026-09-04 (fixed) — App Review could not get into the app, and three separate things made that possible
 
 Build **1.0.7 (51)** was rejected on 2026-09-02 under **Guideline 2.1(a)** — *"The app displays
