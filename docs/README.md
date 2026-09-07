@@ -90,14 +90,21 @@ Feature- and subsystem-level documentation for this repo.
 - [`shipping-to-testflight.md`](shipping-to-testflight.md) — **one command** to build, verify and
   upload a TestFlight build (`tools/ship/ship_testflight.sh`), the one-time signing/API-key setup,
   and the several ways Apple's tooling reports success while silently doing nothing. **Complete.**
-- [`app-review-response.md`](app-review-response.md) — **the 2.1(a) rejection of 1.0.7 (51) and the
-  answer to it.** Why the "Could Not Connect" alert was Apple's own and not ours, the three single
-  points of failure that made it fatal, and the reply + App Review Notes to paste into App Store
-  Connect. **Read this with `app-store-handoff.md` before resubmitting.**
+- [`app-review-response.md`](app-review-response.md) — **every App Review rejection and the reply to
+  it, newest first.** 1.0.8 (52) on Guidelines 2.3.2 + 2.3.4, where nothing but the product page was
+  wrong; and 1.0.7 (51) on 2.1(a), why the "Could Not Connect" alert was Apple's own and not ours,
+  and the three single points of failure that made it fatal. Both carry the reply and the App Review
+  Notes to paste into App Store Connect. **Read this with `app-store-handoff.md` before
+  resubmitting.**
 - [`app-store-handoff.md`](app-store-handoff.md) — the operational checklist for whoever has the Mac
   and the App Store Connect login: the exact product IDs and prices, the order the steps have to
   happen in, and why a mistyped product ID is a rejection rather than an error message. Ends with a
   self-contained brief to hand an assistant. **Start here to submit.**
+- [`app-store-assets.md`](app-store-assets.md) — the product page itself: which of the screenshots,
+  app previews and IAP promotional images are actually required, the sizes, the recording brief to
+  forward to whoever has the Mac, and `tools/ship/make_app_preview.sh` — whose border check catches
+  the device frame that got 1.0.8 rejected, and why neither `cropdetect` nor an absolute luma
+  threshold could. **Complete.**
 
 _More docs get added here as features are built._
 

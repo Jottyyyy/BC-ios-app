@@ -133,7 +133,25 @@ And the three things 1.0.8 exists to prove, which need no sandbox account at all
 - the **Analysis** tile opens the board with no subscription
 - with the products deliberately unconfigured, the app opens the free tier rather than a wall
 
-### 5. Submit
+### 5. Listing assets
+
+**Screenshots are required. App previews and in-app-purchase promotional images are not** — and both
+of the optional ones are what got 1.0.8 (52) rejected, which is why
+[`app-store-assets.md`](app-store-assets.md) now exists. Read it before touching the product page.
+
+The rule that catches people: a device frame is **allowed in a screenshot** and **forbidden in an
+app preview**. Running the same mockup template over both is precisely what produced the 2.3.4
+citation.
+
+```bash
+tools/ship/make_app_preview.sh export raw.mov preview_65.mov   # from a full-screen iOS recording
+tools/ship/make_app_preview.sh check preview_65.mov            # size, length, codec, black borders
+```
+
+If either optional asset is not ready, **delete it rather than ship a weak one.** An empty preview
+slot is still a complete product page; a bad preview is a rejection.
+
+### 6. Submit
 
 **Submit both in-app purchases together with the build**, not afterwards.
 
@@ -177,6 +195,13 @@ the build.
 - **Do not bump the build number by hand.** The ship script and CI manage it, and
   `ExportOptions.plist` pins `manageAppVersionAndBuildNumber` to false because export otherwise
   rewrites it.
+- **A device frame is fine in a screenshot and fatal in an app preview.** 1.0.8 (52) was rejected
+  under 2.3.4 for a preview composited inside a tablet mockup — and the footage inside it was not
+  even the iOS app. `tools/ship/make_app_preview.sh check` measures the black borders a frame
+  always leaves; run it on every preview before uploading.
+- **A promotional image is optional, and a duplicated one is worse than none.** The same rejection
+  cited 2.3.2 because one screenshot of the paywall had been uploaded against both subscriptions.
+  Delete them unless you are actually promoting the products on the App Store.
 
 ---
 

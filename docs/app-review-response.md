@@ -1,4 +1,75 @@
-# The 2.1(a) rejection of 1.0.7 (51), and the reply to it
+# App Review rejections, and the replies to them
+
+**Newest first.** Two so far, with nothing in common: the first was about the binary, the second
+about nothing but the product page.
+
+---
+
+## 1.0.8 (52) — Guidelines 2.3.2 and 2.3.4, metadata only
+
+**Submission ID `a037695f-351d-4397-8412-83cf612b0bbe`, reviewed 2026-09-06** on an iPad Air 11-inch
+(M3). Two citations, **neither of them the binary** — build 52 was resubmitted unchanged. The rules
+nobody had written down are now in [`app-store-assets.md`](app-store-assets.md).
+
+### 2.3.2 — the in-app-purchase promotional image
+
+Apple: *"You submitted duplicate or identical promotional images for different promoted In-App
+Purchase products"* and *"Your promotional image is a screenshot taken from the app."* Both were
+true. One file was uploaded against `…plus.monthly` and `…plus.yearly` alike, and it was a square
+crop of the **Go Premium** screen — caught, as it happens, in its store-failure state
+(*"Couldn't load subscriptions from App Store"*).
+
+A promotional image is only used when the subscription is *promoted* on the App Store, which this
+app does not do, so both were deleted. Apple's own message offers that as a resolution.
+
+### 2.3.4 — the app preview
+
+Apple: *"Includes device images and/or device frames."* The preview was a screen recording
+composited inside a **white tablet mockup**, letterboxed onto the 886×1920 canvas, with the app
+covering about a third of the frame.
+
+Three things Apple did *not* cite were wrong in the same file:
+
+| | |
+|---|---|
+| **It was not this app** | The status bar reads `17:37 Fri 17 Apr` — time *and* date on the left, which iOS never shows — and the "Continue Previous Game?" alert is a Material dialog with borderless ALL-CAPS `NEW GAME` / `CONTINUE`. That is the React Native Android build. |
+| **A notification shade is open at ~19 s** | Two Messenger notifications, a Gmail "1 new message" and an Android "Notification settings" button, all headed for the public product page. |
+| **It predates the app** | That status bar dates the capture to 17 April 2026. Stockfish was not embedded in this repo until 2026-08-25. |
+
+It was also the wrong shape for the product: `ios/project.yml` makes this app iPhone-only and
+portrait-only, so a tablet mockup was never going to be right.
+
+All three previews were deleted — a preview is optional, a screenshot is not. Replacements go
+through [`app-store-assets.md`](app-store-assets.md) and the border check in
+`tools/ship/make_app_preview.sh`, which fails on the rejected file and passes a full-bleed capture.
+
+### The reply to paste into App Store Connect
+
+> Thank you. Both issues were in our product page assets rather than the app, so build 52 is
+> resubmitted unchanged.
+>
+> **2.3.2** — We have deleted the promotional images from both subscriptions. We do not promote our
+> in-app purchases on the App Store, so the images served no purpose, and your message notes that
+> removing them resolves this. Your findings were both correct: the same file had been uploaded for
+> the monthly and the yearly product, and it was a screenshot of the app rather than a designed
+> image.
+>
+> **2.3.4** — We have removed the app previews. They were built by compositing a screen recording
+> inside a tablet mockup, which is exactly the device frame you identified, and the footage was not
+> from this build either. Rather than upload a corrected version under time pressure, we have
+> removed them and will submit proper full-screen captures in a later update. The screenshots on
+> the page are unchanged.
+>
+> Nothing in the binary changed for this resubmission.
+
+### App Review Notes for the submission form
+
+Unchanged from 1.0.7 (51) — reuse the block further down this page. No app behaviour changed
+between the two builds.
+
+---
+
+## 1.0.7 (51) — Guideline 2.1(a), "the app displays error upon login"
 
 **Submission ID `aaf81c76-d222-412c-a78c-d70a1e1d0457`, reviewed 2026-09-02.** Guideline 2.1(a) —
 Performance — App Completeness. *"The app displays error upon login."* iPhone 17 Pro Max and iPad
@@ -7,7 +78,7 @@ Air 11-inch (M3), iOS/iPadOS 26.6, internet connection active.
 The screenshot shows a system alert — **"Could Not Connect" / "Make sure you are connected to Wi-Fi
 or your mobile network."** — over Apple's own Sign in with Apple sheet.
 
-## What it was
+### What it was
 
 **That alert is not ours.** Neither string exists anywhere in this repository — not in Swift, not in
 JavaScript, and there are no `.strings`, `.xcstrings` or `.lproj` files at all. Three independent
@@ -29,7 +100,7 @@ review devices, including on the same iPad Air the reviewer used.
 **So we did not try to fix Apple's side. We removed our dependence on it** — and on two other
 things the app could not control either.
 
-## What changed in 1.0.8
+### What changed in 1.0.8
 
 | | Before | Now |
 |---|---|---|
@@ -53,7 +124,7 @@ Two smaller hardenings, in case any part of it was ours after all:
   rest of the `NSError` away, which is precisely why this rejection could not be diagnosed. The
   alert now carries the domain and code.
 
-## The reply to paste into App Store Connect
+### The reply to paste into App Store Connect
 
 > Thank you for the detailed report — the screenshot was what let us identify this.
 >
@@ -85,7 +156,7 @@ Two smaller hardenings, in case any part of it was ours after all:
 > We have also added diagnostic detail to that alert, so if anything similar occurs again the error
 > code will be visible in the screenshot.
 
-## App Review Notes for the submission form
+### App Review Notes for the submission form
 
 > No demo account is required — signing in is optional. Tap "Continue without an account" on the
 > first screen to use the app.
@@ -101,7 +172,7 @@ Two smaller hardenings, in case any part of it was ours after all:
 > The app works in Airplane Mode apart from three features: Sign in with Apple, the Opening Tree's
 > Lichess/Chess.com game download, and Tutorial Videos.
 
-## How to test
+### How to test
 
 ```bash
 node tools/qa/replay_login.js       # the guest door, both languages, the anchor ladder
