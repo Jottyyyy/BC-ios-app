@@ -121,6 +121,19 @@ enum PaywallLayout {
     static let disclosureLineBottom: CGFloat = 2   // disclosureLine.marginBottom
     static let disclosureBodyTop: CGFloat = 8      // disclosureBody.marginTop
 
+    // The trial offer card — the popup that opens itself a few seconds after launch, and stands in
+    // for the full paywall when a locked tile is tapped. INVENTED: the RN app has no launch-time
+    // offer and no "Maybe Later", so there is nothing to extract here and these are the first
+    // paywall numbers in this file that were chosen rather than measured. PORTING_NOTES.md records
+    // them as such. The card reuses the lock card's radius, padding and CTA height on purpose —
+    // it is the same card with a different job, and two sets of numbers would drift.
+    static let offerCardMaxWidth: CGFloat = 320
+    static let offerArtSize: CGFloat = 72
+    static let offerCloseSize: CGFloat = 22
+    /// The close button's tap target, not its glyph. Apple's minimum, and the glyph is half of it.
+    static let offerCloseHit: CGFloat = 44
+    static let offerDismissHeight: CGFloat = 44
+
     // Values the view needs that carry no design meaning; named so no body does arithmetic.
     static let none: CGFloat = 0
     static let hidden: Double = 0
@@ -167,6 +180,10 @@ enum PaywallType {
 enum PaywallTiming {
     static let presentSeconds: Double = 0.28
     static let purchaseSeconds: Double = 0.6
+    /// How long after the shell settles the trial offer opens itself. The client asked for three
+    /// seconds. Milliseconds because that is the unit `Task.sleep` and `setTimeout` are both fed —
+    /// the two `*Seconds` above are animation durations, which SwiftUI wants as seconds.
+    static let offerDelayMs: Int = 3000
 }
 
 // MARK: - Copy
@@ -190,6 +207,16 @@ enum PaywallStrings {
     static let priceNote = "{price} per month. Cancel anytime."
     static let trialNoteYearly = "{days} days free, then {price} per year. Cancel anytime."
     static let priceNoteYearly = "{price} per year. Cancel anytime."
+
+    // The trial offer card. INVENTED — the RN app has no launch-time offer popup, and the spec's
+    // "Maybe Later" was never ported. `{price}` here is the INTRODUCTORY offer's own display
+    // price, which StoreKit formats in the storefront's currency: "₱0.00" in the Philippines,
+    // "THB 0.00" in Thailand, "$0.00" in the US. Not a digit in any of these, for the same reason
+    // `trialCta` has none — see the note above it.
+    static let offerTitle = "Try Biyaherong Plus for Free"
+    static let offerBody = "Unlock every puzzle, all five coaches, and unlimited Game Reviews."
+    static let offerTryFree = "Try for {price}"
+    static let offerDismiss = "No, thanks"
 
     // Plan toggle — labels and sub-lines verbatim from RN premium/index.tsx:628, 74-79.
     static let planMonthly = "Monthly"
@@ -329,6 +356,23 @@ enum PaywallStrings {
     /// payment sheet.
     static func cta(trialEligible: Bool, days: Int) -> String {
         trialEligible ? fill(trialCta, ["days": String(days)]) : subscribeCta
+    }
+
+    /// The offer card's button — **"Try for ₱0.00"**.
+    ///
+    /// The zero is not typed. It is the introductory offer's own `displayPrice`, which is why the
+    /// currency is right in every storefront without this app knowing what a peso is; the same
+    /// rule `displayPrice` has always followed, one level down.
+    ///
+    /// Falls back to the paywall's own CTA whenever either half is missing — an account that is
+    /// not eligible for the offer, or a store that has not answered yet. Naming a free price to
+    /// someone who cannot have it, or inventing a zero the store never returned, is exactly the
+    /// Guideline 3.1.2 misrepresentation that `cta` and `offerNote` already exist to avoid.
+    static func offerCta(trialEligible: Bool, introPrice: String?, days: Int) -> String {
+        guard trialEligible, let introPrice else {
+            return cta(trialEligible: trialEligible, days: days)
+        }
+        return fill(offerTryFree, ["price": introPrice])
     }
 
     /// `Sep 12, 2026` — the same frozen month table `HomeMembership.expiryText` uses, and for the

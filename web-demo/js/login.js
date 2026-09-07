@@ -235,9 +235,10 @@ var BiyaLogin = (function () {
      * list that must not drift. */
     erasedFiles: ['puzzle-progress.json', 'pairing.json', 'openings.json', 'analysis-library.json'],
     /* KEPT. The entitlement snapshot, because Apple requires that deleting an account does not
-     * forfeit a paid subscription; and the daily counters, because clearing them would make
-     * "delete, sign in again" a free reset of every free-tier cap. */
-    keptKeys: ['biya.store.subscription.v1', 'biya.store.usage.v1']
+     * forfeit a paid subscription; the daily counters, because clearing them would make
+     * "delete, sign in again" a free reset of every free-tier cap; and the trial offer's day key,
+     * which is device state in the same Keychain store the eraser cannot reach. */
+    keptKeys: ['biya.store.subscription.v1', 'biya.store.usage.v1', 'biya.store.offer.v1']
   };
 
   /* -- the sign-in state machine (mirrors LoginAuth in LoginMetrics.swift).

@@ -258,9 +258,27 @@ public func biyaherongPaywallMetricsCheck() -> PaywallMetricsCheckResult {
     // a fixed rule of the App Store rather than anything App Store Connect can change.
     for (name, s) in [("trialCta", PaywallStrings.trialCta),
                       ("trialNote", PaywallStrings.trialNote),
-                      ("trialNoteYearly", PaywallStrings.trialNoteYearly)] {
+                      ("trialNoteYearly", PaywallStrings.trialNoteYearly),
+                      ("offerTryFree", PaywallStrings.offerTryFree)] {
         expect(!s.contains(where: \.isNumber), "\(name) contains no digit of its own")
     }
+
+    // The offer card's button. The zero is StoreKit's — `introductoryOffer.displayPrice`, already
+    // formatted for the storefront — which is why the currency is right in Manila and in Bangkok
+    // without this app knowing what either one is.
+    expectEqual(PaywallStrings.offerCta(trialEligible: true, introPrice: "₱0.00", days: 7),
+                "Try for ₱0.00", "the offer button carries the storefront's own zero")
+    expectEqual(PaywallStrings.offerCta(trialEligible: true, introPrice: "THB 0.00", days: 7),
+                "Try for THB 0.00", "...whatever currency that storefront is in")
+    // Both fallbacks matter, and for the same reason: a card promising a free trial to an account
+    // that cannot have one, or naming a price the store never returned, is the Guideline 3.1.2
+    // misrepresentation the rest of this file exists to prevent.
+    expectEqual(PaywallStrings.offerCta(trialEligible: true, introPrice: nil, days: 7),
+                PaywallStrings.cta(trialEligible: true, days: 7),
+                "a store that has not answered gets the paywall's CTA, not an invented zero")
+    expectEqual(PaywallStrings.offerCta(trialEligible: false, introPrice: "₱0.00", days: 7),
+                PaywallStrings.subscribeCta,
+                "and an ineligible Apple Account is never offered a free one")
 
     // The one sentence every upsell surface shows.
     expectEqual(PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 7,

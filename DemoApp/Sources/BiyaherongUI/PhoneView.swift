@@ -91,6 +91,9 @@ struct PhoneApp: View {
     /// them under — and, since round 4 of client feedback, from **every** tap a user without an
     /// entitlement makes. See `locked` below.
     @State private var showPaywall = false
+    /// The trial offer card. Opens itself a few seconds after launch, once a day, and stands in
+    /// for the full paywall whenever a locked tile is tapped. See `offerAfterDelay` and `gated`.
+    @State private var showTrialOffer = false
     @Environment(\.scenePhase) private var scenePhase
 
     // Explicit rather than relying on the synthesized inits: the `private` @StateObject properties
@@ -155,12 +158,17 @@ struct PhoneApp: View {
     /// not keep playing it until they next tap something.
     private var lockedOut: Bool { locked }
 
-    /// Wraps a Home tile's action. Runs it, or raises the paywall in its place while locked.
+    /// Wraps a Home tile's action. Runs it, or raises the offer in its place while locked.
     ///
     /// Every destination — Puzzles, Analysis, Play vs Coach, Pairing, Opening Tree — is reachable
     /// ONLY from a Home tile, so wrapping the tiles closes all five without a flag of their own.
+    ///
+    /// This used to push the whole paywall. A locked tap now raises the offer card instead, which
+    /// says the same thing over the screen the user was already on and keeps Home behind it; its
+    /// button opens the paywall for anyone who wants the plan picker. The gate itself is unchanged
+    /// — same predicate, same single choke point, one destination further back.
     private func gated(_ action: @escaping () -> Void) -> () -> Void {
-        { if locked { openPaywall() } else { action() } }
+        { if locked { openTrialOffer() } else { action() } }
     }
 
     var body: some View {
@@ -287,6 +295,25 @@ struct PhoneApp: View {
                     .background(VideoList.containerBackgroundColor)
                     .transition(.move(edge: .bottom))
                 }
+                // The offer card sits above the pushed routes and BELOW the paywall, because its
+                // button opens the paywall — it closes itself on the way, so the two are never
+                // both up, and this ordering means a mistake there fails visibly rather than
+                // leaving a card stranded on top of the screen it opened.
+                if showTrialOffer {
+                    ZStack {
+                        PaywallPalette.scrim
+                            .ignoresSafeArea()
+                            .onTapGesture { closeTrialOffer() }
+                        TrialOfferCard(cta: premium.offerCta,
+                                       offerNote: premium.offerNote,
+                                       onTry: {
+                                           closeTrialOffer()
+                                           openPaywall()
+                                       },
+                                       onDismiss: { closeTrialOffer() })
+                    }
+                    .transition(.opacity)
+                }
                 // The paywall sits ABOVE the three pushed routes — a gate hit inside Play vs Coach
                 // has to be able to cover it — but BELOW the login gate, which must stay last.
                 if showPaywall {
@@ -331,6 +358,10 @@ struct PhoneApp: View {
             // take effect after they had already been walled and pushed to the paywall once.
             // It also makes the paywall's prices appear instantly instead of after a spinner.
             await premium.load()
+            // ...and only THEN offer anything. Before `load()` returns there is no price, no
+            // trial length and no eligibility, so an offer raised any earlier would read
+            // "Loading…" on the one screen that has to state what it costs.
+            await offerAfterDelay()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -344,6 +375,45 @@ struct PhoneApp: View {
 
     private func closePaywall() {
         withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showPaywall = false }
+    }
+
+    private func openTrialOffer() {
+        withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showTrialOffer = true }
+    }
+
+    private func closeTrialOffer() {
+        withAnimation(.easeInOut(duration: PaywallTiming.presentSeconds)) { showTrialOffer = false }
+    }
+
+    /// Today, as the same day key `DailyLimits` cuts its allowances on. Device-local, which is the
+    /// documented deviation from the server's UTC and the right one for a nag cap: "once a day"
+    /// should mean the user's day.
+    private var offerDay: String { DailyLimits.dayKey(for: Date()) }
+
+    /// May the offer open itself right now? Every term is a reason not to.
+    ///
+    /// `locked` carries three of them already — a subscriber, someone inside the trial, and anyone
+    /// the App Store could not be reached for. That last one is the whole 1.0.7 lesson: an offer
+    /// in front of a user who **cannot buy** is worse than no offer, and it is the case App Review
+    /// lands in when the products are not approved yet.
+    private var mayAutoOffer: Bool {
+        locked && !showPaywall && !showTrialOffer && !premium.offerShown(on: offerDay)
+    }
+
+    /// The client's ask: a few seconds after the app settles, offer the trial. Once a day.
+    ///
+    /// Checked on both sides of the wait. Three seconds is long enough for the user to have signed
+    /// in, subscribed, opened the paywall themselves or walked into a screen — and this is the
+    /// module's first delayed presentation, so it inherits none of the habits that would have made
+    /// that safe. `.task` cancels this when the shell goes away; `Task.isCancelled` is what stops a
+    /// timer that outlived its reason from firing anyway, which `web-demo/js/coach-turn.js` records
+    /// as a bug this project has already shipped once.
+    private func offerAfterDelay() async {
+        guard mayAutoOffer else { return }
+        try? await Task.sleep(nanoseconds: UInt64(PaywallTiming.offerDelayMs) * 1_000_000)
+        guard !Task.isCancelled, mayAutoOffer else { return }
+        premium.recordOfferShown(on: offerDay)
+        openTrialOffer()
     }
 
     /// Opens the session, animated here rather than inside `LoginScreen` — the screen raises the

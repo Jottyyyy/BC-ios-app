@@ -464,6 +464,9 @@ enum PaywallGlyph {
     static let renew = "🔄"
     static let gear = "⚙️"
     static let lock = "🔒"
+    /// The offer card's close control. `AnalysisBottomSheet` set this precedent — a bare ✕ rather
+    /// than `NavIconButton`, which is the BACK affordance and would read as "go back one screen".
+    static let close = "✕"
 }
 
 /// What a gated feature shows **in its own shell** — never a modal over an empty screen (spec §3.3).
