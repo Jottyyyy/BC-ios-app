@@ -90,6 +90,44 @@ Four things about it are deliberate:
 - **The paywall stays dismissible.** Back returns to Home. A locked user can look at the app, and
   open the Analysis Board, and nothing else.
 
+### The offer card — what a locked tap actually raises
+
+Round 5, the client: the offer should appear **three seconds after launch** as well as on a locked
+tap, the way Chess.com's does. So `gated` no longer pushes the whole paywall; it raises a card.
+
+| | Swift | Browser |
+|---|---|---|
+| The card | `TrialOfferCard.swift` | `premium.js` `offerCard()` |
+| Raised by a locked tap | `gated(_:)` → `openTrialOffer()` | the Home tile handler → `showTrialOffer(false)` |
+| Raised by itself | `offerAfterDelay()`, off the shell's launch `.task` | `armTrialOffer()`, from `renderHome` |
+| How often, by itself | once per **calendar day**, `PremiumStore.offerShown(on:)` | the same, `offerShown(day)` |
+| Where it sits | a ZStack sibling **below** the paywall | mounted on `.app-card`, not a route |
+| Ways out | the ✕, "No, thanks", and the scrim | the same three |
+
+Five things about it are deliberate:
+
+- **The gate did not change — its destination did.** Same predicate, same two exemptions, same
+  single choke point. `trial_gate_check.js` pins both languages to the new destination, because a
+  destination that moves in one language only is how the browser ended up with no locks on it once
+  before.
+- **It is not a route in either language.** `OPEN_ROUTES` is asserted to be exactly
+  `analysis,home,login,paywall,profile`; an `offer` route would fail that gate, rightly. It is a
+  modal, the same shape `confirmDeleteAccount` uses and for the same reason.
+- **`offerNote` is required, not optional.** `PremiumLockCard` takes it optionally so a caller with
+  no store in scope still compiles. A card whose whole purpose is a button reading "Try for ₱0.00"
+  is exactly what **Guideline 3.1.2** is about, so on this one the sentence naming the price and
+  the duration is a requirement of constructing one.
+- **The zero is StoreKit's.** `PremiumStore.introDisplayPrice` is
+  `introductoryOffer.displayPrice` — already formatted for the storefront, so the button reads
+  `Try for ₱0.00` in Manila and `Try for THB 0.00` in Bangkok with nothing here knowing what either
+  currency is. When it is missing, or the Apple Account is not eligible, `PaywallStrings.offerCta`
+  falls back to the paywall's own CTA rather than inventing a free price.
+- **It never opens itself in front of somebody who cannot buy.** `mayAutoOffer` is built on
+  `locked`, which already carries `!storeUnavailable` — see below, and see 1.0.7.
+- **The browser's `render()` backstop still goes to the full paywall, not the card**, and should.
+  It fires when an entitlement lapses while the user is standing *inside* a premium screen, and a
+  card they can dismiss would leave them standing there. Only the tap path moved.
+
 ### A store that will not load walls nobody
 
 The third term in `locked` is `!premium.storeUnavailable`, which is `loadState == .failed` — the App
@@ -273,7 +311,14 @@ real trial, renewal, expiry and billing-retry paths.
 
 In `web-demo/index.html`, set the **Subscription** picker to **Free**:
 
-- every Home tile lands on **"Start Your 7-Day Free Trial"** — except **Analysis**, which opens;
+- the **offer card** opens itself about three seconds in, and **not again** on the next reload the
+  same day — `localStorage.removeItem('biya.store.offer.v1')` to see it again;
+- every Home tile raises that card instead of navigating, with Home still visible behind it —
+  except **Analysis**, which opens;
+- the ✕, **"No, thanks"** and the scrim all close it having navigated nowhere; its button opens the
+  full paywall;
+- navigating away while the three seconds are still running must **not** produce a late card;
+- on **Trial**, **Active**, **Grace** and under `?storefail` the card never appears at all;
 - Back from the paywall returns to Home;
 - Profile still opens, and **Sign out** still works;
 - every lock card names the trial, the price it converts to, and that it can be cancelled;

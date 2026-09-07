@@ -257,6 +257,46 @@
     render();
   }
 
+  /* -- The trial offer. Twin of `showTrialOffer` / `offerAfterDelay` in PhoneView.swift. -------
+   *
+   * A MODAL rather than a route, for the same reason `confirmDeleteAccount` is one: OPEN_ROUTES is
+   * asserted to be exactly analysis/home/login/paywall/profile, and an `offer` route would fail
+   * that gate. Mounted on `.app-card` rather than `#view` so it survives the `render()` that a
+   * locked tap may trigger underneath it. */
+  function offerDay() { return BiyaDailyLimits.dayKey(Date.now()); }
+
+  function showTrialOffer(auto) {
+    if (document.querySelector('.pw-offer')) return;
+    if (auto) BiyaPremium.shared().recordOfferShown(offerDay());
+    document.querySelector('.app-card').appendChild(
+      BiyaPremium.offerCard({ onSeePlans: function () { goPaywall(); } })
+    );
+  }
+
+  /* Every term is a reason not to nag. `locked()` carries three of them already — a subscriber,
+   * someone inside the trial, and anyone the App Store could not be reached for; that last is the
+   * 1.0.7 lesson, since an offer in front of someone who cannot buy is worse than no offer. */
+  function mayAutoOffer() {
+    return locked()
+      && current !== 'paywall'
+      && !document.querySelector('.pw-offer')
+      && !BiyaPremium.shared().offerShown(offerDay());
+  }
+
+  /* Armed once per page load, the way the Swift hangs this off the shell's launch `.task` rather
+   * than off a screen. Guarded on BOTH sides of the wait: three seconds is long enough for the
+   * user to have subscribed, opened the paywall, or navigated away, and js/coach-turn.js records
+   * what this project already shipped once — four setTimeouts that fired after navigation. */
+  var offerArmed = false;
+  function armTrialOffer() {
+    if (offerArmed) return;
+    offerArmed = true;
+    if (!mayAutoOffer()) return;
+    setTimeout(function () {
+      if (mayAutoOffer()) showTrialOffer(true);
+    }, BiyaPremium.TIMING.offerDelayMs);
+  }
+
   /**
    * The free tier's allowances, at the one place every route transition funnels through — the same
    * split the Swift uses, where `PuzzleHubScreen` owns every gate and the solvers know nothing.
@@ -751,7 +791,11 @@
       // `analysis` are deliberately outside it: one leads to Sign out, one IS the offer, and the
       // Analysis Board is free for everyone. The exemption list here must agree with OPEN_ROUTES
       // above, or the render backstop bounces the user straight back out on the next paint.
-      if (locked() && action !== 'avatar' && action !== 'membership' && action !== 'analysis') { goPaywall(); return; }
+      // The offer card stands in for the full paywall here since round 5: it says the same thing
+      // over the screen the user was already on, and its button opens the paywall for anyone who
+      // wants the plan picker. The GATE is unchanged — same predicate, same exemptions, same
+      // single choke point — only its destination is one step back.
+      if (locked() && action !== 'avatar' && action !== 'membership' && action !== 'analysis') { showTrialOffer(false); return; }
       if (action === 'puzzles') { current = 'puzzles'; render(); }
       else if (action === 'playCoach') { current = 'play'; render(); }
       else if (action === 'analysis') { current = 'analysis'; render(); }
@@ -770,6 +814,8 @@
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
     });
+    // ...and a few seconds after the app settles, offer the trial. Once per page load, once a day.
+    armTrialOffer();
   }
 
   /* ======================================================================== *

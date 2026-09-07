@@ -382,7 +382,13 @@ enum LoginAccountData {
     /// - `biya.store.usage.v1` (`PremiumStore.usageKey`) holds the daily free-tier counters.
     ///   Clearing them would make "delete account, sign in again" a free reset of every cap — a
     ///   paywall bypass wearing a privacy feature's clothes.
-    static let keptKeys: [String] = ["biya.store.subscription.v1", "biya.store.usage.v1"]
+    /// - `biya.store.offer.v1` (`PremiumStore.offerShownKey`) is the day the trial offer last
+    ///   opened itself. It is device state like the two above, and it lives in the same Keychain
+    ///   store — which `AccountDeletion.erase` cannot reach at all, since it is handed
+    ///   `CoachDefaultsStorage`. Listing it as erased would be a claim the code does not honour.
+    static let keptKeys: [String] = [
+        "biya.store.subscription.v1", "biya.store.usage.v1", "biya.store.offer.v1",
+    ]
 }
 
 // MARK: - The sign-in state machine

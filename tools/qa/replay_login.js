@@ -414,6 +414,7 @@ function run() {
       ['biya.coach.draft.v1.', read(CORE, 'CoachGame.swift'), 'CoachGame.draftKeyPrefix'],
       ['biya.store.subscription.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.snapshotKey'],
       ['biya.store.usage.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.usageKey'],
+      ['biya.store.offer.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.offerShownKey'],
     ];
     owners.forEach(([key, src, owner]) => {
       expect(!!src && code(src).indexOf('"' + key + '"') >= 0,

@@ -103,6 +103,9 @@ final class PremiumStore: ObservableObject {
 
     static let snapshotKey = "biya.store.subscription.v1"
     static let usageKey = "biya.store.usage.v1"
+    /// The day the trial offer last opened itself, as a `DailyLimits` day key. One string, so
+    /// there is no counter to migrate and no clock to trust beyond the calendar's own.
+    static let offerShownKey = "biya.store.offer.v1"
 
     var isPremium: Bool { access.isPremium }
 
@@ -127,6 +130,32 @@ final class PremiumStore: ObservableObject {
     var displayPrice: String? { product?.displayPrice }
 
     func displayPrice(for plan: Plan) -> String? { products[plan]?.displayPrice }
+
+    /// The **introductory offer's** price, as StoreKit formats it for this storefront — `₱0.00` in
+    /// the Philippines, `THB 0.00` in Thailand, `$0.00` in the US.
+    ///
+    /// This is what puts the right currency on a button that says "Try for ₱0.00" without the app
+    /// ever knowing what a peso is. Nil until the store answers, and nil for a product with no
+    /// introductory offer; `PaywallStrings.offerCta` falls back rather than typing a zero.
+    var introDisplayPrice: String? {
+        product?.subscription?.introductoryOffer?.displayPrice
+    }
+
+    /// The offer card's button label. See `PaywallStrings.offerCta`.
+    var offerCta: String {
+        PaywallStrings.offerCta(trialEligible: trialEligible,
+                                introPrice: introDisplayPrice,
+                                days: trialDays)
+    }
+
+    /// Has the launch offer already opened itself on this day key?
+    ///
+    /// The cap is a day rather than a launch because the client wants the offer seen and the user
+    /// should not be asked twice for saying no once. `Entitlement.Usage` is deliberately not
+    /// reused: it is parity-tested Core with golden floors, and this is a nag cap, not a quota.
+    func offerShown(on day: String) -> Bool { storage.get(Self.offerShownKey) == day }
+
+    func recordOfferShown(on day: String) { storage.set(Self.offerShownKey, day) }
 
     /// The one sentence every upsell surface shows: how long the trial runs, what it converts to,
     /// and that it can be cancelled. Ready to draw, so a lock card does not have to know about

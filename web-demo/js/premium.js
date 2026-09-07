@@ -177,7 +177,9 @@ var BiyaPremium = (function () {
   var SESSION = {
     /* Same biya.<area>.<thing>.v1 shape as biya.auth.session.v1. */
     snapshotKey: 'biya.store.subscription.v1',
-    usageKey: 'biya.store.usage.v1'
+    usageKey: 'biya.store.usage.v1',
+    /* The day the trial offer last opened itself — PremiumStore.offerShownKey. */
+    offerShownKey: 'biya.store.offer.v1'
   };
 
   function memoryStorage(seed) {
@@ -246,6 +248,16 @@ var BiyaPremium = (function () {
        * The Swift asks `loadState == .failed`. A browser has no StoreKit at all, so `?storefail`
        * IS the failed load here — the same switch that makes the paywall draw its failure card. */
       storeUnavailable: function () { return storeFailRequested(); },
+
+      /* Has the trial offer already opened itself on this day key? One string rather than a
+       * counter, so there is nothing to migrate — the twin of `PremiumStore.offerShown(on:)`.
+       * The cap is a day because the user should not be asked twice for saying no once. */
+      offerShown: function (day) {
+        try { return !!s && s.getItem(SESSION.offerShownKey) === day; } catch (e) { return false; }
+      },
+      recordOfferShown: function (day) {
+        try { if (s) s.setItem(SESSION.offerShownKey, day); } catch (e) { /* private mode */ }
+      },
 
       /** Applies what a refresh saw. The clock floor only ever moves forward. */
       apply: function (next, signedAtMs) {
@@ -490,9 +502,26 @@ var BiyaPremium = (function () {
     });
     /* `disclosureTrial` is excluded: its "24 hours" is Apple's cancellation deadline, a fixed rule
        of the App Store rather than anything App Store Connect can change. */
-    ['trialCta', 'trialNote', 'trialNoteYearly'].forEach(function (k) {
+    ['trialCta', 'trialNote', 'trialNoteYearly', 'offerTryFree'].forEach(function (k) {
       expect(!/\d/.test(STRINGS[k]), k + ' contains no digit of its own');
     });
+
+    /* The offer card's button. The zero is StoreKit's — `introductoryOffer.displayPrice`, already
+       formatted for the storefront — which is why the currency is right in Manila and in Bangkok
+       without this app knowing what either one is. */
+    eq(offerCtaLabel(true, '₱0.00', CONST.trialDays), 'Try for ₱0.00',
+      'the offer button carries the storefront\'s own zero');
+    eq(offerCtaLabel(true, 'THB 0.00', CONST.trialDays), 'Try for THB 0.00',
+      'whatever currency that storefront is in');
+    /* Both fallbacks matter, and for the same reason: a card promising a free trial to an account
+       that cannot have one, or naming a price the store never returned, is the 3.1.2
+       misrepresentation the rest of this block exists to prevent. */
+    eq(offerCtaLabel(true, null, CONST.trialDays), ctaLabel(true, CONST.trialDays),
+      'a store that has not answered gets the paywall CTA, not an invented zero');
+    eq(offerCtaLabel(true, '', CONST.trialDays), ctaLabel(true, CONST.trialDays),
+      'and an empty price is treated as no price, not as a free one');
+    eq(offerCtaLabel(false, '₱0.00', CONST.trialDays), STRINGS.subscribeCta,
+      'an ineligible Apple Account is never offered a free one');
 
     /* The one sentence every upsell surface shows. */
     eq(offerNote(true, false, 7, '$1.99'), '7 days free, then $1.99 per month. Cancel anytime.',
@@ -621,6 +650,14 @@ var BiyaPremium = (function () {
     disclosureTitleBottom: 6,
     disclosureLineBottom: 2,
     disclosureBodyTop: 8,
+    /* The trial offer card. INVENTED — the RN app has no launch-time offer, so unlike everything
+       above these were chosen rather than measured. It reuses the lock card's radius, padding and
+       CTA height deliberately: same card, different job. */
+    offerCardMaxWidth: 320,
+    offerArtSize: 72,
+    offerCloseSize: 22,
+    offerCloseHit: 44,
+    offerDismissHeight: 44,
     pressed: 0.82
   };
 
@@ -648,7 +685,10 @@ var BiyaPremium = (function () {
     legalLineHeight: 16
   };
 
-  var TIMING = { presentSeconds: 0.28, purchaseSeconds: 0.6 };
+  /* `offerDelayMs` is how long after the shell settles the trial offer opens itself — the client
+     asked for three seconds. Milliseconds because that is what `setTimeout` and `Task.sleep` both
+     take; the two `*Seconds` beside it are animation durations, which SwiftUI wants in seconds. */
+  var TIMING = { presentSeconds: 0.28, purchaseSeconds: 0.6, offerDelayMs: 3000 };
 
   var STRINGS = {
     goPremium: 'Go Premium',
@@ -666,6 +706,15 @@ var BiyaPremium = (function () {
     priceNote: '{price} per month. Cancel anytime.',
     trialNoteYearly: '{days} days free, then {price} per year. Cancel anytime.',
     priceNoteYearly: '{price} per year. Cancel anytime.',
+
+    /* The trial offer card. INVENTED — the RN app has no launch-time offer popup, and the spec's
+       "Maybe Later" was never ported. `{price}` is the INTRODUCTORY offer's own display price,
+       which StoreKit formats in the storefront's currency: "₱0.00" in the Philippines, "THB 0.00"
+       in Thailand, "$0.00" in the US. No digit in any of these, same rule as `trialCta`. */
+    offerTitle: 'Try Biyaherong Plus for Free',
+    offerBody: 'Unlock every puzzle, all five coaches, and unlimited Game Reviews.',
+    offerTryFree: 'Try for {price}',
+    offerDismiss: 'No, thanks',
     planMonthly: 'Monthly',
     planYearly: 'Yearly',
     perMonth: 'per month',
@@ -754,7 +803,7 @@ var BiyaPremium = (function () {
 
   /** Mirrors `PaywallGlyph` — named so no renderer carries a bare emoji literal. */
   var GLYPH = {
-    crown: '👑', check: '✓', calendar: '📅', renew: '🔄', gear: '⚙️', lock: '🔒'
+    crown: '👑', check: '✓', calendar: '📅', renew: '🔄', gear: '⚙️', lock: '🔒', close: '✕'
   };
 
   /**
@@ -764,6 +813,11 @@ var BiyaPremium = (function () {
    */
   var DEMO = {
     simulatedPrice: '(App Store price)',
+    /* The trial's own price is a real zero, but the CURRENCY around it is the storefront's and a
+       browser has no storefront. The Swift reads `introductoryOffer.displayPrice` and gets
+       "₱0.00" / "THB 0.00" / "$0.00"; typing one of those here would be the exact bug the RN app
+       shipped, so this says what it is instead. */
+    simulatedIntroPrice: '(free)',
     simulateCancel: 'Simulate: turn off auto-renew'
   };
 
@@ -816,6 +870,22 @@ var BiyaPremium = (function () {
   /** The CTA label. The trial is only ever promised to an Apple Account that can actually have it. */
   function ctaLabel(trialEligible, days) {
     return trialEligible ? fill(STRINGS.trialCta, { days: days }) : STRINGS.subscribeCta;
+  }
+
+  /**
+   * The offer card's button — "Try for ₱0.00".
+   *
+   * The zero is not typed: the Swift passes the introductory offer's own `displayPrice`, which is
+   * why the currency is right in every storefront. Falls back to the paywall's CTA when either
+   * half is missing — an ineligible account, or a store that has not answered — because naming a
+   * free price to someone who cannot have it is the Guideline 3.1.2 misrepresentation `ctaLabel`
+   * and `offerNote` already exist to avoid.
+   */
+  function offerCtaLabel(trialEligible, introPrice, days) {
+    if (!trialEligible || introPrice === null || introPrice === undefined || introPrice === '') {
+      return ctaLabel(trialEligible, days);
+    }
+    return fill(STRINGS.offerTryFree, { price: introPrice });
   }
 
   /** `Sep 12, 2026` — the same frozen month table the Home banner uses. */
@@ -878,6 +948,10 @@ var BiyaPremium = (function () {
     return offerNote(true, selectedPlan === 'yearly', CONST.trialDays, DEMO.simulatedPrice);
   }
 
+  function demoOfferCta() {
+    return offerCtaLabel(true, DEMO.simulatedIntroPrice, CONST.trialDays);
+  }
+
   function benefitRows() {
     return BENEFITS.map(function (b) {
       return '<div class="pw-row"><span class="pw-check">' + GLYPH.check + '</span>'
@@ -916,6 +990,50 @@ var BiyaPremium = (function () {
       + '</div>';
     function close() { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }
     wrap.querySelector('.pw-lock-scrim').onclick = close;
+    wrap.querySelector('.pw-cta').onclick = function () {
+      close();
+      if (opts.onSeePlans) opts.onSeePlans();
+    };
+    return wrap;
+  }
+
+  /**
+   * The trial offer card — mirrors `TrialOfferCard.swift`.
+   *
+   * Opens itself a few seconds after the app settles, and stands in for the full paywall when a
+   * locked tile is tapped. Returns the scrim + card; the caller appends it and owns where.
+   *
+   * Three ways out, where `lockCard` has one. The scrim is enough for a card the user summoned by
+   * hitting a cap; a card that appears on its own needs a visible ✕ and a visible "No, thanks",
+   * and a dismissal that is hard to find is how an offer becomes a Guideline 4.2 complaint.
+   *
+   * The offer sentence under the button is the same `demoOfferNote()` the lock card uses, because
+   * Guideline 3.1.2 asks the surface that offers a free trial to also say what it becomes.
+   */
+  function offerCard(opts) {
+    opts = opts || {};
+    var wrap = el('div', 'pw-offer');
+    // Its own metrics, for the same reason `lockCard` needs its own: this is raised OVER whatever
+    // screen the user was on, so there is no `.pw-view` root above it holding the properties.
+    applyMetrics(wrap);
+    wrap.innerHTML = '<div class="pw-offer-scrim"></div>'
+      + '<div class="pw-offer-card">'
+      + '<button class="pw-offer-close" type="button" aria-label="' + STRINGS.offerDismiss + '">'
+      + GLYPH.close + '</button>'
+      + '<div class="pw-offer-art">' + GLYPH.crown + '</div>'
+      + '<div class="pw-offer-title">' + STRINGS.offerTitle + '</div>'
+      + '<div class="pw-offer-body">' + STRINGS.offerBody + '</div>'
+      + '<button class="pw-cta" type="button">' + demoOfferCta() + '</button>'
+      + '<div class="pw-lock-offer">' + demoOfferNote() + '</div>'
+      + '<button class="pw-offer-no" type="button">' + STRINGS.offerDismiss + '</button>'
+      + '</div>';
+    function close() {
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      if (opts.onClose) opts.onClose();
+    }
+    wrap.querySelector('.pw-offer-scrim').onclick = close;
+    wrap.querySelector('.pw-offer-close').onclick = close;
+    wrap.querySelector('.pw-offer-no').onclick = close;
     wrap.querySelector('.pw-cta').onclick = function () {
       close();
       if (opts.onSeePlans) opts.onSeePlans();
@@ -1114,7 +1232,8 @@ var BiyaPremium = (function () {
     GLYPH: GLYPH, DEMO: DEMO,
     fill: fill, daysPillText: daysPillText, dateText: dateText,
     // view
-    applyMetrics: applyMetrics, render: render, lockCard: lockCard
+    applyMetrics: applyMetrics, render: render, lockCard: lockCard, offerCard: offerCard,
+    offerCtaLabel: offerCtaLabel
   };
 })();
 

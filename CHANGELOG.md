@@ -9,6 +9,64 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-07 (added) — The trial offer opens itself, and the zero on its button is StoreKit's
+
+Client, round 5: after about three seconds the app should offer the trial the way Chess.com does — a
+card over the screen, one big **"Try for ₱0.00"**, a way out — and the same card should stand in for
+the paywall when a paid feature is tapped. Priced in the user's own currency.
+
+**Two thirds of that already existed, and finding out which two mattered.** The currency needs no
+code: `PremiumStore.displayPrice` is `Product.displayPrice` and nothing else, and a repo-wide search
+for a hardcoded currency returns **zero hits in shipping code** — every match is prose or a test
+fixture. And the "tap a paid feature" trigger has existed since round 4; `gated(_:)` is one line.
+What was genuinely new is the three-second delay, which nothing in this module had a precedent for,
+and the ✕ / "No, thanks", which neither existing offer overlay has — tap-the-scrim is their whole
+dismissal, fine for a card the user summoned by hitting a cap and not fine for one that appears on
+its own.
+
+**The zero is not typed.** `PremiumStore.introDisplayPrice` reads
+`introductoryOffer.displayPrice`, which StoreKit has already formatted for the storefront: the
+button says `Try for ₱0.00` on a Philippine account and `Try for THB 0.00` on a Thai one with
+nothing here knowing what either currency is. `PaywallStrings.offerCta` falls back to the paywall's
+own CTA when the price is missing or the Apple Account is not eligible — typing a `0.00` would have
+hardcoded a currency by accident, and promising a free trial to an account that cannot have one is
+the same **Guideline 3.1.2** problem the trial *length* was already fixed for.
+
+**The card is a teaser, not a purchase surface.** Its button opens `PaywallScreen`, so there is one
+purchase path and one place for the legal disclosure. It still carries `offerNote` — and here that
+sentence is a **required** initialiser parameter where `PremiumLockCard` takes it optionally, because
+a card whose entire purpose is a button reading "Try for ₱0.00" is exactly what 3.1.2 is about.
+It is the sixth surface to carry that sentence.
+
+**The gate did not change; its destination moved one step back.** Same predicate, same two
+exemptions, same single choke point — nothing became reachable that was not reachable before. What
+changed is that saying no now leaves the user where they were. `trial_gate_check.js` pins the new
+destination **in both languages**, since a destination that moves in one language only is how the
+browser ended up with no locks on it once already. The browser's `render()` backstop still goes to
+the full paywall on purpose: it fires when an entitlement lapses while the user is *inside* a
+premium screen, and a card they can dismiss would leave them standing in it.
+
+**It never opens itself in front of somebody who cannot buy.** `mayAutoOffer` is built on `locked`,
+which already carries `!storeUnavailable`. That is not hypothetical — it is how 1.0.7 failed. The
+launch cap is one calendar day, held as a single `DailyLimits` day key in
+`biya.store.offer.v1`; `Entitlement.Usage` is deliberately not reused, being parity-tested Core with
+golden floors, and this is a nag cap rather than a quota.
+
+Shapes followed rather than invented: **no `.sheet`** (a ZStack sibling below the paywall, because
+these views also render in the macOS `PhoneFrame`); **not a route in the browser** (`OPEN_ROUTES` is
+asserted to be exactly five, so it is a modal on `.app-card`, like `confirmDeleteAccount`); and a
+timer checked on **both** sides of its wait, because `js/coach-turn.js` records four `setTimeout`s
+this project already shipped that fired after navigation.
+
+New: `DemoApp/Sources/BiyaherongUI/TrialOfferCard.swift`, `premium.js` `offerCard()`, and the
+`.pw-offer-*` rules in `app.css` — added to the reduced-motion block as well as the animation one.
+Gates extended, never loosened: `trial_gate_check.js` 55 → **60** invariants, `replay_premium.js`
+617 → **651** expectations, plus the offer CTA's four branches in `PaywallMetricsCheck.swift` and
+the browser's `selfTest`. `js_goldens.js` **35,997** assertions across 86 suites.
+
+**`web-demo/` was updated** — the card, the three-second timer and the once-a-day cap are all
+walkable in the browser with the Subscription picker on **Free**.
+
 ### 2026-09-07 (added) — The listing assets that got 1.0.8 rejected, and a check that measures the next one
 
 Build **1.0.8 (52)** was rejected on **2026-09-06** — submission `a037695f-351d-4397-8412-83cf612b0bbe`,
