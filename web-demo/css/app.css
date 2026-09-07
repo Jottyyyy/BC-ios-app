@@ -2879,6 +2879,86 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   text-align: center;
 }
 
+/* The trial offer card — mirrors TrialOfferCard.swift. Raised over whatever the user was looking
+   at, a few seconds after launch or in place of the full paywall when a locked tile is tapped.
+   Structurally the lock card with a ✕, a "No, thanks" and a width cap, and it reuses that card's
+   radius, padding and CTA on purpose: same card, different job, one set of numbers. */
+.pw-offer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pw-fade var(--pw-present-secs) ease-out both;
+}
+
+.pw-offer-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--pw-c-scrim);
+}
+
+.pw-offer-card {
+  position: relative;
+  margin: 0 var(--pw-screen-padding-h);
+  padding: var(--pw-card-padding);
+  max-width: var(--pw-offer-card-max-width);
+  border-radius: var(--pw-card-radius);
+  background: var(--pw-c-card);
+  border: var(--pw-restore-border-width) solid var(--pw-c-cta);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pw-row-gap);
+}
+
+/* Top-right, over the card's own padding, so it costs the content no height. The hit target is
+   Apple's 44 and the glyph is half of it — a close control small enough to miss is the reason
+   Guideline 4.2 complaints about offers get written. */
+.pw-offer-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--pw-offer-close-hit);
+  height: var(--pw-offer-close-hit);
+  font-size: var(--pw-offer-close-size);
+  line-height: 1;
+  color: var(--pw-c-body);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.pw-offer-art {
+  font-size: var(--pw-offer-art-size);
+  line-height: 1;
+}
+
+.pw-offer-title {
+  font-size: var(--pw-t-header-title-size);
+  font-weight: 700;
+  color: var(--pw-c-title);
+}
+
+.pw-offer-body {
+  font-size: var(--pw-t-row-size);
+  line-height: var(--pw-t-hero-body-line-height);
+  color: var(--pw-c-body);
+}
+
+/* The second way out, under the offer sentence. Quiet rather than hidden: the trial is what the
+   card is for, but saying no has to be a real button and not a grey ghost. */
+.pw-offer-no {
+  height: var(--pw-offer-dismiss-height);
+  font-size: var(--pw-t-row-size);
+  font-weight: 700;
+  color: var(--pw-c-body);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
 /* The brand mark, in the paywall header on the offer state. It used to be `app-icon.png` in a
    `border-radius: 50%` circle — the last gold knight left in the app, and the only true circular
    crop of it. The Swift paywall had already been drawing the collage in a squircle, so this was a
@@ -2894,8 +2974,8 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pw-lock { animation: none !important; }
-  .pw-cta, .pw-restore, .pw-back { transition: none; }
+  .pw-lock, .pw-offer { animation: none !important; }
+  .pw-cta, .pw-restore, .pw-back, .pw-offer-close, .pw-offer-no { transition: none; }
 }
 
 /* The Profile tab's subscription row, beside the account card. */

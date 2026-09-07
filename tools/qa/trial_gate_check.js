@@ -157,8 +157,33 @@ const APP_CODE = code(APP);
     expect(hits <= 2, `${flag} is set ${hits} times — a second entry point would bypass the gate`);
   }
 
-  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership' && action !== 'analysis'\) \{ goPaywall\(\); return; \}/
+  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership' && action !== 'analysis'\) \{ showTrialOffer\(false\); return; \}/
     .test(APP_CODE), 'app.js gates the Home tiles with the same three exemptions');
+
+  // Round 5: a locked tap raises the OFFER CARD, not the full paywall. The gate is unchanged —
+  // same predicate, same exemptions, same single choke point — but its destination moved, and a
+  // destination that moved in one language only is exactly the divergence this file exists to
+  // catch. The gate would still be closed; the two would simply disagree about what closing it
+  // looks like, which is how the browser ended up with no locks on it once already.
+  expect(/private func gated\([\s\S]{0,160}if locked \{ openTrialOffer\(\) \} else \{ action\(\) \}/
+    .test(PHONE_CODE), 'PhoneView.gated raises the trial offer, not the paywall');
+  expect(/function showTrialOffer\(/.test(APP_CODE) && /BiyaPremium\.offerCard\(/.test(APP_CODE),
+    'and app.js has an offer card to raise');
+
+  // The offer never opens ITSELF in front of somebody who cannot buy. `locked` carries that term
+  // already (`!premium.storeUnavailable`), so requiring the auto-offer to be built on `locked`
+  // rather than on its own predicate is what keeps the 1.0.7 rule attached to the new surface —
+  // an offer a reviewer cannot accept is worse than no offer, and that is the rejection this
+  // repo has actually had.
+  expect(/private var mayAutoOffer: Bool \{[\s\S]{0,240}locked/.test(PHONE_CODE),
+    'the Swift auto-offer is gated on `locked`, so an unreachable store raises nothing');
+  expect(/function mayAutoOffer\(\) \{[\s\S]{0,320}locked\(\)/.test(APP_CODE),
+    'and the browser twin is gated the same way');
+
+  // Once a day, in both languages, off the same day key the free-tier caps use.
+  expect(/premium\.offerShown\(on: offerDay\)/.test(PHONE_CODE)
+    && /offerShown\(offerDay\(\)\)/.test(APP_CODE),
+    'both cap the launch offer at once a day');
   // The tile exemption and the route exemption must agree. Exempting the tile alone would let the
   // user in and then have the render backstop throw them out on the very next paint; exempting the
   // route alone would leave the tile unreachable. Either half on its own is worse than neither.

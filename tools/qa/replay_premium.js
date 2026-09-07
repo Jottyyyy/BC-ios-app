@@ -312,6 +312,8 @@ function run() {
   });
   near(P.TIMING.presentSeconds, swNum(metrics, 'PaywallTiming', 'presentSeconds'),
     'PaywallTiming.presentSeconds');
+  near(P.TIMING.offerDelayMs, swNum(metrics, 'PaywallTiming', 'offerDelayMs'),
+    'PaywallTiming.offerDelayMs');
   eq(P.LAYOUT.pressed < 1 && P.LAYOUT.pressed > 0, true, 'the pressed opacity is a fraction');
 
   // 6. Copy, including the disclosure App Review requires verbatim.
@@ -377,6 +379,31 @@ function run() {
     const appCss = fs.readFileSync(path.join(ROOT, 'web-demo', 'css', 'app.css'), 'utf8');
     expect(/pw-lock-offer/.test(premiumJs) && /\.pw-lock-offer/.test(appCss),
       'and the browser lock card draws it, with a rule in app.css to draw it with');
+
+    // THE SIXTH SURFACE, and the only one that opens itself. A card whose whole purpose is a
+    // button reading "Try for ₱0.00" is precisely what Guideline 3.1.2 is about — "clearly
+    // indicate how long the free trial lasts and the price billed once the free trial is over" —
+    // so the sentence that does that is a REQUIREMENT of constructing one. `offerNote` is
+    // non-optional here where `PremiumLockCard` takes it optionally, and this is why.
+    const offerCard = code(read(UI, 'TrialOfferCard.swift'));
+    expect(/let offerNote: String\b/.test(offerCard),
+      'TrialOfferCard requires the offer sentence rather than taking it optionally');
+    expect(/Text\(offerNote\)/.test(offerCard), 'and draws it under the button');
+    expect(/TrialOfferCard\(cta: premium\.offerCta,[\s\S]{0,120}offerNote: premium\.offerNote/
+      .test(code(read(UI, 'PhoneView.swift'))), 'and PhoneView hands it both');
+    expect(/pw-offer-card/.test(premiumJs) && /\.pw-offer-card/.test(appCss),
+      'and the browser draws the same card, with rules in app.css to draw it with');
+
+    // The zero in "Try for ₱0.00" is StoreKit's, not ours. `introductoryOffer.displayPrice` is
+    // formatted for the storefront, which is the whole reason the currency is right in Manila and
+    // in Bangkok without this app knowing what either one is — the same rule `displayPrice` has
+    // always followed, one level down. A typed zero would be a currency hardcoded by accident.
+    expect(!/\d/.test(P.STRINGS.offerTryFree),
+      'the offer CTA template carries no typed price');
+    expect(/introductoryOffer\?\.displayPrice/.test(code(read(UI, 'PremiumStore.swift'))),
+      'the offer price is the introductory offer\'s own displayPrice');
+    expect(/guard trialEligible, let introPrice else/.test(code(metrics)),
+      'and it falls back rather than promising a free trial the Apple Account cannot have');
 
     // The disclosure card names the offer, and only when this Apple Account can have it.
     expect(/if store\.trialEligible \{[\s\S]{0,300}PaywallStrings\.disclosureTrial/.test(code(screen)),

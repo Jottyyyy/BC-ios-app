@@ -5,6 +5,87 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The trial offer card (2026-09-07, fifth round)
+
+Client, round 5: after about three seconds the app should offer the trial the way Chess.com does —
+a card over the screen, one big button, a way out — and the same card should stand in for the
+paywall when a paid feature is tapped. Reference screenshot: Chess.com's *"Try for THB 0.00"*.
+
+### DEVIATION: a locked tap raises a card, where round 4 pushed the whole paywall
+
+**Round 4** put one guard at the router: *"kada click lagi mong dalhin doon."* Every locked tile
+pushed `PaywallScreen`. **Round 5 keeps the guard and moves its destination one step back** —
+`gated(_:)` now calls `openTrialOffer()`, and the card's button opens the paywall for anyone who
+wants the plan picker.
+
+**Why it is not a weakening.** The predicate, the two exemptions and the single choke point are
+untouched; nothing became reachable that was not reachable before. What changed is that saying no
+now leaves the user where they were instead of on a screen they have to back out of.
+`trial_gate_check.js` pins the new destination **in both languages**, because a destination that
+moves in one language only is how the browser ended up with no locks on it once already.
+
+The browser's `render()` backstop deliberately still goes to the full paywall: it fires when an
+entitlement lapses while the user is *inside* a premium screen, and a card they can dismiss would
+leave them standing in it.
+
+### DECISION: a teaser, not a purchase surface
+
+The card's button opens `PaywallScreen` rather than calling `purchase()`. One purchase path, and
+one place for the legal disclosure instead of two that can drift apart.
+
+It still carries `offerNote`, and on this card that sentence is **required** rather than optional as
+it is on `PremiumLockCard`. A card whose entire purpose is a button reading "Try for ₱0.00" is
+precisely what **Guideline 3.1.2** covers — *"clearly indicate how long the free trial lasts and the
+price billed once the free trial is over"* — so the sentence is a parameter of the initialiser.
+
+### NOT INVENTED: the zero in "Try for ₱0.00"
+
+`PremiumStore.introDisplayPrice` is `product.subscription?.introductoryOffer?.displayPrice`, which
+StoreKit has already formatted for the storefront. The button reads `Try for ₱0.00` on a Philippine
+account and `Try for THB 0.00` on a Thai one with nothing in this repo knowing what either currency
+is — the same rule `displayPrice` has followed since the paywall landed, one level down.
+
+`PaywallStrings.offerCta` falls back to the paywall's own CTA when the price is missing or the Apple
+Account is not eligible for the offer. Typing a `0.00` would have hardcoded a currency by accident,
+and promising a free trial to an account that cannot have one is the same 3.1.2 problem the trial
+length was already fixed for.
+
+### INVENTED: the card's constants
+
+No RN counterpart exists — the original has no launch-time offer, and the spec's "Maybe Later"
+(§`BIYAHERONG-PORT-SPEC.md`) was never ported. These were chosen, not measured, which makes them the
+first paywall numbers in `PaywallMetrics.swift` that were not extracted from the RN source.
+
+| Constant | Value | Why |
+|---|---|---|
+| `PaywallTiming.offerDelayMs` | `3000` | The client asked for three seconds. Milliseconds because that is what `Task.sleep` and `setTimeout` both take. |
+| `PaywallLayout.offerCardMaxWidth` | `320` | Narrower than the lock card, which stretches to the screen's gutters. A card that appears unbidden should read as a card. |
+| `PaywallLayout.offerArtSize` | `72` | Between the paywall hero's `crownSize` 64 and nothing. |
+| `PaywallLayout.offerCloseHit` | `44` | Apple's minimum tap target. |
+| `PaywallLayout.offerCloseSize` | `22` | The glyph, half the target it sits in. |
+| `PaywallLayout.offerDismissHeight` | `44` | The same, for "No, thanks". |
+
+Radius, padding, row gap and CTA height are **reused from the lock card** rather than invented
+again: it is the same card with a different job, and two sets of numbers would drift.
+
+### DECISION: once per calendar day, and never when the store is unreachable
+
+The cap is a day rather than a launch — the user should not be asked twice for saying no once. It is
+`PremiumStore.offerShownKey = "biya.store.offer.v1"`, one string holding a `DailyLimits` day key, so
+there is no counter to migrate. `Entitlement.Usage` is deliberately **not** reused: it is
+parity-tested Core with golden floors, and this is a nag cap, not a quota.
+
+`mayAutoOffer` is built on `locked`, which already carries `!premium.storeUnavailable`. An offer in
+front of somebody who **cannot buy** is worse than no offer, and that is not hypothetical — it is
+how 1.0.7 failed.
+
+The key is classified **KEPT** in `LoginAccountData`, with the other two `biya.store.*` keys. It is
+device state rather than user data, and it lives in the Keychain store that `AccountDeletion.erase`
+— which is handed `CoachDefaultsStorage` — cannot reach at all. Listing it as erased would have been
+a claim the code does not honour.
+
+---
+
 ## The 2.1(a) rejection of 1.0.7 (51), and what it changed (2026-09-04)
 
 Full account and the reply to Apple: `docs/app-review-response.md`. Recorded here are only the

@@ -9,6 +9,125 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-07 (added) — The trial offer opens itself, and the zero on its button is StoreKit's
+
+Client, round 5: after about three seconds the app should offer the trial the way Chess.com does — a
+card over the screen, one big **"Try for ₱0.00"**, a way out — and the same card should stand in for
+the paywall when a paid feature is tapped. Priced in the user's own currency.
+
+**Two thirds of that already existed, and finding out which two mattered.** The currency needs no
+code: `PremiumStore.displayPrice` is `Product.displayPrice` and nothing else, and a repo-wide search
+for a hardcoded currency returns **zero hits in shipping code** — every match is prose or a test
+fixture. And the "tap a paid feature" trigger has existed since round 4; `gated(_:)` is one line.
+What was genuinely new is the three-second delay, which nothing in this module had a precedent for,
+and the ✕ / "No, thanks", which neither existing offer overlay has — tap-the-scrim is their whole
+dismissal, fine for a card the user summoned by hitting a cap and not fine for one that appears on
+its own.
+
+**The zero is not typed.** `PremiumStore.introDisplayPrice` reads
+`introductoryOffer.displayPrice`, which StoreKit has already formatted for the storefront: the
+button says `Try for ₱0.00` on a Philippine account and `Try for THB 0.00` on a Thai one with
+nothing here knowing what either currency is. `PaywallStrings.offerCta` falls back to the paywall's
+own CTA when the price is missing or the Apple Account is not eligible — typing a `0.00` would have
+hardcoded a currency by accident, and promising a free trial to an account that cannot have one is
+the same **Guideline 3.1.2** problem the trial *length* was already fixed for.
+
+**The card is a teaser, not a purchase surface.** Its button opens `PaywallScreen`, so there is one
+purchase path and one place for the legal disclosure. It still carries `offerNote` — and here that
+sentence is a **required** initialiser parameter where `PremiumLockCard` takes it optionally, because
+a card whose entire purpose is a button reading "Try for ₱0.00" is exactly what 3.1.2 is about.
+It is the sixth surface to carry that sentence.
+
+**The gate did not change; its destination moved one step back.** Same predicate, same two
+exemptions, same single choke point — nothing became reachable that was not reachable before. What
+changed is that saying no now leaves the user where they were. `trial_gate_check.js` pins the new
+destination **in both languages**, since a destination that moves in one language only is how the
+browser ended up with no locks on it once already. The browser's `render()` backstop still goes to
+the full paywall on purpose: it fires when an entitlement lapses while the user is *inside* a
+premium screen, and a card they can dismiss would leave them standing in it.
+
+**It never opens itself in front of somebody who cannot buy.** `mayAutoOffer` is built on `locked`,
+which already carries `!storeUnavailable`. That is not hypothetical — it is how 1.0.7 failed. The
+launch cap is one calendar day, held as a single `DailyLimits` day key in
+`biya.store.offer.v1`; `Entitlement.Usage` is deliberately not reused, being parity-tested Core with
+golden floors, and this is a nag cap rather than a quota.
+
+Shapes followed rather than invented: **no `.sheet`** (a ZStack sibling below the paywall, because
+these views also render in the macOS `PhoneFrame`); **not a route in the browser** (`OPEN_ROUTES` is
+asserted to be exactly five, so it is a modal on `.app-card`, like `confirmDeleteAccount`); and a
+timer checked on **both** sides of its wait, because `js/coach-turn.js` records four `setTimeout`s
+this project already shipped that fired after navigation.
+
+New: `DemoApp/Sources/BiyaherongUI/TrialOfferCard.swift`, `premium.js` `offerCard()`, and the
+`.pw-offer-*` rules in `app.css` — added to the reduced-motion block as well as the animation one.
+Gates extended, never loosened: `trial_gate_check.js` 55 → **60** invariants, `replay_premium.js`
+617 → **651** expectations, plus the offer CTA's four branches in `PaywallMetricsCheck.swift` and
+the browser's `selfTest`. `js_goldens.js` **35,997** assertions across 86 suites.
+
+**`web-demo/` was updated** — the card, the three-second timer and the once-a-day cap are all
+walkable in the browser with the Subscription picker on **Free**.
+
+### 2026-09-07 (added) — The listing assets that got 1.0.8 rejected, and a check that measures the next one
+
+Build **1.0.8 (52)** was rejected on **2026-09-06** — submission `a037695f-351d-4397-8412-83cf612b0bbe`,
+reviewed on an iPad Air 11-inch (M3) — under **Guideline 2.3.2** and **Guideline 2.3.4**. Both are
+metadata guidelines. **Nothing in the binary is wrong and build 52 is resubmitted unchanged**; what
+was wrong was the product page, and specifically its two *optional* assets.
+
+**2.3.2 — the promotional image.** One file had been uploaded against both `…plus.monthly` and
+`…plus.yearly`, and it was a square crop of the **Go Premium** screen — caught, as it happens, in its
+store-failure state (*"Couldn't load subscriptions from App Store"*). A promotional image is only
+used when a subscription is *promoted* on the App Store, which this app does not do, so both were
+deleted; Apple's own message offers that as the resolution.
+
+**2.3.4 — the app preview.** A screen recording composited inside a white tablet mockup and
+letterboxed onto the 886×1920 canvas, the app covering about a third of the frame. Three more things
+were wrong in the same file that Apple did **not** cite, any one of which would have earned a second
+rejection: the footage is the **React Native Android build** (its status bar carries a date, which
+iOS never shows, and the "Continue Previous Game?" alert is a Material dialog with borderless
+ALL-CAPS buttons); a **notification shade is pulled down at ~19 s**, putting personal Messenger and
+Gmail notifications on a public product page; and the capture is dated **17 April 2026**, months
+before Stockfish was embedded in this repo. It was the wrong shape for the product too —
+`ios/project.yml` makes this app iPhone-only and portrait-only, so a tablet mockup was never right.
+All three previews were deleted: a preview is optional, a screenshot is not.
+
+**The real defect is that none of this was written down.** `app-store-handoff.md` stopped at the
+subscriptions; there was no doc, no asset and no tool for the product page anywhere in the repo. So
+this adds them.
+
+**`tools/ship/make_app_preview.sh`** (new). `export` turns a raw iOS screen recording into a
+compliant preview: it picks 886×1920 or 1080×1920 from the **source aspect** rather than forcing one
+so nothing is stretched, caps at 30 s, adds a silent stereo track when the source has none (Simulator
+recordings do not), and then runs `check` on its own output — an exit code is not evidence. It
+refuses a landscape source, an aspect that is neither accepted shape, under 15 s of footage, and an
+HDR source. It needs only ffmpeg, so unlike `ship_testflight.sh` it runs on the Windows checkout.
+
+**`check` is the half that matters, and the border test took three attempts.** Both obvious
+implementations are wrong here:
+
+- **`cropdetect` misses it.** It only trims a row when *every* pixel falls under the limit, so a
+  handful of compression-noise pixels defeat it. On the actual rejected file it reports a full
+  244×530 frame at `limit=8` **and** at `limit=16`, finding the real 238×330 content box only at
+  `limit=24` — one unit from the app's own background colour.
+- **An absolute luma threshold misses it too.** This app is very dark: `#0F1A2E` measures luma
+  **8–10** through this pipeline while the rejected file's bars measure **0–5**. A threshold of 12
+  flagged a full-bleed navy screen as letterboxed — caught by a positive control, not by reasoning.
+
+The check therefore averages a strip along each edge and calls it a border only when it is **both**
+near-black (≤ 24) **and at least 4× darker than the whole frame**. The ratio is what works: an
+all-dark frame has a low average too, so a legitimately dark screen sits near 1×, while the rejected
+file averages 64 against a top edge of 5. Verified four ways — it fails the file Apple sent back
+(`top bottom right`), fails a synthetic letterbox, and passes both a realistic dark app screen and a
+uniform fill of the darkest colour the app owns.
+
+Docs: **`docs/app-store-assets.md`** (new) — which assets are required, the sizes, what a preview may
+not contain, the recording brief to forward to whoever has the Mac, and why the border check is built
+the way it is. `docs/app-review-response.md` restructured to hold **both** rejections newest-first
+with the reply to paste for each; `docs/app-store-handoff.md` gained a *Listing assets* step and two
+traps; `docs/README.md` indexes the new doc.
+
+`web-demo/` was **not** updated, and cannot be: these are App Store assets, not app behaviour.
+
 ### 2026-09-04 (changed) — 1.0.8 (52) uploaded: the App Review fixes, on a tree that compiles
 
 Delivery UUID `9c6e5c0e-3ec7-43fd-8bfd-63de56e391cd`. 85,662,814 bytes, `UPLOAD SUCCEEDED with no
