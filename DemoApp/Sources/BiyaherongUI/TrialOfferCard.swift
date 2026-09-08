@@ -19,6 +19,14 @@ import SwiftUI
 /// hitting a cap and not fine for one that appears on its own. The host supplies the scrim, the
 /// same split `capOverlay` uses.
 struct TrialOfferCard: View {
+    /// The headline — `PremiumStore.offerHeading`. A promise only when there is one to make.
+    ///
+    /// This is a parameter and not `PaywallStrings.offerTitle` because it shipped as the latter:
+    /// the CTA and the note both fell back when there was no trial, and the biggest text on the
+    /// card went on saying **"Try Biyaherong Plus for Free"** above a **Subscribe** button.
+    let heading: String
+    /// The line under it — `PremiumStore.offerSubheading`.
+    let subheading: String
     /// The button — `PremiumStore.offerCta`. "Try for ₱0.00" once the store has answered.
     let cta: String
     /// What the button starts, in words — `PremiumStore.offerNote`.
@@ -41,11 +49,11 @@ struct TrialOfferCard: View {
                 .buttonStyle(DimButtonStyle(pressedOpacity: PaywallLayout.pressed))
             }
             Text(PaywallGlyph.crown).font(.system(size: PaywallLayout.offerArtSize))
-            Text(PaywallStrings.offerTitle)
+            Text(heading)
                 .font(Theme.nunito(PaywallType.headerTitleSize, .bold))
                 .foregroundStyle(PaywallPalette.title)
                 .multilineTextAlignment(.center)
-            Text(PaywallStrings.offerBody)
+            Text(subheading)
                 .font(Theme.nunito(PaywallType.rowSize, .medium))
                 .foregroundStyle(PaywallPalette.body)
                 .multilineTextAlignment(.center)

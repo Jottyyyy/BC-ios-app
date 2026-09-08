@@ -128,6 +128,40 @@ Five things about it are deliberate:
   It fires when an entitlement lapses while the user is standing *inside* a premium screen, and a
   card they can dismiss would leave them standing there. Only the tap path moved.
 
+### Why there is no trial — reading the paywall backwards
+
+When `trialEligible` is false, **nine surfaces** quietly drop to price-only copy: the paywall CTA
+becomes "Subscribe", every offer sentence loses its trial clause, and the `Free trial: 7 days` line
+vanishes from the disclosure card. That is correct — promising a trial the store will not honour is
+a Guideline 3.1.2 misrepresentation — and it is also indistinguishable from a bug unless you know
+where to look.
+
+It happened for real on **2026-09-08**: the client sent a recording of the paywall reading
+**Subscribe** and *"$1.99 per month. Cancel anytime."* and asked why there was no free trial. The
+answer was not in the app. `CHANGELOG.md` had said so since 2026-08-18 — *"the 7-day introductory
+offer does not exist in App Store Connect yet"* — and nothing could see it.
+
+Three causes, all in App Store Connect:
+
+| Cause | How to tell | Fix |
+|---|---|---|
+| **No introductory offer at all.** A separate section under each subscription, *not* part of setting the price. | the checker prints `NO introductory offer configured` | create it: **Free Trial**, 1 week, on **both** products |
+| **The offer misses the tester's territory.** Offers are configured **per territory** — one API call per country. | the checker names the missing territories | add them; `--territories` sets what it requires |
+| **That Apple Account has already used it.** Once per subscription *group*, and it never resets. | the checker is green and the app still says Subscribe | retest on an Apple ID that has never started this trial |
+
+**The third survives every fix, and that is the trap.** After correcting App Store Connect the same
+tester may still see "Subscribe" — which is not a failure. TestFlight uses the tester's **real**
+Apple ID, and eligibility does not reset between installs or builds. Say so before anyone retests.
+
+```bash
+node tools/ship/check_iap_offers.js        # 0 = ok · 1 = really missing · 2 = could not look
+```
+
+`ship_testflight.sh` runs it before every build and refuses on exit 1. Nothing in `tools/qa/` can:
+those 44 checks are offline and read the local `ios/Biyaherong.storekit`, which **only the Debug
+scheme runs against** (`ios/project.yml:199-203`). That file declaring a perfect `P1W` free trial
+says nothing whatever about production, and `replay_premium.js` was green the whole month.
+
 ### A store that will not load walls nobody
 
 The third term in `locked` is `!premium.storeUnavailable`, which is `loadState == .failed` — the App
@@ -319,6 +353,13 @@ In `web-demo/index.html`, set the **Subscription** picker to **Free**:
   full paywall;
 - navigating away while the three seconds are still running must **not** produce a late card;
 - on **Trial**, **Active**, **Grace** and under `?storefail` the card never appears at all;
+- **`?notrial`** — the state the client was actually in, and the one the browser could not draw
+  until this switch existed. The card must headline *"Unlock Biyaherong Plus"*, never *"Try … for
+  Free"*; its button must read **Subscribe**; the word "free" must appear nowhere on it; and the
+  paywall's disclosure card must drop its `Free trial: 7 days` line. Every render site here used to
+  hard-code eligibility, so the one machine anybody previews on could not show this — which is
+  exactly how the card shipped reading *"Try Biyaherong Plus for Free"* above a **Subscribe**
+  button;
 - Back from the paywall returns to Home;
 - Profile still opens, and **Sign out** still works;
 - every lock card names the trial, the price it converts to, and that it can be cancelled;

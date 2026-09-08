@@ -5,6 +5,71 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The trial that was never there (2026-09-08)
+
+Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall
+reading **Subscribe** and *"$1.99 per month. Cancel anytime."*
+
+**The app was right.** `introOfferEligible` asked StoreKit, was told there was no free introductory
+offer, and every surface dropped to price-only copy exactly as designed. The offer did not exist in
+App Store Connect — and `CHANGELOG.md` had recorded that as outstanding since **2026-08-18**.
+Nothing could see it: all 44 checks in `tools/qa/` are offline and read the local
+`ios/Biyaherong.storekit`, which `ios/project.yml:199-203` scopes to the **Debug scheme alone**.
+
+### FIXED: the offer card promised a trial it had already stopped offering
+
+`TrialOfferCard` drew `PaywallStrings.offerTitle` — *"Try Biyaherong Plus for Free"* —
+**unconditionally**, while `offerCta` and `offerNote` both fell back. So the card that opens itself
+three seconds after launch read:
+
+> **Try Biyaherong Plus for Free** · [ Subscribe ] · *$1.99 per month. Cancel anytime.*
+
+A promise in the largest text on the card, over a button refusing it. Shipped 2026-09-07 in the same
+change that built the card *to avoid* exactly that; it survived because every string on it except
+those two already fell back, and because the browser twin hard-coded eligibility at every render
+site, so no preview could draw the state. The headline and its subline now come from the store
+(`offerHeading` / `offerSubheading`) like every other string on the card, and `replay_premium.js`
+fails if the view names the string table directly.
+
+### FIXED: `introOfferEligible` accepted a paid introductory offer
+
+Apple has three kinds — free trial, pay up front, pay as you go. `trialDays` required
+`paymentMode == .freeTrial`; `introOfferEligible`, four lines below, required only that an offer
+existed. A **paid** introductory offer therefore made `trialEligible` true, sent `trialDays` to its
+`Entitlement.trialDays` fallback, and every surface read *"7 days free, then $1.99 per month"* for
+an offer that was neither. The same Guideline 3.1.2 problem the trial LENGTH was already fixed for,
+one field over — and directly in the path of the fix, since resolving this bug report means somebody
+choosing one of those three radio buttons. Both guards now test the kind, and the gate counts them.
+
+### ADDED: `tools/ship/check_iap_offers.js` — the first thing here that talks to Apple
+
+`docs/app-store-handoff.md` had stated the gap plainly: *"nothing in this repo can see App Store
+Connect — that half is on you."* This is that half. Dependency-free Node, ES256 via
+`crypto.sign(…, { dsaEncoding: 'ieee-p1363' })`, the same API key `ship_testflight.sh` already
+needs. It verifies an introductory offer exists on **both** products, is a **FREE_TRIAL**, matches
+the `P1W` the copy is built around, and **covers every required territory** — offers are configured
+per territory, and the client's recording was made on a **US** storefront while the market is the
+Philippines.
+
+Wired into `ship_testflight.sh`, which refuses to build on exit 1 and warns on exit 2. The exit
+codes are split deliberately: *"this is broken"* must block a ship, *"I could not look"* must not.
+
+**What it cannot tell you, and says so on success:** whether a given Apple Account has already used
+the trial. Eligibility is once per subscription **group** and never resets, and TestFlight uses the
+tester's **real** Apple ID — so a tester can keep seeing "Subscribe" against a perfectly configured
+offer. That third cause survives every fix, which is why the tool prints it rather than implying
+green means the tester will see a trial.
+
+### ADDED: `?notrial` in the browser
+
+Every render site in `premium.js` hard-coded `trialEligible = true`, and `disclosureLines()` emitted
+the trial paragraph unconditionally where the Swift gates it. The ineligible path — the one the
+client was actually in — was reachable only from the self-test. That is why the headline defect
+above was invisible on the machine this project previews on. `?notrial` is the twin of `?storefail`
+and draws it.
+
+---
+
 ## The trial offer card (2026-09-07, fifth round)
 
 Client, round 5: after about three seconds the app should offer the trial the way Chess.com does —

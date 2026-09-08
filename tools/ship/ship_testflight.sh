@@ -51,6 +51,26 @@ KEYFILE="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
 [ -f "$KEYFILE" ] || fail "no API key at $KEYFILE"
 echo "    API key $ASC_KEY_ID"
 
+# The half no offline check can see. Everything the app says about a free trial depends on an
+# introductory offer that exists only in App Store Connect: `replay_premium.js` reads the LOCAL
+# ios/Biyaherong.storekit, which the Debug scheme alone uses, and stayed green for a month while
+# the real offer did not exist. The client found out instead, from a paywall that said "Subscribe".
+say "Verifying the free trial exists in App Store Connect"
+if command -v node >/dev/null; then
+  set +e
+  node "$ROOT/tools/ship/check_iap_offers.js"
+  OFFERS=$?
+  set -e
+  case "$OFFERS" in
+    0) ;;
+    # 2 is "could not look" — no network, no key, an API that moved. Never a reason not to ship.
+    2) printf '\033[33m    WARNING: could not check the introductory offers (see above)\033[0m\n' ;;
+    *) fail "no free trial in App Store Connect - the app would ship promising one it cannot give" ;;
+  esac
+else
+  printf '\033[33m    WARNING: node not installed, skipping the introductory-offer check\033[0m\n'
+fi
+
 # the signing settings must be TARGET-scoped in project.yml, never -xcodebuild overrides:
 # as overrides they also hit SwiftPM's BiyaherongUI_BiyaherongUI bundle, which rejects profiles.
 grep -q 'CODE_SIGN_STYLE: Manual' "$PROJ" || fail "project.yml is not set to Manual signing"

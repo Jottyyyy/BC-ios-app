@@ -89,6 +89,18 @@ The trial goes on **both**. Introductory-offer eligibility belongs to the subscr
 to a product, and the paywall offers it on whichever plan the user selects — a trial on only one of
 them is a row promising something the App Store will not honour.
 
+**Introductory Offers is its own section, under the product, separate from Subscription Prices.**
+Setting a price does not create a trial, and this step being skipped is what the client eventually
+reported as *"wala parin yung option na free 7 day trial"* — a month after `CHANGELOG.md` recorded
+that it was outstanding. Pick **Free Trial** (not the two paid kinds), **1 week**, no end date, and
+**every territory** you sell or test in.
+
+Then prove it, because this is the only part of the submission the repo could never see:
+
+```bash
+node tools/ship/check_iap_offers.js     # 0 = ok · 1 = really missing · 2 = could not look
+```
+
 ### 3. Build
 
 **Easiest, and needs no Mac:** run the **`ios-appstore`** workflow in Codemagic. It refuses to build
@@ -202,6 +214,16 @@ the build.
 - **A promotional image is optional, and a duplicated one is worse than none.** The same rejection
   cited 2.3.2 because one screenshot of the paywall had been uploaded against both subscriptions.
   Delete them unless you are actually promoting the products on the App Store.
+- **An introductory offer is configured PER TERRITORY, and the gap has no symptom.** The App Store
+  Connect UI looks identical whether you selected two countries or two hundred; the app simply
+  shows no trial to anyone outside the list, and says nothing about why. The client's own recording
+  was made on a **US** storefront while the market is the **Philippines** — either one missing is
+  invisible. `check_iap_offers.js` names the missing territories, which is the only way to see it
+  short of finding an Apple Account in each country.
+- **A green `replay_premium.js` says nothing about the real store.** It reads
+  `ios/Biyaherong.storekit`, which **only the Debug scheme runs against** (`ios/project.yml:199`).
+  That file can declare a perfect 7-day trial while App Store Connect has none at all — and did,
+  for a month.
 
 ---
 
