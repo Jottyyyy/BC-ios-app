@@ -9,6 +9,49 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-08 (changed) — 1.0.8 (53) uploaded: the trial offer card, on a tree that compiles
+
+Delivery UUID `b8513567-6b2e-4483-bb41-897bc91b04f7`. 85,688,666 bytes, `UPLOAD SUCCEEDED with no
+errors`, via `tools/ship/ship_testflight.sh 53`. This is the first build carrying the self-opening
+trial offer card and the App Store asset tooling from the two entries below.
+
+**The build number was passed explicitly, not bumped.** The `--dry-run` that preceded this run had
+already moved `CURRENT_PROJECT_VERSION` 52 → 53, so a bare invocation would have produced 54 and
+stranded the number this entry names. `53` is what the run printed.
+
+**Shipped from the branch, because `main` still does not build — the same reason as 52, unfixed.**
+`origin/main` carries the App Review and trial-offer work but none of the three Mac-only build fixes:
+`biya_stockfish.cpp`'s missing `#include "sf/evaluate.h"` and its three unset `Search::Worker`
+listeners, the `import AVKit` Tutorial Videos needs, and the regenerated `.xcodeproj`. Merging main
+*into* `fix/stockfish-search-callbacks` is again what produced a tree with both halves. One conflict,
+the CHANGELOG, re-stacked newest-first so 09-07 precedes 09-04. **Those three fixes have now sat
+unpushed across two releases; a fresh clone of `main` cannot compile the app.**
+
+**Guards, all passed against this exact artifact.** `BIYA_TESTBUILD` did not reach the compiler
+(`(none)` — real sign-in, real StoreKit); `com.apple.developer.applesignin` decoded back out of both
+the archive *and* the signed `.ipa`; `VERIFY SUCCEEDED with no errors` from `altool --validate-app`;
+the Info.plist read back `1.0.8 (53)`.
+
+**Verification before the archive**, since a merge from `origin/main` is written blind on Windows and
+has broken this build before: `swift build` clean at the root and in `DemoApp/`; `swift_lint.js` (144
+files), `swift_symbol_check.js` (3,865 references, 160 types), `swift_enum_payload_check.js`;
+`trial_gate_check.js` 60, `replay_premium.js` 651, `replay_login.js` 535, `replay_stockfish.js` 80,
+`stockfish_vendor_check.js` 26; and the eight self-checks — PaywallMetricsCheck 135,
+LoginMetricsCheck 181, HomeMetricsCheck 212, AnalysisMetricsCheck 510, PuzzleMetricsCheck 84,
+PairingMetricsCheck 44, CoachMetricsCheck 59, PieceArtCheck 112.
+
+**`StockfishSmoke` is the one that matters here** and it was run for real: `SMOKE OK`, Stockfish 17.1
+started, depth 22 at 1.94 Mnps on the start position, `Ra8#` found in the rook endgame. That is the
+exact path that used to reach `std::terminate` on the first search, so a green build alone would not
+have proved it.
+
+**`js_goldens.js` could not run on this Mac, and that is the same pre-existing gap as 52.** It needs
+`Goldens/san_parse.json`, which `tools/oracle/generate_goldens.php` refuses to write because the
+sibling `../BYAHERONG-COACH-LARAVEL` clone is trimmed and has no `app/Services/ChessEngine.php`.
+Nothing in this merge touched a ported algorithm.
+
+`web-demo/` not updated — a release.
+
 ### 2026-09-07 (added) — The trial offer opens itself, and the zero on its button is StoreKit's
 
 Client, round 5: after about three seconds the app should offer the trial the way Chess.com does — a
