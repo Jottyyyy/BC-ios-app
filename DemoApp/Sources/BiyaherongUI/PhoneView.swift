@@ -304,7 +304,9 @@ struct PhoneApp: View {
                         PaywallPalette.scrim
                             .ignoresSafeArea()
                             .onTapGesture { closeTrialOffer() }
-                        TrialOfferCard(cta: premium.offerCta,
+                        TrialOfferCard(heading: premium.offerHeading,
+                                       subheading: premium.offerSubheading,
+                                       cta: premium.offerCta,
                                        offerNote: premium.offerNote,
                                        onTry: {
                                            closeTrialOffer()

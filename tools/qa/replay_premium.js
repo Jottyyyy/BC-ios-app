@@ -389,8 +389,29 @@ function run() {
     expect(/let offerNote: String\b/.test(offerCard),
       'TrialOfferCard requires the offer sentence rather than taking it optionally');
     expect(/Text\(offerNote\)/.test(offerCard), 'and draws it under the button');
-    expect(/TrialOfferCard\(cta: premium\.offerCta,[\s\S]{0,120}offerNote: premium\.offerNote/
-      .test(code(read(UI, 'PhoneView.swift'))), 'and PhoneView hands it both');
+    expect(/TrialOfferCard\(heading: premium\.offerHeading,[\s\S]{0,80}subheading: premium\.offerSubheading,[\s\S]{0,80}cta: premium\.offerCta,[\s\S]{0,80}offerNote: premium\.offerNote/
+      .test(code(read(UI, 'PhoneView.swift'))), 'and PhoneView hands it all four from the store');
+
+    // The HEADLINE is the one that shipped wrong. `offerCta` and `offerNote` both fell back when
+    // there was no trial, so the card degraded to a Subscribe button under "$1.99 per month" —
+    // while the largest text on it went on reading "Try Biyaherong Plus for Free". A promise in
+    // the title is still a promise. Nothing on this card may name the string table directly.
+    expect(!/PaywallStrings\.offer(Title|Body)\b/.test(offerCard),
+      'TrialOfferCard names no offer copy directly — every string is resolved by the store');
+    expect(/trialEligible \? offerTitle : offerTitleNoTrial/.test(code(metrics))
+      && /trialEligible \? offerBody : offerBodyNoTrial/.test(code(metrics)),
+      'and the headline and the line under it both fall back when there is no trial');
+
+    // Both introductory-offer guards must test the KIND, not merely the presence. Apple has three
+    // (free trial, pay up front, pay as you go). `introOfferEligible` used to accept any of them
+    // while `trialDays` accepted only the free one, so a PAID introductory offer set trialEligible
+    // true, sent trialDays to its fallback, and every surface then read "7 days free, then $1.99
+    // per month" for an offer that was neither free nor seven days. They sit four lines apart and
+    // answer the same question; nothing but this makes them agree.
+    const storeSrc = code(read(UI, 'PremiumStore.swift'));
+    const kindGuards = (storeSrc.match(/paymentMode == \.freeTrial/g) || []).length;
+    expect(kindGuards >= 2,
+      `only ${kindGuards} of the two introductory-offer guards checks paymentMode == .freeTrial`);
     expect(/pw-offer-card/.test(premiumJs) && /\.pw-offer-card/.test(appCss),
       'and the browser draws the same card, with rules in app.css to draw it with');
 

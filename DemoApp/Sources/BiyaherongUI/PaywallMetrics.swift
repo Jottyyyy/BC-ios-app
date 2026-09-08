@@ -217,6 +217,15 @@ enum PaywallStrings {
     static let offerBody = "Unlock every puzzle, all five coaches, and unlimited Game Reviews."
     static let offerTryFree = "Try for {price}"
     static let offerDismiss = "No, thanks"
+    /// The same card when there is no trial to offer — an Apple Account that has already used it,
+    /// or a subscription with no introductory offer configured at all.
+    ///
+    /// It needs its own headline because the first one is a promise. Shipped once without this,
+    /// the card read **"Try Biyaherong Plus for Free"** over a **Subscribe** button and
+    /// *"$1.99 per month"*, since only the CTA and the note fell back — which is the Guideline
+    /// 3.1.2 misrepresentation the whole card was built to avoid, in the largest text on it.
+    static let offerTitleNoTrial = "Unlock Biyaherong Plus"
+    static let offerBodyNoTrial = "Every puzzle, all five coaches, and unlimited Game Reviews."
 
     // Plan toggle — labels and sub-lines verbatim from RN premium/index.tsx:628, 74-79.
     static let planMonthly = "Monthly"
@@ -373,6 +382,20 @@ enum PaywallStrings {
             return cta(trialEligible: trialEligible, days: days)
         }
         return fill(offerTryFree, ["price": introPrice])
+    }
+
+    /// The offer card's headline and its line underneath.
+    ///
+    /// Resolved here rather than in the view for the same reason `offerNote` is: the card should
+    /// not have to know about eligibility to say the true thing. Every other string on that card
+    /// already fell back when there was no trial; these two did not, and the largest text on the
+    /// screen was the one still promising one.
+    static func offerHeading(trialEligible: Bool) -> String {
+        trialEligible ? offerTitle : offerTitleNoTrial
+    }
+
+    static func offerSubheading(trialEligible: Bool) -> String {
+        trialEligible ? offerBody : offerBodyNoTrial
     }
 
     /// `Sep 12, 2026` — the same frozen month table `HomeMembership.expiryText` uses, and for the
