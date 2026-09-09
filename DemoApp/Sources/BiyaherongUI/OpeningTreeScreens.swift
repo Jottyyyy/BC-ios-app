@@ -562,7 +562,7 @@ struct OpeningTreeExplorerScreen: View {
                           selected: selected,
                           legalTargets: legalTargets,
                           lastMove: store.lastMove,
-                          flipped: store.open?.colour == .black,
+                          flipped: boardFlipped,
                           checkSquare: checkSquare(pos),
                           boardSize: side,
                           onTap: { tap($0, in: pos) },
@@ -639,8 +639,15 @@ struct OpeningTreeExplorerScreen: View {
     /// `evalRail(height: edge)` reads the same here as on the Analysis Board — which is what
     /// `swift_layout_check.js` §4d's site table matches on.
     private func evalRail(height: CGFloat) -> some View {
-        EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)
+        EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel,
+                 flipped: boardFlipped)
     }
+
+    /// Which way the board faces here. Derived, with no toggle: a Black repertoire is studied from
+    /// Black's side. Named once because the board and the rail must never disagree about it — the
+    /// rail following the wrong orientation is exactly the bug the client reported on the other
+    /// screen.
+    private var boardFlipped: Bool { store.open?.colour == .black }
 
     /// `alignSelf: flex-start` in the RN source, so it hugs the left rather than stretching.
     private var engineToggle: some View {

@@ -146,27 +146,47 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 1), 200, "a mate delivered fills it")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: 2), 200, "a fraction past 1 clamps")
     expectNear(AnalysisEval.fillHeight(rail: 200, fraction: -1), 0, "and one below 0 clamps too")
-    expect(AnalysisEval.labelAtBottom(fraction: 1), "1-0 hangs off the BOTTOM, on the white block")
-    expect(AnalysisEval.labelAtBottom(fraction: 0.95), "so does a forced mate for White")
-    expect(AnalysisEval.labelAtBottom(fraction: 0.5), "and a dead-level position, stably")
-    expect(!AnalysisEval.labelAtBottom(fraction: 0.49), "a Black edge hangs off the TOP")
-    expect(!AnalysisEval.labelAtBottom(fraction: 0), "and so does 0-1, on the bare dark track")
+    expect(AnalysisEval.labelAtBottom(fraction: 1, flipped: false),
+           "1-0 hangs off the BOTTOM, on the white block")
+    expect(AnalysisEval.labelAtBottom(fraction: 0.95, flipped: false),
+           "so does a forced mate for White")
+    expect(AnalysisEval.labelAtBottom(fraction: 0.5, flipped: false),
+           "and a dead-level position, stably")
+    expect(!AnalysisEval.labelAtBottom(fraction: 0.49, flipped: false),
+           "a Black edge hangs off the TOP")
+    expect(!AnalysisEval.labelAtBottom(fraction: 0, flipped: false),
+           "and so does 0-1, on the bare dark track")
+    // Flipped, every one of those moves to the other end — because White's BLOCK moved there.
+    expect(!AnalysisEval.labelAtBottom(fraction: 1, flipped: true),
+           "flipped, 1-0 hangs off the TOP: White is up there now")
+    expect(AnalysisEval.labelAtBottom(fraction: 0, flipped: true),
+           "and 0-1 off the BOTTOM, still on the bare track")
+    expect(AnalysisEval.fillAlignment(flipped: false) == .bottom
+           && AnalysisEval.fillAlignment(flipped: true) == .top,
+           "White grows from the floor normally and from the ceiling when the board is flipped")
 
     // LEGIBILITY, as the geometric fact it rests on rather than as a promise. The label's band is
-    // one line of rail type plus its two insets. `labelAtBottom` is true exactly when that band at
-    // the BOTTOM is inside the white fill, and false exactly when the band at the TOP is bare
-    // track — so the label always lands on solid colour. Swept over the whole range, on the
-    // SHORTEST rail the app can draw. No threshold to tune, which is why this is a sweep and not a
-    // comment.
+    // one line of rail type plus its two insets. `labelOnFill` is true exactly when that band is
+    // inside White's own block and false exactly when it is on bare track — stated on the BLOCK
+    // rather than on an end, so it holds in BOTH orientations at once, which is what makes the flip
+    // a change to where the label goes and not to whether it can be read. Swept over the whole
+    // range, on the SHORTEST rail the app can draw. No threshold to tune, which is why this is a
+    // sweep and not a comment.
     let labelBand = (AnalysisEval.labelFontSize * AnalysisLayout.engineLineRatio
                      + AnalysisEval.railPaddingV * 2) / railEdge
     for step in 0...20 {
         let f = CGFloat(step) / 20
-        if AnalysisEval.labelAtBottom(fraction: f) {
-            expect(f >= labelBand, "at \(f) the bottom label sits inside the white fill")
+        if AnalysisEval.labelOnFill(fraction: f) {
+            expect(f >= labelBand, "at \(f) the label sits inside White's own block")
         } else {
-            expect(1 - f >= labelBand, "at \(f) the top label sits on bare track")
+            expect(1 - f >= labelBand, "at \(f) the label sits on bare track")
         }
+        expect(AnalysisEval.labelAtBottom(fraction: f, flipped: false)
+               == AnalysisEval.labelOnFill(fraction: f),
+               "at \(f) unflipped, the label is at the bottom exactly when it is on White")
+        expect(AnalysisEval.labelAtBottom(fraction: f, flipped: true)
+               != AnalysisEval.labelOnFill(fraction: f),
+               "at \(f) flipped, it is at the other end — White's block moved")
     }
     expect(AnalysisEval.labelInk(fraction: 1) == AnalysisPalette.onGold,
            "White's end takes the screen's dark-ink-over-a-light-fill colour")

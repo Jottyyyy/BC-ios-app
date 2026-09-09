@@ -306,7 +306,7 @@ var BiyaOpenings = (function () {
     boardWrap.appendChild(rail);
     boardWrap.appendChild(board);
     root.appendChild(boardWrap);
-    paintEval(fill, lbl);
+    paintEval(rail, fill, lbl, explorerFlipped(store));
     sizeExplorer(root, view);
 
     root.appendChild(engineToggle(handlers.onEngineToggle));
@@ -395,6 +395,18 @@ var BiyaOpenings = (function () {
    * tree was the only thing you could walk. Playing your own move is not a second way to walk the
    * tree — it is the way you LEAVE it, which is what the client asked for.
    */
+  /**
+   * Which way the explorer board faces. Derived, with no toggle: a Black repertoire is studied from
+   * Black's side.
+   *
+   * Named once because the board and the eval rail must never disagree about it — a rail following
+   * the wrong orientation is exactly what the client reported on the other screen.
+   */
+  function explorerFlipped(store) {
+    var open = store && store.open && store.open();
+    return !!(open && open.colour === 'black');
+  }
+
   function explorerBoard(store, onPlay) {
     var open = store.open();
     var b = document.createElement('chess-board');
@@ -404,7 +416,7 @@ var BiyaOpenings = (function () {
     if (b.setPosition) b.setPosition(store.fen(), { animate: false, lastMove: store.lastMove() });
     // The PROPERTY. `flipped` is attribute-truthy for every value but the literal 'false', so
     // `flipped="0"` would be upside down for White.
-    b.flipped = !!(open && open.colour === 'black');
+    b.flipped = explorerFlipped(store);
     b.rules = rulesAdapter();
     // Both, or the drag is dead: the component attaches NO pointer handlers until a screen asks.
     b.draggablePieces = true;
@@ -438,13 +450,19 @@ var BiyaOpenings = (function () {
    * because it is the analysis rail. `evalFractionFor` carries the branch a bare fraction cannot:
    * a delivered mate pins the rail to a full 1, where a mate four moves away is 0.95.
    */
-  function paintEval(fill, lbl) {
+  function paintEval(rail, fill, lbl, flipped) {
     var A = analysisMetrics();
     var AN = isNode ? require('./analysis-engine.js') : BiyaAnalysis;
     var snap = engineState.snapshot;
     var f = snap ? AN.evalFractionFor(AN.evalPartsOf(snap)) : A.evalBarFraction(null, null);
+    // The rail follows the board, exactly as on the Analysis Board: side fixed, fill mirrored.
+    // Here the orientation is derived from the repertoire rather than toggled, so a Black
+    // repertoire opens with the rail already the right way up.
+    rail.classList.toggle('flipped', !!flipped);
     fill.style.height = (f * 100) + '%';
-    lbl.className = 'lbl ' + (A.evalLabelAtBottom(f) ? 'bottom' : 'top');
+    lbl.className = 'lbl '
+      + (A.evalLabelAtBottom(f, flipped) ? 'bottom' : 'top')
+      + (A.evalLabelOnFill(f) ? ' on-fill' : ' on-track');
     // ONE formatter, the same one the rows' eval column uses — the rail and row 1 are two
     // projections of the same score and cannot disagree.
     lbl.textContent = snap && snap.score ? AN.formatScore(snap.score) : '';

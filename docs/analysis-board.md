@@ -181,6 +181,17 @@ Two things reading the source corrected:
   **both** renderers draw, because CSS has no `minimumScaleFactor` and would clip where SwiftUI
   shrinks.
 
+  **The rail's side is fixed; its fill mirrors.** The rail is on the left whichever way the board
+  faces, but White's block grows from White's own end — the floor normally, the ceiling once the
+  board is flipped — so the colour at the bottom of the rail is always the colour at the bottom of
+  the board. This reversed an earlier "never mirrored" rule after the client reported the old
+  behaviour: *"yung engine bar hindi na flip kapag nagflip ka, nasa taas parin ung black"*. Two
+  predicates keep it honest: `labelOnFill(fraction)` decides the INK and is orientation-free — the
+  label rides its own block, so what is behind it never changes — while
+  `labelAtBottom(fraction:flipped:)` decides the physical END and is the only one that flips. The
+  browser had those welded into one class and now has `bottom`/`top` beside `on-fill`/`on-track`.
+  Reasoning in `PORTING_NOTES.md`, "The eval rail follows the board".
+
   **The rail is only there when the engine is.** `toggleEngine` drops the snapshot when it switches
   the engine off, so the rail would sit at a dead 50/50 with no number on it — the client's word was
   *"hindi na need yun pag nakapatay engine … yung space nya kainin na ng chessboard"*. One function,
