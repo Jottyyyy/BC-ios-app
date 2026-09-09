@@ -5,6 +5,84 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The piece lifts when you drag it (2026-09-09)
+
+Client: *"sana yung drag pieces kita na inaangat piyesa / Parang sa android nabubuhat piyesa / Or
+usually kapag drag kita mo piyesa nagalaw agad"* — on all the boards.
+
+The drag already **worked**; it was invisible. `BoardView.dragGesture` was `DragGesture(minimumDistance: 4)`
+with `.onEnded` only, so nothing happened between finger-down and finger-up and the app read as
+unresponsive. `CHANGELOG.md:1274` had scoped it exactly: *"a live ghost is a change to every board in
+the app, not to this screen, so it is out of scope here."* `BoardView` is the only Swift board, so
+one gesture reaches all nine — Analysis, Play vs Coach, Opening Trainer and the five puzzle solvers.
+
+### EXTRACTED: every number, from worklets the walker could not reach
+
+The lift lives in `Gesture.Pan()` worklets and `useAnimatedStyle` callbacks in
+`DragDropChessBoard.tsx`. The `StyleSheet.create` walk cannot see either — the `styles` block in that
+file holds the squares and the labels and nothing about a piece that has left the board — which is
+why none of it had ever been extracted.
+
+`extract_board_styles.js` now scans for it and writes `dragConstants` into `board_styles.json`,
+exactly as it already scans `EvalGraph.tsx`'s SVG attributes: *"cruder than the StyleSheet walk, but
+it still RE-DERIVES on every run instead of trusting a copy, which is the whole point."*
+`board_layout_check.js` §9 pins **both** languages against that JSON rather than against each other —
+CLAUDE.md's *"two hand-typed copies agreeing with each other is not verification"*, taken literally.
+
+Lengths are multiples of **SQUARE_SIZE**, never pixels: the board is sized per device.
+
+**The springs are converted, not copied.** Reanimated states a spring as (stiffness, damping, mass),
+SwiftUI as (response, dampingFraction). The extractor applies the standard identities —
+`response = 2π/√(k/m)`, `dampingFraction = c/(2√(km))` — so the curve is the source's own rather than
+a guess that looked close.
+
+**The browser moved too.** It had softer values of its own (a 1.15 scale, a 0.35-square lift) while
+its shadow and its hover colour already matched the source exactly, which is what suggested the rest
+was meant to. Both now read one table.
+
+### FIXED: the pickup haptic fired on drop
+
+`PuzzleSolverParts.swift` played `Haptics.play(.pickUp)` inside `onDragMove` — which runs on
+**release**. `Haptics.Kind.pickUp` is documented *"ported: DragDropChessBoard.tsx:351"*, where it
+fires in `onBegin`. The buzz for lifting a piece arrived as the piece was put down. It moved into
+`BoardView`'s gesture, where the browser component has always had it.
+
+### DEVIATION: the drop point moved, and it had to
+
+The drop square is now measured from the **lifted** point, not the fingertip — the source applies
+the same `SQUARE_SIZE * 0.45` correction in `onEnd` that it applies on hover. Without it the piece
+hovers over one square while another lights up and the move lands on the second, so what happens is
+not what the user watched themselves do.
+
+This is invisible to any test that drops at a square CENTRE, because 0.45 is less than half a
+square: every existing drag assertion stayed green while the correction did not exist.
+`board_component_test.js` gained two that drop 0.7 of a square low, and they report `e2e3` when the
+correction is removed.
+
+### NOT PORTED: `EDGE_TOLERANCE`, because it cannot fire in the source either
+
+`coordsToSquare` computes `EDGE_TOLERANCE = SQUARE_SIZE * 0.15` and four centre-biasing branches
+around it. **None of them can ever execute.** At remainder `r` inside a square of side `S`:
+
+    dist(currentCentre) = |r − 0.5·S|      dist(previousCentre) = r + 0.5·S
+    the branch needs    r + 0.5·S < 0.5·S − r    ⟺    r < 0
+
+and `r ≥ 0` always; the far-edge branch is the same by symmetry, needing `r > S`. Swept over 12,000
+sample points it changes the square **zero** times.
+
+So there were three options and only one honest one. Porting it faithfully means shipping a no-op.
+Building what its comment describes (*"snap toward square center within 15% of edge"*) means
+inventing behaviour the client's own reference app never had — and *"parang sa Android"* is the whole
+brief. It is therefore **extracted but not consumed**: the constant stays in `board_styles.json` so
+the fact of it stays on the record, and `board_layout_check.js` asserts neither language reads it, so
+nobody later "finishes the job" by wiring up a branch that is unreachable where it came from.
+
+This is the same shape as `renderEvalBar` — an author's comment describing something the code does
+not do — and it is resolved the other way, because there the code was never called at all and here
+it is called and does nothing.
+
+---
+
 ## The eval rail follows the board (2026-09-09)
 
 Client, with a screenshot of the Analysis Board: *"Yung engine bar hindi na flip kapag nagflip ka.

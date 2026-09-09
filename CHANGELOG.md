@@ -9,6 +9,66 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-09 (added) — The piece lifts when you drag it, on all nine boards
+
+Client: *"sana yung drag pieces kita na inaangat piyesa / Parang sa android nabubuhat piyesa"* — on
+every board.
+
+**The drag already worked. It was invisible.** `BoardView.dragGesture` was `.onEnded` only, so
+nothing at all happened between finger-down and finger-up and the app read as unresponsive. This
+changelog had scoped the fix precisely, at line 1274: *"a live ghost is a change to every board in
+the app, not to this screen, so it is out of scope here."* That is the change, and `BoardView` being
+the only Swift board is what makes it one gesture for Analysis, Play vs Coach, Opening Trainer and
+all five puzzle solvers at once.
+
+The piece now lifts to **1.3 squares** with a shadow, rides **0.45 of a square above the fingertip**
+so the finger does not cover it, leaves its origin square at **0.3 opacity** — dimmed, not removed,
+so a cancelled drag does not look like a completed one — and springs in and out on the source's own
+curves.
+
+**Every number is extracted, and none of it had been before.** The lift lives in `Gesture.Pan()`
+worklets and `useAnimatedStyle` callbacks, which the `StyleSheet.create` walk cannot see —
+`DragDropChessBoard.tsx`'s `styles` block holds the squares and the labels and nothing about a piece
+that has left the board. `extract_board_styles.js` now scans for it into `dragConstants`, the same
+targeted re-derivation `EvalGraph.tsx` already gets, and `board_layout_check.js` §9 pins **both**
+languages against that JSON rather than against each other. Mutating either one names the exact
+discrepancy; reverting the browser to its old 1.15 scale fails.
+
+**The springs are converted, not copied.** Reanimated states (stiffness, damping, mass), SwiftUI
+(response, dampingFraction); the extractor applies `response = 2π/√(k/m)` and
+`dampingFraction = c/(2√(km))`, so the curve is the source's rather than a guess that looked close.
+
+**The browser moved too** — it had a 1.15 scale and a 0.35 lift of its own while its shadow and
+hover colour already matched the source exactly, which is what gave away that the rest was meant to.
+
+**Two real bugs came out of it.**
+
+*The drop point.* The landing square is measured from the **lifted** point now, not the fingertip —
+the source applies the same 0.45 correction on drop that it applies on hover. Without it the piece
+hovers over one square while another lights up and the move lands on the second. This is invisible to
+any test that drops at a square CENTRE, because 0.45 is under half a square: every existing drag
+assertion stayed green while the correction did not exist. Two new ones drop 0.7 of a square low, and
+they report `e2e3` when it is removed.
+
+*The pickup haptic fired on drop.* `PuzzleSolverParts.swift` played `Haptics.play(.pickUp)` inside
+`onDragMove`, which runs on release — so the buzz for lifting a piece arrived as it was put down,
+while `Haptics.Kind.pickUp` is documented *"ported: DragDropChessBoard.tsx:351"*, where it fires on
+`onBegin`. It lives in `BoardView`'s gesture now, where the browser component always had it.
+
+**One constant is extracted and deliberately not used.** `EDGE_TOLERANCE`'s four centre-biasing
+branches **cannot fire in the source**: the comparison needs `r < 0` for a remainder that is never
+negative, and `r > S` for one that is always under `S`. Swept over 12,000 points it changes the
+square zero times. Porting it faithfully ships a no-op; building what its comment claims invents
+behaviour the client's own reference app never had. So it stays in the JSON with the finding on the
+record, and the gate asserts neither language reads it.
+
+Gates: `board_layout_check` 886 → **911**, `board_component_test` 190 → **192**, `js_goldens`
+**36,102** across 86 suites. `extract_board_styles.js` also gained a `FRONTEND_ROOT` override — the
+same escape hatch `LARAVEL_ROOT` gives the oracle, without which it cannot run from a worktree at
+all.
+
+**`web-demo/` was updated** — same constants, same lift, same corrected drop.
+
 ### 2026-09-09 (fixed) — The eval rail follows the board, and the gate forbidding it was aimed at the wrong text
 
 Client, with a screenshot of the Analysis Board: *"Yung engine bar hindi na flip kapag nagflip ka.

@@ -354,6 +354,27 @@ function selfTest() {
     check(b._suppressClick === false, 'the suppression flag is one-shot');
     clickSquare(b, E4);
     check(b._selected === E4, 'the next click selects as usual');
+
+    // -- the LIFT correction -----------------------------------------------------
+    //
+    // The piece rides 0.45 of a square ABOVE the finger, so the square that lights up — and the
+    // square the piece lands on — is the one under the PIECE, not under the fingertip. Every
+    // assertion above drops at a square CENTRE, where the correction cannot change the answer
+    // (0.45 < half a square), so all of them stayed green while this was unimplemented. These two
+    // drop 0.7 of a square BELOW e4's centre: that point is inside e3, but the piece is over e4.
+    // Read the raw pointer and the move is e2e3; read the lifted point and it is e2e4 — the move
+    // the user watched themselves make.
+    var lift = makeBoard({ targets: { 12: [E3, E4], 28: [E5] }, draggable: true });
+    var liftMoves = recorder(lift);
+    pointer(lift, 'pointerdown', E2);
+    pointer(lift, 'pointermove', E4, 0, 0.7 * SQ);
+    dom.flushFrames();
+    check(lift._hoverSq === E4,
+      'mid-drag, the square lit up is the one under the LIFTED PIECE, got ' + lift._hoverSq);
+    pointer(lift, 'pointerup', E4, 0, 0.7 * SQ);
+    check(liftMoves.length === 1 && liftMoves[0].uci === 'e2e4',
+      'and the drop lands there too — the highlight and the move cannot disagree, got '
+      + JSON.stringify(liftMoves));
   })();
 
 
