@@ -245,7 +245,8 @@ struct AnalysisBoardScreen: View {
     /// ceremony: it keeps `evalRail(height: edge)` in `boardBand`, so every mount assertion and
     /// every mount mutant written against this screen still matches character for character.
     private func evalRail(height: CGFloat) -> some View {
-        EvalRail(height: height, fraction: vm.evalFraction, label: vm.evalLabel)
+        EvalRail(height: height, fraction: vm.evalFraction, label: vm.evalLabel,
+                 flipped: vm.flipped)
     }
 
     /// `UIScreen.main.scale` is iOS-only and deprecated; the environment value works on both

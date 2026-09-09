@@ -9,6 +9,57 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-09 (fixed) — The eval rail follows the board, and the gate forbidding it was aimed at the wrong text
+
+Client, with a screenshot of the Analysis Board: *"Yung engine bar hindi na flip kapag nagflip ka.
+Nasa taas parin ung black."* The screenshot proves it — ranks running 1→8 downward and files h→a, so
+the board is on Black's perspective; the evaluation is **−1.1**; and Black's larger block is still at
+the **top** of the rail.
+
+**It was not a bug, which is what made it worth writing down.** The rail was pinned to one end in
+four places, one of which was a gate that failed the build if anyone wired the flip in:
+*"nothing about the rail depends on the flip; the side is FIXED, like Lichess"*. Reversing it meant
+rewriting assertions that pinned the opposite, including a mutant whose whole job was to make
+flipping the anchor **fail**.
+
+**The rule's justification did not survive being read.** `PORTING_NOTES.md` said *"Lichess mirrors
+its bar; Chess.com does not; we do not"*; `web-demo/css/app.css` said *"Lichess and Chess.com both
+keep it put"*. One was wrong whichever way the truth runs, and a search turned up nothing
+authoritative about the eval bar specifically — so no claim about either app is made now. There was
+no source precedent behind either: `renderEvalBar` (`board.tsx:2741`) is dead code with one grep
+hit. The fixed-side rule was this port's own invention resting on an appeal it stated two
+contradictory ways, and the client's instruction is a better warrant than either sentence.
+
+**The side is still fixed; the FILL mirrors.** The rail stays on the left. White's block grows from
+White's own end — floor normally, ceiling when flipped — so the colour at the bottom of the rail is
+always the colour at the bottom of the board. `EngineScore` is untouched and still "Always
+White-relative"; only the axis it is painted along knows about the flip.
+
+**Placement flips, ink does not, and splitting that in two is the whole design.**
+`labelOnFill(fraction)` asks whose block the label is on and is **orientation-free** — the label
+hangs off the leading side's end, and that end is the one that side's own block covers whichever way
+up the rail is painted, so `labelInk` needs no flip at all. `labelAtBottom(fraction:flipped:)` asks
+which *physical* end that works out to, and is the only one that mirrors. The browser had the two
+welded together (`.lbl.bottom` carried both `bottom: 0` and the dark ink) — precisely the coupling
+that would have inked a flipped label for the ground it had left. They are `bottom`/`top` beside
+`on-fill`/`on-track` now, and the gate asserts neither end class carries a colour.
+
+**One gate was passing without reading anything.** `swift_layout_check.js:303` tested the board
+**band** — where the flip is not passed under either rule, because the three-line `evalRail(height:)`
+forwarder is what reads it. It would have gone on passing whichever way the rail was actually wired.
+Inverted **and** re-aimed at the forwarder.
+
+Gates rewritten, never loosened: `swift_layout_check` 451 → **454**, `board_layout_check` 883 → **886**
+(including two new assertions that something actually *sets* the flipped class — the CSS rule alone
+could have sat there unreferenced with the whole section green), and
+`swift_layout_mutation_test` **23/23 killed** — `rail_fill_ignores_the_flip` reintroduces the
+client's exact bug, `rail_label_ignores_the_flip` parks the score on the sliver, and
+`second_eval_rail_in_the_module` was re-anchored after it silently stopped applying.
+`js_goldens` **36,075** across 86 suites.
+
+**`web-demo/` was updated** — `.an-eval.flipped`, both `paintEval`s, and `explorerFlipped` so the
+Opening Trainer's board and rail read one expression rather than two.
+
 ### 2026-09-08 (fixed) — The offer card promised a free trial that App Store Connect never had
 
 Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall

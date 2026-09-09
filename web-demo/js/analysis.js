@@ -1667,14 +1667,23 @@ var BiyaAnalysisBoard = (function () {
     // leaves the flex row entirely — a hidden-but-present rail would keep both its width and
     // `.an-board`'s gap, and the board would gain nothing.
     ui.evalRail.classList.toggle('off', !session.autoAnalyze);
+    // The rail follows the board. Its SIDE does not move — it is on the left either way — but
+    // White's block grows from White's own end, so the colour at the bottom of the rail is the
+    // colour at the bottom of the board. See the header comment in app.css.
+    ui.evalRail.classList.toggle('flipped', !!session.flipped);
     var f = evalFraction(session);
-    // The RAIL fills from the BOTTOM, so it animates its HEIGHT. The engine panel's 3px micro bar
-    // is a DIFFERENT bar — real in the RN source, still horizontal — so it still animates width.
+    // The RAIL animates its HEIGHT whichever end it is anchored to. The engine panel's 3px micro
+    // bar is a DIFFERENT bar — real in the RN source, still horizontal — so it still animates
+    // width, and it has no board beside it to face either way.
     ui.evalFill.style.height = (f * 100) + '%';
     ui.microFill.style.width = (f * 100) + '%';
-    // Which end the label hangs off is the shared pure function, never a second `f >= 0.5` here.
+    // Two questions, two classes, both from shared pure functions and never a `f >= 0.5` here:
+    // which END the label hangs off (flips with the board) and which INK it takes (does not,
+    // because the label rides its own block wherever that block went).
     ui.evalLabel.textContent = evalLabel(session);
-    ui.evalLabel.className = 'lbl ' + (MET.evalLabelAtBottom(f) ? 'bottom' : 'top');
+    ui.evalLabel.className = 'lbl '
+      + (MET.evalLabelAtBottom(f, session.flipped) ? 'bottom' : 'top')
+      + (MET.evalLabelOnFill(f) ? ' on-fill' : ' on-track');
   }
 
   function paintStatus() {
@@ -2070,7 +2079,8 @@ var BiyaAnalysisBoard = (function () {
     // The rail is appended BEFORE the board stack: it lives on the LEFT, and it stays there when
     // the board is flipped. A SIBLING of the stack, never a child — `.an-badge` is `inset: 0`
     // against the stack and paintBadge measures that stack's width.
-    var evalBar = el('div', 'an-eval', '<div class="fill"></div><div class="lbl bottom"></div>');
+    var evalBar = el('div', 'an-eval',
+      '<div class="fill"></div><div class="lbl bottom on-fill"></div>');
     boardBand.appendChild(evalBar);
     boardBand.appendChild(boardStack);
     root.appendChild(boardBand);

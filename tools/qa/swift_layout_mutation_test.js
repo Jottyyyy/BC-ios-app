@@ -189,18 +189,28 @@ const MUTANTS = [
   {
     id: 'second_eval_rail_in_the_module',
     file: 'OpeningTreeScreens.swift',
-    from: 'EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel)',
+    from: 'EvalRail(height: height, fraction: engine.evalFraction, label: engine.evalLabel,\n'
+      + '                 flipped: boardFlipped)',
     to: 'Rectangle().frame(height: AnalysisEval.fillHeight(rail: height, fraction: 0.5))',
     why: 'a screen drawing its own eval fill instead of the shared rail — §4e`s census must see a '
       + 'second drawer, or two rails drift on the fill anchor and the label ink',
   },
   {
-    id: 'rail_fill_anchored_at_the_top',
+    id: 'rail_fill_ignores_the_flip',
     file: 'EvalRail.swift',
-    from: '.overlay(alignment: .bottom)',
-    to: '.overlay(alignment: .top)',
-    why: 'the eval fill growing DOWN from the ceiling — every evaluation in the app is then '
-      + 'backwards while every number behind it stays right, which is the only symptom there is',
+    from: '.overlay(alignment: AnalysisEval.fillAlignment(flipped: flipped))',
+    to: '.overlay(alignment: .bottom)',
+    why: 'the eval fill pinned to one end — this IS the bug the client reported, where Black stays '
+      + 'at the top after the board is flipped. Every evaluation is then backwards for anyone '
+      + 'playing Black while every number behind it stays right, which is the only symptom there is',
+  },
+  {
+    id: 'rail_label_ignores_the_flip',
+    file: 'EvalRail.swift',
+    from: 'AnalysisEval.labelAlignment(fraction: fraction, flipped: flipped)',
+    to: 'AnalysisEval.labelAlignment(fraction: fraction, flipped: false)',
+    why: 'the score parked at the end its own block no longer covers — it lands on the sliver, '
+      + 'inked for the colour that is now behind the OTHER end',
   },
   {
     id: 'rail_fill_height_by_hand',

@@ -638,10 +638,22 @@ enum AnalysisEval {
 
     // MARK: - The vertical rail
     //
-    // LEFT, FIXED, never mirrored — Lichess and Chess.com both keep it put, and a rail that swapped
-    // ends on every flip would be unreadable. White fills from the BOTTOM regardless, because
-    // `EngineScore` is documented "Always White-relative" (AnalysisEngine.swift:22-25), so nothing
-    // here can know or care which way the board is facing.
+    // LEFT and fixed there; the FILL mirrors with the board. The rail's SIDE never moves — it is on
+    // the left whichever way the board faces — but the colour at the bottom of the rail is always
+    // the colour at the bottom of the board, so a player looking at their own pieces finds their
+    // own block beneath them.
+    //
+    // This REVERSES an earlier rule, and the reversal is the client's: *"yung engine bar hindi na
+    // flip kapag nagflip ka, nasa taas parin ung black"*. What it replaces was defended by an appeal
+    // to other apps that this repo stated two contradictory ways — PORTING_NOTES said "Lichess
+    // mirrors its bar; Chess.com does not; we do not", `app.css` said "both keep it put" — so one of
+    // them was wrong whichever way round the truth is, and neither was checkable from here. Nor was
+    // there a source precedent behind either: `renderEvalBar` (board.tsx:2741) is dead code with one
+    // grep hit, so the fixed-side rule was this port's own invention and the client's instruction is
+    // a better warrant than the comment it retires.
+    //
+    // `EngineScore` is unchanged and still "Always White-relative" (AnalysisEngine.swift:22-25).
+    // Only the axis it is PAINTED along knows about the flip; nothing about the number does.
     //
     // Every number below is a real key in the source's own `evalBar*` block — the block that
     // `renderEvalBar` (board.tsx:2741) never rendered. Its header comment reads
@@ -679,29 +691,47 @@ enum AnalysisEval {
     /// What the rail costs the board: its own width, plus the gap to the board.
     static var railTotal: CGFloat { railWidth + railGap }
 
-    /// White's block, measured from the BOTTOM of the rail. Clamped, so a caller handing over a
-    /// fraction outside 0…1 draws a full or an empty rail rather than overflowing the clip.
+    /// White's block, as a LENGTH. Which end it grows from is `fillAlignment(flipped:)` — keeping
+    /// the two apart is what lets the flip be one decision rather than two. Clamped, so a caller
+    /// handing over a fraction outside 0…1 draws a full or an empty rail rather than overflowing
+    /// the clip.
     static func fillHeight(rail: CGFloat, fraction: CGFloat) -> CGFloat {
         rail * min(max(fraction, 0), 1)
     }
 
-    /// Which end the score hangs off: the LEADING side's. White ahead → bottom, Black ahead → top.
-    ///
-    /// This is not a style choice, it is the legibility rule, and it is exact rather than tuned.
-    /// `fraction >= 0.5` is precisely the condition under which the BOTTOM of the rail is inside
-    /// the white fill, and `< 0.5` precisely the condition under which the TOP is bare track — so
-    /// the label always lands on a block of solid colour it was inked for, with no threshold to
-    /// tune. A dead-level position resolves to the bottom, stably.
-    static func labelAtBottom(fraction: CGFloat) -> Bool { fraction >= 0.5 }
+    /// Which end White's block grows from. White sits at the bottom of the board until the board is
+    /// flipped, and the rail follows the board.
+    static func fillAlignment(flipped: Bool) -> Alignment { flipped ? .top : .bottom }
 
-    static func labelAlignment(fraction: CGFloat) -> Alignment {
-        labelAtBottom(fraction: fraction) ? .bottom : .top
+    /// Is the label sitting on White's fill rather than on the bare track?
+    ///
+    /// **Orientation-independent, and that is the whole trick.** The label hangs off the LEADING
+    /// side's end, and the leading side's end is the one its own block covers — whichever way up
+    /// the rail is painted. So `labelInk` needs no flip at all; only the physical end does.
+    ///
+    /// `fraction >= 0.5` is exact rather than tuned: it is precisely the condition under which
+    /// White's block reaches past the middle, so the label always lands on a solid block of the
+    /// colour it was inked for, with no threshold to guess. A dead-level position resolves to
+    /// White's end, stably.
+    static func labelOnFill(fraction: CGFloat) -> Bool { fraction >= 0.5 }
+
+    /// Which PHYSICAL end the score hangs off, once the flip is taken into account. Unflipped,
+    /// White ahead → bottom; flipped, White ahead → top, because that is where White's block is.
+    static func labelAtBottom(fraction: CGFloat, flipped: Bool) -> Bool {
+        flipped ? !labelOnFill(fraction: fraction) : labelOnFill(fraction: fraction)
+    }
+
+    static func labelAlignment(fraction: CGFloat, flipped: Bool) -> Alignment {
+        labelAtBottom(fraction: fraction, flipped: flipped) ? .bottom : .top
     }
 
     /// Dark ink on the white fill, light ink on the dark track. `onGold` is this screen's existing
     /// dark-ink-over-a-light-fill token; `textPrimary` is its ordinary light ink.
+    ///
+    /// Takes no `flipped`, deliberately — see `labelOnFill`. The label moves with its block, so
+    /// what is behind it never changes.
     static func labelInk(fraction: CGFloat) -> Color {
-        labelAtBottom(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
+        labelOnFill(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
     }
 
     /// The size the label is actually drawn at: whatever fits `labelGlyphs` across the rail, capped

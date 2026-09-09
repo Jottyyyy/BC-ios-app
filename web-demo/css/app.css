@@ -410,9 +410,14 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .an-title { flex: 1; text-align: center; font-weight: 800; font-size: var(--an-fs-title); letter-spacing: -.2px; }
 
 /* 2 — the board, with the vertical eval RAIL on its LEFT.
-   FIXED SIDE: the rail does not mirror when the board is flipped. Lichess and Chess.com both keep
-   it put, and a rail that swapped ends on every ⇅ would be unreadable. White always fills from the
-   BOTTOM — the score is White-relative, so nothing here knows which way the board faces.
+   FIXED SIDE, MIRRORED FILL: the rail stays on the left whichever way the board faces, but White's
+   block grows from White's own end — the floor normally, the ceiling once the board is flipped —
+   so the colour at the bottom of the rail is always the colour at the bottom of the board.
+   This REVERSES what used to be written here ("the rail does not mirror … Lichess and Chess.com
+   both keep it put"), which contradicted PORTING_NOTES ("Lichess mirrors its bar; Chess.com does
+   not") and was checkable from neither. The client reported the old behaviour as the bug it looked
+   like: "hindi na flip kapag nagflip ka, nasa taas parin ung black". The SCORE is still
+   White-relative; only the axis it is painted along knows about the flip.
    THE BOARD IS STILL SIZED BY WIDTH, AND IT STILL DOES NOT FLEX.
    `--an-board-edge` is boardSizeBesideRail() for this screen, published by sizeBands() from the
    metrics layer's own formula — the pinned snap-to-8 formula fed a width the rail has already been
@@ -443,6 +448,9 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   background: var(--an-eval-fill);
   transition: height var(--an-eval-anim) ease;
 }
+/* Flipped: White grows DOWN from the ceiling, because White is now at the top of the board.
+   `bottom: auto` first — leaving both set would pin BOTH edges and the height would be ignored. */
+.an-eval.flipped .fill { bottom: auto; top: 0; }
 .an-eval .lbl {
   position: absolute; left: 0; right: 0;
   padding-block: var(--an-rail-pad-v);
@@ -453,8 +461,16 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
    or an opacity — a hidden-but-present rail keeps its width AND .an-board's gap, so the board
    would gain nothing and the row would sit off-centre by half of both. */
 .an-eval.off { display: none; }
-.an-eval .lbl.bottom { bottom: 0; color: var(--an-on-gold); }
-.an-eval .lbl.top { top: 0; color: var(--an-text); }
+/* WHERE the label sits and WHAT COLOUR it is are two questions now, not one.
+   They used to be the same class because the label could only ever be at White's end when White
+   was winning — true while the fill never moved. Flipped, White's block is at the TOP, so the
+   label goes up there and must still be inked for the white it is sitting on. `on-fill` /
+   `on-track` come from evalLabelOnFill, which asks whose block the label is on and never which way
+   the board faces; `bottom` / `top` come from evalLabelAtBottom, which is the only one that flips. */
+.an-eval .lbl.bottom { bottom: 0; }
+.an-eval .lbl.top { top: 0; }
+.an-eval .lbl.on-fill { color: var(--an-on-gold); }
+.an-eval .lbl.on-track { color: var(--an-text); }
 
 /* 3 — the status line, then the toolbar.
    TWO ROWS, not the source's one: nine emoji buttons measure 346px in a 365px card and left the

@@ -5,6 +5,64 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The eval rail follows the board (2026-09-09)
+
+Client, with a screenshot of the Analysis Board: *"Yung engine bar hindi na flip kapag nagflip ka.
+Nasa taas parin ung black."* The board was on Black's perspective — ranks running 1→8 downward — the
+evaluation was **−1.1**, and Black's larger block was still at the top of the rail.
+
+### REVERSED: the fill mirrors with the board; the side still does not
+
+The rail stays on the **left** whichever way the board faces. What changed is that White's block now
+grows from **White's own end** — the floor normally, the ceiling once the board is flipped — so the
+colour at the bottom of the rail is always the colour at the bottom of the board.
+
+**The rule this replaces was defended by an appeal this repo stated two contradictory ways.**
+`PORTING_NOTES` said *"Lichess mirrors its bar; Chess.com does not; we do not"*; `app.css` said
+*"Lichess and Chess.com both keep it put"*. One of them was wrong whichever way the truth runs, and
+neither was checkable from here — a search turned up nothing authoritative about the eval bar
+specifically, so no claim about either app is made now. Nor was there a source precedent behind
+either: `renderEvalBar` (`board.tsx:2741`) is dead code with a single grep hit, so the fixed-side
+rule was this port's own invention and the client's instruction is the better warrant.
+
+`EngineScore` is unchanged and still *"Always White-relative"*. Only the axis it is painted along
+knows about the flip; nothing about the number does.
+
+### The design point: placement flips, ink does not
+
+Splitting one predicate into two is what keeps this honest.
+
+- `labelOnFill(fraction)` — is the label on White's block or on bare track? **Orientation-free.**
+  The label hangs off the leading side's end, and that end is the one that side's own block covers,
+  whichever way up the rail is painted. So `labelInk` takes no `flipped` at all.
+- `labelAtBottom(fraction, flipped)` — which **physical** end that works out to.
+
+The browser had the two welded together — `.lbl.bottom` carried both `bottom: 0` and the dark ink —
+which is exactly the coupling that would have inked a flipped label for the ground it was no longer
+standing on. They are `bottom`/`top` and `on-fill`/`on-track` now, and `board_layout_check.js`
+asserts neither end class carries a colour.
+
+### The gates were rewritten, not loosened, and one of them was pointed at the wrong text
+
+`swift_layout_check.js:303` used to read *"nothing about the rail depends on the flip; the side is
+FIXED, like Lichess"* — and it was testing the **band**, where the flip is not passed under either
+rule, because the three-line `evalRail(height:)` forwarder is what reads it. **It would have gone on
+passing whichever way the rail was actually wired.** Inverted and moved to the forwarder.
+
+`swift_layout_mutation_test.js` gained `rail_fill_ignores_the_flip` — which reintroduces the
+client's exact bug — and `rail_label_ignores_the_flip`, and `second_eval_rail_in_the_module` was
+re-anchored: **23/23 killed**, up from 21/21 plus one that had silently stopped applying.
+
+### INVENTED: nothing new
+
+Every rail number is still the extracted `evalBar*` block (`board_styles.json:1451-1493`), untouched.
+The axis was already a declared invention (see the entry below); this only changes which way it
+points. `OpeningTreeScreens` gained a `boardFlipped` property and `openings.js` an `explorerFlipped`
+so the board and the rail read one expression rather than two — a rail disagreeing with its own board
+about orientation is precisely the bug being fixed.
+
+---
+
 ## The trial that was never there (2026-09-08)
 
 Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall
@@ -1279,10 +1337,15 @@ colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` wher
 
 **Consequences that are decisions, not accidents:**
 
-- **The side is FIXED.** Flipping the board does not move the rail, and White always fills from the
-  bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
+- ~~**The side is FIXED.** Flipping the board does not move the rail, and White always fills from
+  the bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
   "Always White-relative", so nothing connects the flip to the rail and the gate asserts nothing
-  will. With Black at the bottom, the white block is still at the bottom — intended.
+  will. With Black at the bottom, the white block is still at the bottom — intended.~~
+  **REVERSED on 2026-09-09 — see "The eval rail follows the board" at the top of this file.** The
+  side is still fixed; the FILL mirrors now. Recorded in place rather than rewritten, because the
+  half of this that survived matters: the rail does not change sides, and `EngineScore` is still
+  White-relative. What did not survive is the appeal to other apps, which this repo stated two
+  contradictory ways.
 - **`AnalysisEval.mainHeight` (8) is load-bearing** — it is the track inside the rail, and
   `railWidth` is built from it. For one round it was retired-but-kept, on the argument that
   `matches("evalBarTrack", "height", …)` is the only pin on `evalBarTrack` and deleting the
