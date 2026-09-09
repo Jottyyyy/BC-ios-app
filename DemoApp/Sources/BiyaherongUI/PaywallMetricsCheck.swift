@@ -280,6 +280,23 @@ public func biyaherongPaywallMetricsCheck() -> PaywallMetricsCheckResult {
                 PaywallStrings.subscribeCta,
                 "and an ineligible Apple Account is never offered a free one")
 
+    // The HEADLINE, which is the one that shipped wrong: the CTA and the note above both fell back
+    // while the largest text on the card went on reading "Try Biyaherong Plus for Free". The
+    // invariant worth pinning is not which string is picked but what the card is allowed to claim.
+    expectEqual(PaywallStrings.offerHeading(trialEligible: true), PaywallStrings.offerTitle,
+                "an eligible account is offered the trial by name")
+    expectEqual(PaywallStrings.offerHeading(trialEligible: false), PaywallStrings.offerTitleNoTrial,
+                "and one that is not, is not")
+    expectEqual(PaywallStrings.offerSubheading(trialEligible: false),
+                PaywallStrings.offerBodyNoTrial, "the line under it follows")
+    for (name, s) in [("offerHeading", PaywallStrings.offerHeading(trialEligible: false)),
+                      ("offerSubheading", PaywallStrings.offerSubheading(trialEligible: false)),
+                      ("offerCta", PaywallStrings.offerCta(trialEligible: false,
+                                                           introPrice: "₱0.00", days: 7))] {
+        expect(!s.lowercased().contains("free"),
+               "\(name) says nothing about anything being free when there is no trial")
+    }
+
     // The one sentence every upsell surface shows.
     expectEqual(PaywallStrings.offerNote(trialEligible: true, yearly: false, days: 7,
                                          price: "$1.99"),

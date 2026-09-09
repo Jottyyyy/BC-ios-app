@@ -9,6 +9,65 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-08 (fixed) — The offer card promised a free trial that App Store Connect never had
+
+Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall
+reading **Subscribe** and *"$1.99 per month. Cancel anytime."*
+
+**The app was right, and that is the whole shape of this.** `introOfferEligible` asked StoreKit, was
+told there was no free introductory offer to have, and all nine upsell surfaces dropped to
+price-only copy exactly as designed — because naming a trial the store will not honour is a
+Guideline 3.1.2 misrepresentation. The offer does not exist in App Store Connect. This changelog has
+said so since **2026-08-18**: *"the 7-day introductory offer does not exist in App Store Connect
+yet … Until it does, `trialEligible` is false."* A month later the client found out instead of us.
+
+Nothing could see it. All 44 checks in `tools/qa/` are offline and read the local
+`ios/Biyaherong.storekit` — which `ios/project.yml:199-203` scopes to the **Debug scheme alone**, and
+which declares a flawless `P1W` free trial. `replay_premium.js` was green the entire time.
+
+**The defect this uncovered, which we shipped yesterday.** `TrialOfferCard` drew
+`PaywallStrings.offerTitle` **unconditionally** while `offerCta` and `offerNote` both fell back, so
+the card that opens itself three seconds after launch read **"Try Biyaherong Plus for Free"** over a
+**Subscribe** button and *"$1.99 per month"* — a promise in the largest text on the card, above a
+button refusing it. It shipped in the same change that built the card *to avoid* exactly that. It
+survived because every other string on the card already fell back, and because the browser twin
+hard-coded eligibility at every render site, so no preview could draw the state. The headline and
+its subline now come from the store (`offerHeading` / `offerSubheading`) like everything else on the
+card, and the gate fails if the view names the string table directly.
+
+**The second bug, four lines from the first.** Apple has three kinds of introductory offer — free
+trial, pay up front, pay as you go. `trialDays` required `paymentMode == .freeTrial`;
+`introOfferEligible` required only that an offer *existed*. A **paid** introductory offer therefore
+made `trialEligible` true, sent `trialDays` to its fallback, and every surface read *"7 days free,
+then $1.99 per month"* for an offer that was neither free nor seven days. Not what was wrong today,
+but squarely in the blast radius: fixing this bug report means somebody choosing one of those three
+radio buttons. Both guards now test the kind; `replay_premium.js` counts them.
+
+**New: `tools/ship/check_iap_offers.js` — the first thing in this repo that talks to Apple.**
+`docs/app-store-handoff.md` had stated the gap in as many words: *"nothing in this repo can see App
+Store Connect — that half is on you."* This is that half. Dependency-free Node, ES256 through
+`crypto.sign(…, { dsaEncoding: 'ieee-p1363' })`, the same API key `ship_testflight.sh` already
+needs, product IDs and the expected `P1W` **extracted** from the repo rather than typed. It verifies
+an offer exists on **both** products, is a `FREE_TRIAL`, matches the period the copy is built
+around, and **covers every required territory** — offers are configured per territory, and the
+client's recording was made on a **US** storefront while the market is the Philippines. Either gap
+is invisible in the App Store Connect UI.
+
+`ship_testflight.sh` now refuses to build on exit 1 and warns on exit 2. The codes are split on
+purpose: *"this is broken"* must block a ship, *"I could not look"* must not.
+
+**What no tool can tell you, and what it prints on success anyway:** whether a given Apple Account
+has already used the trial. Eligibility is once per subscription **group**, never resets, and
+TestFlight uses the tester's **real** Apple ID — so a tester can keep seeing "Subscribe" against a
+perfect configuration. That cause survives every fix, and pretending green means otherwise would
+send someone chasing it twice.
+
+**`web-demo/` was updated** — `?notrial`, the twin of `?storefail`, draws the ineligible state.
+Until it existed every render site in `premium.js` hard-coded `trialEligible = true` and
+`disclosureLines()` emitted the trial paragraph where the Swift gates it, so the one machine this
+project previews on could not show the bug above. Gates: `replay_premium` 651 → **656**, the browser
+self-test 125 → **132**, `js_goldens` **36,009** across 86 suites.
+
 ### 2026-09-08 (changed) — 1.0.8 (53) uploaded: the trial offer card, on a tree that compiles
 
 Delivery UUID `b8513567-6b2e-4483-bb41-897bc91b04f7`. 85,688,666 bytes, `UPLOAD SUCCEEDED with no
@@ -49,6 +108,12 @@ have proved it.
 `Goldens/san_parse.json`, which `tools/oracle/generate_goldens.php` refuses to write because the
 sibling `../BYAHERONG-COACH-LARAVEL` clone is trimmed and has no `app/Services/ChessEngine.php`.
 Nothing in this merge touched a ported algorithm.
+
+**Superseded — do not promote this build.** 53 was archived from a tree that predated the fix in the
+entry above, so its offer card draws *"Try Biyaherong Plus for Free"* over a Subscribe button reading
+`$1.99 per month` — the Guideline 3.1.2 misrepresentation, in the largest text on a card that opens
+itself three seconds after launch. It is `VALID` in App Store Connect and must not be assigned to a
+TestFlight group or submitted for review; 54 replaces it.
 
 `web-demo/` not updated — a release.
 

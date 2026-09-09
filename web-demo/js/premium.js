@@ -523,6 +523,22 @@ var BiyaPremium = (function () {
     eq(offerCtaLabel(false, '₱0.00', CONST.trialDays), STRINGS.subscribeCta,
       'an ineligible Apple Account is never offered a free one');
 
+    /* The headline is the one that shipped wrong: the CTA and the note above both fell back while
+       the largest text on the card went on saying "Try Biyaherong Plus for Free". The invariant
+       worth pinning is not which string is chosen but what the card as a whole is allowed to
+       claim — so assert the word itself is gone. */
+    eq(offerHeading(true), STRINGS.offerTitle, 'an eligible account is offered the trial by name');
+    eq(offerHeading(false), STRINGS.offerTitleNoTrial, 'and one that is not, is not');
+    eq(offerSubheading(true), STRINGS.offerBody, 'the line under it follows the headline');
+    eq(offerSubheading(false), STRINGS.offerBodyNoTrial, '...in both directions');
+    ['offerHeading', 'offerSubheading'].forEach(function (name) {
+      var fn = (name === 'offerHeading') ? offerHeading : offerSubheading;
+      expect(fn(false).toLowerCase().indexOf('free') < 0,
+        name + '(false) says nothing about anything being free');
+    });
+    expect(offerCtaLabel(false, '₱0.00', CONST.trialDays).toLowerCase().indexOf('free') < 0,
+      'and neither does the button beside them');
+
     /* The one sentence every upsell surface shows. */
     eq(offerNote(true, false, 7, '$1.99'), '7 days free, then $1.99 per month. Cancel anytime.',
       'monthly, eligible');
@@ -715,6 +731,11 @@ var BiyaPremium = (function () {
     offerBody: 'Unlock every puzzle, all five coaches, and unlimited Game Reviews.',
     offerTryFree: 'Try for {price}',
     offerDismiss: 'No, thanks',
+    /* The same card when there is no trial to offer. It needs its own headline because the first
+       one is a promise: shipped without these, the card read "Try Biyaherong Plus for Free" over a
+       Subscribe button and "$1.99 per month", since only the CTA and the note fell back. */
+    offerTitleNoTrial: 'Unlock Biyaherong Plus',
+    offerBodyNoTrial: 'Every puzzle, all five coaches, and unlimited Game Reviews.',
     planMonthly: 'Monthly',
     planYearly: 'Yearly',
     perMonth: 'per month',
@@ -888,6 +909,22 @@ var BiyaPremium = (function () {
     return fill(STRINGS.offerTryFree, { price: introPrice });
   }
 
+  /**
+   * The offer card's headline and the line under it.
+   *
+   * Resolved here rather than in the renderer for the same reason `offerNote` is: the card should
+   * not have to know about eligibility to say the true thing. Every other string on that card
+   * already fell back when there was no trial; these two did not, and the largest text on the
+   * screen was the one still promising one.
+   */
+  function offerHeading(trialEligible) {
+    return trialEligible ? STRINGS.offerTitle : STRINGS.offerTitleNoTrial;
+  }
+
+  function offerSubheading(trialEligible) {
+    return trialEligible ? STRINGS.offerBody : STRINGS.offerBodyNoTrial;
+  }
+
   /** `Sep 12, 2026` — the same frozen month table the Home banner uses. */
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -937,6 +974,22 @@ var BiyaPremium = (function () {
   }
 
   /**
+   * Is there a trial to offer, in the demo? `?notrial` says no — the twin of `?storefail`.
+   *
+   * This exists because the browser could not reproduce the state the client was actually in. The
+   * Swift asks StoreKit `isEligibleForIntroOffer`; the browser has no StoreKit, so every render
+   * site here hard-coded `true` and the ineligible path was reachable only from the self-test.
+   * That is how the offer card shipped reading "Try Biyaherong Plus for Free" over a Subscribe
+   * button: the one machine anybody previews on could not draw it. `?notrial` draws it.
+   *
+   * Both real causes land here — a subscription with no introductory offer configured in App Store
+   * Connect, and an Apple Account that has already used the one there is.
+   */
+  function demoTrialEligible() {
+    return !(typeof location !== 'undefined' && /(\?|&)notrial\b/.test(location.search));
+  }
+
+  /**
    * The offer sentence for THIS browser: the constant for the length, the placeholder for the
    * price, and eligibility assumed.
    *
@@ -945,11 +998,12 @@ var BiyaPremium = (function () {
    * price is the exact bug the RN app shipped. The Swift reads all three off the product.
    */
   function demoOfferNote() {
-    return offerNote(true, selectedPlan === 'yearly', CONST.trialDays, DEMO.simulatedPrice);
+    return offerNote(demoTrialEligible(), selectedPlan === 'yearly',
+                     CONST.trialDays, DEMO.simulatedPrice);
   }
 
   function demoOfferCta() {
-    return offerCtaLabel(true, DEMO.simulatedIntroPrice, CONST.trialDays);
+    return offerCtaLabel(demoTrialEligible(), DEMO.simulatedIntroPrice, CONST.trialDays);
   }
 
   function benefitRows() {
@@ -1021,8 +1075,8 @@ var BiyaPremium = (function () {
       + '<button class="pw-offer-close" type="button" aria-label="' + STRINGS.offerDismiss + '">'
       + GLYPH.close + '</button>'
       + '<div class="pw-offer-art">' + GLYPH.crown + '</div>'
-      + '<div class="pw-offer-title">' + STRINGS.offerTitle + '</div>'
-      + '<div class="pw-offer-body">' + STRINGS.offerBody + '</div>'
+      + '<div class="pw-offer-title">' + offerHeading(demoTrialEligible()) + '</div>'
+      + '<div class="pw-offer-body">' + offerSubheading(demoTrialEligible()) + '</div>'
       + '<button class="pw-cta" type="button">' + demoOfferCta() + '</button>'
       + '<div class="pw-lock-offer">' + demoOfferNote() + '</div>'
       + '<button class="pw-offer-no" type="button">' + STRINGS.offerDismiss + '</button>'
@@ -1129,8 +1183,15 @@ var BiyaPremium = (function () {
       // The offer itself, in the binding text. The card named the price and the period of both
       // products and never mentioned the introductory offer, while the Apple boilerplate under it
       // describes a renewal that, for a trial user, does not begin for another week.
-      + '<div class="pw-disclosure-line">'
-      + fill(STRINGS.disclosureTrial, { days: CONST.trialDays }) + '</div>';
+      //
+      // Conditional, matching `if store.trialEligible` in PaywallScreen.swift. This line used to
+      // render unconditionally here while the Swift gated it, so the browser promised a trial the
+      // app would have stayed silent about — a divergence in the direction that matters, since
+      // this is the paragraph App Review reads.
+      + (demoTrialEligible()
+          ? '<div class="pw-disclosure-line">'
+            + fill(STRINGS.disclosureTrial, { days: CONST.trialDays }) + '</div>'
+          : '');
   }
 
   function renderOffer(body, store) {
@@ -1160,7 +1221,7 @@ var BiyaPremium = (function () {
 
     body.appendChild(el('div', 'pw-actions',
       '<button class="pw-cta" type="button" data-act="trial">'
-      + ctaLabel(true, CONST.trialDays) + '</button>'
+      + ctaLabel(demoTrialEligible(), CONST.trialDays) + '</button>'
       + '<div class="pw-price">' + demoOfferNote() + '</div>'));
 
     body.appendChild(el('div', 'pw-legal',
@@ -1233,7 +1294,8 @@ var BiyaPremium = (function () {
     fill: fill, daysPillText: daysPillText, dateText: dateText,
     // view
     applyMetrics: applyMetrics, render: render, lockCard: lockCard, offerCard: offerCard,
-    offerCtaLabel: offerCtaLabel
+    offerCtaLabel: offerCtaLabel, offerHeading: offerHeading, offerSubheading: offerSubheading,
+    demoTrialEligible: demoTrialEligible
   };
 })();
 

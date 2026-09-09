@@ -148,6 +148,12 @@ final class PremiumStore: ObservableObject {
                                 days: trialDays)
     }
 
+    /// The offer card's headline and the line under it, ready to draw. Both fall back when there is
+    /// no trial to promise — see `PaywallStrings.offerHeading`.
+    var offerHeading: String { PaywallStrings.offerHeading(trialEligible: trialEligible) }
+
+    var offerSubheading: String { PaywallStrings.offerSubheading(trialEligible: trialEligible) }
+
     /// Has the launch offer already opened itself on this day key?
     ///
     /// The cap is a day rather than a launch because the client wants the offer seen and the user
@@ -259,10 +265,20 @@ final class PremiumStore: ObservableObject {
     /// **group**, not of a product: a customer who has used the free trial on monthly cannot have
     /// it again on yearly. Asking per row would promise a second trial the App Store will not
     /// honour, and the user would find out at the payment sheet.
+    /// `.freeTrial` and nothing else, matching `trialDays` four lines up.
+    ///
+    /// Apple has **three** kinds of introductory offer — free trial, pay up front, and pay as you
+    /// go. This used to accept any of them while `trialDays` accepted only the free one, so a paid
+    /// introductory offer made `trialEligible` true, sent `trialDays` to its `Entitlement.trialDays`
+    /// fallback, and every upsell surface then read *"7 days free, then $1.99 per month"* for an
+    /// offer that was neither free nor seven days. That is the same Guideline 3.1.2 problem the
+    /// trial LENGTH was already fixed for, one field over — and the fix for a missing trial is
+    /// somebody choosing one of those three radio buttons in App Store Connect.
     private static func introOfferEligible(among products: some Collection<Product>) async -> Bool {
         for product in products {
             guard let subscription = product.subscription,
-                  subscription.introductoryOffer != nil else { continue }
+                  let offer = subscription.introductoryOffer,
+                  offer.paymentMode == .freeTrial else { continue }
             return await subscription.isEligibleForIntroOffer
         }
         return false
