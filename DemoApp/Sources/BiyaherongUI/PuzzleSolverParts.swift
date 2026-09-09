@@ -406,9 +406,13 @@ struct PuzzleBoardBand: View {
                           engine.tap(sq)
                       },
                       customHighlights: engine.solutionHighlight,
+                      // No haptic here. `onDragMove` runs on RELEASE, so this fired the PICK-UP
+                      // buzz at the moment the piece was put down — `Haptics.Kind.pickUp` is
+                      // documented "ported: DragDropChessBoard.tsx:351", where it fires on
+                      // `onBegin`. `BoardView` owns it now, at the start of the gesture, the way
+                      // the browser component has always done it (chess-board.js `_onPointerDown`).
                       onDragMove: { from, to in
                           guard engine.interactive else { return }
-                          Haptics.play(.pickUp)
                           engine.submit(from: from, to: to)
                       })
         }

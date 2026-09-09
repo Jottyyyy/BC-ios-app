@@ -28,7 +28,14 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const FRONTEND = path.resolve(ROOT, '..', 'BYAHERONG-COACH-FRONTEND');
+// `../BYAHERONG-COACH-FRONTEND` is right from a normal checkout and WRONG from a git worktree: a
+// worktree sits three levels down in `.claude/worktrees/<slug>`, so the relative hop lands on
+// `.claude/worktrees/BYAHERONG-COACH-FRONTEND` and the tool dies claiming the sibling repo is
+// missing. `FRONTEND_ROOT` is the same escape hatch `LARAVEL_ROOT` already gives the oracle, and
+// docs/git-workflow.md documents that trap for exactly this reason.
+const FRONTEND = process.env.FRONTEND_ROOT
+  ? path.resolve(process.env.FRONTEND_ROOT)
+  : path.resolve(ROOT, '..', 'BYAHERONG-COACH-FRONTEND');
 const BOARD_TSX = path.join(FRONTEND, 'app', '(app)', 'user', 'analysis-board', 'board.tsx');
 const DRAG_TSX = path.join(FRONTEND, 'components', 'DragDropChessBoard.tsx');
 const GRAPH_TSX = path.join(FRONTEND, 'components', 'EvalGraph.tsx');
@@ -183,6 +190,99 @@ for (const [blockName, block] of Object.entries(stylesheets)) {
   }
 }
 
+// ---- Drag-to-move, from the same file -----------------------------------------
+//
+// The lift lives in `Gesture.Pan()` worklets and `useAnimatedStyle` callbacks. The StyleSheet walk
+// cannot see either — `styles` in DragDropChessBoard.tsx holds the squares and the labels and
+// nothing at all about a piece that has left the board. So this is a targeted scan, cruder in
+// exactly the way the eval graph's is and for exactly the same reason: it RE-DERIVES on every run
+// instead of trusting a copy.
+//
+// Every length is a MULTIPLE of SQUARE_SIZE, never a pixel count. The board is sized per device, so
+// a folded value would be right on a 390@3x phone and wrong on every other one — the trap
+// `_deviceDerived` above exists to flag.
+
+function dragNum(re, what) {
+  const m = re.exec(dragText);
+  if (!m) {
+    console.error('FATAL: drag constant not found in DragDropChessBoard.tsx: ' + what);
+    process.exit(1);
+  }
+  return Number(m[1]);
+}
+function dragStr(re, what) {
+  const m = re.exec(dragText);
+  if (!m) {
+    console.error('FATAL: drag value not found in DragDropChessBoard.tsx: ' + what);
+    process.exit(1);
+  }
+  return m[1];
+}
+
+// Reanimated states a spring as (stiffness, damping, mass); SwiftUI states the same physical spring
+// as (response, dampingFraction). Converted here rather than eyeballed, so the curve is the source's
+// own and not a guess that looked close:
+//     response        = 2π / √(stiffness / mass)        — the undamped period
+//     dampingFraction = damping / (2 · √(stiffness · mass))
+function swiftUISpring(stiffness, damping, mass) {
+  return {
+    response: Math.round((2 * Math.PI / Math.sqrt(stiffness / mass)) * 10000) / 10000,
+    dampingFraction: Math.round((damping / (2 * Math.sqrt(stiffness * mass))) * 10000) / 10000,
+  };
+}
+function springAt(re, what) {
+  const m = re.exec(dragText);
+  if (!m) {
+    console.error('FATAL: spring not found in DragDropChessBoard.tsx: ' + what);
+    process.exit(1);
+  }
+  const [, stiffness, damping, mass] = m.map(Number);
+  return { stiffness, damping, mass, swiftUI: swiftUISpring(stiffness, damping, mass) };
+}
+const SPRING = (to) => new RegExp(
+  'withSpring\\(' + to + ',\\s*\\{ stiffness: (\\d+), damping: (\\d+), mass: ([0-9.]+)');
+
+const dragConstants = {
+  _note: 'The lifted piece, re-derived from the RN gesture worklets on every run. Lengths are '
+       + 'multiples of SQUARE_SIZE; anchors are fractions of the FLOAT BOX, which is what the '
+       + 'source offsets against. The springs are converted to SwiftUI\'s (response, '
+       + 'dampingFraction) by the standard identities, not matched by eye.',
+  _source: 'BYAHERONG-COACH-FRONTEND/components/DragDropChessBoard.tsx',
+
+  // Sizes, in squares. The RESTING piece is 0.95 of a square, so the lift is 1.3/0.95 as seen.
+  floatBoxSquares: dragNum(/FLOAT_SIZE\s*=\s*SQUARE_SIZE\s*\*\s*([0-9.]+)/, 'FLOAT_SIZE'),
+  floatPieceSquares: dragNum(/FLOAT_PIECE_SIZE\s*=\s*SQUARE_SIZE\s*\*\s*([0-9.]+)/, 'FLOAT_PIECE_SIZE'),
+  restingPieceSquares: dragNum(/PieceComp width=\{SQUARE_SIZE \* ([0-9.]+)\}/, 'the resting piece size'),
+
+  // Where the float box hangs off the finger, as a fraction of its OWN box. X centres it; Y lifts
+  // it clear so the piece is not under the fingertip — which is the whole of what the client asked
+  // for: "kita na inaangat piyesa".
+  floatAnchorX: dragNum(/floatX\.value\s*=\s*e\.absoluteX - ox - FLOAT_SIZE \* ([0-9.]+)/, 'floatX anchor'),
+  floatAnchorY: dragNum(/floatY\.value\s*=\s*e\.absoluteY - oy - FLOAT_SIZE \* ([0-9.]+)/, 'floatY anchor'),
+
+  // The correction that keeps the HIGHLIGHT under the lifted piece rather than under the finger.
+  // The source applies the same number on hover and on drop; both are read, and a consumer that
+  // finds them unequal has found a real divergence rather than a rounding difference.
+  hoverLiftSquares: dragNum(
+    /const relY = \(e\.absoluteY - boardOriginY\.value\) - SQUARE_SIZE \* ([0-9.]+)/, 'hover correction'),
+  dropLiftSquares: dragNum(
+    /const correctedY = e\.absoluteY - SQUARE_SIZE \* ([0-9.]+)/, 'drop correction'),
+
+  edgeToleranceSquares: dragNum(/EDGE_TOLERANCE = SQUARE_SIZE \* ([0-9.]+)/, 'EDGE_TOLERANCE'),
+  thresholdPx: dragNum(/\.minDistance\(([0-9.]+)\)/, 'minDistance'),
+  originOpacity: dragNum(/opacity: isDragOrigin \? ([0-9.]+) : 1/, 'the drag-origin opacity'),
+
+  shadow: {
+    offsetY: dragNum(/shadowOffset:\s*\{ width: 0, height: ([0-9.]+) \}/, 'shadowOffset.height'),
+    opacity: dragNum(/shadowOpacity:\s*([0-9.]+)/, 'shadowOpacity'),
+    radius: dragNum(/shadowRadius:\s*([0-9.]+)/, 'shadowRadius'),
+  },
+  hoverFill: dragStr(/hoverStyle[\s\S]*?backgroundColor:\s*'([^']+)'/, 'the hover fill'),
+
+  pickupSpring: springAt(SPRING(1), 'the pickup spring'),
+  releaseSpring: springAt(SPRING(0), 'the release spring'),
+};
+
 // ---- Emit --------------------------------------------------------------------
 
 const out = {
@@ -210,6 +310,7 @@ const out = {
          + 'of an offset, not only its size. `squareToPixel` is included because it defines the '
          + 'anchor every one of these offsets is measured from — it returns the square CENTRE.',
   }, renderConstants),
+  dragConstants: dragConstants,
   moduleConstants: moduleConstants,
   stylesheets: stylesheets,
 };

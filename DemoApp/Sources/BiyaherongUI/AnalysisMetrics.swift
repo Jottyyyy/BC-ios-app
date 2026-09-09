@@ -296,6 +296,71 @@ enum BoardCoords {
     static func rankLabel(_ rank: Int) -> String { String(rank + 1) }
 }
 
+// MARK: - The lifted piece
+//
+// EXTRACTED, never typed: `tools/metrics/board_styles.json` → `dragConstants`, re-derived from
+// `DragDropChessBoard.tsx` on every run of `extract_board_styles.js`. The StyleSheet walk cannot
+// see any of this — the lift lives in `Gesture.Pan()` worklets and `useAnimatedStyle` callbacks —
+// so the extractor scans for it the same way it scans the eval graph's SVG attributes.
+// `board_layout_check.js` pins every number below against that JSON, in both languages.
+//
+// Every length is a MULTIPLE OF A SQUARE. The board is sized per device, so a pixel count would be
+// right on a 390@3x phone and wrong on every other one.
+enum BoardDrag {
+    /// `thresholdPx` — how far the finger travels before this stops being a tap.
+    static let threshold: CGFloat = 4
+    /// `floatBoxSquares` — the floating box.
+    static let floatBoxSquares: CGFloat = 1.4
+    /// `floatPieceSquares` — the piece drawn inside it. A resting piece is `restingPieceSquares`
+    /// (0.95) of a square, so what the user sees is a 1.3/0.95 enlargement, not 1.3.
+    static let floatPieceSquares: CGFloat = 1.3
+    /// `floatAnchorX` / `floatAnchorY` — where the box hangs off the finger, as a fraction of its
+    /// OWN box. X centres it; Y lifts it clear so the piece is not hidden under the fingertip,
+    /// which is the whole of what was asked for: *"kita na inaangat piyesa"*.
+    static let anchorX: CGFloat = 0.5
+    static let anchorY: CGFloat = 0.82
+    /// `hoverLiftSquares` — the highlight follows the LIFTED PIECE, not the finger. Without this
+    /// the piece hovers over one square while a different one lights up, and the lift reads as
+    /// broken. The source applies the same number again on drop (`dropLiftSquares`, also 0.45).
+    static let hoverLiftSquares: CGFloat = 0.45
+    /// `originOpacity` — what is left on the square whose piece is in the air, and its other arm.
+    /// Both come from the source's one expression, `opacity: isDragOrigin ? 0.3 : 1`.
+    static let originOpacity: Double = 0.3
+    static let restingOpacity: Double = 1
+
+    /// `shadow.*` — what makes it read as lifted rather than merely large.
+    static let shadowOffsetY: CGFloat = 8
+    static let shadowOpacity: Double = 0.45
+    static let shadowRadius: CGFloat = 12
+    /// `hoverFill` — `rgba(20, 85, 30, 0.5)`. The browser board already draws this exact colour.
+    static let hoverFill = Color(red: 20.0 / 255, green: 85.0 / 255, blue: 30.0 / 255)
+    static let hoverFillOpacity: Double = 0.5
+
+    /// `pickupSpring.swiftUI` / `releaseSpring.swiftUI`. Reanimated states a spring as
+    /// (stiffness, damping, mass) and SwiftUI as (response, dampingFraction); the extractor
+    /// converts by the standard identities so the curve is the source's own rather than a guess
+    /// that looked close.
+    static let pickupResponse: Double = 0.1987
+    static let pickupDamping: Double = 0.7379
+    static let releaseResponse: Double = 0.2177
+    static let releaseDamping: Double = 0.8083
+
+    /// The lifted piece's CENTRE for a finger at `p`.
+    ///
+    /// SwiftUI positions by centre where the source positioned by top-left, so the two anchors fold
+    /// into one offset rather than being transcribed separately: horizontally centred on the finger
+    /// (`anchorX` is 0.5), and riding `floatBoxSquares * (anchorY - 0.5)` squares above it.
+    static func floatCenter(at p: CGPoint, square: CGFloat) -> CGPoint {
+        let box = floatBoxSquares * square
+        return CGPoint(x: p.x + box * (0.5 - anchorX), y: p.y - box * (anchorY - 0.5))
+    }
+
+    /// The point the hovered square is measured from: the lifted piece, not the fingertip.
+    static func hoverPoint(from p: CGPoint, square: CGFloat) -> CGPoint {
+        CGPoint(x: p.x, y: p.y - square * hoverLiftSquares)
+    }
+}
+
 // MARK: - Arrows (spec 3.9)
 
 enum AnalysisArrow {

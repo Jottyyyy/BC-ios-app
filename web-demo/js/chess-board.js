@@ -47,6 +47,32 @@
   var GLYPH = ['♟', '♞', '♝', '♜', '♛', '♚']; // pawn…king (solid)
   // Below this many CSS px a press is still a tap, so tap-to-move keeps working.
   var DRAG_THRESHOLD = 4;
+
+  // The lifted piece. EXTRACTED from the RN board's gesture worklets into
+  // `tools/metrics/board_styles.json` → `dragConstants`, and pinned against that JSON — in BOTH
+  // languages — by `board_layout_check.js`. This board shipped with softer numbers of its own
+  // (a 1.15 scale, a 0.35 lift) while its shadow and hover colour already matched the source
+  // exactly, which is what gave the game away: the rest was meant to match too.
+  //
+  // Lengths are MULTIPLES OF A SQUARE. The board is sized per device, so a pixel count would be
+  // right on one phone and wrong on every other.
+  var DRAG = {
+    floatBoxSquares: 1.4,   // dragConstants.floatBoxSquares
+    // dragConstants.floatPieceSquares. A resting piece is one full square HERE (`.piece` is
+    // 12.5%), where the source's is 0.95 of one — so this is the absolute size, and the jump the
+    // eye sees is very slightly larger than the source's.
+    pieceScale: 1.3,
+    anchorY: 0.82,          // dragConstants.floatAnchorY — a fraction of the float BOX
+    hoverLift: 0.45,        // dragConstants.hoverLiftSquares
+    shadowY: 8,             // dragConstants.shadow.offsetY
+    shadowBlur: 12,         // dragConstants.shadow.radius
+    shadowOpacity: 0.45,    // dragConstants.shadow.opacity
+    hoverFill: 'rgba(20, 85, 30, 0.5)', // dragConstants.hoverFill
+  };
+  // How far the piece's CENTRE rides above the finger, in squares. The source offsets a 1.4-square
+  // box by 0.82 of itself from its TOP-LEFT; measured from the centre instead, that is the same
+  // number every time it is derived and a different one every time it is transcribed.
+  var DRAG_CENTRE_LIFT = DRAG.floatBoxSquares * (DRAG.anchorY - 0.5);
   // A light tap. The source asks for ImpactFeedbackStyle.Light, which has no duration to copy —
   // the Web Vibration API only takes milliseconds, so this is the shortest buzz that registers.
   var HAPTIC_LIGHT_MS = 10;
@@ -108,8 +134,10 @@
     // A dragged piece follows the pointer, so its slide transition has to be off or it lags
     // a third of a second behind the finger.
     '.piece.dragging{transition:none;z-index:8;}',
-    '.piece.dragging .inner{transform:scale(1.15);filter:drop-shadow(0 8px 12px rgba(0,0,0,.45));}',
-    '.sq.drophover::before{background:rgba(20,85,30,.5);}',
+    '.piece.dragging .inner{transform:scale(' + DRAG.pieceScale + ');'
+      + 'filter:drop-shadow(0 ' + DRAG.shadowY + 'px ' + DRAG.shadowBlur + 'px rgba(0,0,0,'
+      + DRAG.shadowOpacity + '));}',
+    '.sq.drophover::before{background:' + DRAG.hoverFill + ';}',
     // Only while drag is enabled: "manipulation" still lets the browser claim a vertical swipe
     // as a scroll and fire pointercancel mid-drag. Boards without drag keep scrolling normally.
     '.board.draggable{touch-action:none;}',
@@ -692,11 +720,15 @@
       var s = r.width / 8;
       // Lift the piece clear of the fingertip (spec 3.5) and follow the pointer.
       var x = (p.x - r.left) / s - 0.5;
-      var y = (p.y - r.top) / s - 0.5 - 0.35;
+      var y = (p.y - r.top) / s - 0.5 - DRAG_CENTRE_LIFT;
       d.el.style.transform = 'translate(' + (x * 100) + '%,' + (y * 100) + '%)';
       // Only the two squares that changed. Sweeping all 64 every event was 64 class writes per
       // pointermove, and the browser has to re-style each one.
-      var over = this._squareAtPoint(p.x, p.y);
+      //
+      // Measured from the LIFTED PIECE, not the fingertip. Reading the raw pointer lights up the
+      // square under the finger while the piece hovers over the one above it — the two disagree by
+      // most of a square, and the lift reads as broken rather than as a lift.
+      var over = this._squareAtPoint(p.x, p.y - DRAG.hoverLift * s);
       if (over === this._hoverSq) return;
       var prev = this._hoverSq == null ? null : this._cellBySq.get(this._hoverSq);
       if (prev) prev.classList.remove('drophover');
@@ -724,7 +756,14 @@
       if (this._boardEl.releasePointerCapture) {
         try { this._boardEl.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
       }
-      var to = d.moved ? this._squareAtPoint(e.clientX, e.clientY) : null;
+      // The SAME lift correction the hover uses — the source applies it again in `onEnd` for the
+      // same reason. Reading the raw pointer here would drop the piece on the square under the
+      // FINGER while the one under the piece was the one lit up, so the move that lands is not the
+      // move the user watched themselves make.
+      var dropSq = this._rect ? this._rect.width / 8 : 0;
+      var to = d.moved
+        ? this._squareAtPoint(e.clientX, e.clientY - DRAG.hoverLift * dropSq)
+        : null;
       this._endDrag();
       d.el.classList.remove('dragging');
       if (!d.moved) return;                        // never became a drag; the click handler has it

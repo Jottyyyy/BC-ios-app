@@ -551,6 +551,77 @@ for (const gone of ['.board-row', '.board-row chess-board', '.eval-bar', '.eval-
 expect(!/\beval-bar\b/.test(CSS),
   'and no rule mentions eval-bar at all any more — .an-eval is the only eval bar in the stylesheet');
 
+// ---- 9. the lifted piece: both languages carry the EXTRACTED numbers -----------
+//
+// The lift lives in RN gesture worklets, which the StyleSheet walk cannot reach, so
+// `extract_board_styles.js` scans for it and writes `dragConstants` into board_styles.json — the
+// same targeted re-derivation the eval graph gets. That makes the JSON the source of truth and
+// these two tables copies of it, which is precisely the arrangement CLAUDE.md warns about:
+// "two hand-typed copies agreeing with each other is NOT verification". So compare BOTH against
+// the JSON rather than against each other. A transcription slip in either one fails here.
+{
+  const DRAGJSON = require(path.join(ROOT, 'tools', 'metrics', 'board_styles.json')).dragConstants;
+  const SWIFT = fs.readFileSync(
+    path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI', 'AnalysisMetrics.swift'), 'utf8');
+  const BOARDJS = fs.readFileSync(
+    path.join(ROOT, 'web-demo', 'js', 'chess-board.js'), 'utf8');
+
+  expect(DRAGJSON !== undefined,
+    'board_styles.json has a dragConstants block — re-run tools/metrics/extract_board_styles.js');
+
+  const swiftNum = (name) => {
+    const m = new RegExp('static let ' + name + '\\s*:\\s*\\w+\\s*=\\s*(-?[0-9.]+)').exec(SWIFT);
+    return m ? Number(m[1]) : undefined;
+  };
+  const jsNum = (name) => {
+    const m = new RegExp('\\b' + name + ':\\s*(-?[0-9.]+)').exec(BOARDJS);
+    return m ? Number(m[1]) : undefined;
+  };
+
+  // [ JSON value, Swift constant, JS key ] — a null means that language has no use for it.
+  const PINS = [
+    [DRAGJSON && DRAGJSON.thresholdPx, 'threshold', null],
+    [DRAGJSON && DRAGJSON.floatBoxSquares, 'floatBoxSquares', 'floatBoxSquares'],
+    [DRAGJSON && DRAGJSON.floatPieceSquares, 'floatPieceSquares', 'pieceScale'],
+    [DRAGJSON && DRAGJSON.floatAnchorX, 'anchorX', null],
+    [DRAGJSON && DRAGJSON.floatAnchorY, 'anchorY', 'anchorY'],
+    [DRAGJSON && DRAGJSON.hoverLiftSquares, 'hoverLiftSquares', 'hoverLift'],
+    [DRAGJSON && DRAGJSON.originOpacity, 'originOpacity', null],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.offsetY, 'shadowOffsetY', 'shadowY'],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.opacity, 'shadowOpacity', 'shadowOpacity'],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.radius, 'shadowRadius', 'shadowBlur'],
+  ];
+  for (const [want, swiftName, jsName] of PINS) {
+    expect(want !== undefined && swiftNum(swiftName) === want,
+      `BoardDrag.${swiftName} is ${swiftNum(swiftName)}, the RN source says ${want}`);
+    if (jsName) {
+      expect(want !== undefined && jsNum(jsName) === want,
+        `chess-board.js DRAG.${jsName} is ${jsNum(jsName)}, the RN source says ${want}`);
+    }
+  }
+  // The hover fill is the one value the two languages already agreed on before this change, which
+  // is what suggested the rest was meant to.
+  expect(DRAGJSON !== undefined && BOARDJS.indexOf("'" + DRAGJSON.hoverFill + "'") >= 0,
+    `chess-board.js draws the source hover fill ${DRAGJSON && DRAGJSON.hoverFill}`);
+  // The springs are converted, not copied: Reanimated states (stiffness, damping, mass) and SwiftUI
+  // (response, dampingFraction). The extractor does the conversion so the curve is the source's.
+  for (const [spring, resp, damp] of [['pickupSpring', 'pickupResponse', 'pickupDamping'],
+                                      ['releaseSpring', 'releaseResponse', 'releaseDamping']]) {
+    const s = DRAGJSON && DRAGJSON[spring] && DRAGJSON[spring].swiftUI;
+    expect(s !== undefined && swiftNum(resp) === s.response,
+      `BoardDrag.${resp} matches the converted ${spring}`);
+    expect(s !== undefined && swiftNum(damp) === s.dampingFraction,
+      `BoardDrag.${damp} matches the converted ${spring}`);
+  }
+  // `edgeToleranceSquares` is deliberately NOT consumed — see PORTING_NOTES. Extracted so the fact
+  // that it exists stays visible; asserted absent so nobody "finishes the job" by wiring up a
+  // branch that is unreachable in the source it came from.
+  expect(DRAGJSON !== undefined && DRAGJSON.edgeToleranceSquares !== undefined,
+    'edgeToleranceSquares is still extracted, so the dead branch stays on the record');
+  expect(!/edgeTolerance/.test(SWIFT) && !/edgeTolerance/.test(BOARDJS),
+    'and neither language consumes it — the source branch it comes from can never fire');
+}
+
 const result = {
   passed,
   failures,
