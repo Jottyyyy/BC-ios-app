@@ -9,6 +9,43 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-09 (changed) — 1.0.8 (54) uploaded: the offer-card fix, and the first live IAP check
+
+Delivery UUID `900f9cae-5973-475b-a210-6661f53eb4fe`. 85,689,181 bytes, `UPLOAD SUCCEEDED with no
+errors`, via `tools/ship/ship_testflight.sh 54`. **This replaces 53**, which shipped the offer card
+drawing *"Try Biyaherong Plus for Free"* over a Subscribe button — 53 must not be promoted.
+
+**`check_iap_offers.js` ran against the live API for the first time, and it contradicts the premise
+it was written under.** The commit that added it says *"The offer does not exist in App Store
+Connect"*; there was no key on that machine to check. There is one here, and both products carry a
+`FREE_TRIAL` of `ONE_WEEK` across **175 territories**, USA and PHL included. The offers exist and are
+configured correctly.
+
+**What is actually unfinished is the subscriptions' state: both are `READY_TO_SUBMIT`.** They have
+never been submitted with an app version, so nothing is approved for production yet. That is a
+listing task, not a code one, and it does not block TestFlight — sandbox serves `READY_TO_SUBMIT`
+products. The likelier explanation for the client's recording remains the one the checker prints
+itself: **intro-offer eligibility is once per subscription group and never resets**, and the
+recording was made on a US storefront by an Apple ID that may already have consumed it.
+
+**Prince's code fix is right regardless** and is what 54 carries: a card that names a trial StoreKit
+says the account cannot have is a Guideline 3.1.2 misrepresentation whether or not the offer exists
+in App Store Connect.
+
+**Verified on this Mac before the archive**, since main is still written blind on Windows:
+`swift build` clean at the root and in `DemoApp/`; `StockfishSmoke` **SMOKE OK** (depth 22, `Ra8#`);
+`swift_lint` 144 files, `swift_symbol_check` 3,870 refs / 160 types, `swift_enum_payload_check`,
+`trial_gate_check` 60, `replay_premium` **656**, `replay_login` 535, `replay_stockfish` 80,
+`stockfish_vendor_check` 26; `PaywallMetricsCheck` **141**, `LoginMetricsCheck` 181,
+`HomeMetricsCheck` 212, `PieceArtCheck` 112. Entitlement decoded from archive and signed `.ipa`;
+`BIYA_TESTBUILD` absent.
+
+**The three Mac-only build fixes are merged into `main` locally but could NOT be pushed** — the
+push 403s (`denied to fush-toj`), as it has for builds 48, 49 and 53. `main` on GitHub still does not
+compile.
+
+`web-demo/` not updated — a release.
+
 ### 2026-09-08 (fixed) — The offer card promised a free trial that App Store Connect never had
 
 Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall

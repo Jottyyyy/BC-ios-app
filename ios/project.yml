@@ -98,7 +98,7 @@ targets:
         # outside this history, so the file understated the record by four. 52 is therefore the
         # floor, not a suggestion — a lower number is refused as a duplicate. `ship_testflight.sh`
         # and CI stamp this themselves; do not bump it by hand for those paths.
-        CURRENT_PROJECT_VERSION: "53"
+        CURRENT_PROJECT_VERSION: "54"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone
