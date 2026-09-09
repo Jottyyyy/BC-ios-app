@@ -99,22 +99,38 @@ if (evalRail) {
     '.an-eval must be `flex: none` — a flexible rail eats the width the board was sized for');
   expect(!/cq[whibm]/.test(evalRail), 'and uses no container-query unit');
 }
-// The fill grows UPWARD from the bottom. Anchor it at the top and the rail reads INVERTED, with no
-// other symptom whatsoever — the eval is White-relative and White is always at the bottom.
+// The fill grows from WHITE'S end — the floor normally, the ceiling once the board is flipped — so
+// the colour at the bottom of the rail is the colour at the bottom of the board. Pin it to one end
+// and the rail reads INVERTED for everyone playing Black, with no other symptom whatsoever. That
+// is the bug the client reported: "hindi na flip kapag nagflip ka, nasa taas parin ung black".
 const evalFill = rule('.an-eval .fill');
 expect(evalFill !== null && /bottom:\s*0/.test(evalFill),
-  'the rail fill is anchored at the BOTTOM — White grows upward');
+  'the rail fill is anchored at the BOTTOM — White grows upward on an unflipped board');
 expect(evalFill !== null && /transition:\s*height/.test(evalFill),
   'and animates its HEIGHT, not the old width');
-// Both label ends exist and are inked differently, or one of them is invisible against its ground.
+const evalFillFlipped = rule('.an-eval.flipped .fill');
+expect(evalFillFlipped !== null && /top:\s*0/.test(evalFillFlipped),
+  '.an-eval.flipped .fill anchors at the TOP — the rail follows the board');
+expect(evalFillFlipped !== null && /bottom:\s*auto/.test(evalFillFlipped),
+  'clearing `bottom` as it goes — leaving both edges set pins the box and the height is ignored');
+
+// PLACEMENT and INK are two questions, and keeping them apart is the whole of the flip. The label
+// rides its own block, so which END it sits at mirrors while what is BEHIND it never changes.
 const lblBottom = rule('.an-eval .lbl.bottom');
 const lblTop = rule('.an-eval .lbl.top');
-expect(lblBottom !== null && /bottom:\s*0/.test(lblBottom) && /color:/.test(lblBottom),
-  'the label has a BOTTOM placement with its own ink (dark, on the white fill)');
-expect(lblTop !== null && /top:\s*0/.test(lblTop) && /color:/.test(lblTop),
-  'and a TOP one (light, on the dark track)');
-expect(lblBottom !== null && lblTop !== null
-  && /color:\s*([^;]+)/.exec(lblBottom)[1] !== /color:\s*([^;]+)/.exec(lblTop)[1],
+expect(lblBottom !== null && /bottom:\s*0/.test(lblBottom), 'the label has a BOTTOM placement');
+expect(lblTop !== null && /top:\s*0/.test(lblTop), 'and a TOP one');
+expect(lblBottom !== null && !/color:/.test(lblBottom)
+  && lblTop !== null && !/color:/.test(lblTop),
+  'and NEITHER end carries ink. Welding the two together is how a flipped rail comes to ink its '
+  + 'label for the ground it is no longer standing on — which is what these classes used to do');
+const lblOnFill = rule('.an-eval .lbl.on-fill');
+const lblOnTrack = rule('.an-eval .lbl.on-track');
+expect(lblOnFill !== null && /color:/.test(lblOnFill),
+  'the ink for a label on the white fill is its own class (dark)');
+expect(lblOnTrack !== null && /color:/.test(lblOnTrack), 'and one for the dark track (light)');
+expect(lblOnFill !== null && lblOnTrack !== null
+  && /color:\s*([^;]+)/.exec(lblOnFill)[1] !== /color:\s*([^;]+)/.exec(lblOnTrack)[1],
   'and they are DIFFERENT colours — the whole point is that the label lands on solid contrast');
 
 // ---- 2c. the board stack is exactly the board box ------------------------------
@@ -170,6 +186,17 @@ expect(stack !== null && /flex:\s*none/.test(stack) && /width:\s*var\(--an-board
       'the engine toggle calls sizeBands() — the rail appears and disappears with it, so the '
       + 'board\'s width changes and the old edge would otherwise survive until the next resize');
   }
+  // The CSS above proves `.an-eval.flipped` EXISTS. This proves something ever sets it — without
+  // this pair the rule could sit there unreferenced and the rail would never flip, with the whole
+  // CSS section green. The flip has to reach BOTH the fill (a class on the rail) and the label
+  // (an argument to the shared function), or one of them mirrors and the other does not.
+  expect(/ui\.evalRail\.classList\.toggle\('flipped', !!session\.flipped\)/.test(JS),
+    'paintEval puts `flipped` on the rail from the session, so the fill follows the board');
+  expect(/MET\.evalLabelAtBottom\(f, session\.flipped\)/.test(JS),
+    'and hands the flip to evalLabelAtBottom, so the label goes to the end its block moved to');
+  expect(/MET\.evalLabelOnFill\(f\)/.test(JS),
+    'while the INK comes from evalLabelOnFill, which takes no flip — the label rides its own '
+    + 'block, so what is behind it never changes and only the end does');
   expect(/MET\.evalLabelAtBottom\(/.test(JS),
     'and which end the label hangs off is the shared pure function, not a second `f >= 0.5` here');
   expect(/ui\.evalFill\.style\.height/.test(JS),
@@ -523,6 +550,77 @@ for (const gone of ['.board-row', '.board-row chess-board', '.eval-bar', '.eval-
 }
 expect(!/\beval-bar\b/.test(CSS),
   'and no rule mentions eval-bar at all any more — .an-eval is the only eval bar in the stylesheet');
+
+// ---- 9. the lifted piece: both languages carry the EXTRACTED numbers -----------
+//
+// The lift lives in RN gesture worklets, which the StyleSheet walk cannot reach, so
+// `extract_board_styles.js` scans for it and writes `dragConstants` into board_styles.json — the
+// same targeted re-derivation the eval graph gets. That makes the JSON the source of truth and
+// these two tables copies of it, which is precisely the arrangement CLAUDE.md warns about:
+// "two hand-typed copies agreeing with each other is NOT verification". So compare BOTH against
+// the JSON rather than against each other. A transcription slip in either one fails here.
+{
+  const DRAGJSON = require(path.join(ROOT, 'tools', 'metrics', 'board_styles.json')).dragConstants;
+  const SWIFT = fs.readFileSync(
+    path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI', 'AnalysisMetrics.swift'), 'utf8');
+  const BOARDJS = fs.readFileSync(
+    path.join(ROOT, 'web-demo', 'js', 'chess-board.js'), 'utf8');
+
+  expect(DRAGJSON !== undefined,
+    'board_styles.json has a dragConstants block — re-run tools/metrics/extract_board_styles.js');
+
+  const swiftNum = (name) => {
+    const m = new RegExp('static let ' + name + '\\s*:\\s*\\w+\\s*=\\s*(-?[0-9.]+)').exec(SWIFT);
+    return m ? Number(m[1]) : undefined;
+  };
+  const jsNum = (name) => {
+    const m = new RegExp('\\b' + name + ':\\s*(-?[0-9.]+)').exec(BOARDJS);
+    return m ? Number(m[1]) : undefined;
+  };
+
+  // [ JSON value, Swift constant, JS key ] — a null means that language has no use for it.
+  const PINS = [
+    [DRAGJSON && DRAGJSON.thresholdPx, 'threshold', null],
+    [DRAGJSON && DRAGJSON.floatBoxSquares, 'floatBoxSquares', 'floatBoxSquares'],
+    [DRAGJSON && DRAGJSON.floatPieceSquares, 'floatPieceSquares', 'pieceScale'],
+    [DRAGJSON && DRAGJSON.floatAnchorX, 'anchorX', null],
+    [DRAGJSON && DRAGJSON.floatAnchorY, 'anchorY', 'anchorY'],
+    [DRAGJSON && DRAGJSON.hoverLiftSquares, 'hoverLiftSquares', 'hoverLift'],
+    [DRAGJSON && DRAGJSON.originOpacity, 'originOpacity', null],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.offsetY, 'shadowOffsetY', 'shadowY'],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.opacity, 'shadowOpacity', 'shadowOpacity'],
+    [DRAGJSON && DRAGJSON.shadow && DRAGJSON.shadow.radius, 'shadowRadius', 'shadowBlur'],
+  ];
+  for (const [want, swiftName, jsName] of PINS) {
+    expect(want !== undefined && swiftNum(swiftName) === want,
+      `BoardDrag.${swiftName} is ${swiftNum(swiftName)}, the RN source says ${want}`);
+    if (jsName) {
+      expect(want !== undefined && jsNum(jsName) === want,
+        `chess-board.js DRAG.${jsName} is ${jsNum(jsName)}, the RN source says ${want}`);
+    }
+  }
+  // The hover fill is the one value the two languages already agreed on before this change, which
+  // is what suggested the rest was meant to.
+  expect(DRAGJSON !== undefined && BOARDJS.indexOf("'" + DRAGJSON.hoverFill + "'") >= 0,
+    `chess-board.js draws the source hover fill ${DRAGJSON && DRAGJSON.hoverFill}`);
+  // The springs are converted, not copied: Reanimated states (stiffness, damping, mass) and SwiftUI
+  // (response, dampingFraction). The extractor does the conversion so the curve is the source's.
+  for (const [spring, resp, damp] of [['pickupSpring', 'pickupResponse', 'pickupDamping'],
+                                      ['releaseSpring', 'releaseResponse', 'releaseDamping']]) {
+    const s = DRAGJSON && DRAGJSON[spring] && DRAGJSON[spring].swiftUI;
+    expect(s !== undefined && swiftNum(resp) === s.response,
+      `BoardDrag.${resp} matches the converted ${spring}`);
+    expect(s !== undefined && swiftNum(damp) === s.dampingFraction,
+      `BoardDrag.${damp} matches the converted ${spring}`);
+  }
+  // `edgeToleranceSquares` is deliberately NOT consumed — see PORTING_NOTES. Extracted so the fact
+  // that it exists stays visible; asserted absent so nobody "finishes the job" by wiring up a
+  // branch that is unreachable in the source it came from.
+  expect(DRAGJSON !== undefined && DRAGJSON.edgeToleranceSquares !== undefined,
+    'edgeToleranceSquares is still extracted, so the dead branch stays on the record');
+  expect(!/edgeTolerance/.test(SWIFT) && !/edgeTolerance/.test(BOARDJS),
+    'and neither language consumes it — the source branch it comes from can never fire');
+}
 
 const result = {
   passed,

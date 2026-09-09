@@ -1153,6 +1153,44 @@
       }
     }
   },
+  "dragConstants": {
+    "_note": "The lifted piece, re-derived from the RN gesture worklets on every run. Lengths are multiples of SQUARE_SIZE; anchors are fractions of the FLOAT BOX, which is what the source offsets against. The springs are converted to SwiftUI's (response, dampingFraction) by the standard identities, not matched by eye.",
+    "_source": "BYAHERONG-COACH-FRONTEND/components/DragDropChessBoard.tsx",
+    "floatBoxSquares": 1.4,
+    "floatPieceSquares": 1.3,
+    "restingPieceSquares": 0.95,
+    "floatAnchorX": 0.5,
+    "floatAnchorY": 0.82,
+    "hoverLiftSquares": 0.45,
+    "dropLiftSquares": 0.45,
+    "edgeToleranceSquares": 0.15,
+    "thresholdPx": 4,
+    "originOpacity": 0.3,
+    "shadow": {
+      "offsetY": 8,
+      "opacity": 0.45,
+      "radius": 12
+    },
+    "hoverFill": "rgba(20, 85, 30, 0.5)",
+    "pickupSpring": {
+      "stiffness": 600,
+      "damping": 28,
+      "mass": 0.6,
+      "swiftUI": {
+        "response": 0.1987,
+        "dampingFraction": 0.7379
+      }
+    },
+    "releaseSpring": {
+      "stiffness": 500,
+      "damping": 28,
+      "mass": 0.6,
+      "swiftUI": {
+        "response": 0.2177,
+        "dampingFraction": 0.8083
+      }
+    }
+  },
   "moduleConstants": {
     "DRAFT_KEY": "@biyaherong_analysis_draft",
     "SETUP_DRAFT_KEY": "@biyaherong_setup_draft",

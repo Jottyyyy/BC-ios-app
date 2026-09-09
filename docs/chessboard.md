@@ -178,20 +178,36 @@ nothing. §7's two name-based exemptions — `PlayView` / `PuzzleView`, the fixe
 panels — assert their own premise: exempt only while `AppShell` is the sole thing that constructs
 them.
 
-### What a drag does and does not do
+### What a drag does
 
-The two renderers are deliberately **not** equal here, and the difference is the component's, not a
-screen's:
+The two renderers do the same thing now. They did not until 2026-09-09: Swift's `dragGesture` was
+`.onEnded` only, so the move worked but **nothing moved until you let go** — which the client
+reported as the app not responding, *"sana yung drag pieces kita na inaangat piyesa, parang sa
+android nabubuhat piyesa"*. It was a change to `BoardView` and therefore to all nine boards at once,
+which is why it had been deferred rather than done on one screen.
 
-- **The browser follows the pointer.** `_onPointerDown` caches the board rect once, `_onPointerMove`
-  crosses a 4 px threshold before it hijacks the tap, and `_dragFrame` writes one transform per
-  animation frame and repaints exactly the two squares whose hover changed. A legal drop lands where
-  the finger let go (`_justDropped`); an illegal one sends the piece home. Promotion goes home first,
-  because the piece cannot sit under the dialog.
-- **Swift does not.** `BoardView.dragGesture` is `DragGesture(minimumDistance: 4)` with `.onEnded`
-  only: no piece follows the finger, no ring appears mid-travel. Every board in the app behaves this
-  way — Analysis, all five puzzle solvers, and now Play vs Coach — so a live ghost is a change to
-  `BoardView` and to every screen at once, not to one screen.
+- **The piece lifts and follows.** Both renderers draw the dragged piece **1.3 squares** wide with a
+  shadow, riding **0.45 of a square above the fingertip** so it is not hidden under the finger, and
+  leave the origin square's piece at **0.3 opacity** — dimmed, not removed, so a cancelled drag does
+  not look like a completed one.
+- **The highlight follows the PIECE, not the finger.** The hovered square is computed from the
+  lifted point. Without that the piece hovers over one square while another lights up, and the drop
+  lands on the second — the move that happens is not the one the user watched themselves make.
+- **The threshold is 4 px** in both, so a press that barely moves is still a tap.
+- **A legal drop lands where it was let go** (`_justDropped` in the browser); an illegal one sends
+  the piece home. Promotion goes home first, because the piece cannot sit under the dialog.
+- **The pickup haptic fires on PICKUP**, in the component, as the source does. It used to fire from
+  the screens' `onDragMove` — which runs on release, so the buzz for lifting a piece arrived as it
+  was put down.
+
+Every number above is **extracted**, not chosen: `tools/metrics/board_styles.json` → `dragConstants`,
+re-derived from `DragDropChessBoard.tsx`'s gesture worklets on every run of
+`extract_board_styles.js`, and pinned **in both languages** by `board_layout_check.js` §9. The
+browser had softer values of its own (a 1.15 scale, a 0.35 lift) while its shadow and hover colour
+already matched the source exactly — which is what suggested the rest was meant to.
+
+One constant is extracted and deliberately **not used**: `edgeToleranceSquares`. See
+`PORTING_NOTES.md` — the branch it comes from cannot fire in the source either.
 
 **A Swift screen's drag handler must check legality itself.** `dragGesture` reports whatever two
 squares the gesture spanned and knows nothing about pieces or rules, whereas the tap route already
@@ -261,6 +277,13 @@ hint. Then the same for Daily, Thematic, Turbo and Play vs Coach.
 a legal square; the move must play. This is the check no suite can make for you: both gates read
 source, and the component's own pointer tests drive their *own* correct wiring rather than a
 screen's. It is how the Play vs Coach drag went missing for the whole life of that screen.
+
+**And watch the piece while you drag it.** It must lift clear of the pointer, grow, cast a shadow,
+and leave its origin square dimmed rather than empty; the highlighted square must be the one under
+the **piece**, not under the pointer. Drop deliberately LOW — with the pointer near the bottom edge
+of the square you are aiming at — and the move must still be the square the piece was over. That
+last one is the case every centre-of-square test misses, because a 0.45-square lift cannot cross a
+boundary from a centre.
 
 The squares are **brown** on all of them — `#F0D9B5` / `#B58863`. If any board is blue, something
 is writing a square colour that is not `BoardStyle` or `--board-light`/`--board-dark`, and

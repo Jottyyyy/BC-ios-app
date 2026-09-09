@@ -296,6 +296,71 @@ enum BoardCoords {
     static func rankLabel(_ rank: Int) -> String { String(rank + 1) }
 }
 
+// MARK: - The lifted piece
+//
+// EXTRACTED, never typed: `tools/metrics/board_styles.json` → `dragConstants`, re-derived from
+// `DragDropChessBoard.tsx` on every run of `extract_board_styles.js`. The StyleSheet walk cannot
+// see any of this — the lift lives in `Gesture.Pan()` worklets and `useAnimatedStyle` callbacks —
+// so the extractor scans for it the same way it scans the eval graph's SVG attributes.
+// `board_layout_check.js` pins every number below against that JSON, in both languages.
+//
+// Every length is a MULTIPLE OF A SQUARE. The board is sized per device, so a pixel count would be
+// right on a 390@3x phone and wrong on every other one.
+enum BoardDrag {
+    /// `thresholdPx` — how far the finger travels before this stops being a tap.
+    static let threshold: CGFloat = 4
+    /// `floatBoxSquares` — the floating box.
+    static let floatBoxSquares: CGFloat = 1.4
+    /// `floatPieceSquares` — the piece drawn inside it. A resting piece is `restingPieceSquares`
+    /// (0.95) of a square, so what the user sees is a 1.3/0.95 enlargement, not 1.3.
+    static let floatPieceSquares: CGFloat = 1.3
+    /// `floatAnchorX` / `floatAnchorY` — where the box hangs off the finger, as a fraction of its
+    /// OWN box. X centres it; Y lifts it clear so the piece is not hidden under the fingertip,
+    /// which is the whole of what was asked for: *"kita na inaangat piyesa"*.
+    static let anchorX: CGFloat = 0.5
+    static let anchorY: CGFloat = 0.82
+    /// `hoverLiftSquares` — the highlight follows the LIFTED PIECE, not the finger. Without this
+    /// the piece hovers over one square while a different one lights up, and the lift reads as
+    /// broken. The source applies the same number again on drop (`dropLiftSquares`, also 0.45).
+    static let hoverLiftSquares: CGFloat = 0.45
+    /// `originOpacity` — what is left on the square whose piece is in the air, and its other arm.
+    /// Both come from the source's one expression, `opacity: isDragOrigin ? 0.3 : 1`.
+    static let originOpacity: Double = 0.3
+    static let restingOpacity: Double = 1
+
+    /// `shadow.*` — what makes it read as lifted rather than merely large.
+    static let shadowOffsetY: CGFloat = 8
+    static let shadowOpacity: Double = 0.45
+    static let shadowRadius: CGFloat = 12
+    /// `hoverFill` — `rgba(20, 85, 30, 0.5)`. The browser board already draws this exact colour.
+    static let hoverFill = Color(red: 20.0 / 255, green: 85.0 / 255, blue: 30.0 / 255)
+    static let hoverFillOpacity: Double = 0.5
+
+    /// `pickupSpring.swiftUI` / `releaseSpring.swiftUI`. Reanimated states a spring as
+    /// (stiffness, damping, mass) and SwiftUI as (response, dampingFraction); the extractor
+    /// converts by the standard identities so the curve is the source's own rather than a guess
+    /// that looked close.
+    static let pickupResponse: Double = 0.1987
+    static let pickupDamping: Double = 0.7379
+    static let releaseResponse: Double = 0.2177
+    static let releaseDamping: Double = 0.8083
+
+    /// The lifted piece's CENTRE for a finger at `p`.
+    ///
+    /// SwiftUI positions by centre where the source positioned by top-left, so the two anchors fold
+    /// into one offset rather than being transcribed separately: horizontally centred on the finger
+    /// (`anchorX` is 0.5), and riding `floatBoxSquares * (anchorY - 0.5)` squares above it.
+    static func floatCenter(at p: CGPoint, square: CGFloat) -> CGPoint {
+        let box = floatBoxSquares * square
+        return CGPoint(x: p.x + box * (0.5 - anchorX), y: p.y - box * (anchorY - 0.5))
+    }
+
+    /// The point the hovered square is measured from: the lifted piece, not the fingertip.
+    static func hoverPoint(from p: CGPoint, square: CGFloat) -> CGPoint {
+        CGPoint(x: p.x, y: p.y - square * hoverLiftSquares)
+    }
+}
+
 // MARK: - Arrows (spec 3.9)
 
 enum AnalysisArrow {
@@ -638,10 +703,22 @@ enum AnalysisEval {
 
     // MARK: - The vertical rail
     //
-    // LEFT, FIXED, never mirrored — Lichess and Chess.com both keep it put, and a rail that swapped
-    // ends on every flip would be unreadable. White fills from the BOTTOM regardless, because
-    // `EngineScore` is documented "Always White-relative" (AnalysisEngine.swift:22-25), so nothing
-    // here can know or care which way the board is facing.
+    // LEFT and fixed there; the FILL mirrors with the board. The rail's SIDE never moves — it is on
+    // the left whichever way the board faces — but the colour at the bottom of the rail is always
+    // the colour at the bottom of the board, so a player looking at their own pieces finds their
+    // own block beneath them.
+    //
+    // This REVERSES an earlier rule, and the reversal is the client's: *"yung engine bar hindi na
+    // flip kapag nagflip ka, nasa taas parin ung black"*. What it replaces was defended by an appeal
+    // to other apps that this repo stated two contradictory ways — PORTING_NOTES said "Lichess
+    // mirrors its bar; Chess.com does not; we do not", `app.css` said "both keep it put" — so one of
+    // them was wrong whichever way round the truth is, and neither was checkable from here. Nor was
+    // there a source precedent behind either: `renderEvalBar` (board.tsx:2741) is dead code with one
+    // grep hit, so the fixed-side rule was this port's own invention and the client's instruction is
+    // a better warrant than the comment it retires.
+    //
+    // `EngineScore` is unchanged and still "Always White-relative" (AnalysisEngine.swift:22-25).
+    // Only the axis it is PAINTED along knows about the flip; nothing about the number does.
     //
     // Every number below is a real key in the source's own `evalBar*` block — the block that
     // `renderEvalBar` (board.tsx:2741) never rendered. Its header comment reads
@@ -679,29 +756,47 @@ enum AnalysisEval {
     /// What the rail costs the board: its own width, plus the gap to the board.
     static var railTotal: CGFloat { railWidth + railGap }
 
-    /// White's block, measured from the BOTTOM of the rail. Clamped, so a caller handing over a
-    /// fraction outside 0…1 draws a full or an empty rail rather than overflowing the clip.
+    /// White's block, as a LENGTH. Which end it grows from is `fillAlignment(flipped:)` — keeping
+    /// the two apart is what lets the flip be one decision rather than two. Clamped, so a caller
+    /// handing over a fraction outside 0…1 draws a full or an empty rail rather than overflowing
+    /// the clip.
     static func fillHeight(rail: CGFloat, fraction: CGFloat) -> CGFloat {
         rail * min(max(fraction, 0), 1)
     }
 
-    /// Which end the score hangs off: the LEADING side's. White ahead → bottom, Black ahead → top.
-    ///
-    /// This is not a style choice, it is the legibility rule, and it is exact rather than tuned.
-    /// `fraction >= 0.5` is precisely the condition under which the BOTTOM of the rail is inside
-    /// the white fill, and `< 0.5` precisely the condition under which the TOP is bare track — so
-    /// the label always lands on a block of solid colour it was inked for, with no threshold to
-    /// tune. A dead-level position resolves to the bottom, stably.
-    static func labelAtBottom(fraction: CGFloat) -> Bool { fraction >= 0.5 }
+    /// Which end White's block grows from. White sits at the bottom of the board until the board is
+    /// flipped, and the rail follows the board.
+    static func fillAlignment(flipped: Bool) -> Alignment { flipped ? .top : .bottom }
 
-    static func labelAlignment(fraction: CGFloat) -> Alignment {
-        labelAtBottom(fraction: fraction) ? .bottom : .top
+    /// Is the label sitting on White's fill rather than on the bare track?
+    ///
+    /// **Orientation-independent, and that is the whole trick.** The label hangs off the LEADING
+    /// side's end, and the leading side's end is the one its own block covers — whichever way up
+    /// the rail is painted. So `labelInk` needs no flip at all; only the physical end does.
+    ///
+    /// `fraction >= 0.5` is exact rather than tuned: it is precisely the condition under which
+    /// White's block reaches past the middle, so the label always lands on a solid block of the
+    /// colour it was inked for, with no threshold to guess. A dead-level position resolves to
+    /// White's end, stably.
+    static func labelOnFill(fraction: CGFloat) -> Bool { fraction >= 0.5 }
+
+    /// Which PHYSICAL end the score hangs off, once the flip is taken into account. Unflipped,
+    /// White ahead → bottom; flipped, White ahead → top, because that is where White's block is.
+    static func labelAtBottom(fraction: CGFloat, flipped: Bool) -> Bool {
+        flipped ? !labelOnFill(fraction: fraction) : labelOnFill(fraction: fraction)
+    }
+
+    static func labelAlignment(fraction: CGFloat, flipped: Bool) -> Alignment {
+        labelAtBottom(fraction: fraction, flipped: flipped) ? .bottom : .top
     }
 
     /// Dark ink on the white fill, light ink on the dark track. `onGold` is this screen's existing
     /// dark-ink-over-a-light-fill token; `textPrimary` is its ordinary light ink.
+    ///
+    /// Takes no `flipped`, deliberately — see `labelOnFill`. The label moves with its block, so
+    /// what is behind it never changes.
     static func labelInk(fraction: CGFloat) -> Color {
-        labelAtBottom(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
+        labelOnFill(fraction: fraction) ? AnalysisPalette.onGold : AnalysisPalette.textPrimary
     }
 
     /// The size the label is actually drawn at: whatever fits `labelGlyphs` across the rail, capped

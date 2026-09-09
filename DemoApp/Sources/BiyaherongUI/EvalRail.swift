@@ -32,20 +32,28 @@ struct EvalRail: View {
     let fraction: CGFloat
     /// `+1.3` / `M4` / `½-½`, from `EngineScore.displayText`. Empty draws nothing.
     let label: String
+    /// The board's orientation, so the rail can follow it.
+    ///
+    /// The rail's SIDE does not move — it is on the left either way — but the colour at the bottom
+    /// of the rail is always the colour at the bottom of the board. The client reported the old
+    /// behaviour as the bug it looked like: *"hindi na flip kapag nagflip ka, nasa taas parin ung
+    /// black"*. See `AnalysisEval`'s doc comment for the rule this reversed and why.
+    let flipped: Bool
 
     var body: some View {
         RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous)
             .fill(AnalysisPalette.evalTrack)
             .frame(width: AnalysisEval.railWidth, height: height)
-            // BOTTOM, so White grows upward. Inverting this has no symptom other than every
-            // evaluation in the app being backwards, which is why it is asserted by name.
-            .overlay(alignment: .bottom) {
+            // Bottom normally, top when the board is flipped — White always grows from White's own
+            // end. Anchoring this to a literal end has no symptom other than every evaluation in
+            // the app being backwards for half the users, which is why it is asserted by name.
+            .overlay(alignment: AnalysisEval.fillAlignment(flipped: flipped)) {
                 RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous)
                     .fill(AnalysisPalette.evalFill)
                     .frame(width: AnalysisEval.railWidth,
                            height: AnalysisEval.fillHeight(rail: height, fraction: fraction))
             }
-            .overlay(alignment: AnalysisEval.labelAlignment(fraction: fraction)) {
+            .overlay(alignment: AnalysisEval.labelAlignment(fraction: fraction, flipped: flipped)) {
                 Text(label)
                     .font(AnalysisType.mono(AnalysisEval.labelFontSize, AnalysisType.evalRailWeight))
                     .foregroundStyle(AnalysisEval.labelInk(fraction: fraction))
@@ -57,5 +65,8 @@ struct EvalRail: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: AnalysisEval.railRadius, style: .continuous))
             .animation(.easeInOut(duration: AnalysisEval.animationSeconds), value: fraction)
+            // The flip animates on the same curve, so tapping 🔄 slides the block across rather
+            // than snapping it — the same easing the evaluation itself moves on.
+            .animation(.easeInOut(duration: AnalysisEval.animationSeconds), value: flipped)
     }
 }

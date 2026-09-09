@@ -300,8 +300,15 @@ function lineOf(file, re) {
       expect(band.indexOf('evalRail(') >= 0
         && band.indexOf('evalRail(') < band.indexOf('ChessBoardBand('),
         `${site.file} — the rail comes FIRST: it is on the LEFT and stays there when the board flips`);
-      expect(!/evalRail\([^)]*flip/.test(band),
-        `${site.file} — nothing about the rail depends on the flip; the side is FIXED, like Lichess`);
+      // This assertion used to say the OPPOSITE — "nothing about the rail depends on the flip;
+      // the side is FIXED, like Lichess" — and it was reading the BAND, where the flip is not
+      // passed under either rule: the three-line forwarder is what reads it. So it would have gone
+      // on passing whichever way the rail was actually wired. Inverted AND moved to the forwarder,
+      // because a rule pointed at the wrong text is worse than no rule.
+      expect(/EvalRail\([^)]*flipped:/.test(s),
+        `${site.file} — its evalRail forwarder passes flipped: to EvalRail. The rail's SIDE stays `
+        + 'on the left (asserted above); its FILL mirrors, so the colour at the bottom of the rail '
+        + 'is the colour at the bottom of the board.');
       if (site.overlays) {
         expect(/ChessBoardBand\([\s\S]{0,1200}?\.overlay\(alignment: \.topLeading\)/.test(band),
           `${site.file} — the arrow and badge overlays stay attached to ChessBoardBand, not to the `
@@ -391,10 +398,21 @@ function lineOf(file, re) {
       + 'in a view body is a second copy of the rule and would drift from the JS twin');
     expect(/AnalysisEval\.fillHeight\(rail:/.test(s) && !/height: height \*/.test(s),
       'and the fill height is the pure function, not arithmetic in a view body');
-    // The fill grows UP from the floor. Flip this and every evaluation in the app is backwards
-    // while every number behind it stays right — there is no other symptom.
-    expect(/\.overlay\(alignment: \.bottom\)/.test(s),
-      'the fill is anchored at the BOTTOM, so White grows upward');
+    // The fill grows from WHITE'S end — the floor normally, the ceiling when the board is
+    // flipped. Anchor this to a literal and every evaluation in the app is backwards for half the
+    // users while every number behind it stays right, which is the bug the client reported:
+    // "hindi na flip kapag nagflip ka, nasa taas parin ung black".
+    expect(/\.overlay\(alignment: AnalysisEval\.fillAlignment\(flipped:/.test(s),
+      'the fill anchor comes from AnalysisEval.fillAlignment(flipped:) — bottom normally, top when '
+      + 'the board is flipped, so the colour at the bottom of the rail is the colour at the bottom '
+      + 'of the board');
+    expect(/AnalysisEval\.labelAlignment\(fraction: fraction, flipped: flipped\)/.test(s),
+      'and the label follows its own block across the flip, or it lands on the sliver');
+    // labelInk takes NO flip, and that is load-bearing rather than an omission: the label hangs off
+    // the leading side's end, which is the end that side's own block covers whichever way up the
+    // rail is painted. What is behind the label never changes, so its ink cannot need to.
+    expect(!/AnalysisEval\.labelInk\([^)]*flipped/.test(s),
+      'while the label INK is orientation-free — see AnalysisEval.labelOnFill');
     expect(/\.clipShape\(RoundedRectangle/.test(s),
       'and the fill is clipped to the rail, or a full-height eval spills past the rounding');
     // The label is drawn at the size that FITS the rail, which is the same number the browser is

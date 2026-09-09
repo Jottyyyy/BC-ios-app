@@ -81,13 +81,24 @@ struct BoardView: View {
     /// screens pass `false` because they draw their own strips outside the board.
     var coordinates: Bool = true
 
+    // The piece in the air, and where the finger is. Both `private` AND defaulted, which is what
+    // keeps them out of the memberwise initializer — see the note above `style`: a `private var`
+    // WITHOUT a default would drag the whole init down to private and break the cross-file call
+    // sites in PhoneView.swift and PuzzleView.swift.
+    @State private var dragFrom: Int? = nil
+    @State private var dragPoint: CGPoint? = nil
+
     private var square: CGFloat { boardSize / 8 }
     private var occupied: Set<Int> { Set(pieces.map { $0.square }) }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             squares
+            // Hover under the pieces, the float above them — the source's zIndex 50 and 200. A
+            // float below the resting pieces would slide *behind* them on the way across.
+            hoverLayer.allowsHitTesting(false)
             pieceLayer.allowsHitTesting(false)
+            floatLayer.allowsHitTesting(false)
         }
         .frame(width: boardSize, height: boardSize)
         // One board-level gesture rather than per-piece: `pieceLayer` is `allowsHitTesting(false)`,
@@ -101,13 +112,77 @@ struct BoardView: View {
         .gesture(dragGesture, including: onDragMove == nil ? .subviews : .all)
     }
 
+    /// Tap still commits on release; the drag now SHOWS itself on the way.
+    ///
+    /// This used to be `.onEnded` only, on every board in the app — the move worked, but nothing
+    /// moved until you let go, which the client reported as the app not responding: *"sana yung
+    /// drag pieces kita na inaangat piyesa, parang sa android nabubuhat piyesa"*. `CHANGELOG.md`
+    /// had scoped it as *"a change to every board in the app, not to this screen"*, which is
+    /// exactly what this is: `BoardView` is the only board, so one gesture reaches all nine.
+    ///
+    /// The DROP square is measured from the same lifted point the hover is, not from the fingertip
+    /// — otherwise the piece lands on a different square from the one that was lit up under it.
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 4)
+        DragGesture(minimumDistance: BoardDrag.threshold)
+            .onChanged { value in
+                guard onDragMove != nil else { return }
+                if dragFrom == nil {
+                    // Only an occupied square lifts. `BoardView` knows no rules — legality is the
+                    // screen's job on drop — but lifting empty air is not a rule question.
+                    guard let from = squareAt(value.startLocation), occupied.contains(from) else { return }
+                    Haptics.play(.pickUp)
+                    withAnimation(.spring(response: BoardDrag.pickupResponse,
+                                          dampingFraction: BoardDrag.pickupDamping)) {
+                        dragFrom = from
+                    }
+                }
+                // NOT animated: this is written every frame, and a spring on it would make the
+                // piece lag the finger instead of following it.
+                dragPoint = value.location
+            }
             .onEnded { value in
+                defer {
+                    dragPoint = nil
+                    withAnimation(.spring(response: BoardDrag.releaseResponse,
+                                          dampingFraction: BoardDrag.releaseDamping)) {
+                        dragFrom = nil
+                    }
+                }
                 guard let onDragMove else { return }
-                guard let from = squareAt(value.startLocation), let to = squareAt(value.location) else { return }
+                guard let from = squareAt(value.startLocation),
+                      let to = squareAt(BoardDrag.hoverPoint(from: value.location, square: square))
+                else { return }
                 if from != to { onDragMove(from, to) }
             }
+    }
+
+    /// The square under the LIFTED PIECE — not under the finger, which is 0.45 of a square below it.
+    private var hoverSquare: Int? {
+        guard dragFrom != nil, let p = dragPoint else { return nil }
+        return squareAt(BoardDrag.hoverPoint(from: p, square: square))
+    }
+
+    @ViewBuilder private var hoverLayer: some View {
+        if let sq = hoverSquare {
+            Rectangle()
+                .fill(BoardDrag.hoverFill.opacity(BoardDrag.hoverFillOpacity))
+                .frame(width: square, height: square)
+                .position(center(sq))
+        }
+    }
+
+    /// The piece in the air: larger, shadowed, and riding above the fingertip so it is not hidden
+    /// under it. `allowsHitTesting(false)` at the call site — it must never eat the gesture.
+    @ViewBuilder private var floatLayer: some View {
+        if let from = dragFrom, let p = dragPoint,
+           let bp = pieces.first(where: { $0.square == from }) {
+            PieceImage(piece: bp.piece, size: square * BoardDrag.floatPieceSquares)
+                .shadow(color: .black.opacity(BoardDrag.shadowOpacity),
+                        radius: BoardDrag.shadowRadius,
+                        y: BoardDrag.shadowOffsetY)
+                .position(BoardDrag.floatCenter(at: p, square: square))
+                .transition(.scale(scale: 0))
+        }
     }
 
     /// Board-local point → logical square, honouring the flip. Nil outside the board.
@@ -222,6 +297,10 @@ struct BoardView: View {
         ZStack(alignment: .topLeading) {
             ForEach(pieces) { bp in
                 PieceImage(piece: bp.piece, size: square)
+                    // Dimmed, not hidden, while its own piece is in the air — the source's
+                    // `opacity: isDragOrigin ? 0.3 : 1`. Removing it outright makes the square
+                    // read as already empty, so a cancelled drag looks like a completed one.
+                    .opacity(bp.square == dragFrom ? BoardDrag.originOpacity : BoardDrag.restingOpacity)
                     .position(center(bp.square))
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
                     .zIndex(lastMove?.to == bp.square ? 1 : 0)

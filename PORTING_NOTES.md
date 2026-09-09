@@ -5,6 +5,142 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The piece lifts when you drag it (2026-09-09)
+
+Client: *"sana yung drag pieces kita na inaangat piyesa / Parang sa android nabubuhat piyesa / Or
+usually kapag drag kita mo piyesa nagalaw agad"* — on all the boards.
+
+The drag already **worked**; it was invisible. `BoardView.dragGesture` was `DragGesture(minimumDistance: 4)`
+with `.onEnded` only, so nothing happened between finger-down and finger-up and the app read as
+unresponsive. `CHANGELOG.md:1274` had scoped it exactly: *"a live ghost is a change to every board in
+the app, not to this screen, so it is out of scope here."* `BoardView` is the only Swift board, so
+one gesture reaches all nine — Analysis, Play vs Coach, Opening Trainer and the five puzzle solvers.
+
+### EXTRACTED: every number, from worklets the walker could not reach
+
+The lift lives in `Gesture.Pan()` worklets and `useAnimatedStyle` callbacks in
+`DragDropChessBoard.tsx`. The `StyleSheet.create` walk cannot see either — the `styles` block in that
+file holds the squares and the labels and nothing about a piece that has left the board — which is
+why none of it had ever been extracted.
+
+`extract_board_styles.js` now scans for it and writes `dragConstants` into `board_styles.json`,
+exactly as it already scans `EvalGraph.tsx`'s SVG attributes: *"cruder than the StyleSheet walk, but
+it still RE-DERIVES on every run instead of trusting a copy, which is the whole point."*
+`board_layout_check.js` §9 pins **both** languages against that JSON rather than against each other —
+CLAUDE.md's *"two hand-typed copies agreeing with each other is not verification"*, taken literally.
+
+Lengths are multiples of **SQUARE_SIZE**, never pixels: the board is sized per device.
+
+**The springs are converted, not copied.** Reanimated states a spring as (stiffness, damping, mass),
+SwiftUI as (response, dampingFraction). The extractor applies the standard identities —
+`response = 2π/√(k/m)`, `dampingFraction = c/(2√(km))` — so the curve is the source's own rather than
+a guess that looked close.
+
+**The browser moved too.** It had softer values of its own (a 1.15 scale, a 0.35-square lift) while
+its shadow and its hover colour already matched the source exactly, which is what suggested the rest
+was meant to. Both now read one table.
+
+### FIXED: the pickup haptic fired on drop
+
+`PuzzleSolverParts.swift` played `Haptics.play(.pickUp)` inside `onDragMove` — which runs on
+**release**. `Haptics.Kind.pickUp` is documented *"ported: DragDropChessBoard.tsx:351"*, where it
+fires in `onBegin`. The buzz for lifting a piece arrived as the piece was put down. It moved into
+`BoardView`'s gesture, where the browser component has always had it.
+
+### DEVIATION: the drop point moved, and it had to
+
+The drop square is now measured from the **lifted** point, not the fingertip — the source applies
+the same `SQUARE_SIZE * 0.45` correction in `onEnd` that it applies on hover. Without it the piece
+hovers over one square while another lights up and the move lands on the second, so what happens is
+not what the user watched themselves do.
+
+This is invisible to any test that drops at a square CENTRE, because 0.45 is less than half a
+square: every existing drag assertion stayed green while the correction did not exist.
+`board_component_test.js` gained two that drop 0.7 of a square low, and they report `e2e3` when the
+correction is removed.
+
+### NOT PORTED: `EDGE_TOLERANCE`, because it cannot fire in the source either
+
+`coordsToSquare` computes `EDGE_TOLERANCE = SQUARE_SIZE * 0.15` and four centre-biasing branches
+around it. **None of them can ever execute.** At remainder `r` inside a square of side `S`:
+
+    dist(currentCentre) = |r − 0.5·S|      dist(previousCentre) = r + 0.5·S
+    the branch needs    r + 0.5·S < 0.5·S − r    ⟺    r < 0
+
+and `r ≥ 0` always; the far-edge branch is the same by symmetry, needing `r > S`. Swept over 12,000
+sample points it changes the square **zero** times.
+
+So there were three options and only one honest one. Porting it faithfully means shipping a no-op.
+Building what its comment describes (*"snap toward square center within 15% of edge"*) means
+inventing behaviour the client's own reference app never had — and *"parang sa Android"* is the whole
+brief. It is therefore **extracted but not consumed**: the constant stays in `board_styles.json` so
+the fact of it stays on the record, and `board_layout_check.js` asserts neither language reads it, so
+nobody later "finishes the job" by wiring up a branch that is unreachable where it came from.
+
+This is the same shape as `renderEvalBar` — an author's comment describing something the code does
+not do — and it is resolved the other way, because there the code was never called at all and here
+it is called and does nothing.
+
+---
+
+## The eval rail follows the board (2026-09-09)
+
+Client, with a screenshot of the Analysis Board: *"Yung engine bar hindi na flip kapag nagflip ka.
+Nasa taas parin ung black."* The board was on Black's perspective — ranks running 1→8 downward — the
+evaluation was **−1.1**, and Black's larger block was still at the top of the rail.
+
+### REVERSED: the fill mirrors with the board; the side still does not
+
+The rail stays on the **left** whichever way the board faces. What changed is that White's block now
+grows from **White's own end** — the floor normally, the ceiling once the board is flipped — so the
+colour at the bottom of the rail is always the colour at the bottom of the board.
+
+**The rule this replaces was defended by an appeal this repo stated two contradictory ways.**
+`PORTING_NOTES` said *"Lichess mirrors its bar; Chess.com does not; we do not"*; `app.css` said
+*"Lichess and Chess.com both keep it put"*. One of them was wrong whichever way the truth runs, and
+neither was checkable from here — a search turned up nothing authoritative about the eval bar
+specifically, so no claim about either app is made now. Nor was there a source precedent behind
+either: `renderEvalBar` (`board.tsx:2741`) is dead code with a single grep hit, so the fixed-side
+rule was this port's own invention and the client's instruction is the better warrant.
+
+`EngineScore` is unchanged and still *"Always White-relative"*. Only the axis it is painted along
+knows about the flip; nothing about the number does.
+
+### The design point: placement flips, ink does not
+
+Splitting one predicate into two is what keeps this honest.
+
+- `labelOnFill(fraction)` — is the label on White's block or on bare track? **Orientation-free.**
+  The label hangs off the leading side's end, and that end is the one that side's own block covers,
+  whichever way up the rail is painted. So `labelInk` takes no `flipped` at all.
+- `labelAtBottom(fraction, flipped)` — which **physical** end that works out to.
+
+The browser had the two welded together — `.lbl.bottom` carried both `bottom: 0` and the dark ink —
+which is exactly the coupling that would have inked a flipped label for the ground it was no longer
+standing on. They are `bottom`/`top` and `on-fill`/`on-track` now, and `board_layout_check.js`
+asserts neither end class carries a colour.
+
+### The gates were rewritten, not loosened, and one of them was pointed at the wrong text
+
+`swift_layout_check.js:303` used to read *"nothing about the rail depends on the flip; the side is
+FIXED, like Lichess"* — and it was testing the **band**, where the flip is not passed under either
+rule, because the three-line `evalRail(height:)` forwarder is what reads it. **It would have gone on
+passing whichever way the rail was actually wired.** Inverted and moved to the forwarder.
+
+`swift_layout_mutation_test.js` gained `rail_fill_ignores_the_flip` — which reintroduces the
+client's exact bug — and `rail_label_ignores_the_flip`, and `second_eval_rail_in_the_module` was
+re-anchored: **23/23 killed**, up from 21/21 plus one that had silently stopped applying.
+
+### INVENTED: nothing new
+
+Every rail number is still the extracted `evalBar*` block (`board_styles.json:1451-1493`), untouched.
+The axis was already a declared invention (see the entry below); this only changes which way it
+points. `OpeningTreeScreens` gained a `boardFlipped` property and `openings.js` an `explorerFlipped`
+so the board and the rail read one expression rather than two — a rail disagreeing with its own board
+about orientation is precisely the bug being fixed.
+
+---
+
 ## The trial that was never there (2026-09-08)
 
 Client: *"Wala parin yung option na free 7 day trial"*, with a screen recording of the paywall
@@ -1279,10 +1415,15 @@ colours. `AnalysisPalette.evalTrack` / `evalFill` are `#2A3540` / `#DEDEDE` wher
 
 **Consequences that are decisions, not accidents:**
 
-- **The side is FIXED.** Flipping the board does not move the rail, and White always fills from the
-  bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
+- ~~**The side is FIXED.** Flipping the board does not move the rail, and White always fills from
+  the bottom. Lichess mirrors its bar; Chess.com does not; we do not. `EngineScore` is documented
   "Always White-relative", so nothing connects the flip to the rail and the gate asserts nothing
-  will. With Black at the bottom, the white block is still at the bottom — intended.
+  will. With Black at the bottom, the white block is still at the bottom — intended.~~
+  **REVERSED on 2026-09-09 — see "The eval rail follows the board" at the top of this file.** The
+  side is still fixed; the FILL mirrors now. Recorded in place rather than rewritten, because the
+  half of this that survived matters: the rail does not change sides, and `EngineScore` is still
+  White-relative. What did not survive is the appeal to other apps, which this repo stated two
+  contradictory ways.
 - **`AnalysisEval.mainHeight` (8) is load-bearing** — it is the track inside the rail, and
   `railWidth` is built from it. For one round it was retired-but-kept, on the argument that
   `matches("evalBarTrack", "height", …)` is the only pin on `evalBarTrack` and deleting the

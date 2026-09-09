@@ -358,7 +358,8 @@ var BiyaAnalysisMetrics = (function () {
     mainHeight: 8, mainRadius: 4,
     // The per-engine-line micro bar. Real in the source, still drawn, still HORIZONTAL.
     microHeight: 3, microRadius: 1, microMarginBottom: 4,
-    // The vertical rail. LEFT, FIXED, never mirrored on a flip. Every number is a real key in the
+    // The vertical rail. LEFT and fixed there, but the FILL mirrors on a flip — the colour at the
+    // bottom of the rail is the colour at the bottom of the board. Every number is a real key in the
     // source's own `evalBar*` block — the block `renderEvalBar` (board.tsx:2741) never rendered,
     // whose header comment reads "RENDER EVAL BAR (vertical, DroidFish-style)" and whose style says
     // `flexDirection: 'row'`. DEVIATION: we build the comment. See PORTING_NOTES.md.
@@ -382,14 +383,31 @@ var BiyaAnalysisMetrics = (function () {
   }
 
   /**
-   * Which end the score hangs off: the LEADING side's. White ahead -> bottom, Black ahead -> top.
+   * Is the label sitting on White's fill rather than on the bare track?
+   * Mirrors AnalysisEval.labelOnFill.
+   *
+   * ORIENTATION-INDEPENDENT, and that is the whole trick: the label hangs off the LEADING side's
+   * end, and the leading side's end is the one its own block covers — whichever way up the rail is
+   * painted. So the INK needs no flip at all; only the physical end does.
+   *
+   * Exact, not tuned: `>= 0.5` is precisely the condition under which White's block reaches past
+   * the middle, so the label always lands on a solid block of the colour it was inked for.
+   */
+  function evalLabelOnFill(fraction) { return fraction >= 0.5; }
+
+  /**
+   * Which PHYSICAL end the score hangs off, once the flip is taken into account.
    * Mirrors AnalysisEval.labelAtBottom.
    *
-   * Exact, not tuned: `>= 0.5` is precisely the condition under which the BOTTOM of the rail is
-   * inside the white fill, and `< 0.5` precisely the condition under which the TOP is bare track —
-   * so the label always lands on a block of solid colour it was inked for.
+   * Unflipped, White ahead -> bottom. Flipped, White ahead -> top, because that is where White's
+   * block now is. The rail follows the board; see the header comment in app.css.
    */
-  function evalLabelAtBottom(fraction) { return fraction >= 0.5; }
+  function evalLabelAtBottom(fraction, flipped) {
+    return flipped ? !evalLabelOnFill(fraction) : evalLabelOnFill(fraction);
+  }
+
+  /** Which end White's block grows from. Mirrors AnalysisEval.fillAlignment. */
+  function evalFillAtBottom(flipped) { return !flipped; }
 
   /**
    * The size the label is actually drawn at: whatever fits labelGlyphs across the rail, capped at
@@ -882,24 +900,39 @@ var BiyaAnalysisMetrics = (function () {
     expectNear(evalFillHeight(200, 1), 200, 'a mate delivered fills it');
     expectNear(evalFillHeight(200, 2), 200, 'a fraction past 1 clamps');
     expectNear(evalFillHeight(200, -1), 0, 'and one below 0 clamps too');
-    expect(evalLabelAtBottom(1), '1-0 hangs off the BOTTOM, on the white block');
-    expect(evalLabelAtBottom(0.95), 'so does a forced mate for White');
-    expect(evalLabelAtBottom(0.5), 'and a dead-level position, stably');
-    expect(!evalLabelAtBottom(0.49), 'a Black edge hangs off the TOP');
-    expect(!evalLabelAtBottom(0), 'and so does 0-1, on the bare dark track');
+    expect(evalLabelAtBottom(1, false), '1-0 hangs off the BOTTOM, on the white block');
+    expect(evalLabelAtBottom(0.95, false), 'so does a forced mate for White');
+    expect(evalLabelAtBottom(0.5, false), 'and a dead-level position, stably');
+    expect(!evalLabelAtBottom(0.49, false), 'a Black edge hangs off the TOP');
+    expect(!evalLabelAtBottom(0, false), 'and so does 0-1, on the bare dark track');
+    // Flipped, every one of those moves to the other end — because White's BLOCK moved there.
+    expect(!evalLabelAtBottom(1, true), 'flipped, 1-0 hangs off the TOP: White is up there now');
+    expect(evalLabelAtBottom(0, true), 'and 0-1 off the BOTTOM, still on the bare track');
+    expect(evalFillAtBottom(false) && !evalFillAtBottom(true),
+      'White grows from the floor normally and from the ceiling when the board is flipped');
+    // The ink question is orientation-free, and that is the point: the label rides its own block,
+    // so what is behind it never changes. Only the physical end does.
+    expect(evalLabelOnFill(1) && !evalLabelOnFill(0),
+      'labelOnFill asks only whose block the label is on, never which way the board faces');
     // LEGIBILITY, as the geometric fact it rests on rather than as a promise. The label's band is
-    // one line of rail type plus its two insets; evalLabelAtBottom is true exactly when that band
-    // at the BOTTOM is inside the white fill, and false exactly when the band at the TOP is bare
-    // track. Swept over the whole range, on the SHORTEST rail the app can draw.
+    // one line of rail type plus its two insets; evalLabelOnFill is true exactly when that band is
+    // inside White's block, and false exactly when it is on bare track. Stated on the BLOCK rather
+    // than on an end, so it holds in both orientations at once — which is what makes the flip a
+    // change to where the label goes and not to whether it can be read. Swept over the whole
+    // range, on the SHORTEST rail the app can draw.
     var railEdge = boardSizeBesideRail(375, 3);
     var labelBand = (evalLabelFontSize() * ENGINE_LINE_RATIO + EVAL_BAR.railPaddingV * 2) / railEdge;
     for (var st = 0; st <= 20; st++) {
       var fr = st / 20;
-      if (evalLabelAtBottom(fr)) {
-        expect(fr >= labelBand, 'at ' + fr + ' the bottom label sits inside the white fill');
+      if (evalLabelOnFill(fr)) {
+        expect(fr >= labelBand, 'at ' + fr + " the label sits inside White's own block");
       } else {
-        expect(1 - fr >= labelBand, 'at ' + fr + ' the top label sits on bare track');
+        expect(1 - fr >= labelBand, 'at ' + fr + ' the label sits on bare track');
       }
+      expect(evalLabelAtBottom(fr, false) === evalLabelOnFill(fr),
+        'at ' + fr + ' unflipped, the label is at the bottom exactly when it is on White');
+      expect(evalLabelAtBottom(fr, true) === !evalLabelOnFill(fr),
+        'at ' + fr + " flipped, it is at the other end — White's block moved");
     }
     // THE LABEL FITS BY CONSTRUCTION, at a size BOTH renderers draw — CSS has no
     // minimumScaleFactor, so an 11px label in a 20px rail would clip here while SwiftUI shrank.
@@ -1755,6 +1788,7 @@ var BiyaAnalysisMetrics = (function () {
     autoplayBandHeight: autoplayBandHeight, engineAvailable: engineAvailable,
     EVAL_BAR: EVAL_BAR, EVAL_CLAMP: EVAL_CLAMP, evalBarFraction: evalBarFraction,
     evalFillHeight: evalFillHeight, evalLabelAtBottom: evalLabelAtBottom,
+    evalLabelOnFill: evalLabelOnFill, evalFillAtBottom: evalFillAtBottom,
     evalLabelFontSize: evalLabelFontSize, evalLabelMinScale: evalLabelMinScale,
     GRAPH: GRAPH, graphPoint: graphPoint,
     CLASSIFICATIONS: CLASSIFICATIONS, CLASSIFICATION_ORDER: CLASSIFICATION_ORDER,
