@@ -9,6 +9,31 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-09 (changed) — 1.0.8 (55) uploaded: the drag ghost and the eval rail
+
+Delivery UUID `09e1ac65-40ce-431a-868c-22aa63785719`. 85,699,067 bytes, `UPLOAD SUCCEEDED with no
+errors`, via `tools/ship/ship_testflight.sh 55`. Carries PR #36 (the eval rail follows the board
+flip) and PR #37 (the piece lifts when dragged, on all nine boards) on top of everything in 54.
+
+**This tree compiled on the first try**, which is worth recording because the two preceding merges
+from `origin/main` did not. Nothing needed fixing here; the Windows-authored Swift was sound.
+
+**Verified on this Mac before the archive:** `swift build` clean at the root and in `DemoApp/`;
+`StockfishSmoke` **SMOKE OK**; `swift_lint` 144 files, `swift_symbol_check` **3,874** references /
+160 types, `swift_enum_payload_check`, `trial_gate_check` 60, `replay_premium` 656, `replay_login`
+535, `replay_stockfish` 80, `stockfish_vendor_check` 26; and all eight self-checks —
+**`AnalysisMetricsCheck` 510 → 555**, which is the one covering the new eval-rail and drag geometry,
+plus PaywallMetricsCheck 141, LoginMetricsCheck 181, HomeMetricsCheck 212, PuzzleMetricsCheck 84,
+PairingMetricsCheck 44, CoachMetricsCheck 59, PieceArtCheck 112.
+
+`check_iap_offers.js` ran again as a ship preflight and passed: both products still carry a
+`FREE_TRIAL` of `ONE_WEEK` in all 175 territories. Both subscriptions remain **`READY_TO_SUBMIT`**.
+
+**Still not pushed.** `main` is merged locally through this release but the push 403s
+(`denied to fush-toj`) — builds 48, 49, 53, 54 and now 55. `origin/main` still cannot compile.
+
+`web-demo/` not updated — a release.
+
 ### 2026-09-09 (added) — The piece lifts when you drag it, on all nine boards
 
 Client: *"sana yung drag pieces kita na inaangat piyesa / Parang sa android nabubuhat piyesa"* — on
