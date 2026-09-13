@@ -294,6 +294,40 @@ function run() {
     }
   }
 
+  // ── The select header: which string wears which style ───────────────────────
+  //
+  // EXACTLY the failure above, one screen over, and it shipped for the whole life of this screen.
+  // The port put the kicker "PLAY AGAINST THE" in `titleLarge` (30pt gold) and the app's own name
+  // in `titleSmall` (12pt white) — the source has them the other way round (`index.tsx:185-192`),
+  // and so does spec §2.5. Both languages agreed with each other, so every gate stayed green and
+  // only the RN disagreed. `coach_screen_test.js` now pins the browser half; this pins the Swift.
+  //
+  // The symptom the client reported was the width: a 20-character kicker at 30pt does not fit, so
+  // it wrapped into the line below. The cause was never the size.
+  {
+    const sel = code(read(UI, 'CoachScreens.swift'));
+    expect(/Text\(CoachStrings\.selectFamily\)[\s\S]{0,200}?titleLargeFontSize/.test(sel),
+      'the BRAND NAME is the big gold line — selectFamily at titleLargeFontSize');
+    expect(/Text\(CoachStrings\.selectHeader\)[\s\S]{0,200}?titleSmallFontSize/.test(sel),
+      'and the kicker is small — selectHeader at titleSmallFontSize');
+    expect(/multilineTextAlignment\(\.center\)/.test(sel),
+      'the hard-wrapped brand name is CENTRED; leading alignment is what hung the old second line '
+      + 'off to the left while everything beneath it was centred');
+
+    // Eight constants the extraction has always carried were declared and read by nothing. A dead
+    // extracted constant is the quiet half of a bad port: the number is right, the screen ignores
+    // it, and no gate can tell the difference. Assert they are actually spent.
+    for (const c of ['titleBlockPaddingHorizontal', 'titleBlockPaddingTop',
+                     'titleBlockPaddingBottom', 'titleTopRowMarginBottom',
+                     'knightDecorFontSize', 'knightDecorColor', 'knightDecorOpacity',
+                     'chessPieceAccentFontSize', 'chessPieceAccentColor',
+                     'chessPieceAccentMarginTop', 'chessPieceAccentMarginBottom',
+                     'titleLargeLineHeight']) {
+      expect(new RegExp(`CoachSelect\\.${c}\\b`).test(sel + code(read(UI, 'CoachLayout.swift'))),
+        `CoachSelect.${c} is read by the screen — it was extracted and then ignored`);
+    }
+  }
+
   // ── CoachGame: the draft contract ───────────────────────────────────────────
   {
     eq('biya.coach.draft.v1.', swStr(swGame, 'draftKeyPrefix'), 'the draft key prefix');

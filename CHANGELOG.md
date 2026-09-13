@@ -9,6 +9,48 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-13 (fixed) — The coach header: the two title styles had been swapped, and every gate was fine with it
+
+Client, circling the *"♞ PLAY AGAINST THE ♞"* block on the coach-select screen:
+**"Paayos para kasya, lang maganda tingnan."**
+
+The obvious reading is *make the text smaller*. That would have been the wrong fix. **No font size
+was wrong; two of them were in the wrong places.**
+
+`index.tsx:185-192` sets the kicker *"PLAY AGAINST THE"* in `titleSmall` — 12pt, white — and the
+brand name *"BIYAHERONG COACH / FAMILY BOTS"* in `titleLarge` — 30pt, gold, weight 900, with a hard
+`{'\n'}`. **The port had the two styles the other way round.** So a 20-character kicker was being set
+at 30pt, and the app's own name was the small line underneath it. Three faults rode along: the `♟`
+accent below the title was never ported at all, the two knights were baked into the copy string
+rather than being their own nodes, and the whole block was nested *inside* the back-button row —
+laying out in 268pt where the RN screen gives it 342.
+
+Restored in both languages. `CoachStrings` gains `selectFamily`, `knightDecor` and `chessAccent`;
+the header splits into a chrome row (back + logo) and a full-width title block. One derived constant,
+`CoachLayout.titleLargeExtraLeading` = `titleLargeLineHeight − titleLargeFontSize`, converts RN's
+total `lineHeight` into SwiftUI's between-lines `.lineSpacing` so the two-line name wraps at the
+right leading. Nothing is invented — both operands are extracted.
+
+**Why nothing caught it, which is the part worth keeping.** All twelve of the block's extracted
+constants were **dead** — `titleBlockPadding*`, `titleTopRowMarginBottom`, `knightDecor*`,
+`chessPieceAccent*`, `titleLargeLineHeight`. `coach_styles.json` had carried every one since the
+first extraction and nothing read them. This is the same shape as the `kingWhite`/`kingBlack` swap
+that `replay_coach.js:270-274` already documents: *both languages had it, so the twin agreed with
+itself and every gate stayed green; only the RN disagreed.* A JS↔Swift replay proves the two ports
+match **each other**, never that either matches the source.
+
+So the new assertions pin the **pairing** rather than the sizes — brand name at `titleLargeFontSize`,
+kicker at `titleSmallFontSize`, in the Swift and in the DOM — plus a loop over all twelve constants
+asserting each is actually read, which turns the dead-constant signal into a gate.
+
+Gates: `replay_coach` 338 → **353**, `coach_screen_test` 124 → **130**, `js_goldens` **36,201**
+across 86 suites. Both new gates were mutated and watched to fail: re-swapping the Swift styles
+names two assertions, and putting the kicker back in `.cgs-title` names the third.
+
+**`web-demo/` was updated** — same arrangement, `.cgs-title-block` / `.cgs-kicker` / `.cgs-accent`;
+`.cgs-title` now reads the `--cgs-title-large-line-height` variable that had been published and never
+used. `PORTING_NOTES.md` and `docs/play-vs-coach.md` carry the post-mortem.
+
 ### 2026-09-10 (changed) — The paywall opens on Monthly, and the gate that should have watched it did not exist
 
 Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*

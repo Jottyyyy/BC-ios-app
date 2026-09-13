@@ -103,12 +103,27 @@ var BiyaCoachSelect = (function () {
     back.innerHTML = BiyaIcons.back();
     back.onclick = function () { if (cb.onExit) cb.onExit(); };
     header.appendChild(back);
-    var centre = el('div', 'cgs-header-center');
-    centre.appendChild(el('div', 'cgs-title', STR.selectHeader));
-    centre.appendChild(el('div', 'cgs-family', STR.selectFamily));
-    header.appendChild(centre);
     header.appendChild(BiyaIcons.brandLogoEl('cgs-logo'));
     root.appendChild(header);
+
+    // The title block is its OWN band, below the chrome row — `index.tsx:185-192`, where `backBtn`
+    // and `titleBlock` are stacked siblings. It used to sit between the back button and the logo,
+    // which is what left the Swift twin too little width to fit the line. This renderer's flex row
+    // simply grew instead, so the browser never showed the bug — which is why no gate caught it.
+    //
+    // And the two styles were the wrong way round in BOTH languages: the kicker had `titleLarge`
+    // (30pt gold) and the brand name had `titleSmall` (12pt white). The twins agreed with each
+    // other and only the RN disagreed — the same shape as the `kingWhite`/`kingBlack` bug that
+    // `replay_coach.js` records.
+    var titleBlock = el('div', 'cgs-title-block');
+    var kicker = el('div', 'cgs-kicker');
+    kicker.appendChild(el('span', 'cgs-knight', STR.knightDecor));
+    kicker.appendChild(el('span', 'cgs-kicker-text', STR.selectHeader));
+    kicker.appendChild(el('span', 'cgs-knight', STR.knightDecor));
+    titleBlock.appendChild(kicker);
+    titleBlock.appendChild(el('div', 'cgs-title', STR.selectFamily));
+    titleBlock.appendChild(el('div', 'cgs-accent', STR.chessAccent));
+    root.appendChild(titleBlock);
 
     root.appendChild(el('div', 'cgs-blurb', STR.selectBlurb));
     root.appendChild(el('div', 'cgs-tagline', STR.tagline));

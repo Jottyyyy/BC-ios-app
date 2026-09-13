@@ -43,9 +43,9 @@ artificially slow, which is the opposite of what a floor is for.
 | `Sources/BiyaherongCoachCore/CoachBook.swift` | The lookup. Tables are generated into `CoachBookData.swift`. |
 | `DemoApp/…/CoachStore.swift` | The reply loop: book → search → pace → apply → premove. |
 | `DemoApp/…/CoachScreens.swift` | The three screens and the resign prompt. |
-| `DemoApp/…/CoachLayout.swift` | The twelve unextracted values and the five glyphs, in one place. |
+| `DemoApp/…/CoachLayout.swift` | The unextracted values, the values *derived* from an extracted one (`titleLargeExtraLeading` = line height − font size), and the four transport glyphs. |
 | `DemoApp/…/CoachMetricsCheck.swift` | `swift run CoachMetricsCheck`. |
-| `tools/qa/replay_coach.js` | 239 Swift expectations, replayed against the JS. |
+| `tools/qa/replay_coach.js` | 353 Swift expectations, replayed against the JS. |
 
 ### The presentation layer
 
@@ -213,7 +213,7 @@ the curve in prose. Every one is an SVG attribute literal in `components/EvalGra
 extractor now walks — along with the `height={60}` at its call site in `play.tsx`. `CLAMP = 500` is
 read too, so the curve and the maths behind it cannot disagree about what "off the scale" means.
 
-## Two more things that are easy to get wrong
+## More things that are easy to get wrong
 
 ### The reply is paced, not delayed
 
@@ -256,6 +256,42 @@ Three things made it invisible, and all three are worth remembering before trust
 Now: the generator's table holds `{name}` placeholders instead of Swift, it evaluates its own output
 against the JS twin before writing, and `replay_coach.js` re-checks the **committed** file on every
 gate run — because a generator only runs when someone runs it.
+
+### A two-language port can invert a style and stay green forever
+
+The coach-select header shipped with its two title styles **swapped**. `index.tsx:185-192` puts the
+kicker *"♞ PLAY AGAINST THE ♞"* in `titleSmall` (12pt, white) and the brand name
+*"BIYAHERONG COACH / FAMILY BOTS"* in `titleLarge` (30pt, gold, weight 900, hard-wrapped). The port
+had it the other way round, so a 20-character kicker was set at 30pt in a 268pt slot and the app's
+own name was the 12pt line under it. The `♟` accent was dropped entirely, the two knights were baked
+into the copy string instead of being their own nodes, and the whole block sat *inside* the
+back-button row — 268pt of usable width where the RN screen has 342.
+
+The client saw only the symptom and described it exactly: **"Paayos para kasya, lang maganda
+tingnan."**
+
+**This is the same failure shape as the `kingWhite`/`kingBlack` swap** that
+`replay_coach.js:270-274` already carries a note about: *both languages had it, so the twin agreed with itself and every gate
+stayed green; only the RN disagreed.* A JS↔Swift twin check proves the two ports match each other.
+It says nothing about whether either matches the source.
+
+**All twelve of the block's extracted constants were dead** the whole time — `titleBlockPadding*`,
+`titleTopRowMarginBottom`, `knightDecor*`, `chessPieceAccent*`, `titleLargeLineHeight`. That was the
+detectable signal, and nothing was looking at it: `coach_styles.json` had carried them since the
+first extraction. **An unread constant in an extracted table is evidence that a block was
+transcribed rather than assembled** — it is worth grepping for before trusting a screen.
+
+What guards it now, in both languages:
+
+- `replay_coach.js` asserts the **pairing**, not the sizes — `selectFamily` at `titleLargeFontSize`
+  and `selectHeader` at `titleSmallFontSize` — plus a loop over all twelve `CoachSelect.*` title
+  constants confirming each is actually read by `CoachScreens.swift`.
+- `coach_screen_test.js` asserts the same pairing in the DOM: `.cgs-title` is the brand name,
+  `.cgs-kicker-text` is the kicker, two `.cgs-knight` nodes, the accent present, the hard break
+  surviving into the rendered text.
+
+Both were mutation-proved before being trusted: re-swapping the styles fails two `replay_coach`
+assertions by name, and putting the kicker back in the big gold line fails `coach_screen_test`.
 
 ## How to test
 

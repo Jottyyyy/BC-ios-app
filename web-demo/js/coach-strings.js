@@ -26,8 +26,21 @@ var BiyaCoachStrings = (function () {
 
   var STR = {
     // --- Coach Select (2.5) ---
-    selectHeader: '♞ PLAY AGAINST THE ♞',
-    selectFamily: 'BIYAHERONG COACH FAMILY BOTS',
+    /* The SMALL kicker above the name, 12pt white — `index.tsx:187` is
+       `<Text style={styles.titleSmall}> PLAY AGAINST THE </Text>`, flanked by two separate
+       `knightDecor` Texts at 16pt white. The knights used to be baked into this string, which put
+       them at 30pt gold and made the line too wide to fit; see `knightDecor` below. */
+    selectHeader: 'PLAY AGAINST THE',
+    /* The BRAND NAME, and the big gold line — `index.tsx:191` is
+       `<Text style={styles.titleLarge}>BIYAHERONG COACH{'\n'}FAMILY BOTS</Text>`. The break is
+       HARD in the source and has to stay hard: each half fits the width at 30pt/900, so the line
+       never has to be measured and can never reflow. */
+    selectFamily: 'BIYAHERONG COACH\nFAMILY BOTS',
+    /* Single glyphs, like `kingWhite`/`kingBlack` below and for the same reason. Baked into
+       `selectHeader` they inherited that line's style; on their own they get `knightDecor`
+       (16pt white at 0.85) and `chessPieceAccent` (22pt gold), which is what the source draws. */
+    knightDecor: '♞',
+    chessAccent: '♟',
     selectBlurb: 'Train your chess skills with fun AI opponents.',
     allowTakeBack: 'Allow Take Back',
     tagline: 'Kabyahe mo sa pag improve!!',

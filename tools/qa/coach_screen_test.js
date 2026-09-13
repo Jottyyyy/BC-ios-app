@@ -278,7 +278,30 @@ function run() {
     });
     const root = view.children[0];
     expect(root.classList.contains('cgs-view'), 'the select screen mounts');
-    eq(textOf(root, 'cgs-title')[0], STR.selectHeader, 'the header');
+    // THE HEADER, and which STYLE each half wears — the part nothing guarded.
+    //
+    // The port had these swapped: the kicker wore `titleLarge` (30pt gold) and the app's own name
+    // wore `titleSmall` (12pt white). Both languages agreed with each other, so every gate stayed
+    // green and only the RN disagreed — the same shape as the `kingWhite`/`kingBlack` bug
+    // `replay_coach.js` records. Asserting the TEXT alone is exactly what let it through, so this
+    // asserts the PAIRING: which element, carrying which style, holds which string.
+    eq(textOf(root, 'cgs-title')[0], STR.selectFamily,
+       'the big gold line (.cgs-title, titleLarge) is the BRAND NAME');
+    eq(textOf(root, 'cgs-kicker-text')[0], STR.selectHeader,
+       'and the small white kicker (.cgs-kicker-text, titleSmall) is "PLAY AGAINST THE"');
+    eq(textOf(root, 'cgs-knight').length, 2,
+       'the two knights are their own nodes — baked into the copy they wore the big line\'s style, '
+       + 'which is half of why that line no longer fit');
+    eq(textOf(root, 'cgs-accent')[0], STR.chessAccent,
+       'and the pawn accent is drawn at all; it was missing from the port entirely');
+    expect(STR.selectFamily.indexOf('\n') > 0,
+       'the brand name keeps the source\'s HARD break, so neither half is ever measured or reflowed');
+    // The title block is a band of its own, not a cell between the back button and the logo. That
+    // one structural change is what cut the Swift twin's width from ~342pt to ~268 and turned
+    // "fits" into "wraps".
+    expect(first(root, 'cgs-title-block') != null, 'the title block is its own band');
+    expect(first(root, 'cgs-header-center') == null,
+       'and the old centre cell inside the chrome row is gone');
     eq(byClass(root, 'cgs-card').length, 5, 'five coach cards');
     eq(textOf(root, 'cgs-name').join('|'),
        'Jaden Pogi|Pretty Jade|Handsome Jude|Mommy Julie|Coach Pogi',
