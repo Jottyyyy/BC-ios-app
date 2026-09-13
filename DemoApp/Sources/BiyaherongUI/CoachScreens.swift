@@ -64,30 +64,94 @@ struct CoachSelectScreen: View {
         }
     }
 
+    /// The header, as two STACKED bands — which is the whole fix.
+    ///
+    /// The title used to sit inside the back button's `HStack`, between a 44pt button and a 44pt
+    /// logo. That left it ~268pt on a 390pt phone where the source gives its title block the full
+    /// width less `titleBlockPaddingHorizontal` either side — about 342. RN keeps `backBtn` and
+    /// `titleBlock` as stacked column siblings (`index.tsx:179-193`), and putting them in one row
+    /// is the single change that turned "fits" into "wraps into the line below it".
     private var header: some View {
+        VStack(spacing: .zero) {
+            chromeRow
+            titleBlock
+        }
+    }
+
+    /// Back on the left, the brand ring on the right, and nothing between them any more.
+    private var chromeRow: some View {
         HStack {
             NavIconButton(.back, size: CoachSelect.backIconFontSize,
                           tint: CoachSelect.backIconColor, action: { onExit() })
             .frame(width: CoachSelect.backBtnWidth, height: CoachSelect.backBtnHeight)
             Spacer()
-            VStack(spacing: .zero) {
-                Text(CoachStrings.selectHeader)
-                    .font(.system(size: CoachSelect.titleLargeFontSize, weight: .heavy))
-                    .foregroundStyle(CoachSelect.titleLargeColor)
-                    .tracking(CoachSelect.titleLargeLetterSpacing)
-                Text(CoachStrings.selectFamily)
-                    .font(.system(size: CoachSelect.titleSmallFontSize, weight: .semibold))
-                    .foregroundStyle(CoachSelect.titleSmallColor)
-                    .tracking(CoachSelect.titleSmallLetterSpacing)
-            }
-            Spacer()
-            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. Swift had
-            // an invisible counterweight of the same size, so this is a drop-in: same footprint,
-            // no longer blank.
+            // The browser draws `.cgs-logo` / `.cgp-logo` here — the `AppLogo.tsx` ring. The RN
+            // screen has no logo at all; this is the port's own addition and it stays, now that it
+            // is not competing with the title for width. The margin is horizontal rather than
+            // leading-only for the same reason: with the title gone from this row, a leading-only
+            // pad would have left the ring flush against the screen edge.
             HomeLogo(size: CoachSelect.backBtnWidth)
         }
         .padding(.top, CoachSelect.backBtnMarginTop)
-        .padding(.leading, CoachSelect.backBtnMarginLeft)
+        .padding(.horizontal, CoachSelect.backBtnMarginLeft)
+    }
+
+    /// `index.tsx:185-192`, restored.
+    ///
+    /// **The two styles were the wrong way round.** The source puts the kicker
+    /// *"PLAY AGAINST THE"* in `titleSmall` — 12pt, white — and the BRAND NAME
+    /// *"BIYAHERONG COACH / FAMILY BOTS"* in `titleLarge` — 30pt, gold, weight 900, hard-wrapped.
+    /// The port had them swapped, which put a 20-character kicker at 30pt in a 268pt slot and left
+    /// the app's own name at 12. The client reported the symptom — *"paayos para kasya"* — and this
+    /// is the cause.
+    ///
+    /// All twelve constants the extraction carries for this block were dead until now:
+    /// `titleBlockPadding*`, `titleTopRowMarginBottom`, `knightDecor*`, `chessPieceAccent*` and
+    /// `titleLargeLineHeight`. Nothing here is invented; it is the source's own block, assembled.
+    private var titleBlock: some View {
+        VStack(spacing: .zero) {
+            // RN separates the knights from the kicker with literal spaces inside the Text
+            // (`<Text> PLAY AGAINST THE </Text>`). A glyph split into its own node cannot carry
+            // those, so the gap is the same style block's own spacing unit instead.
+            HStack(spacing: CoachSelect.titleTopRowMarginBottom) {
+                knight
+                Text(CoachStrings.selectHeader)
+                    .font(.system(size: CoachSelect.titleSmallFontSize, weight: .bold))
+                    .foregroundStyle(CoachSelect.titleSmallColor)
+                    .tracking(CoachSelect.titleSmallLetterSpacing)
+                knight
+            }
+            .padding(.bottom, CoachSelect.titleTopRowMarginBottom)
+
+            Text(CoachStrings.selectFamily)
+                .font(.system(size: CoachSelect.titleLargeFontSize, weight: .black))
+                .foregroundStyle(CoachSelect.titleLargeColor)
+                .tracking(CoachSelect.titleLargeLetterSpacing)
+                // Centred, and that is not decoration: `selectFamily` carries a hard break, and
+                // leading alignment is what made the old second line hang off to the left while
+                // everything under it was centred.
+                .multilineTextAlignment(.center)
+                .lineSpacing(CoachLayout.titleLargeExtraLeading)
+
+            Text(CoachStrings.chessAccent)
+                .font(.system(size: CoachSelect.chessPieceAccentFontSize))
+                .foregroundStyle(CoachSelect.chessPieceAccentColor)
+                .padding(.top, CoachSelect.chessPieceAccentMarginTop)
+                .padding(.bottom, CoachSelect.chessPieceAccentMarginBottom)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, CoachSelect.titleBlockPaddingHorizontal)
+        .padding(.top, CoachSelect.titleBlockPaddingTop)
+        .padding(.bottom, CoachSelect.titleBlockPaddingBottom)
+    }
+
+    /// `knightDecor` — 16pt white at 0.85, its own node. Baked into the copy string it inherited
+    /// the 30pt gold of whatever line it sat on, which is half of why that line was too wide.
+    private var knight: some View {
+        Text(CoachStrings.knightDecor)
+            .font(.system(size: CoachSelect.knightDecorFontSize))
+            .foregroundStyle(CoachSelect.knightDecorColor)
+            .opacity(CoachSelect.knightDecorOpacity)
     }
 
     private var roster: some View {

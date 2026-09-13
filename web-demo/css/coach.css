@@ -41,19 +41,51 @@
 }
 
 /* ---- Coach Select (2.5) ---- */
-.cgs-header { display: flex; align-items: center; padding: 12px 16px; }
-.cgs-header-center { flex: 1; text-align: center; min-width: 0; }
+/* The chrome row: back on the left, the brand ring on the right. `space-between`, because the
+   title no longer sits between them — it is its own band below, at full width, the way
+   `index.tsx` stacks `backBtn` and `titleBlock` as siblings. */
+.cgs-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+}
+.cgs-title-block {
+  text-align: center;
+  padding: var(--cgs-title-block-padding-top) var(--cgs-title-block-padding-horizontal)
+           var(--cgs-title-block-padding-bottom);
+}
+/* The small white kicker, with a knight either side. These three used to be one 30pt gold string:
+   the knights were baked into the copy, so they inherited the big line's style. */
+.cgs-kicker { margin-bottom: var(--cgs-title-top-row-margin-bottom); }
+.cgs-knight {
+  font-size: var(--cgs-knight-decor-font-size);
+  color: var(--cgs-knight-decor-color);
+  opacity: var(--cgs-knight-decor-opacity);
+}
+.cgs-kicker-text {
+  font-size: var(--cgs-title-small-font-size);
+  font-weight: var(--cgs-title-small-font-weight);
+  color: var(--cgs-title-small-color);
+  letter-spacing: var(--cgs-title-small-letter-spacing);
+  margin: 0 var(--cgs-title-top-row-margin-bottom);
+}
+/* THE BRAND NAME — the big gold line, which is what `titleLarge` is for.
+   `pre-line` because `selectFamily` carries the source's own hard break between "BIYAHERONG COACH"
+   and "FAMILY BOTS"; each half fits the width at 30px/900, so the line never has to be measured
+   and can never reflow. `line-height` is read here for the first time — the metrics layer has
+   always declared it and no rule ever used it. */
 .cgs-title {
   font-size: var(--cgs-title-large-font-size);
   font-weight: var(--cgs-title-large-font-weight);
   color: var(--cgs-title-large-color);
   letter-spacing: var(--cgs-title-large-letter-spacing);
+  line-height: var(--cgs-title-large-line-height);
+  white-space: pre-line;
 }
-.cgs-family {
-  font-size: var(--cgs-title-small-font-size);
-  font-weight: var(--cgs-title-small-font-weight);
-  color: var(--cgs-title-small-color);
-  letter-spacing: var(--cgs-title-small-letter-spacing);
+.cgs-accent {
+  font-size: var(--cgs-chess-piece-accent-font-size);
+  color: var(--cgs-chess-piece-accent-color);
+  margin: var(--cgs-chess-piece-accent-margin-top) 0
+          var(--cgs-chess-piece-accent-margin-bottom);
 }
 .cgs-blurb, .cgs-tagline, .cgs-subtagline {
   font-size: var(--cgs-title-sub-font-size);

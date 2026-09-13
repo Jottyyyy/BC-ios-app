@@ -11,8 +11,10 @@
 import Foundation
 
 public enum CoachStrings {
-    public static let selectHeader = "\u{265E} PLAY AGAINST THE \u{265E}"
-    public static let selectFamily = "BIYAHERONG COACH FAMILY BOTS"
+    public static let selectHeader = "PLAY AGAINST THE"
+    public static let selectFamily = "BIYAHERONG COACH\nFAMILY BOTS"
+    public static let knightDecor = "\u{265E}"
+    public static let chessAccent = "\u{265F}"
     public static let selectBlurb = "Train your chess skills with fun AI opponents."
     public static let allowTakeBack = "Allow Take Back"
     public static let tagline = "Kabyahe mo sa pag improve!!"

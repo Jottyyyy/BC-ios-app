@@ -3792,3 +3792,65 @@ coincidence); and `coach-select.js` read an `STR.backArrow` that is undefined ev
 **Deliberately out of scope**, at the user's choice: the nine Analysis toolbar emoji, the four
 transport arrows, and the ☰ menu's own `✕`. (Home's `🔍` was on this list until round 4, when the
 client asked for the button itself — which had never been wired to anything — to be removed.)
+
+## The coach header's two title styles were inverted (2026-09-13)
+
+The client circled the coach-select header and wrote **"Paayos para kasya, lang maganda tingnan"** —
+make it fit. The instinct is to shrink the text. The cause was not size.
+
+`index.tsx:185-192` builds the header as three nodes:
+
+| Node | RN source | What shipped |
+|---|---|---|
+| `♞ PLAY AGAINST THE ♞` | `titleSmall` — 12pt, `#FFFFFF`, bold | `titleLarge` — 30pt, gold, weight 900 |
+| `BIYAHERONG COACH` ⏎ `FAMILY BOTS` | `titleLarge` — 30pt, gold, 900, hard `{'\n'}` | `titleSmall` — 12pt |
+| `♟` | 22pt gold accent | **absent** |
+
+The two styles were **swapped**. That put a 20-character kicker at 30pt — and put the app's own name
+at 12pt underneath it. Three smaller faults travelled with it: the `♟` accent was never ported, the
+two knights were baked into the copy string rather than being their own nodes, and the whole block
+was nested *inside* the back-button `HStack`, so it laid out in 268pt where the RN screen gives it
+342.
+
+### FIXED: restored to the source, not resized
+
+Both languages now draw the source's arrangement. No font size changed value; they changed places.
+`CoachStrings` gains `selectFamily` (with the hard break), `knightDecor` and `chessAccent` as
+separate strings — `CoachStrings.swift` is generated from `web-demo/js/coach-strings.js`, so the JS
+is the edit and the Swift is regenerated.
+
+### INVENTED: nothing — but one value is *derived*
+
+`CoachLayout.titleLargeExtraLeading` = `CoachSelect.titleLargeLineHeight − CoachSelect.titleLargeFontSize`.
+SwiftUI's `.lineSpacing` is the gap *between* lines; RN's `lineHeight` is the total. The two-line
+brand name needs the conversion or it wraps at single leading. This does not spend the ≤10 invented-
+constant budget: both operands are extracted, and the expression is in the Swift so that changing
+`coach_styles.json` moves it.
+
+### The reason no gate caught it
+
+**All twelve of the block's extracted constants were dead** — `titleBlockPadding{Horizontal,Top,Bottom}`,
+`titleTopRowMarginBottom`, `knightDecor{FontSize,Color,Opacity}`,
+`chessPieceAccent{FontSize,Color,MarginTop,MarginBottom}`, `titleLargeLineHeight`.
+`coach_styles.json` had carried every one since the first extraction; nothing read them, and
+nothing was looking for that.
+
+**An unread constant in an extracted table means a block was transcribed rather than assembled.**
+That is the general lesson, and it is cheap to check.
+
+This is the **same failure shape** as the `kingWhite`/`kingBlack` swap already noted at
+`replay_coach.js:270-274`: *both languages had it, so the twin agreed with itself and every gate
+stayed green; only the RN disagreed.* A JS↔Swift replay proves the two ports match **each other** —
+never that either matches the source. Any assertion that only compares the twins is blind to an
+inversion introduced before the split.
+
+### What guards it now
+
+`replay_coach.js` pins the **pairing** rather than the sizes — `selectFamily` at
+`titleLargeFontSize`, `selectHeader` at `titleSmallFontSize`, `.multilineTextAlignment(.center)` on
+the wrapped line — plus a loop asserting all twelve `CoachSelect.*` title constants are read by
+`CoachScreens.swift`, which is the dead-constant signal turned into a gate. `coach_screen_test.js`
+asserts the same pairing in the DOM, including that the hard break survives into the rendered text.
+
+Both were mutation-proved before being trusted: re-swapping the Swift styles fails two
+`replay_coach` assertions by name; putting the kicker back in `.cgs-title` fails `coach_screen_test`.

@@ -16,6 +16,16 @@ enum CoachLayout {
     /// header block and what follows.
     static let sectionGap: CGFloat = CoachSelect.titleSubMarginTop
 
+    /// `titleLarge.lineHeight` as SwiftUI wants it. CSS and RN state a line's TOTAL height;
+    /// SwiftUI's `lineSpacing` is the extra leading BETWEEN lines, so the font size comes off.
+    /// Derived, not chosen — the source's 35 over its own 30.
+    ///
+    /// It matters here and nowhere else on this screen: `selectFamily` is the one string with a
+    /// hard line break in it, and without this the two halves of the brand name set at SwiftUI's
+    /// default leading rather than the source's.
+    static let titleLargeExtraLeading: CGFloat =
+        CoachSelect.titleLargeLineHeight - CoachSelect.titleLargeFontSize
+
     /// The roster is two RN rows (`row1`, `row2`) of three and two cards. A `LazyVGrid` of three
     /// flexible columns reproduces that without hard-coding which coach is on which row.
     static let rosterColumns: [GridItem] = [
