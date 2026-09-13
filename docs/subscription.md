@@ -253,10 +253,20 @@ nowhere — the RN client never enforced it, the PHP controller did, and there i
 - **The date of the first charge is named.** A trial auto-renews, so `willAutoRenew` alone called its
   end "Next Renewal Date". `trialEndsRow` and `trialChargeNote` say what actually happens and when.
 - **Prices are never hard-coded.** `Product.displayPrice` only — the original showed three different
-  prices in one session. The same rule covers the **`Save {n}%`** badge on the yearly row: it is
-  computed from the two real `Product.price` values and simply does not render when either tier is
-  missing. Spec §3.2 asks for that line; the RN never actually rendered it (only `BEST VALUE`), and
-  `PORTING_NOTES.md` records the disagreement.
+  prices in one session. `replay_premium.js` now asserts that **no `PaywallStrings` value contains a
+  currency symbol at all**, in either language: `displayPrice` is already formatted for the viewer's
+  storefront, so a typed symbol is right in one country and wrong in every other. The same rule
+  covers the **`Save {n}%`** badge on the yearly row: it is computed from the two real
+  `Product.price` values and simply does not render when either tier is missing. Spec §3.2 asks for
+  that line; the RN never actually rendered it (only `BEST VALUE`), and `PORTING_NOTES.md` records
+  the disagreement.
+- **The paywall opens on MONTHLY, and the yearly row carries no `BEST VALUE`.** Both are the
+  client's decisions and both reverse the source — RN and spec §3.2 agree on a yearly default and on
+  the badge. The reason is what the trial button leads to: it opens the paywall, the CTA buys the
+  *selected* plan, and Apple's confirmation sheet prints that plan's figure, so a year's price was
+  the number people met while deciding whether to start a free week. `Save {n}%` stays, because it
+  is arithmetic over real prices rather than a claim. `replay_premium.js` pins the two languages to
+  the *same* default rather than to monthly — the tier is a product decision, the agreement is not.
 - **Trial eligibility is asked once, for the GROUP.** `isEligibleForIntroOffer` is a property of the
   subscription group, not of a product — someone who used the free trial on monthly cannot have it
   again on yearly. Asking per row would promise a second trial the App Store will not honour, and

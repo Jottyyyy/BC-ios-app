@@ -128,8 +128,14 @@ call the provisioning endpoints. Put the `.p8` in `~/.appstoreconnect/private_ke
 
 Sign in with a sandbox Apple Account and check every one of these:
 
-- the paywall lists **both** plans, with real prices from the App Store
-- the yearly row shows **BEST VALUE** and a saving computed from the two prices
+- the paywall lists **both** plans, with real prices from the App Store — **in the storefront's own
+  currency.** A device billed in ฿ or ₱ must not be shown `$`: every price comes from
+  `Product.displayPrice` and the app types no symbol of its own, so `$` on a non-US account means
+  that territory has no price set for the product, which is a wrong price on the screen App Review
+  reads most closely
+- the paywall opens on **Monthly** — the client's decision, against spec §3.2; PORTING_NOTES records it
+- the yearly row shows a saving computed from the two prices, and **no BEST VALUE** (also the
+  client's, so the badge does not pull against the monthly default)
 - the trial line states its duration and what it converts to — **and so does every lock card**, the
   Game Review cap and the Tutorial Videos paywall
 - the legal card carries the **Free trial: 7 days** line, and the duration in it matches what you
@@ -290,8 +296,11 @@ WHAT I NEED, IN THIS ORDER:
       ~/.appstoreconnect/asc.env with ASC_KEY_ID and ASC_ISSUER_ID.
 
 5. Sandbox test before submitting:
-   - the paywall lists BOTH plans with real App Store prices
-   - the yearly row shows "BEST VALUE" and a computed saving
+   - the paywall lists BOTH plans with real App Store prices, in the
+     STOREFRONT'S OWN currency — a "$" on a non-US account means that territory
+     has no price set for the product
+   - the paywall opens on MONTHLY
+   - the yearly row shows a computed saving, and no "BEST VALUE"
    - the trial line states the duration and what it converts to, and so does
      every lock card, the Game Review cap and the Tutorial Videos paywall
    - the legal card carries the "Free trial: 7 days" line, and the number in it

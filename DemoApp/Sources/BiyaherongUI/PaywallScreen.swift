@@ -162,24 +162,36 @@ struct PaywallScreen: View {
         .buttonStyle(DimButtonStyle(pressedOpacity: PaywallLayout.pressed))
     }
 
-    /// `BEST VALUE`, and beneath it the saving — but only when both tiers resolved and the
-    /// arithmetic says something true. A percentage that cannot be computed is simply absent.
-    private var yearlyBadge: some View {
-        VStack(spacing: PaywallLayout.none) {
-            Text(PaywallStrings.bestValue)
+    /// The saving on the yearly row — and **nothing else on it**.
+    ///
+    /// It used to lead with `BEST VALUE`. The client asked for that to come off when the default
+    /// moved to monthly, and the reasoning holds up: the badge is anchored to the yearly ROW, not
+    /// to the selection (RN did the same, `index.tsx:646`), so left alone it sits on the card the
+    /// screen has just decided NOT to select and pulls against it.
+    ///
+    /// `Save {n}%` stays, and the difference is not cosmetic. `BEST VALUE` is a claim this app
+    /// makes; `Save {n}%` is arithmetic over the two real `Product.price` values
+    /// (`PremiumStore.yearlySavingsPercent`). Dropping the label removes a nudge; dropping the
+    /// number would hide a real saving from somebody weighing the two plans, which is a different
+    /// thing and not what was asked for.
+    ///
+    /// `PaywallStrings.bestValue` is still DECLARED, so the source extraction stays pinned by the
+    /// string-table parity check — the same arrangement `restoreLink` already has. It is simply
+    /// drawn nowhere, and `replay_premium.js` asserts that.
+    ///
+    /// Nothing at all when the percentage cannot be computed: a badge with no text in it is a box
+    /// of padding, which is what the old `VStack` would have become the moment `BEST VALUE` left.
+    @ViewBuilder private var yearlyBadge: some View {
+        if let percent = store.yearlySavingsPercent {
+            Text(PaywallStrings.fill(PaywallStrings.savePercent, ["n": String(percent)]))
                 .font(Theme.nunito(PaywallType.badgeSize, .bold))
                 .foregroundStyle(PaywallPalette.badgeInk)
-            if let percent = store.yearlySavingsPercent {
-                Text(PaywallStrings.fill(PaywallStrings.savePercent, ["n": String(percent)]))
-                    .font(Theme.nunito(PaywallType.badgeSize, .bold))
-                    .foregroundStyle(PaywallPalette.badgeInk)
-            }
+                .padding(.horizontal, PaywallLayout.badgePaddingH)
+                .padding(.vertical, PaywallLayout.badgePaddingV)
+                .background(PaywallPalette.badgeFill,
+                            in: RoundedRectangle(cornerRadius: PaywallLayout.badgeRadius))
+                .padding(.top, PaywallLayout.badgeTop)
         }
-        .padding(.horizontal, PaywallLayout.badgePaddingH)
-        .padding(.vertical, PaywallLayout.badgePaddingV)
-        .background(PaywallPalette.badgeFill,
-                    in: RoundedRectangle(cornerRadius: PaywallLayout.badgeRadius))
-        .padding(.top, PaywallLayout.badgeTop)
     }
 
     private func planLabel(_ plan: PremiumStore.Plan) -> String {
