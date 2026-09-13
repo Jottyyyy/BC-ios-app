@@ -5,6 +5,73 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The paywall opens on Monthly (2026-09-10)
+
+Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*
+
+The screenshot that came with it shows why. `TrialOfferCard`'s button only opens `PaywallScreen`;
+it sets no plan. So tapping the trial lands on whatever `selectedPlan` holds, the CTA buys that, and
+what Apple's confirmation sheet then printed was **Yearly · 1-week free trial · ฿699.00 per year** —
+a year's price, met at the moment somebody is deciding whether to start a *free* week.
+
+### DEVIATION: yearly was the default, and it was extracted, not invented
+
+This one reverses a **verified** source, which is why it is recorded here rather than simply done:
+
+- RN `app/(app)/user/premium/index.tsx:132` — `useState<"monthly" | "yearly">("yearly")`
+- Spec §3.2 (`BIYAHERONG-PORT-SPEC.md:3098`) — *"**Default selection: yearly.**"*
+- `CHANGELOG.md:505` — *"Default selection is yearly, per the spec and per every subscription screen."*
+
+Spec and source agreed and the port reproduced both faithfully. The client's instruction replaces
+them, and one fact in the plumbing agrees with it: `ios/Biyaherong.storekit` puts yearly at
+`groupNumber: 1` and monthly at `2` (see *"yearly sits at a higher service level"* below), so
+monthly → yearly is an **immediate** upgrade where yearly → monthly is a deferred crossgrade.
+Opening on monthly points the ordinary upsell the way StoreKit handles best.
+
+`PremiumStore.load()`'s fallback needed no change and that is worth saying, because it looks like it
+should: `Plan.allCases` is `[.monthly, .yearly]`, so `first(where:)` keeps monthly when monthly
+resolves and falls to yearly when only yearly does — the mirror image of its old behaviour, still
+correct for the same reason.
+
+### DEVIATION: `BEST VALUE` comes off the yearly row
+
+The badge is anchored to the yearly **row**, not to the selection — `PaywallScreen.swift`
+`if plan == .yearly`, and RN did the same at `index.tsx:646`. Left alone it would sit on the card the
+screen has just decided *not* to select, pulling against the new default. The client asked for it off.
+
+**`Save {n}%` stays**, and the distinction is the point: `BEST VALUE` is a claim this app makes,
+while `Save {n}%` is arithmetic over the two real `Product.price` values. Dropping a label removes a
+nudge; dropping the number would hide a real saving from somebody weighing the two plans, which is a
+different act and was not what was asked for.
+
+There is an irony worth recording. The entry *"`Save {n}%` is rendered; the RN only rendered
+`BEST VALUE`"* below says this port **added** a line the source never drew. Between the two
+decisions the yearly badge now shows exactly the thing the RN never rendered, and none of the thing
+it did.
+
+`PaywallStrings.bestValue` stays **declared** so the string-table parity check keeps its pin on the
+extraction — the arrangement `restoreLink` has had since it stopped being rendered — and
+`replay_premium.js` asserts it is drawn in neither language.
+
+### The gate that did not exist
+
+`grep -rn selectedPlan tools/` returned **nothing**. The Swift default and the browser default could
+have named different tiers indefinitely, and the browser is where this screen gets previewed.
+
+The new assertion deliberately does **not** pin *monthly*: that is a product decision and it has now
+moved once, so pinning it would make the next change a gate edit rather than a one-line one. It pins
+the **parity** — whatever tier the Swift opens on, the browser opens on the same one.
+
+### Added alongside: the app may not type a currency
+
+Every price is `Product.displayPrice`, already formatted for the viewer's storefront — the client's
+own device bills in ฿ against a base price set in USD. A symbol written into the string table would
+be right in one country and wrong in every other, on the screen App Review reads most carefully.
+Nothing here has ever contained one; `replay_premium.js` now makes starting impossible rather than
+merely unlikely. This is the cheap half of an open question — see the CHANGELOG entry.
+
+---
+
 ## The piece lifts when you drag it (2026-09-09)
 
 Client: *"sana yung drag pieces kita na inaangat piyesa / Parang sa android nabubuhat piyesa / Or

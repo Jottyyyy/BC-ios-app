@@ -273,6 +273,29 @@ function run() {
   expect(/guard Plan\.matching\(transaction\.productID\) != nil/.test(code(store)),
     'ANY tier in the group entitles — filtering to one product ID would lock out every yearly '
     + 'subscriber the moment that tier existed');
+
+  // 4c. Which tier the paywall OPENS on, in both languages.
+  //
+  //     Deliberately not a pin on `monthly`. That is a product decision — it was yearly, matching
+  //     spec §3.2 and the RN source, until the client asked for the other one — and pinning the
+  //     value would make the next change a gate edit rather than a one-line one.
+  //
+  //     What IS worth pinning is that the two languages name the SAME tier. Nothing did: a grep for
+  //     `selectedPlan` across tools/ returned nothing at all before this, so the Swift and the
+  //     browser could have opened on different plans indefinitely. The browser is where this screen
+  //     gets previewed, which makes that the divergence nobody would catch by looking.
+  {
+    const swiftDefault = (/@Published var selectedPlan: Plan = \.(\w+)/.exec(code(store)) || [])[1];
+    const premiumSrc = code(fs.readFileSync(path.join(JS, 'premium.js'), 'utf8'));
+    const jsDefault = (/var selectedPlan = '(\w+)'/.exec(premiumSrc) || [])[1];
+    expect(swiftDefault !== undefined, 'PremiumStore declares a default selectedPlan');
+    expect(jsDefault !== undefined, 'and premium.js declares one too');
+    eq(jsDefault, swiftDefault,
+      'the paywall opens on the same tier in both languages — the browser previews this screen, so '
+      + 'a disagreement here is one nobody would see by looking');
+    expect(planIDs.some(({ plan }) => plan === swiftDefault),
+      `the default tier (${swiftDefault}) is one of the two Plan cases`);
+  }
   expect(!/static let subscriptionGroupID/.test(code(store)),
     'the subscription group ID is NOT a hand-typed constant. It was "biyaherong.plus"; App Store '
     + 'Connect assigns a numeric one, so the status lookup never matched — and being a `try?` it '
@@ -320,6 +343,47 @@ function run() {
   Object.keys(P.STRINGS).forEach((k) => {
     eq(P.STRINGS[k], swText(metrics, 'PaywallStrings', k), 'PaywallStrings.' + k);
   });
+  // 6a. The app never TYPES a currency, in either language.
+  //
+  //     Every price on this screen is `Product.displayPrice`, which StoreKit has already formatted
+  //     for the viewer's storefront: the client's own device is billed in ฿ while the base price is
+  //     set in USD. A symbol written into the string table would be right in one country and wrong
+  //     in every other — and wrong on the screen App Review reads most carefully, which is
+  //     Guideline 3.1.2. The RN app shipped precisely this: PORTING_NOTES records it managing
+  //     "three different prices in one session". Nothing here has ever contained one. This makes
+  //     starting impossible rather than merely unlikely.
+  {
+    const CURRENCY = /[$₱฿€£¥₩₫]/;
+    Object.keys(P.STRINGS).forEach((k) => {
+      expect(!CURRENCY.test(P.STRINGS[k]),
+        `PaywallStrings.${k} contains a currency symbol — prices come from Product.displayPrice, `
+        + 'which is already localised, and a typed symbol is wrong everywhere but one country');
+    });
+  }
+
+  // 6b. BEST VALUE is declared and drawn nowhere.
+  //
+  //     It came off the yearly row when the paywall's default moved to monthly. The badge is
+  //     anchored to the ROW, not to the selection (RN did the same, index.tsx:646), so left alone
+  //     it sat on the card the screen had just decided NOT to select, pulling against it.
+  //     `Save {n}%` stays in its place: that one is arithmetic over two real `Product.price`
+  //     values, not a claim this app makes, and hiding a real saving is a different act from
+  //     dropping a label.
+  //
+  //     The STRING stays declared so the RN extraction keeps its pin in the table above — the same
+  //     arrangement `restoreLink` has had since it stopped being rendered.
+  {
+    const paywall = code(fs.readFileSync(path.join(UI, 'PaywallScreen.swift'), 'utf8'));
+    const premiumSrc = code(fs.readFileSync(path.join(JS, 'premium.js'), 'utf8'));
+    expect(P.STRINGS.bestValue !== undefined,
+      'PaywallStrings.bestValue is still declared, so its parity pin survives');
+    expect(!/PaywallStrings\.bestValue/.test(paywall),
+      'but PaywallScreen draws no BEST VALUE badge');
+    expect(!/STRINGS\.bestValue/.test(premiumSrc), 'and neither does the browser twin');
+    expect(/PaywallStrings\.savePercent/.test(paywall),
+      'while Save {n}% — computed from the two real prices — is still drawn');
+  }
+
   expect(P.STRINGS.disclosure.indexOf('automatically renews') >= 0,
     'the disclosure names auto-renewal');
   expect(P.STRINGS.disclosure.indexOf('24 hours') >= 0, 'and the 24-hour window');

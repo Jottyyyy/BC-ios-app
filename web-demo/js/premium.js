@@ -842,11 +842,17 @@ var BiyaPremium = (function () {
     simulateCancel: 'Simulate: turn off auto-renew'
   };
 
-  /* Which tier the toggle has selected. Yearly by default, matching PremiumStore.selectedPlan and
-     spec §3.2's "Default selection: yearly". Module state rather than store state: the browser has
-     no StoreKit, so this is chrome, and putting it in the store would put a demo concern in the
-     twin of a shipped type. */
-  var selectedPlan = 'yearly';
+  /* Which tier the toggle has selected. MONTHLY by default, matching PremiumStore.selectedPlan —
+     and deliberately NOT matching spec §3.2's "Default selection: yearly" or the RN source it was
+     extracted from. The client asked for it: tapping the trial walks into Apple's confirmation
+     sheet, and what it prints there is the selected plan's figure, so a year's price was the
+     number people met while deciding whether to start a free week. Recorded in PORTING_NOTES.md.
+
+     Module state rather than store state: the browser has no StoreKit, so this is chrome, and
+     putting it in the store would put a demo concern in the twin of a shipped type. `replay_premium.js`
+     asserts this names the same tier the Swift does — the two could otherwise drift silently, and
+     the browser is where this screen gets previewed. */
+  var selectedPlan = 'monthly';
 
   var BENEFITS = [
     { emoji: '♟️', text: 'Unlimited puzzles — no daily caps' },
@@ -1164,7 +1170,11 @@ var BiyaPremium = (function () {
       + '<span class="pw-plan-label">' + label + '</span>'
       + '<span class="pw-plan-price">' + DEMO.simulatedPrice + '</span>'
       + '<span class="pw-plan-period">' + period + '</span>'
-      + (plan === 'yearly' ? '<span class="pw-badge">' + STRINGS.bestValue + '</span>' : '')
+      // No badge on the yearly row any more. `BEST VALUE` came off with the move to a monthly
+      // default: it is anchored to the ROW, not to the selection, so it sat on the card the screen
+      // had just decided not to select and pulled against it. The Swift keeps `Save {n}%` in its
+      // place; this renderer has no real prices to compute a percentage from — see the note above
+      // — so here the row simply ends, which is also what the Swift does when it cannot compute one.
       + '</button>';
   }
 

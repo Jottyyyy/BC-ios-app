@@ -72,10 +72,24 @@ final class PremiumStore: ObservableObject {
     @Published private(set) var access: Entitlement.Access = .free
     /// Every tier StoreKit could resolve. A tier missing here is a tier that cannot be bought.
     @Published private(set) var products: [Plan: Product] = [:]
-    /// Which row the paywall has selected. Yearly by default: it is the better value for the user
-    /// and the better outcome for the business, and preselecting the cheaper-per-month plan is
-    /// what every subscription screen does. One line to change if that ever stops being true.
-    @Published var selectedPlan: Plan = .yearly
+    /// Which row the paywall has selected. **Monthly** by default.
+    ///
+    /// This reverses the source, and knowingly: RN's `premium/index.tsx:132` opens on `"yearly"`
+    /// and spec §3.2 says *"Default selection: yearly"* in as many words. The client asked for the
+    /// other one — *"once clicked yung free trial dapat ang default is monthly payment"* — and the
+    /// reason is visible in the screenshot that came with it: tapping the trial walks straight into
+    /// Apple's confirmation sheet, and what it reads there is the SELECTED plan's yearly figure.
+    /// A year's price is a bad number to meet while deciding whether to start a free week.
+    ///
+    /// One thing in the plumbing agrees. `ios/Biyaherong.storekit` puts yearly at `groupNumber: 1`
+    /// and monthly at `2` (PORTING_NOTES: "yearly sits at a higher service level"), so monthly →
+    /// yearly is an **immediate** upgrade while yearly → monthly is a deferred crossgrade. Opening
+    /// on monthly points the common upsell the way StoreKit handles best.
+    ///
+    /// Deviation recorded in PORTING_NOTES.md. `replay_premium.js` does not pin WHICH tier this is
+    /// — that is a product decision and it has already moved once — but it does pin that the
+    /// browser twin names the same one.
+    @Published var selectedPlan: Plan = .monthly
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var purchasing = false
     /// Whether to advertise the free trial. StoreKit is the authority on eligibility — an Apple

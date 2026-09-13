@@ -9,6 +9,57 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-10 (changed) — The paywall opens on Monthly, and the gate that should have watched it did not exist
+
+Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*
+
+**First, the good news in the same screenshot.** Apple's confirmation sheet reads **"1-week free
+trial — Starting today."** The introductory offer created in App Store Connect the night before is
+live and StoreKit is serving it. That was the whole of the previous report, and it is closed.
+
+**Why the default matters more than it looks.** `TrialOfferCard`'s button only opens
+`PaywallScreen` — it sets no plan — so the trial lands on whatever `selectedPlan` holds, the CTA
+buys *that*, and what Apple then printed was **Yearly · ฿699.00 per year**. A year's price, met at
+the moment somebody is deciding whether to start a free week.
+
+**This reverses a verified source, so it is a recorded deviation and not just an edit.** RN
+`premium/index.tsx:132` opens on `"yearly"`; spec §3.2 says *"Default selection: yearly"*; this
+changelog said *"per the spec and per every subscription screen"* at line 505. Spec and source
+agreed and the port was faithful to both. One fact in the plumbing sides with the client:
+`Biyaherong.storekit` puts yearly at `groupNumber: 1` and monthly at `2`, so monthly → yearly is an
+**immediate** upgrade where the reverse is a deferred crossgrade — the new default points the
+ordinary upsell the way StoreKit handles best. `load()`'s fallback needed no edit: `Plan.allCases`
+is `[.monthly, .yearly]`, so it now keeps monthly and falls to yearly, the mirror of before.
+
+**`BEST VALUE` comes off the yearly row.** The badge is anchored to the ROW, not the selection (RN
+did the same), so left alone it sat on the card the screen had just decided not to select.
+**`Save {n}%` stays** — that one is arithmetic over the two real `Product.price` values, not a claim
+the app makes, and hiding a real saving is a different act from dropping a label. An irony worth
+keeping: an earlier entry records that this port *added* `Save {n}%`, which the RN never rendered.
+The badge now shows exactly what the source never drew and none of what it did.
+
+**The gate that did not exist.** `grep -rn selectedPlan tools/` returned **nothing** — the Swift
+default and the browser default could have named different tiers indefinitely, and the browser is
+where this screen gets previewed. The new assertion deliberately does **not** pin *monthly*: the
+tier is a product decision and it has now moved once, so pinning it would make the next change a
+gate edit instead of a one-line one. It pins the **parity**.
+
+**And one open question, with its cheap half shipped.** Apple bills the client's device in **฿**
+while the base price is USD; the app's own line under the CTA *may* read `$19.99`, and at that
+resolution `$` and `฿` are not distinguishable — so no claim is made either way. What is checkable
+from here is that **the code cannot be the cause**: prices are `Product.displayPrice` and nothing
+else, a tier that fails to resolve is omitted rather than guessed, and the placeholder is
+`"Loading…"`. So `replay_premium.js` now asserts **no `PaywallStrings` value contains a currency
+symbol** in either language. If a non-US device does show `$`, the fault is a missing territory
+price in App Store Connect — a configuration fix, and a Guideline 3.1.2 one. The five-second test is
+in `docs/app-store-handoff.md`'s sandbox checklist.
+
+Gates: `replay_premium` 656 → **727**, `js_goldens` **36,173** across 86 suites. All three new
+assertions were mutated and watched to fail — mismatched defaults, a typed `₱`, and a re-added
+`BEST VALUE` each name their own problem.
+
+**`web-demo/` was updated** — same default, same badge removal.
+
 ### 2026-09-09 (changed) — 1.0.8 (55) uploaded: the drag ghost and the eval rail
 
 Delivery UUID `09e1ac65-40ce-431a-868c-22aa63785719`. 85,699,067 bytes, `UPLOAD SUCCEEDED with no
