@@ -209,11 +209,17 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
 
 // ── 7. No gold knight anywhere inside the app ───────────────────────────────────
 //
-// `app-icon.png` is the **app icon** — byte-identical to
-// `ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png` — and it stays there, because a photo
-// collage with a wordmark turns to mud at 60 px. What it must not be is a logo *inside* the app,
-// which is what the client screenshotted: a 30 px gold knight in the paywall header, in a
-// `border-radius: 50%` circle, while the Swift paywall had been drawing the collage all along.
+// `app-icon.png` is the OLD gold knight, kept for one job only: the browser's 404 fallback. What it
+// must not be is a logo *inside* the app, which is what the client screenshotted — a 30 px gold
+// knight in the paywall header, in a `border-radius: 50%` circle, while the Swift paywall had been
+// drawing the brand mark all along. That is what this section guards, and it is unchanged.
+//
+// The claim that used to stand here — that `app-icon.png` is the shipped app icon, "byte-identical
+// to icon-1024.png" — has been wrong twice over. It stopped being true when the brand collage went
+// into the catalog on 2026-08-19, and the icon changed again on 2026-09-16 when Apple rejected the
+// collage under Guideline 5.2.5: it contained a smartphone with a notch and an iOS status bar.
+// The shipped icon is now a blue chess knight with a contrail, and NONE of these three files are
+// the same picture.
 //
 // Two exemptions, both named and both justified — anything else is a regression.
 {
@@ -243,18 +249,41 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
     expect(!/HomeAppIcon\([^)]*asset: \.appIcon/s.test(src),
       `${f} draws HomeAppIcon with the knight`);
   }
-  // THE SHIPPED APP ICON. It used to be the knight, and the client kept it there deliberately —
-  // until they saw it inside Apple's own Sign in with Apple sheet, which draws the app icon, and
-  // asked for the brand mark there too. `icon-1024.png` was byte-identical to `Images/app-icon.png`
-  // for exactly that reason, so the cheapest proof that it changed is that they are no longer the
-  // same file.
+  // THE SHIPPED APP ICON, and the two things that must remain true of it.
+  //
+  // History, because it has now moved twice and each move had a reason worth keeping:
+  //   1. It was the gold knight. The client saw it inside Apple's own Sign in with Apple sheet —
+  //      which draws the app icon — and asked for the brand mark there instead (2026-08-19).
+  //   2. That brand mark was a photo collage containing a smartphone with a notch and an iOS
+  //      status bar. Apple rejected 1.0.8 (56) for it under Guideline 5.2.5 on 2026-09-16.
+  // It is now a blue chess knight with a contrail: no device, no text, no faces.
+  //
+  // So the assertion is NOT "it isn't the knight any more" — it is that the shipped icon and the
+  // bundled `app-icon.png` are different pictures. `app-icon.png` is the browser's 404 fallback and
+  // nothing else; if the two ever became the same file again, §7 above would be guarding a rule
+  // that no longer describes the app.
   {
     const icon = fs.readFileSync(path.join(ROOT, 'ios', 'App', 'Assets.xcassets',
                                            'AppIcon.appiconset', 'icon-1024.png'));
     const knight = fs.readFileSync(path.join(UI, 'Images', 'app-icon.png'));
     expect(!icon.equals(knight),
-      'the shipped iOS app icon is no longer the gold knight');
+      'the shipped iOS app icon is a separate picture from the bundled app-icon.png fallback');
     expect(icon.length > 0, 'and the catalog still has an icon at all');
+  }
+
+  // The icon Apple cited carried a phone; the replacement must not bring one back by the side door.
+  // The brand mark is drawn in the top-right of ten screens, so it lands in every screenshot on the
+  // product page — metadata, judged by the same reviewer. Both copies must be the SAME file as the
+  // shipped icon, which is the cheapest way to say "there is one brand mark and it is the icon".
+  {
+    const icon = fs.readFileSync(path.join(ROOT, 'ios', 'App', 'Assets.xcassets',
+                                           'AppIcon.appiconset', 'icon-1024.png'));
+    for (const p of [path.join(UI, 'Images', 'brand-logo.png'),
+                     path.join(WEB, 'assets', 'images', 'brand-logo.png'),
+                     path.join(WEB, 'assets', 'brand', 'icon.png')]) {
+      expect(fs.readFileSync(p).equals(icon),
+        `${path.basename(path.dirname(p))}/${path.basename(p)} has drifted from the shipped app icon`);
+    }
   }
 
   // And nothing may take it by default any more, so a NEW call site cannot get it by omission.

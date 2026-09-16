@@ -124,7 +124,7 @@ cannot read a key must still open.
 | `DemoApp/Sources/LoginMetricsCheck/main.swift` | `swift run LoginMetricsCheck`. |
 | `DemoApp/Sources/BiyaherongUI/PhoneView.swift` | The gate (`PhoneApp`, last ZStack sibling) and the Profile screen's **Account** card. |
 | `DemoApp/Sources/BiyaherongUI/HomeArt.swift` | `HomeArt.Asset.brandLogo` and the generalised `HomeAppIcon(size:shape:asset:)`. |
-| `DemoApp/Sources/BiyaherongUI/Images/brand-logo.png` | The brand mark, copied from the RN app's `assets/images/icon.png`. |
+| `DemoApp/Sources/BiyaherongUI/Images/brand-logo.png` | The brand mark — **byte-identical to the shipped app icon** since the 5.2.5 fix; `home_chrome_check.js` asserts it. It is no longer the RN app's `assets/images/icon.png`, which still carries the phone. |
 | `web-demo/js/login.js` | The browser twin — the same pure layer, the same store, plus the DOM renderer. |
 | `web-demo/js/app.js` | The boot gate (`current = … ? 'home' : 'login'`), `renderLogin`, `finishSignIn`, `signOut`, and the Profile Account card. |
 | `web-demo/css/app.css` (`---- Login ----`) | The styles, driven entirely by `--lg-*` custom properties the JS sets from the one table. |
