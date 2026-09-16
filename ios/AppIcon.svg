@@ -1,8 +1,22 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  Biyaherong Chess Coach — app icon source art (1024x1024).
-  Regenerate the PNG with:
+  Biyaherong Chess Coach — the ORIGINAL app icon source art (1024x1024). HISTORICAL.
+
+  ⚠ DO NOT regenerate the shipped icon from this file. The command that used to live here —
       rsvg-convert -w 1024 -h 1024 ios/AppIcon.svg -o ios/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+  would silently revert an App Store fix. The catalog icon has moved twice since:
+
+    2026-08-19  the client replaced this gold knight with their brand collage, because Apple's own
+                Sign in with Apple sheet draws the app icon and they wanted the mark to appear there.
+    2026-09-16  Apple rejected 1.0.8 (56) under Guideline 5.2.5 — that collage contained a
+                smartphone with a notch and an iOS status bar. The shipped icon is now a blue chess
+                knight with a contrail, supplied by the client, and it is a raster with no source
+                in this repo.
+
+  This file is kept because it documents the palette and the geometry, and because the render of it
+  still lives at DemoApp/Sources/BiyaherongUI/Images/app-icon.png as the browser's 404 fallback.
+  `tools/qa/home_chrome_check.js` asserts that fallback is a DIFFERENT picture from the shipped
+  icon, so regenerating over the catalog would fail the gate as well as the review.
 
   Palette is taken straight from Theme.swift so the icon matches the app:
       background #0F1A2E · card #1A2942 · gold #FDB022 · boardDark #2C4A73

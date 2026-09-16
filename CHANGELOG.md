@@ -9,6 +9,55 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-09-16 (changed) — The app icon loses the phone, and so does every screen that draws it
+
+Apple rejected **1.0.8 (56)** under **Guideline 5.2.5 — Intellectual Property**:
+*"Imagery that is similar to iPhone in one of the app icons."* The returned asset was the app icon,
+a photo collage built around a **smartphone with a notch and an iOS status bar** — signal bars and
+Wi-Fi included. The device is the whole citation; the name and the aeroplane were never at issue.
+
+**This one could not be fixed in App Store Connect.** On iOS the 1024×1024 App Store icon ships
+inside the binary (`Assets.xcassets`), which is why the version page shows it read-only under
+*Included Assets → App Icon*. It takes a new build — 57.
+
+**The part Apple did not cite is the part that would have come back.** A hash scan of all 120 image
+files in the repo found the same collage in **nine** places, and one of them is `brand-logo.png` —
+which `HomeAppIcon` draws in the top-right corner of ten screens: Home, Analysis, Coach, Puzzles,
+Paywall, Pairing, Login. It was therefore in **all ten screenshots** on the product page, notch
+visible at thumbnail size. Screenshots are metadata, read by the same reviewer. Fixing only the
+icon would have left the phone on the listing.
+
+Four files now carry the replacement, byte-identical: the catalog icon, the Swift brand mark, and
+the two browser copies (`web-demo/assets/images/brand-logo.png`, `web-demo/assets/brand/icon.png` —
+the banner fallback at `index.html:25`). The new art is the client's: a blue chess knight with a
+contrail, cropped **inside** the generated rounded-rect arc so it is a true full-bleed square —
+iOS applies its own mask, and an icon that arrives pre-rounded renders as an icon inside an icon.
+
+**Two things were deliberately left alone.** `Images/app-icon.png` and its browser twin — the old
+gold knight — stay, because `home_chrome_check.js` asserts the shipped icon is a *different picture*
+from that file and it is the browser's 404 fallback. And the five copies under the repo-root
+`assets/`, which is a **mirror of the sibling React Native app** (`PieceArtCheck.swift:64` walks it
+for chess-piece drift); nothing here ships them and editing them would break the mirror.
+
+**This reverses a decision from 2026-08-19** (`CHANGELOG.md`, *"the app icon is the brand mark"*).
+The collage went into the catalog precisely because Apple's Sign in with Apple sheet draws the app
+icon and the client wanted their mark to appear there. It will now show the knight instead — the
+coach's face is gone from that sheet. Apple forced the reversal; the client chose the replacement.
+
+**A gate that was guarding the wrong thing, and now guards the right one.** The comment in
+`home_chrome_check.js` §7 claimed `app-icon.png` was *"byte-identical to icon-1024.png"* — untrue
+since August, and nothing asserted it. Three new assertions replace the prose: the brand mark in
+both languages, and the browser's banner fallback, must each be the **same file as the shipped
+icon**. All three were mutated back to the collage and watched to fail by name before being trusted.
+`home_chrome_check` 288 → **291**.
+
+`ios/AppIcon.svg` kept a header telling the next person to regenerate `icon-1024.png` from it with
+`rsvg-convert`. Following that instruction would have silently reverted an App Store fix, so it now
+says so in as many words.
+
+**`web-demo/` was updated** — both copies, and the browser is where the change is visible on
+Windows. `docs/home-screen.md` and `docs/login.md` carry the new invariant.
+
 ### 2026-09-13 (fixed) — The coach header: the two title styles had been swapped, and every gate was fine with it
 
 Client, circling the *"♞ PLAY AGAINST THE ♞"* block on the coach-select screen:

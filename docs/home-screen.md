@@ -156,13 +156,23 @@ why the tile pressed, dimmed, and did nothing at all.
 Plus eight tap callbacks (avatar, six cards, the membership banner), all defaulting to `{}`.
 `onSearch` and `onDonate` were removed with the controls that raised them.
 
-**The header mark is the brand logo, not the app icon.** `Images/brand-logo.png` is the "Byaherong COACH
-APP" collage; `Images/app-icon.png` is the gold knight, which is now **only** the iOS app icon —
-the Play-with-Coach ring drew it until the client asked for the brand mark everywhere, and
-`HomeAppIcon` defaults to `.brandLogo` so a new call site cannot pick the knight up by omission. That choice forces the shape: the collage carries a wordmark across its bottom edge, so it
-is clipped to a **squircle**, at the login hero's own corner proportion
-(`LoginLayout.logoRadius / LoginLayout.logoSize`) rather than a second hand-picked radius — same mark,
-same curve, both screens. The radius is a *ratio* because `logoSize` spans 41–92 pt: a fixed one would
+**The header mark is the brand logo, and it is now the same picture as the app icon.**
+`Images/brand-logo.png` is byte-identical to `ios/…/AppIcon.appiconset/icon-1024.png`, and
+`tools/qa/home_chrome_check.js` asserts it — along with the two browser copies. `Images/app-icon.png`
+is the **old gold knight**, kept only as the browser's 404 fallback; `HomeAppIcon` defaults to
+`.brandLogo` so a new call site cannot pick the knight up by omission.
+
+**The mark was the "Byaherong COACH APP" collage until 2026-09-16**, when Apple rejected 1.0.8 (56)
+under **Guideline 5.2.5** — the collage contained a smartphone with a notch and an iOS status bar,
+and this header put it in the corner of ten screens, which is to say into every screenshot on the
+product page. It is now a blue chess knight with a contrail.
+
+**The squircle clip stays**, though its original reason went with the collage — that art carried a
+wordmark across its bottom edge, which a circle would have sliced. It is kept because the mark is
+now the app icon itself, and a squircle is the shape iOS gives an app icon: same picture, same
+silhouette, on the Home Screen and in the header. The clip takes the login hero's own corner
+proportion (`LoginLayout.logoRadius / LoginLayout.logoSize`) rather than a second hand-picked
+radius — same mark, same curve, both screens. The radius is a *ratio* because `logoSize` spans 41–92 pt: a fixed one would
 read as a circle at the small end and a square at the large one.
 
 **`scaleBasis` is not cosmetic.** The host passes the whole phone shell, matching the original's
