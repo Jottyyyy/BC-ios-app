@@ -3292,3 +3292,49 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   border-radius: var(--op-noMovesRadius); padding: var(--op-noMovesPad);
   text-align: center; color: var(--opc-muted); font-size: var(--op-noMovesSize);
 }
+
+/* ---- Edit Profile ----
+   Twin of `EditProfileSheet` in PhoneView.swift. A fixed overlay, following the toast idiom at the
+   bottom of app.js — the only out-of-flow pattern this demo already had. */
+.pedit {
+  margin-left: auto; width: 36px; height: 36px; flex: 0 0 auto;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(0, 0, 0, .14); color: inherit;
+  font-size: 16px; line-height: 1;
+}
+.pedit:hover { background: rgba(0, 0, 0, .22); }
+/* The chosen coach picture, in the same circle the initial used. */
+.mono-badge-art { background-size: cover; background-position: center; color: transparent; }
+
+.ep-scrim {
+  position: fixed; inset: 0; z-index: 998;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .55); backdrop-filter: blur(2px);
+}
+.ep-box {
+  width: min(360px, calc(100vw - 32px));
+  background: var(--card, #14223a); color: var(--fg, #e8eef9);
+  border-radius: 18px; padding: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .5);
+}
+.ep-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+.ep-label { font-size: 12px; font-weight: 700; opacity: .7; margin: 12px 0 6px; display: block; }
+.ep-input {
+  width: 100%; box-sizing: border-box; padding: 11px 13px;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, .22);
+  background: rgba(255, 255, 255, .06); color: inherit; font: inherit; font-size: 16px;
+}
+.ep-avatars { display: flex; gap: 10px; flex-wrap: wrap; }
+.ep-avatar {
+  width: 46px; height: 46px; flex: 0 0 auto; cursor: pointer;
+  border-radius: 50%; border: 1px solid rgba(255, 255, 255, .22);
+  background: rgba(255, 255, 255, .06) center / cover no-repeat;
+  color: inherit; font-weight: 800; font-size: 15px;
+}
+.ep-avatar.is-on { border: 3px solid var(--gold, #fdb022); }
+.ep-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.ep-cancel, .ep-save {
+  padding: 9px 16px; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, .22); background: transparent; color: inherit;
+}
+.ep-save { background: var(--gold, #fdb022); color: #10203a; border-color: transparent; }

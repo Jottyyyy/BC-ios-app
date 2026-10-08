@@ -208,6 +208,56 @@ var BiyaLogin = (function () {
     providers: ['apple', 'guest']
   };
 
+  /* The player's own name and avatar — twin of Swift's `LoginProfile`.
+   *
+   * Local to the device in both languages, because there is no account server: Apple sign-in asks
+   * for ZERO scopes so that PrivacyInfo.xcprivacy can keep an empty NSPrivacyCollectedDataTypes,
+   * and a name typed here is the only identity that does not make that manifest a lie.
+   *
+   * The avatar is a CHOICE among bundled art rather than an upload. The RN original posts an image
+   * to Laravel (profile/index.tsx:112-133); copying that would mean a photo-library permission and
+   * a new App Review surface on a listing already rejected four times. */
+  var PROFILE = {
+    nameKey: 'biya.auth.name.v1',
+    avatarKey: 'biya.auth.avatar.v1',
+    maxNameLength: 24,
+    letterAvatar: 'letter',
+    coachAvatarPrefix: 'coach-',
+    coachLevels: [1, 2, 3, 4, 5]
+  };
+  PROFILE.avatars = [PROFILE.letterAvatar].concat(
+    PROFILE.coachLevels.map(function (n) { return PROFILE.coachAvatarPrefix + n; }));
+
+  /* Trim, collapse whitespace runs, cap, and treat empty as unset.
+   * Returns null rather than '' so there is exactly ONE representation of "no name chosen". */
+  function sanitizeName(raw) {
+    if (raw === null || raw === undefined) return null;
+    var collapsed = String(raw).split(/\s+/).filter(function (p) { return p.length > 0; }).join(' ');
+    if (collapsed === '') return null;
+    return collapsed.slice(0, PROFILE.maxNameLength);
+  }
+
+  /* 'coach-3' -> 3; anything else -> null, which the UI reads as "draw the letter". Fail closed,
+   * exactly like isSignedIn: a hand-edited key draws the initial rather than breaking the screen. */
+  function coachLevel(raw) {
+    if (typeof raw !== 'string' || raw.indexOf(PROFILE.coachAvatarPrefix) !== 0) return null;
+    var tail = raw.slice(PROFILE.coachAvatarPrefix.length);
+    if (!/^[0-9]+$/.test(tail)) return null;
+    var n = Number(tail);
+    return PROFILE.coachLevels.indexOf(n) >= 0 ? n : null;
+  }
+
+  function isValidAvatar(raw) {
+    if (typeof raw !== 'string') return false;
+    return raw === PROFILE.letterAvatar || coachLevel(raw) !== null;
+  }
+
+  /* The circled letter. Uppercased and trimmed, matching Swift's LoginProfile.initial. */
+  function nameInitial(name) {
+    var t = String(name === null || name === undefined ? '' : name).trim();
+    return t.length ? t.charAt(0).toUpperCase() : '?';
+  }
+
   function isSignedIn(raw) {
     if (raw === null || raw === undefined || raw === '') return false;
     return SESSION.providers.indexOf(raw) >= 0;
@@ -226,6 +276,8 @@ var BiyaLogin = (function () {
   var ACCOUNT_DATA = {
     erasedKeys: [
       'biya.auth.session.v1',     /* LoginSession.storageKey */
+      'biya.auth.name.v1',        /* LoginProfile.nameKey — the player's chosen name */
+      'biya.auth.avatar.v1',      /* LoginProfile.avatarKey — their chosen avatar */
       'biya.coach.takeback.v1',   /* CoachStore.takeBackKey */
       'biya.analysis.engine.v1'   /* EngineSettings.storageKey */
     ],
@@ -290,7 +342,15 @@ var BiyaLogin = (function () {
     privacy: 'Privacy',
     terms: 'Terms',
     legalSeparator: '·',
+    /* A FALLBACK as of 2026-10-08, not the only possibility — see PROFILE. It was the latter
+       for two years, which is the bug the client reported. */
     defaultDisplayName: 'Biyahero',
+    editProfileTitle: 'Edit Profile',
+    nameFieldLabel: 'Display name',
+    avatarFieldLabel: 'Avatar',
+    avatarLetterLabel: 'Letter',
+    saveButton: 'Save',
+    cancelButton: 'Cancel',
     appleProviderLabel: 'Apple',
     /* Beside "Signed in with", for a session opened without Apple. Not the em dash: "—" means
        signed out, and a guest is signed in. */
@@ -367,11 +427,48 @@ var BiyaLogin = (function () {
      * trusted one. A half-written or hand-edited key shows the login screen. */
     var provider = isSignedIn(raw) ? raw : null;
 
+    /* Same fail-closed reading for the profile. */
+    var rawName = null, rawAvatar = null;
+    try { rawName = s ? s.getItem(PROFILE.nameKey) : null; } catch (e) { rawName = null; }
+    try { rawAvatar = s ? s.getItem(PROFILE.avatarKey) : null; } catch (e) { rawAvatar = null; }
+    var customName = sanitizeName(rawName);
+    var avatar = isValidAvatar(rawAvatar) ? rawAvatar : PROFILE.letterAvatar;
+
     return {
       provider: function () { return provider; },
       isSignedIn: function () { return isSignedIn(provider); },
       providerLabel: function () { return providerLabel(provider); },
-      displayName: function () { return STRINGS.defaultDisplayName; },
+      /* The name the player typed, or null. The CARD falls back; this does not. */
+      customName: function () { return customName; },
+      avatar: function () { return avatar; },
+      avatarCoachLevel: function () { return coachLevel(avatar); },
+      /* This used to be `return STRINGS.defaultDisplayName;` — a getter that ignored the session
+       * and handed back a constant, so every browser and every device showed "Biyahero". The
+       * comment beside the caller in app.js claimed "the name comes from the session now, not a
+       * literal"; it did not, and nothing checked. */
+      displayName: function () { return customName === null ? STRINGS.defaultDisplayName : customName; },
+      /** Sets the name, or clears it back to the default when the field is emptied. */
+      setDisplayName: function (value) {
+        var clean = sanitizeName(value);
+        if (clean === customName) return false;
+        customName = clean;
+        try {
+          if (s) { if (clean === null) s.removeItem(PROFILE.nameKey); else s.setItem(PROFILE.nameKey, clean); }
+        } catch (e) { /* ignore */ }
+        return true;
+      },
+      /** Refuses a value the predicate does not know, exactly as signIn refuses a provider. */
+      setAvatar: function (value) {
+        if (!isValidAvatar(value) || value === avatar) return false;
+        avatar = value;
+        try {
+          if (s) {
+            if (value === PROFILE.letterAvatar) s.removeItem(PROFILE.avatarKey);
+            else s.setItem(PROFILE.avatarKey, value);
+          }
+        } catch (e) { /* ignore */ }
+        return true;
+      },
       /** Idempotent, and it refuses a provider the predicate does not know. */
       signIn: function (p) {
         if (p === undefined) p = SESSION.appleProvider;
@@ -832,11 +929,13 @@ var BiyaLogin = (function () {
   return {
     // pure
     TYPE: TYPE, PALETTE: PALETTE, LAYOUT: LAYOUT, TIMING: TIMING, DRIFT: DRIFT,
-    STRINGS: STRINGS, SESSION: SESSION, TOPICS: TOPICS,
+    STRINGS: STRINGS, SESSION: SESSION, TOPICS: TOPICS, PROFILE: PROFILE,
     line: line, fixedHeight: fixedHeight, spacerFor: spacerFor,
     leftoverFor: leftoverFor, heroTopFor: heroTopFor,
     driftPoint: driftPoint, usedKinds: usedKinds,
     isSignedIn: isSignedIn, providerLabel: providerLabel,
+    sanitizeName: sanitizeName, coachLevel: coachLevel, isValidAvatar: isValidAvatar,
+    nameInitial: nameInitial,
     AUTH_PHASES: AUTH_PHASES, AUTH_EVENTS: AUTH_EVENTS, SIMULATED_AUTH: SIMULATED_AUTH,
     ACCOUNT_DATA: ACCOUNT_DATA,
     authNext: authNext, authShowsError: authShowsError, authIsBusy: authIsBusy,

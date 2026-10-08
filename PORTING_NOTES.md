@@ -547,6 +547,22 @@ and it arrives with AirPlay, Picture in Picture, the lock screen and the accessi
 built 21 style keys of custom transport because `expo-av` gave it nothing usable; that is a week of
 work to arrive somewhere worse. The spec is amended in place.
 
+⚠ **CORRECTION, 2026-10-08.** The paragraph above was written as a decision and read ever after as a
+description, and the two were not the same thing. What shipped was SwiftUI's **`VideoPlayer`** — the
+AVKit view whose name the spec had reserved for a networking file — not `AVPlayerViewController`.
+`docs/tutorial-videos.md` and the type's own docstring asserted the controller as well, so three
+places agreed with each other and none agreed with the code.
+
+It cost two client bugs. `VideoPlayer` exposes **no fullscreen callbacks**, so there was nowhere to
+unlock the orientation and the video could not go landscape; and the claim of "background audio"
+that rode along with it was never true either — the only `AVAudioSession` in the repo set
+`.ambient`, which the Ring/Silent switch mutes, and there is no `UIBackgroundModes` key anywhere.
+
+It is `AVPlayerViewController` now, wrapped in a `UIViewControllerRepresentable`
+(`VideoScreens.SystemVideoPlayer`), and the reason is the callbacks rather than the transport. The
+"background audio" sentence is deleted rather than fixed: nothing makes it true, and
+`tools/qa/orientation_check.js` §4 now fails the gate if it comes back.
+
 ### The networking allow-list is an EXACT pair, not a ceiling
 
 §12 now holds each language to two names rather than to a count. "At most two" would let a third

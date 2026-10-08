@@ -162,11 +162,53 @@ The admin sees it saved and visible; the app shows a catalogue missing it, with 
 saying why. Both ports fold the unknown into **Uncategorized**, so a mis-categorised video is in the
 wrong section rather than in none.
 
-**The player is `AVPlayerViewController`.** The RN builds its own transport — 21 style keys of
-scrubber, timestamps, a hide timer and a seek strip — because `expo-av` gave it no controls worth
-using. The system player already has all of that, plus AirPlay, Picture in Picture, the lock screen,
-background audio and every accessibility affordance the OS knows. Rebuilding it would be a week of
-work to arrive somewhere worse.
+**The player is `AVPlayerViewController`**, wrapped in a `UIViewControllerRepresentable`. The RN
+builds its own transport — 21 style keys of scrubber, timestamps, a hide timer and a seek strip —
+because `expo-av` gave it no controls worth using. The system player already has all of that, plus
+AirPlay, Picture in Picture, the lock screen and every accessibility affordance the OS knows.
+Rebuilding it would be a week of work to arrive somewhere worse.
+
+> **This sentence was false from the port until 2026-10-08.** What shipped was SwiftUI's
+> `VideoPlayer`, and this doc, `PORTING_NOTES.md` and the type's own docstring all asserted the
+> controller instead. It cost two client bugs — see **Landscape** and **Audio** below. The reason
+> for the controller is now the one thing `VideoPlayer` cannot do, rather than the transport:
+> **it has no fullscreen callbacks.**
+
+### Landscape
+
+The app is a portrait phone layout and `ios/project.yml` declared
+`UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait` — a single value. **That list is
+an outer bound no runtime API can exceed**, so the video could not rotate no matter what it asked
+for. The client reported it as "ayaw ma-landscape kapag maximize".
+
+Three layers fix it, and all three are required:
+
+1. `ios/project.yml` lists portrait **and** both landscapes — mirrored into the committed
+   `ios/Biyaherong.xcodeproj/project.pbxproj`, which is generated but tracked. Edit one without the
+   other and a Mac that skips `xcodegen generate` builds the old value; `orientation_check.js` §1
+   fails on the disagreement.
+2. `BiyaherongAppDelegate` (in `ios/App/BiyaherongApp.swift`) narrows it again at runtime, returning
+   `OrientationGate.mask` — portrait for the whole app, landscape only while the player says so.
+3. `SystemVideoPlayer`'s two fullscreen delegate callbacks open and shut that gate.
+
+The RN original does the same thing by a different road: `app.json` declares it portrait-only too,
+and `expo-screen-orientation` overrides the supported set at runtime
+(`tutorial-videos/play.tsx:73-79`, `:113-123`). The Swift app simply had no runtime layer at all.
+
+### Audio
+
+`.playback` while the player is on screen, `.ambient` the rest of the time
+(`AudioSession` in `Sound.swift`). **`.ambient` is silenced by the Ring/Silent switch**, and it was
+the only category this app ever set — from `SoundManager.init`, lazily, so the symptom moved around
+depending on whether the user had played a puzzle first. It is right for chess move effects and
+wrong for a video someone pressed play on.
+
+Scoped rather than global on purpose: `.playback` everywhere would make move sounds play through a
+muted phone, which is a worse bug affecting more people.
+
+The RN reference has the same defect and is no guide — it sets no audio mode, and `expo-av` defaults
+to `playsInSilentModeIOS: false`, i.e. `.ambient`. The Android build is silenced by its mute switch
+too.
 
 ## The transport, and the rule it lives under
 

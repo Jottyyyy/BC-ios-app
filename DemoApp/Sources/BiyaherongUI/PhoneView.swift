@@ -684,11 +684,17 @@ struct ProfilePhone: View {
     @ObservedObject var premium: PremiumStore
     /// Raised by the Delete account button and lowered by either alert action.
     @State private var confirmingDelete = false
+    /// Raised by the pencil beside the name. The screen had no edit affordance at all until
+    /// 2026-10-08 — `grep TextField PhoneView.swift` returned nothing — which is why every player
+    /// was called "Biyahero".
+    @State private var editingProfile = false
     /// Back to Home. Profile is reached from the Home header's avatar and had no way out at all
     /// while the tab bar existed — it was the only screen in either language without one.
     let onExit: () -> Void
     let onPaywall: () -> Void
-    private var initial: String { String(login.displayName.prefix(1)) }
+    /// Uppercased through `LoginProfile`, which is also what `HomeAvatar` uses. A bare `prefix(1)`
+    /// here meant the same name could draw lowercase on this screen and uppercase on Home.
+    private var initial: String { LoginProfile.initial(login.displayName) }
     private var accuracy: Double {
         // `PuzzleStats.accuracy` is the golden-tested one; it returns nil before any attempt.
         guard let a = PuzzleStats.accuracy(store.state) else { return 0 }
@@ -711,15 +717,22 @@ struct ProfilePhone: View {
                 PhoneHeader(title: "Profile", onBack: onExit)
 
                 HStack(spacing: 14) {
-                    Text(initial).font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
-                        .frame(width: 64, height: 64).background(Theme.onGold.opacity(0.14), in: Circle())
-                        .overlay(Circle().stroke(Theme.onGold.opacity(0.3)))
+                    profileAvatar
                     VStack(alignment: .leading, spacing: 2) {
                         Text(login.displayName).font(Theme.nunito(20, .bold)).foregroundStyle(Theme.onGold)
                         Text(RatingTier.classify(rating)).font(Theme.nunito(14, .medium)).foregroundStyle(Theme.onGold.opacity(0.75))
                         Text("\(rating) rating").font(Theme.nunito(21, .extraBold)).foregroundStyle(Theme.onGold)
                     }
                     Spacer()
+                    // The pencil, in the same place the source puts it (`profile/index.tsx:336-343`).
+                    Button { editingProfile = true } label: {
+                        Image(systemName: "pencil")
+                            .font(Theme.nunito(17, .bold))
+                            .foregroundStyle(Theme.onGold)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.onGold.opacity(0.14), in: Circle())
+                    }
+                    .accessibilityLabel(LoginStrings.editProfileTitle)
                 }
                 .padding(18).background(Theme.violetGradient, in: RoundedRectangle(cornerRadius: 18)).padding(.horizontal, 18)
 
@@ -831,6 +844,28 @@ struct ProfilePhone: View {
                 Spacer(minLength: 8)
             }
         }
+        .sheet(isPresented: $editingProfile) {
+            EditProfileSheet(login: login)
+        }
+    }
+
+    /// The circled initial, or the coach picture the player chose.
+    ///
+    /// Not `HomeAvatar`: that one is sized from the Home header's own metrics and carries a gold
+    /// ring this card does not want. It takes the same `profileImage` shape though, and the same
+    /// `LoginProfile.initial`, so the two cannot disagree about a name any more.
+    @ViewBuilder
+    private var profileAvatar: some View {
+        ZStack {
+            Circle().fill(Theme.onGold.opacity(0.14))
+            if let level = login.avatarCoachLevel, let art = CoachArt.image(level: level) {
+                art.resizable().scaledToFill().clipShape(Circle())
+            } else {
+                Text(initial).font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
+            }
+        }
+        .frame(width: 64, height: 64)
+        .overlay(Circle().stroke(Theme.onGold.opacity(0.3)))
     }
 
     /// One line for all three states, so the card never has to say "Premium Active" to someone
@@ -871,5 +906,102 @@ struct ProfilePhone: View {
         if r >= 1200 { return (1200, 1600) }
         if r >= 800 { return (800, 1200) }
         return (0, 800)
+    }
+}
+
+/// Edit Profile — the name and the avatar, both local to this device.
+///
+/// The RN original is a `Modal` rather than a route (`profile/index.tsx:608+`) and edits seven
+/// fields against a Laravel endpoint. Six of them — bio, national and FIDE rating, birthday, gender,
+/// username — have no local meaning in an app with no account server, and the seventh, the avatar
+/// IMAGE, would cost a photo-library permission and a privacy-manifest entry on a listing that has
+/// been rejected four times already. So this is the name plus a pick from art the app already ships.
+///
+/// Draft state, not live binding: the field edits a local `@State` and only `Save` reaches the
+/// store. Typing into a `@Published` would rename the card behind the sheet letter by letter, and
+/// `Cancel` would have nothing to cancel.
+private struct EditProfileSheet: View {
+    @ObservedObject var login: LoginStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var draftName: String = ""
+    @State private var draftAvatar: String = LoginProfile.letterAvatar
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text(LoginStrings.nameFieldLabel)
+                        .font(Theme.nunito(13, .semiBold))
+                        .foregroundStyle(Theme.mutedForeground)
+                    TextField(LoginStrings.namePlaceholder, text: $draftName)
+                        .textFieldStyle(.plain)
+                        .font(Theme.nunito(17, .medium))
+                        .foregroundStyle(Theme.foreground)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radiusButton))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radiusButton)
+                            .stroke(Theme.mutedForeground.opacity(0.25)))
+
+                    Text(LoginStrings.avatarFieldLabel)
+                        .font(Theme.nunito(13, .semiBold))
+                        .foregroundStyle(Theme.mutedForeground)
+                    // A plain wrap rather than a LazyVGrid: six fixed items, and the grid would
+                    // bring its own sizing rules to a row that is already the right width.
+                    HStack(spacing: 12) {
+                        ForEach(LoginProfile.avatars, id: \.self) { choice in
+                            Button { draftAvatar = choice } label: {
+                                avatarSwatch(choice)
+                            }
+                            .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+                            .accessibilityLabel(LoginProfile.coachLevel(choice).map { "Coach \($0)" }
+                                ?? LoginStrings.avatarLetterLabel)
+                        }
+                    }
+                }
+                .padding(18)
+            }
+            .background(Theme.background.ignoresSafeArea())
+            .navigationTitle(LoginStrings.editProfileTitle)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(LoginStrings.cancelButton) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(LoginStrings.saveButton) {
+                        login.setDisplayName(draftName)
+                        login.setAvatar(draftAvatar)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Prefill from what is actually stored, NOT from `displayName` — that falls back to
+            // "Biyahero", and prefilling the fallback would make a player who has never chosen a
+            // name look like one who chose the brand word, then save it as theirs.
+            draftName = login.customName ?? ""
+            draftAvatar = login.avatar
+        }
+    }
+
+    /// One picker swatch: the coach picture, or a circled "A" standing in for the initial.
+    @ViewBuilder
+    private func avatarSwatch(_ choice: String) -> some View {
+        let selected = choice == draftAvatar
+        ZStack {
+            Circle().fill(Theme.card)
+            if let level = LoginProfile.coachLevel(choice), let art = CoachArt.image(level: level) {
+                art.resizable().scaledToFill().clipShape(Circle())
+            } else {
+                Image(systemName: "textformat")
+                    .font(Theme.nunito(16, .bold))
+                    .foregroundStyle(Theme.mutedForeground)
+            }
+        }
+        .frame(width: 48, height: 48)
+        .overlay(Circle().stroke(selected ? Theme.gold : Theme.mutedForeground.opacity(0.25),
+                                 lineWidth: selected ? 3 : 1))
     }
 }

@@ -9,6 +9,96 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-08 (fixed) — Four client bugs against the live 1.0.8, and the four holes they came through
+
+1.0.8 (57) reached the App Store on 2026-10-06. These are the client's first reports against it.
+All four are fixed here, on one branch at their request, and **every one of them shipped through a
+hole in the gate** — nothing in `tools/qa/` asserted that the position editor's controls did
+anything, that the video player was what three documents said it was, that an audio session was
+ever configured, or that the Profile screen had any structure at all. Three of the four were, in
+this repo's recurring phrase, true in a comment and false in the code.
+
+**1 · "Set up position ayaw gumana."** The feature was fully built — domain, panel, menu entry — and
+had a dropped repaint. The board draws `AnalysisVM.pieces`; the editor owns `editor.squares`; the
+only thing keeping them one picture is `rebuildEditPieces()`, and `AnalysisEditPanel` writes
+`editor` straight through its `@Binding`. So **🧹 Clear did nothing visible** — 32 pieces stayed put
+— and the next palette tap snapped the board to one piece, repainting against an editor that had
+been empty all along. Both references repaint after every mutation; RN's is a single line,
+`board.tsx:3675`, `chessRef.current.clear(); setBoard(chessRef.current.board())`. **The port took
+the first half of that line and dropped the second**, while `PositionEditor.clear()` cites it as its
+source. Fixed with a `didSet` funnel on `editor`, so every control that exists and every control
+added later repaints without being asked. Two more defects in the same family went with it:
+`enterEditMode` never seeded the board (entering while previewing an engine line showed one position
+while editing another), and `leaveEditMode` never restored it (an abandoned edit stayed on screen).
+
+**2 · "Video ayaw ma-landscape kapag maximize."** It could not: `ios/project.yml` declared
+`UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait`, a single value, and **that list
+is an outer bound no runtime API can exceed**. There was no `AppDelegate` and no orientation code
+anywhere in the repo. Three layers now: the plist lists both landscapes, `BiyaherongAppDelegate`
+narrows it back to portrait for every screen but the player, and the player's two fullscreen
+callbacks open and shut `OrientationGate`. The surprise is that **the RN reference is declared
+portrait-only too** (`app.json:6`) and rotates purely at runtime through `expo-screen-orientation` —
+the runtime layer is the thing the port never had, not the declaration.
+
+**3 · "Video wala daw audio."** The one and only `AVAudioSession` in the repo set `.ambient`, from
+`SoundManager.init`, lazily. **`.ambient` is silenced by the Ring/Silent switch.** It is right for
+chess move effects and wrong for a video someone pressed play on, and because the category is
+process-wide and set on first sound, the symptom moved around: cold-launch into Tutorial Videos and
+the session was still iOS's default `.soloAmbient`. Now `.playback` for exactly as long as the
+player is on screen and `.ambient` the rest of the time — scoped deliberately, since `.playback`
+app-wide would play move sounds through a muted phone. **The RN reference has the identical defect**
+(`expo-av` defaults to `playsInSilentModeIOS: false`) and was no guide to the fix.
+
+**4 · "Hindi naeedit profile, puro Biyahero."** `LoginStore.displayName` was
+`{ LoginStrings.defaultDisplayName }` — a computed property that ignored the session and returned a
+constant. Not a fallback: no setter, no storage key, no UI, so every device on earth showed the same
+name. The comment defending it said "this sign-in is simulated anyway", which stopped being true
+when real Sign in with Apple landed. There is now a persisted name and avatar, a pencil on the
+Profile card and an edit sheet behind it. **Apple still supplies no name, on purpose** — the sign-in
+requests zero scopes so `PrivacyInfo.xcprivacy` can keep an empty `NSPrivacyCollectedDataTypes` — so
+a local name is the privacy design, not a shortcut. The avatar is a **choice** among the five coach
+characters the app already bundles rather than a photo upload, which would have cost a photo-library
+permission and a new App Review surface. Both keys are erased by delete-account and deliberately
+survive sign-out.
+
+**Also fixed, found on the way:**
+
+- **The `AVPlayer` was constructed inside `body`** (`VideoPlayer(player: AVPlayer(url: url))`), held
+  in no `@State`, on a screen with six `@State` properties — so any redraw handed the view a fresh
+  player seeked to zero. The textbook "video restarts / stalls", and it would have been blamed on
+  the network.
+- **Three documents asserted a player that did not exist.** `VideoScreens.swift`,
+  `docs/tutorial-videos.md` and `PORTING_NOTES.md` all claimed `AVPlayerViewController` over SwiftUI
+  `VideoPlayer`, and "background audio" besides — which `.ambient` cannot do and no
+  `UIBackgroundModes` key anywhere enables. The claim is true now, for a different reason
+  (`VideoPlayer` has no fullscreen callbacks); the background-audio sentence is deleted.
+- **`CURRENT_PROJECT_VERSION` had drifted a third time** — it read `"55"` while 56 was rejected and
+  57 was approved and released. Two paragraphs of warning in that file did not stop it, because
+  nothing reads it. Now `"58"`, with `MARKETING_VERSION` at `1.0.9`.
+- **`app.js` carried a comment claiming the name "comes from the session now, not a literal".** It
+  did not. The gate now fails if that sentence returns.
+- **`debug.log`** — a stray Chrome crashpad log at the repo root, untracked and not ignored, which
+  `git add -A` would have committed. Ignored.
+
+**Four new gate families, all mutation-proved before being trusted — 36/36 mutants killed.**
+`replay_position_editor.js` §8 pins the repaint funnel (7 mutants); the new
+`tools/qa/orientation_check.js` pins the orientation wiring, the player and the audio category (15);
+`replay_login.js` §14 replays every name and avatar rule across both languages and round-trips the
+store (14). The orientation check also guards a drift that is **newly possible**: `project.yml` is
+the source and `project.pbxproj` is generated **but committed**, so editing one without running
+`xcodegen` ships the old value — §1 fails when the two disagree.
+
+Gates: `js_goldens` 36,204 → **36,323** across 87 suites. `replay_login` 534 → 607,
+`replay_position_editor` 65 → 72, `orientation_check` 28 new.
+
+**`web-demo/` was updated** — the editor repaint already behaved correctly there and is now pinned;
+the profile editor is built twice, because the browser twin was equally read-only. Orientation and
+the audio session have no browser meaning and are stated as such in the gate.
+
+⚠ **Three things no gate on this checkout can verify**, because they are UIKit behaviour and there
+is no Swift compiler here: the rotation, the audio category and the editor repaint. The checks pin
+the *wiring*. `docs/tutorial-videos.md` and `docs/analysis-board.md` carry the device checks.
+
 ### 2026-09-16 (changed) — The app icon loses the phone, and so does every screen that draws it
 
 Apple rejected **1.0.8 (56)** under **Guideline 5.2.5 — Intellectual Property**:
