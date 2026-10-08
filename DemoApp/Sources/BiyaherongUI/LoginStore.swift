@@ -37,9 +37,29 @@ final class LoginStore: ObservableObject {
 
     var isSignedIn: Bool { LoginSession.isSignedIn(provider) }
 
-    /// Apple lets a user hide their name, and this sign-in is simulated anyway, so the app shows the
-    /// brand's own word for the player rather than inventing a fake identity.
-    var displayName: String { LoginStrings.defaultDisplayName }
+    /// The name the player typed, or `nil` while they have not. Private setter for the same reason
+    /// `provider` has one: `setDisplayName` is the single path, so the published value and the
+    /// stored string cannot drift.
+    @Published private(set) var customName: String?
+
+    /// `LoginProfile.letterAvatar`, or `"coach-1"…"coach-5"`.
+    @Published private(set) var avatar: String = LoginProfile.letterAvatar
+
+    /// What every screen draws.
+    ///
+    /// **This used to be `{ LoginStrings.defaultDisplayName }` — a computed property that ignored
+    /// the session and returned a constant.** Not a fallback: there was no setter, no storage key
+    /// and no UI, so every device showed "Biyahero" and the client reported it as a bug. The
+    /// comment that stood here justified it with "this sign-in is simulated anyway", which stopped
+    /// being true when real Sign in with Apple landed and was never revisited.
+    ///
+    /// Apple still never supplies a name — `LoginAppleAuth` requests zero scopes on purpose, so
+    /// that `PrivacyInfo.xcprivacy` can keep an empty `NSPrivacyCollectedDataTypes` — so the name
+    /// is the player's own, typed on this device and kept on it.
+    var displayName: String { customName ?? LoginStrings.defaultDisplayName }
+
+    /// The coach picture to draw, or `nil` for the circled initial.
+    var avatarCoachLevel: Int? { LoginProfile.coachLevel(avatar) }
 
     var providerLabel: String { LoginSession.providerLabel(provider) }
 
@@ -52,6 +72,12 @@ final class LoginStore: ObservableObject {
         // of silently letting someone past it.
         let raw = storage.get(LoginSession.storageKey)
         self.provider = LoginSession.isSignedIn(raw) ? raw : nil
+        // Same fail-closed reading for the profile: `sanitize` turns anything unusable into `nil`
+        // (which shows the default name) and an unrecognised avatar falls back to the letter. A
+        // hand-edited key cannot put this screen into a state it has no branch for.
+        self.customName = LoginProfile.sanitize(storage.get(LoginProfile.nameKey))
+        let storedAvatar = storage.get(LoginProfile.avatarKey)
+        self.avatar = LoginProfile.isValidAvatar(storedAvatar) ? storedAvatar! : LoginProfile.letterAvatar
         // In a TEST build, open the session at launch so the app boots straight to Home and the
         // login screen never appears. Asked for directly: the client is testing FEATURES, and a
         // login screen — even a one-tap one — was still a wall in front of them.
@@ -76,9 +102,35 @@ final class LoginStore: ObservableObject {
 
     /// Closes it. The key is REMOVED rather than set to an empty string, so a later read is a clean
     /// miss and not a value the predicate has to special-case.
+    ///
+    /// The name and avatar are deliberately NOT cleared here. They are device-local preferences,
+    /// like `biya.coach.takeback.v1`, and signing back in to find yourself renamed would be a
+    /// surprise. **Delete account does erase them** — both keys are in `LoginAccountData.erasedKeys`,
+    /// which is the list `replay_login.js` holds the two languages to.
     func signOut() {
         guard provider != nil else { return }
         provider = nil
         storage.remove(LoginSession.storageKey)
+    }
+
+    /// Sets the player's name, or clears it back to the default when they empty the field.
+    ///
+    /// Goes through `LoginProfile.sanitize`, so trailing spaces, a pasted newline and a 300-character
+    /// paste all land as the same shape the browser twin produces for the same input.
+    func setDisplayName(_ raw: String) {
+        let clean = LoginProfile.sanitize(raw)
+        guard clean != customName else { return }
+        customName = clean
+        if let clean { storage.set(LoginProfile.nameKey, clean) } else { storage.remove(LoginProfile.nameKey) }
+    }
+
+    /// Picks an avatar. An unrecognised value is ignored rather than stored — the picker can only
+    /// offer `LoginProfile.avatars`, so reaching here with anything else means something is wrong
+    /// and the last good value is the safer answer.
+    func setAvatar(_ raw: String) {
+        guard LoginProfile.isValidAvatar(raw), raw != avatar else { return }
+        avatar = raw
+        if raw == LoginProfile.letterAvatar { storage.remove(LoginProfile.avatarKey) }
+        else { storage.set(LoginProfile.avatarKey, raw) }
     }
 }

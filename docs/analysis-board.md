@@ -71,7 +71,7 @@ suite, including the session layer and a real hit-test check of the board compon
 | `DemoApp/…/AnalysisMetricsCheck.swift` | its assertions, runnable as `swift run AnalysisMetricsCheck` |
 | `DemoApp/…/BoardArrows.swift` | the SwiftUI arrow overlay, composed at the call site |
 | `DemoApp/…/AnalysisMenuSidebar.swift` | the ☰ sidebar: four sections, ten items, width as a ratio |
-| `DemoApp/…/AnalysisEditPanel.swift` | Setup Position's palette, castling chips, validation banner and FEN row |
+| `DemoApp/…/AnalysisEditPanel.swift` | Setup Position's palette, castling chips, validation banner and FEN row. **It mutates `vm.editor` through a `@Binding` and repaints nothing — the `didSet` on that property is what redraws the board.** See below |
 | `DemoApp/…/AnalysisPgnModals.swift` | Import (paste + `.fileImporter`) and Export (copy + `.fileExporter`) |
 | `DemoApp/…/AnalysisAnnotationPicker.swift` | the two-section picker, and the badge overlay that draws its glyph |
 | `DemoApp/…/AnalysisVariationModal.swift` | the variation card, its delete confirmation, and the autoplay-speed picker |
@@ -850,6 +850,45 @@ how `PromotionOverlay` is already applied — it keeps the shared board free of 
 
 The JavaScript half is documented in [`web-demo.md`](web-demo.md#arrows-and-drag-added-for-the-analysis-board),
 including the three hazards that make drag able to silently break tap-to-move in Play and Puzzles.
+
+## Setup Position: the board draws `pieces`, the editor owns `squares`
+
+They are different things, and exactly one line keeps them the same picture.
+
+`AnalysisEditPanel` writes `vm.editor` straight through its `@Binding` — 🧹 Clear is literally
+`editor.clear()` and nothing else. Nothing in that path refills `AnalysisVM.pieces`, which is what
+`BoardView` actually renders. So **Clear did nothing visible**: all 32 pieces stayed on the board,
+tapping again did nothing, and the next palette tap then snapped the board down to one piece because
+`editTap` finally repainted against an editor that had been empty all along. The client reported it
+as "set up position ayaw gumana", and they were describing it accurately.
+
+The fix is a property observer, and it is deliberately not a wrapper method:
+
+```swift
+@Published var editor = PositionEditor() {
+    didSet { if editing { rebuildEditPieces() } }
+}
+```
+
+A `Binding` write calls the setter, so this catches every control that exists **and every control
+somebody adds later without reading this page** — which is the failure mode a method would invite.
+Both reference implementations already had this discipline: the browser's `paintEditor()` ends every
+handler in `analysis.js`, and the RN original is one line, `board.tsx:3675`:
+`chessRef.current.clear(); setBoard(chessRef.current.board());`. The port took the first half of that
+line and dropped the second — while `PositionEditor.clear()` cites it as its source.
+
+Two call sites still repaint by hand, and both are cases the funnel cannot reach:
+
+- **`enterEditMode()`** seeds `editor` *before* `editing = true`, so the observer is still shut. It
+  also exits any line preview first — `pieces` would otherwise hold the previewed position while
+  `editor` held the real cursor, two different boards until the first tap — and drops `selected` /
+  `legalTargets` so a stale selection ring does not float over the editor.
+- **`leaveEditMode()`** calls `rebuildPieces()`, because `refresh()` assigns no pieces at all.
+  Without it, abandoning an edit left it on screen until something unrelated repainted.
+
+`tools/qa/replay_position_editor.js` §8 pins all of this. Everything before §8 in that file tests the
+domain tables and, as its own header says, cannot see the screen — which is the hole this shipped
+through.
 
 ## Testing notes
 

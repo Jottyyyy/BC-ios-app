@@ -35,3 +35,7 @@ build/
 # App Store Connect API private keys - NEVER commit these
 AuthKey_*.p8
 *.p8
+
+# Chrome/Crashpad drops this at the repo root when the browser tooling runs. Untracked and
+# unwanted, but NOT ignored until now — `git add -A` would have committed it.
+debug.log

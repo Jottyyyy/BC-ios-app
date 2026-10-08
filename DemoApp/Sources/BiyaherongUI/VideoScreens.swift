@@ -390,17 +390,33 @@ struct VideoCard: View {
 /// **DEVIATION, deliberate.** The RN screen builds its own transport — 21 style keys of scrubber,
 /// timestamps, a hide timer and a seek strip — because `expo-av` gave it no controls worth using.
 /// `AVPlayerViewController` already has all of that, plus AirPlay, Picture in Picture, the lock
-/// screen, background audio and every accessibility affordance the system knows about. Rebuilding
-/// it would be a week of work to arrive somewhere worse, and `PORTING_NOTES.md` records it.
+/// screen and every accessibility affordance the system knows about. Rebuilding it would be a week
+/// of work to arrive somewhere worse, and `PORTING_NOTES.md` records it.
+///
+/// ⚠ **That paragraph was aspirational until 2026-10-08.** The shipped code was SwiftUI's
+/// `VideoPlayer`, not `AVPlayerViewController`, while this docstring, `docs/tutorial-videos.md` and
+/// `PORTING_NOTES.md` all asserted otherwise. It is `AVPlayerViewController` now — not for the
+/// transport, which `VideoPlayer` also wraps, but because **`VideoPlayer` exposes no fullscreen
+/// callbacks**, and the fullscreen transition is the only moment at which the app can know to
+/// unlock the orientation. See `SystemVideoPlayer` below.
 struct VideoPlayerScreen: View {
     let video: VideoLibrary.Video
     let onExit: () -> Void
 
+    /// Built **once**, and this is a fix rather than a style preference.
+    ///
+    /// It used to be `VideoPlayer(player: AVPlayer(url: url))` — constructed inline, inside `body`,
+    /// held nowhere. SwiftUI re-evaluates `body` on any invalidation, and the screen that presents
+    /// this one has six `@State` properties, so a redraw handed the view a **brand-new `AVPlayer`
+    /// seeked to zero**. That is the textbook cause of a video that restarts, stalls, or refuses to
+    /// start, and it would have been blamed on the network.
+    @State private var player: AVPlayer?
+
     var body: some View {
         VStack(spacing: 0) {
             VideoHeader(title: video.title, onBack: onExit)
-            if let url = URL(string: video.videoURL) {
-                VideoPlayer(player: AVPlayer(url: url))
+            if let player {
+                SystemVideoPlayer(player: player)
             } else {
                 // `VideoLibrary.parse` drops a row with no URL, so this is unreachable from a
                 // manifest — but a `String` that is not a `URL` is not the same check, and a blank
@@ -413,5 +429,74 @@ struct VideoPlayerScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(VideoPlay.rootBackgroundColor.ignoresSafeArea())
+        .onAppear {
+            if player == nil, let url = URL(string: video.videoURL) {
+                player = AVPlayer(url: url)
+            }
+            // `.playback`, so the video is audible with the Ring/Silent switch engaged. See the
+            // `AudioSession` docstring in Sound.swift for why this is scoped and not global.
+            AudioSession.videoPlayback()
+        }
+        .onDisappear {
+            player?.pause()
+            AudioSession.ambient()
+            // Restore portrait unconditionally, exactly as the source does on unmount
+            // (`play.tsx:76-78`) — leaving the screen while still fullscreen must not strand the
+            // rest of the app in landscape.
+            OrientationGate.set(landscape: false)
+        }
     }
 }
+
+#if canImport(UIKit)
+/// `AVPlayerViewController`, wrapped for the one thing SwiftUI's `VideoPlayer` cannot give: the
+/// fullscreen transition callbacks.
+///
+/// `willBeginFullScreenPresentation…` and `willEndFullScreen…` are the only hooks in the system
+/// that fire when the user taps the expand control, and they are the moments the orientation gate
+/// has to open and shut. They are the whole reason for the `UIViewControllerRepresentable` — the
+/// player itself is identical either way.
+private struct SystemVideoPlayer: UIViewControllerRepresentable {
+    let player: AVPlayer
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    /// Identity, not equality: `AVPlayer` is a reference type and swapping it would restart
+    /// playback. The guard is what makes the `@State` above actually count.
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player { controller.player = player }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willBeginFullScreenPresentationWithAnimationCoordinator
+                coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            OrientationGate.set(landscape: true)
+        }
+
+        func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willEndFullScreenPresentationWithAnimationCoordinator
+                coordinator: UIViewControllerTransitionCoordinator
+        ) {
+            OrientationGate.set(landscape: false)
+        }
+    }
+}
+#else
+/// macOS has no `AVPlayerViewController` and no interface orientation. The demo app must keep
+/// building, so it gets the plain SwiftUI player and no gate — the same split `Haptics` makes.
+private struct SystemVideoPlayer: View {
+    let player: AVPlayer
+    var body: some View { VideoPlayer(player: player) }
+}
+#endif

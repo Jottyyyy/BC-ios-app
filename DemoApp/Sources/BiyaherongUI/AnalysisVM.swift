@@ -78,7 +78,26 @@ final class AnalysisVM: ObservableObject {
     /// Setup Position is open.
     @Published private(set) var editing = false
     /// The board being built while it is. A value type, so undo would be a copy away.
-    @Published var editor = PositionEditor()
+    ///
+    /// **The `didSet` is the repaint funnel, and it is load-bearing.** The board draws `pieces`,
+    /// not `editor`, so a mutation that does not refill `pieces` is invisible. `AnalysisEditPanel`
+    /// writes straight through its `@Binding` — `editor.clear()` and nothing else — so before this
+    /// observer existed, 🧹 **Clear did nothing on screen**: all 32 pieces stayed put, and the next
+    /// palette tap then snapped the board down to one piece, because `editTap` finally repainted
+    /// against an editor that had been empty all along. That is the whole of the client's "set up
+    /// position ayaw gumana".
+    ///
+    /// Both reference implementations repaint after EVERY mutation — the browser's `paintEditor()`
+    /// ends every handler in `web-demo/js/analysis.js`, and the RN original is one line,
+    /// `board.tsx:3675`: `chessRef.current.clear(); setBoard(chessRef.current.board());`. The port
+    /// took the first half and dropped the second — while `PositionEditor.clear()` cites that very
+    /// line as its source.
+    ///
+    /// An observer rather than a wrapper method on purpose: it catches the controls that exist,
+    /// and the ones somebody adds later without reading this.
+    @Published var editor = PositionEditor() {
+        didSet { if editing { rebuildEditPieces() } }
+    }
     /// The palette selection: a piece key, `AnalysisEditPanel.eraser`, or nil.
     @Published var editorSelection: String?
     @Published var editorFEN = ""
@@ -963,17 +982,32 @@ final class AnalysisVM: ObservableObject {
     func enterEditMode() {
         stopAutoplay()
         cancelAnalysis()                  // the engine has nothing to say about a half-built board
+        // Leave the preview FIRST. `editor` is seeded from `session.position` — the real cursor —
+        // but `pieces` would still be holding the PREVIEWED line, so the screen would show one
+        // board while the editor held another, until the first tap snapped them together.
+        previewExit()
+        // A selection ring and legal-move dots belong to the game, not to a half-built board.
+        selected = nil
+        legalTargets = []
         editor = PositionEditor(session.position)
         editorSelection = nil
         editorFEN = ""
         lastEditTap = nil
         editing = true
+        // `editing` is only true as of the line above, so the `didSet` on `editor` did not fire for
+        // the seeding assignment. This is the one repaint the funnel cannot do for itself.
+        rebuildEditPieces()
         refresh()
     }
 
     func leaveEditMode() {
         editing = false
         editorSelection = nil
+        // Back to the real board. `refresh()` does not touch `pieces` — nothing in it assigns them —
+        // so without this the abandoned edit stayed on screen after "Leave Edit Board", and only an
+        // unrelated repaint elsewhere would clear it. `applyEditedPosition` does not need this: it
+        // goes through `adopt(tree:)`, which rebuilds.
+        rebuildPieces()
         refresh()
         scheduleAnalysis()
     }
@@ -993,7 +1027,9 @@ final class AnalysisVM: ObservableObject {
         } else if let key = editorSelection {
             editor.put(key, at: sq)
         }
-        rebuildEditPieces()
+        // No repaint here any more: every branch above writes `editor`, and the `didSet` on it is
+        // the one funnel. Repainting again would mint a second set of `BoardPiece` UUIDs for the
+        // same tap, which SwiftUI reads as 32 new views.
     }
 
     /// ✓ Apply Position. Refuses an illegal board and says why, as the source's Alert does.
@@ -1021,7 +1057,7 @@ final class AnalysisVM: ObservableObject {
             return
         }
         editorFEN = ""
-        rebuildEditPieces()
+        // `editor.loadFEN` above already wrote `editor`, so the funnel has repainted.
     }
 
     /// While editing, the board shows the EDITOR's squares, not the session's.

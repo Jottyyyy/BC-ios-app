@@ -138,6 +138,53 @@ expect(AB.nagFor('⩲') === 14 && AB.nagFor('⩱') === 15,
 expect(session.includes('nag(forSymbol: "⩲") == 14') && session.includes('nag(forSymbol: "⩱") == 15'),
   'and the Swift asserts the same');
 
+// ---- 8. the editor REPAINTS — the hole this file shipped a bug through ------
+//
+// Everything above tests the domain tables. None of it can see the screen, and the header of this
+// file says so. So Setup Position shipped with a defect none of §1-§7 could reach: the panel wrote
+// `editor` through its `@Binding`, nothing refilled `AnalysisVM.pieces`, and 🧹 Clear did nothing
+// visible — all 32 pieces stayed on the board until the next tap snapped it to one.
+//
+// The board draws `pieces`; the editor owns `squares`. The ONLY thing that keeps them the same
+// picture is `rebuildEditPieces()`. These assertions pin the funnel that calls it, because a
+// control added later will write `editor` and nothing else — that is what a `@Binding` is for.
+//
+// Source-level, not behavioural: there is no Swift compiler on this checkout. It proves the wiring
+// exists, not that SwiftUI honours it. The twin in `web-demo/js/analysis.js` is the behavioural
+// half, and §4 of `coach_screen_test.js` is the precedent for that split.
+{
+  const vm = fs.readFileSync(
+    path.join(ROOT, 'DemoApp', 'Sources', 'BiyaherongUI', 'AnalysisVM.swift'), 'utf8');
+
+  // The funnel itself: a property observer on `editor`, repainting while editing.
+  expect(/@Published var editor = PositionEditor\(\)\s*\{\s*\n\s*didSet \{ if editing \{ rebuildEditPieces\(\) \} \}/
+    .test(vm),
+    'AnalysisVM.editor carries the didSet repaint funnel — without it 🧹 Clear is invisible');
+
+  // The one repaint the funnel cannot do for itself: the seeding assignment happens while
+  // `editing` is still false, so `enterEditMode` has to paint once by hand.
+  const enter = (vm.match(/func enterEditMode\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+  expect(enter.includes('rebuildEditPieces()'),
+    'enterEditMode seeds the board from the editor — it assigns `editor` before `editing = true`');
+  expect(enter.indexOf('editing = true') < enter.indexOf('rebuildEditPieces()'),
+    '...and does it AFTER `editing = true`, or the funnel is still shut');
+  expect(enter.includes('previewExit()'),
+    'enterEditMode leaves the preview first, or the screen shows a line while the editor holds the cursor');
+  expect(enter.includes('selected = nil') && enter.includes('legalTargets = []'),
+    'enterEditMode drops the selection ring and legal-move dots');
+
+  // Leaving without applying has to put the real board back: `refresh()` never touches `pieces`.
+  const leave = (vm.match(/func leaveEditMode\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+  expect(leave.includes('rebuildPieces()'),
+    'leaveEditMode restores the real board — refresh() assigns no pieces, so the edit would linger');
+
+  // And the funnel must stay the ONLY path, or the double-repaint churn comes back: every
+  // `editor` write would mint a second set of BoardPiece UUIDs for the same gesture.
+  const editTap = (vm.match(/func editTap\(_ sq: Int\) \{[\s\S]*?\n    \}/) || [''])[0];
+  expect(!editTap.includes('rebuildEditPieces()'),
+    'editTap does NOT repaint by hand — the didSet already did, and twice means 32 new views');
+}
+
 const result = {
   passed,
   failures,

@@ -148,11 +148,42 @@ OS-provided TLS with no cryptography of the app's own, so the standard-encryptio
 **What is NOT settled is the App Store Connect privacy answers** — they were filled in for an app
 that sent nothing, and nothing in this repo can check them. See `PORTING_NOTES.md`.
 
+## The player's name and avatar — local, and that is the whole design
+
+`LoginProfile` (`LoginMetrics.swift`) holds two keys, `biya.auth.name.v1` and `biya.auth.avatar.v1`,
+and the pure rules over them. `LoginStore` persists both; `ProfilePhone`'s pencil opens
+`EditProfileSheet`; `web-demo/js/login.js` + `app.js:openEditProfile()` are the twin.
+
+**Until 2026-10-08 none of that existed and `LoginStore.displayName` was
+`{ LoginStrings.defaultDisplayName }` — a computed property that ignored the session and returned a
+constant.** Not a fallback: there was no setter, no key and no UI, so every device showed
+**"Biyahero"**, and the client reported it. The comment defending it said "this sign-in is simulated
+anyway", which stopped being true when real Sign in with Apple landed and was never revisited.
+
+**Apple still never supplies the name, on purpose.** `LoginAppleAuth` requests **zero scopes**
+(`request.requestedScopes = []`) so that `PrivacyInfo.xcprivacy` can keep an empty
+`NSPrivacyCollectedDataTypes`. A name the player types on the device is therefore the only identity
+this app can offer without making that manifest a lie — the local design is the privacy design.
+
+**The avatar is a choice, not an upload.** The RN original posts an image to Laravel
+(`profile/index.tsx:112-133`); copying that would need `NSPhotoLibraryUsageDescription`, a privacy
+manifest entry and a new App Review surface on a listing already rejected four times. Instead the
+picker offers the letter plus the five coach characters the app already bundles in `Characters/`.
+
+Two rules worth keeping in mind:
+
+- **Delete account erases both keys** — they are in `LoginAccountData.erasedKeys`, and
+  `replay_login.js` holds the two languages to that list.
+- **Sign out does not.** They are device preferences, like `biya.coach.takeback.v1`; signing back in
+  to find yourself renamed would be a surprise.
+
 ## Key files
 
 | File | What it holds |
 |---|---|
 | `DemoApp/…/LoginAppleAuth.swift` | the real `ASAuthorizationController` call — **the only file in the package that imports `AuthenticationServices`** — plus the anchor ladder and the captured error code |
+| `DemoApp/…/LoginMetrics.swift` → `LoginProfile` | the name/avatar keys, `sanitize`, `coachLevel`, `isValidAvatar`, `initial` — all pure, all replayed |
+| `DemoApp/…/PhoneView.swift` → `EditProfileSheet` | the edit sheet: draft state, name field, avatar picker |
 | `DemoApp/…/AccountDeletion.swift` | the eraser. Deliberately does **not** import StoreKit |
 | `DemoApp/…/LoginMetrics.swift` | the pure layer: `LoginAuth` (the state machine), `LoginAccountData` (both lists), the copy |
 | `DemoApp/…/LoginStore.swift` | unchanged — the session, the persistence and the fail-closed read |

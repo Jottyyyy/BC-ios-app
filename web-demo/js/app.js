@@ -1165,6 +1165,72 @@
     { name: 'Intermediate', floor: 1200, ceil: 1600 }, { name: 'Beginner', floor: 800, ceil: 1200 },
     { name: 'Novice', floor: 0, ceil: 800 }
   ];
+  /* Edit Profile — the browser twin of `EditProfileSheet` in PhoneView.swift.
+   *
+   * Draft state, not live binding: the field edits locals and only Save reaches the store, so the
+   * card behind does not rename itself letter by letter and Cancel has something to cancel. Same
+   * reason the Swift sheet keeps `draftName`/`draftAvatar` in @State.
+   *
+   * Fixed-position overlay on document.body, following the toast at the bottom of this file — the
+   * only existing out-of-flow idiom here. */
+  function openEditProfile() {
+    var auth = BiyaLogin.shared();
+    var S = BiyaLogin.STRINGS;
+    var P = BiyaLogin.PROFILE;
+    var draftName = auth.customName() === null ? '' : auth.customName();
+    var draftAvatar = auth.avatar();
+
+    var scrim = el('div', 'ep-scrim');
+    var box = el('div', 'ep-box');
+    box.innerHTML =
+      '<div class="ep-title">' + S.editProfileTitle + '</div>' +
+      '<label class="ep-label" for="ep-name">' + S.nameFieldLabel + '</label>' +
+      '<input id="ep-name" class="ep-input" type="text" maxlength="' + P.maxNameLength +
+        '" placeholder="' + S.defaultDisplayName + '">' +
+      '<div class="ep-label">' + S.avatarFieldLabel + '</div>' +
+      '<div class="ep-avatars"></div>' +
+      '<div class="ep-actions">' +
+        '<button class="ep-cancel" type="button">' + S.cancelButton + '</button>' +
+        '<button class="ep-save" type="button">' + S.saveButton + '</button>' +
+      '</div>';
+
+    var input = box.querySelector('#ep-name');
+    input.value = draftName;
+
+    var row = box.querySelector('.ep-avatars');
+    function paintAvatars() {
+      row.innerHTML = '';
+      P.avatars.forEach(function (choice) {
+        var lvl = BiyaLogin.coachLevel(choice);
+        var b = el('button', 'ep-avatar' + (choice === draftAvatar ? ' is-on' : ''));
+        b.type = 'button';
+        b.setAttribute('aria-label', lvl === null ? S.avatarLetterLabel : 'Coach ' + lvl);
+        if (lvl === null) b.textContent = 'A';
+        else b.style.backgroundImage = 'url(assets/characters/level-' + lvl + '.webp)';
+        b.onclick = function () { draftAvatar = choice; paintAvatars(); };
+        row.appendChild(b);
+      });
+    }
+    paintAvatars();
+
+    function close() { if (scrim.parentNode) scrim.parentNode.removeChild(scrim); }
+    box.querySelector('.ep-cancel').onclick = close;
+    box.querySelector('.ep-save').onclick = function () {
+      auth.setDisplayName(input.value);
+      auth.setAvatar(draftAvatar);
+      close();
+      // Home's header avatar reads the same name, so it has to be told too — the Swift side gets
+      // this for free from @Published.
+      if (typeof BiyaHome !== 'undefined' && BiyaHome.setUserName) BiyaHome.setUserName(auth.displayName());
+      renderProfile();
+    };
+    scrim.onclick = function (e) { if (e.target === scrim) close(); };
+
+    scrim.appendChild(box);
+    document.body.appendChild(scrim);
+    input.focus();
+  }
+
   function renderProfile() {
     view.scrollTop = 0; view.innerHTML = '';
     // Profile is reached from the Home header's avatar. Until the tab bar was removed it was the
@@ -1178,12 +1244,22 @@
     view.appendChild(head);
     var wrap = el('div', 'wrap-x stack');
     var tier = R.classify(store.puzzleRating);
-    // The name comes from the session now, not a literal, so the badge and the header agree with
-    // whatever the signed-in user is called.
-    var who = BiyaLogin.shared().displayName();
-    wrap.appendChild(el('div', 'profile-card',
-      '<div class="mono-badge">' + who.charAt(0) + '</div><div><div class="pname">' + who + '</div><div class="ptier">' + tier + '</div></div>' +
-      '<div class="prating">' + store.puzzleRating + '<div style="font-size:10px;opacity:.8;font-weight:700">RATING</div></div>'));
+    // The name comes from the session, and as of 2026-10-08 that is finally true. It said so here
+    // for two years while `displayName()` returned a constant, which is exactly the sort of comment
+    // this repo keeps getting burned by — the client reported every profile being called "Biyahero".
+    var auth = BiyaLogin.shared();
+    var who = auth.displayName();
+    var lvl = auth.avatarCoachLevel();
+    var badge = lvl === null
+      ? '<div class="mono-badge">' + BiyaLogin.nameInitial(who) + '</div>'
+      : '<div class="mono-badge mono-badge-art" style="background-image:url(assets/characters/level-'
+        + lvl + '.webp)"></div>';
+    var card = el('div', 'profile-card',
+      badge + '<div><div class="pname">' + who + '</div><div class="ptier">' + tier + '</div></div>' +
+      '<div class="prating">' + store.puzzleRating + '<div style="font-size:10px;opacity:.8;font-weight:700">RATING</div></div>' +
+      '<button class="pedit" type="button" aria-label="' + BiyaLogin.STRINGS.editProfileTitle + '">✎</button>');
+    card.querySelector('.pedit').onclick = function () { openEditProfile(); };
+    wrap.appendChild(card);
 
     var acc = store.attempts ? Math.round(store.solved / store.attempts * 100) : 0;
     var tiles = el('div', 'stat-tiles');

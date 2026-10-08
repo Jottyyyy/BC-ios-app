@@ -710,6 +710,127 @@ function run() {
   expect(/png != 6/.test(code(read(UI, 'Diagnostics.swift'))),
     'Diagnostics counts the sixth PNG, or a missing bundle would warn on every launch');
 
+  // 14. The player's own name and avatar.
+  //
+  // `LoginStore.displayName` was `{ LoginStrings.defaultDisplayName }` — a computed property that
+  // ignored the session and handed back a constant — so every device on earth showed "Biyahero".
+  // Nothing in tools/qa/ noticed, and `app.js` carried a comment claiming the opposite. The rules
+  // below are pure in both languages precisely so this section can replay them rather than trust a
+  // comment again.
+  {
+    const SW = code(read(UI, 'LoginMetrics.swift'));
+    const store = code(read(UI, 'LoginStore.swift'));
+    const P = L.PROFILE;
+
+    // -- the keys, which must also be in the erased list checked by §-erasedKeys above ----------
+    eq(P.nameKey, 'biya.auth.name.v1', 'the name key');
+    eq(P.avatarKey, 'biya.auth.avatar.v1', 'the avatar key');
+    for (const k of [P.nameKey, P.avatarKey]) {
+      expect(SW.includes(`"${k}"`), `Swift declares ${k}`);
+      expect(L.ACCOUNT_DATA.erasedKeys.includes(k),
+        `${k} is erased by delete-account — a name is account data`);
+    }
+    // Sign out must NOT erase them: they are device preferences, like the take-back toggle.
+    const signOut = (store.match(/func signOut\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+    expect(!signOut.includes('nameKey') && !signOut.includes('avatarKey'),
+      'signOut leaves the name and avatar alone — signing back in renamed is a surprise');
+
+    // -- sanitize, replayed input by input ------------------------------------------------------
+    const nameCases = [
+      ['  Deniel   Causo  ', 'Deniel Causo'],
+      ['Deniel', 'Deniel'],
+      ['', null],
+      ['   ', null],
+      ['\n\t', null],
+      ['a'.repeat(40), 'a'.repeat(P.maxNameLength)],
+      ['one\ttwo\nthree', 'one two three'],
+    ];
+    for (const [input, want] of nameCases) {
+      eq(L.sanitizeName(input), want, `sanitize(${JSON.stringify(input)})`);
+    }
+    eq(L.sanitizeName(null), null, 'sanitize(null)');
+    eq(L.sanitizeName(undefined), null, 'sanitize(undefined)');
+    eq(P.maxNameLength, 24, 'the name cap');
+    expect(SW.includes('static let maxNameLength = 24'), 'and the Swift agrees on it');
+    // The two shapes the Swift uses, so a reader can see they are the same algorithm.
+    expect(/split\(whereSeparator: \{ \$0\.isWhitespace \|\| \$0\.isNewline \}\)/.test(SW),
+      'Swift collapses on whitespace AND newlines, as the JS /\\s+/ does');
+    expect(/guard !collapsed\.isEmpty else \{ return nil \}/.test(SW),
+      'Swift returns nil for empty, so there is one representation of "unset" and not two');
+
+    // -- the avatar vocabulary ------------------------------------------------------------------
+    eq(P.avatars.join(','), 'letter,coach-1,coach-2,coach-3,coach-4,coach-5', 'the avatar choices');
+    expect(SW.includes('static let letterAvatar = "letter"'), 'Swift names the letter avatar');
+    expect(SW.includes('static let coachAvatarPrefix = "coach-"'), 'and the coach prefix');
+    expect(SW.includes('static let coachLevels = [1, 2, 3, 4, 5]'), 'and the five levels');
+    for (const [raw, want] of [['coach-1', 1], ['coach-5', 5], ['coach-0', null], ['coach-6', null],
+                               ['coach-', null], ['coach-x', null], ['letter', null], ['', null]]) {
+      eq(L.coachLevel(raw), want, `coachLevel(${JSON.stringify(raw)})`);
+    }
+    for (const [raw, want] of [['letter', true], ['coach-3', true], ['coach-9', false],
+                               ['nonsense', false], ['', false]]) {
+      eq(L.isValidAvatar(raw), want, `isValidAvatar(${JSON.stringify(raw)})`);
+    }
+    // Every choice the picker offers has art on disk, in BOTH trees, or it draws an empty circle.
+    for (const level of P.coachLevels) {
+      expect(fs.existsSync(path.join(UI, 'Characters', `level-${level}.webp`)),
+        `level-${level}.webp is in the SwiftPM bundle`);
+      expect(fs.existsSync(path.join(ROOT, 'web-demo', 'assets', 'characters', `level-${level}.webp`)),
+        `level-${level}.webp is in web-demo`);
+    }
+
+    // -- the initial, which two screens used to disagree about ----------------------------------
+    for (const [raw, want] of [['deniel', 'D'], ['  deniel', 'D'], ['Biyahero', 'B'], ['', '?']]) {
+      eq(L.nameInitial(raw), want, `nameInitial(${JSON.stringify(raw)})`);
+    }
+    expect(/return String\(c\)\.uppercased\(\)/.test(SW),
+      'Swift uppercases the initial too — ProfilePhone used a bare prefix(1) and could disagree with Home');
+
+    // -- the store: a real round trip, not a source grep ----------------------------------------
+    {
+      const mem = L.memoryStorage();
+      const s1 = L.createStore(mem);
+      eq(s1.displayName(), L.STRINGS.defaultDisplayName, 'an unset name falls back to the brand word');
+      eq(s1.customName(), null, 'and customName stays null rather than becoming the fallback');
+      s1.setDisplayName('  Deniel  Causo ');
+      s1.setAvatar('coach-4');
+      eq(s1.displayName(), 'Deniel Causo', 'the name is sanitised on the way in');
+      // The point of persisting: a NEW store over the same storage must see it.
+      const s2 = L.createStore(mem);
+      eq(s2.displayName(), 'Deniel Causo', 'and survives a reload');
+      eq(s2.avatar(), 'coach-4', 'as does the avatar');
+      eq(s2.avatarCoachLevel(), 4, 'which resolves to a level');
+      expect(s2.setAvatar('coach-9') === false, 'an unknown avatar is refused, not stored');
+      eq(s2.avatar(), 'coach-4', 'and the last good value stands');
+      s2.setDisplayName('');
+      eq(s2.displayName(), L.STRINGS.defaultDisplayName, 'emptying the field restores the default');
+      eq(L.createStore(mem).customName(), null, 'and the key is removed, not blanked');
+    }
+
+    // -- the Swift side is wired the same way ---------------------------------------------------
+    expect(/var displayName: String \{ customName \?\? LoginStrings\.defaultDisplayName \}/.test(store),
+      'Swift displayName falls back — it must NOT be a constant again');
+    expect(/func setDisplayName\(_ raw: String\)/.test(store) && /func setAvatar\(_ raw: String\)/.test(store),
+      'Swift has both setters');
+    expect(/@Published private\(set\) var customName: String\?/.test(store),
+      'customName is private(set), so the store is the only writer');
+
+    // -- and the screen actually offers the edit ------------------------------------------------
+    const phone = code(read(UI, 'PhoneView.swift'));
+    expect(/struct EditProfileSheet: View/.test(phone), 'the Swift edit sheet exists');
+    expect(/\.sheet\(isPresented: \$editingProfile\)/.test(phone), 'and ProfilePhone presents it');
+    expect(/TextField\(LoginStrings\.namePlaceholder, text: \$draftName\)/.test(phone),
+      'with a name field bound to a DRAFT, not to the store');
+    expect(/ForEach\(LoginProfile\.avatars, id: \\\.self\)/.test(phone)
+      || /ForEach\(LoginProfile\.avatars/.test(phone),
+      'and an avatar picker over LoginProfile.avatars');
+    const appJs = code(read(JS, 'app.js'));
+    expect(/function openEditProfile\(\)/.test(appJs), 'the browser twin has the editor too');
+    expect(/auth\.setDisplayName\(input\.value\)/.test(appJs), 'and Save reaches the store');
+    expect(!/The name comes from the session now, not a literal/.test(read(JS, 'app.js')),
+      'the comment that claimed this already worked is gone');
+  }
+
   return finish();
 }
 

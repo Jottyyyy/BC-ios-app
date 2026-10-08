@@ -345,6 +345,83 @@ enum LoginSession {
     }
 }
 
+/// The player's own name and avatar, as pure predicates over stored strings.
+///
+/// Same shape and the same reason as `LoginSession` above: no `UserDefaults` here, so every rule is
+/// assertable and `tools/qa/replay_login.js` can replay all of it against the browser twin.
+///
+/// ## Why this is local, and why that is not a compromise
+///
+/// There is no account server. `LoginAppleAuth` requests **zero scopes** on purpose, so no name
+/// ever arrives from Apple and `ios/App/PrivacyInfo.xcprivacy` can keep an empty
+/// `NSPrivacyCollectedDataTypes`. A name typed by the player and kept in `UserDefaults` is the only
+/// design that gives them an identity without making that manifest a lie.
+///
+/// The RN original edits `display_name` plus an uploaded avatar image against a Laravel endpoint
+/// (`profile/index.tsx:247-256`, `:112-133`). The image half cannot be copied: a photo picker would
+/// mean `NSPhotoLibraryUsageDescription`, a privacy-manifest entry, and a new surface for App
+/// Review on a listing that has already been rejected four times. So the avatar is a CHOICE among
+/// art the app already ships — the five coach characters in `Characters/`, loaded by `CoachArt` —
+/// which gives the player a picture with no permission, no upload and no new review surface.
+enum LoginProfile {
+
+    /// Same `biya.<area>.<thing>.v1` shape as the session key beside it.
+    static let nameKey = "biya.auth.name.v1"
+    static let avatarKey = "biya.auth.avatar.v1"
+
+    /// Long enough for a real name, short enough that the gold card cannot be overflowed. The card
+    /// draws at 20pt in a fixed-height row; beyond this the tier and rating lines get pushed.
+    static let maxNameLength = 24
+
+    /// Trim, collapse runs of whitespace, cap, and treat empty as unset.
+    ///
+    /// Returns `nil` rather than `""` so there is exactly one representation of "no name chosen",
+    /// and `displayName` can fall back with a single `??`. A stored empty string would be a second
+    /// one, and two representations of the same state is how fail-closed logic stops failing closed.
+    static func sanitize(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let collapsed = raw.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        return String(collapsed.prefix(maxNameLength))
+    }
+
+    /// The avatar is the letter, or one of the five coach characters.
+    static let letterAvatar = "letter"
+    static let coachAvatarPrefix = "coach-"
+    static let coachLevels = [1, 2, 3, 4, 5]
+
+    /// Every valid value, in the order the picker shows them.
+    static var avatars: [String] {
+        [letterAvatar] + coachLevels.map { "\(coachAvatarPrefix)\($0)" }
+    }
+
+    /// `"coach-3"` → `3`; anything else → `nil`, which the UI reads as "draw the letter".
+    ///
+    /// Fail closed, exactly like `isSignedIn`: a hand-edited or half-written key draws the initial
+    /// rather than crashing on an index, because the avatar is decoration and the screen is not.
+    static func coachLevel(_ raw: String?) -> Int? {
+        guard let raw, raw.hasPrefix(coachAvatarPrefix) else { return nil }
+        guard let n = Int(raw.dropFirst(coachAvatarPrefix.count)), coachLevels.contains(n) else { return nil }
+        return n
+    }
+
+    static func isValidAvatar(_ raw: String?) -> Bool {
+        guard let raw else { return false }
+        return raw == letterAvatar || coachLevel(raw) != nil
+    }
+
+    /// The circled letter, when no coach picture is chosen.
+    ///
+    /// Uppercased and whitespace-trimmed, matching `HomeAvatar.initial` (`HomeParts.swift:51`) —
+    /// `ProfilePhone` used a bare `prefix(1)` and so could draw a lowercase letter on one screen
+    /// and an uppercase one on the other for the same name.
+    static func initial(_ name: String) -> String {
+        guard let c = name.trimmingCharacters(in: .whitespacesAndNewlines).first else { return "?" }
+        return String(c).uppercased()
+    }
+}
+
 // MARK: - Account deletion
 
 /// What "delete my account" erases, and what it deliberately does not.
@@ -359,6 +436,8 @@ enum LoginAccountData {
     /// Cleared: everything the account produced on this device.
     static let erasedKeys: [String] = [
         "biya.auth.session.v1",     // LoginSession.storageKey — the session itself
+        "biya.auth.name.v1",        // LoginProfile.nameKey — the player's chosen name
+        "biya.auth.avatar.v1",      // LoginProfile.avatarKey — their chosen avatar
         "biya.coach.takeback.v1",   // CoachStore.takeBackKey
         "biya.analysis.engine.v1",  // EngineSettings.storageKey
     ]
@@ -471,7 +550,18 @@ enum LoginStrings {
     static let terms = "Terms"
     static let legalSeparator = "·"
 
+    /// The name shown when the player has not chosen one. It is a FALLBACK as of 2026-10-08, not
+    /// the only possibility — see `LoginProfile`. For two years it was the latter: `displayName`
+    /// returned this constant unconditionally, so every device on earth showed "Biyahero" and the
+    /// client reported it as a bug. It stays the default because a brand word beats an empty card.
     static let defaultDisplayName = "Biyahero"
+    static let editProfileTitle = "Edit Profile"
+    static let nameFieldLabel = "Display name"
+    static let namePlaceholder = LoginStrings.defaultDisplayName
+    static let avatarFieldLabel = "Avatar"
+    static let avatarLetterLabel = "Letter"
+    static let saveButton = "Save"
+    static let cancelButton = "Cancel"
     static let appleProviderLabel = "Apple"
     /// Beside "Signed in with", for a session opened without Apple. Not the em dash: "—" means
     /// signed out, and a guest is signed in.
