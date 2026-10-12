@@ -142,8 +142,8 @@ wrap the Core; `web-demo/` is a separate JavaScript reimplementation for Windows
   and the puzzle DB ship **inside** this package and load via `Bundle.module`.
 - **`Engine/`** — own package, the **only C++ here**: Stockfish 17.1 vendored (one patched line) + an
   `extern "C"` shim + `StockfishEngine`. **Nothing here compiles it** — read `docs/stockfish.md` first.
-- **`ios/`** — XcodeGen-driven app shell (`project.yml` → `Biyaherong.xcodeproj`); portrait-only; depends on
-  `DemoApp` for `BiyaherongUI`. Build/signing runbook: `ios/BUILD-iOS.md`.
+- **`ios/`** — XcodeGen-driven app shell (`project.yml` → `Biyaherong.xcodeproj`); portrait except video
+  fullscreen (`OrientationGate`); depends on `DemoApp` for `BiyaherongUI`. Runbook: `ios/BUILD-iOS.md`.
 - **`tools/`** — `oracle` (PHP → golden JSON), `eco` (CC0 TSVs → the bundled opening book), `metrics`
   (TypeScript AST walk over the RN source → the committed `board_styles.json`), `qa` (the JS gate, mutation
   testing, and the checks that stand in for a Swift compiler), `puzzlebank` (CSV → SQLite).

@@ -214,6 +214,35 @@ var BiyaMoveTree = (function () {
     return n;
   }
 
+  /**
+   * "Overwrite — Replace X with Y", the answer to "Line Already Exists" that throws the existing
+   * main continuation away (BranchConfirmModal.tsx; handler board.tsx:1302-1329). Twin of Swift's
+   * MoveTree.overwriteMain(with:).
+   *
+   * children[0] and everything after it go; `mv` takes index 0, so it IS the main line from here,
+   * and the cursor lands on it. Any OTHER side lines at this point stay, in their order.
+   *
+   * DEVIATION, deliberate: the source ends with `parentChildren.length = 0`, which also drops every
+   * other side line — though its comment says "Detach the mainline child" and its button says
+   * "Replace X". Porting that would silently erase variations, the very complaint being fixed.
+   *
+   * Returns { node, created }, or null — changing nothing — if `mv` is not legal here.
+   */
+  function overwriteMain(tree, mv) {
+    var cur = tree.current, pos = position(cur), i, ok = false;
+    if (pos == null) return null;
+    var legal = E.legalMoves(pos);
+    for (i = 0; i < legal.length; i++) if (E.moveEquals(legal[i], mv)) { ok = true; break; }
+    if (!ok) return null;
+    if (cur.children.length && !E.moveEquals(cur.children[0].move, mv)) remove(tree, cur.children[0]);
+    var r = addMove(tree, mv);
+    if (!r) return null;
+    // To the front by removal and insertion — promote's swap would reorder the other siblings.
+    var at = cur.children.indexOf(r.node);
+    if (at > 0) { cur.children.splice(at, 1); cur.children.unshift(r.node); }
+    return r;
+  }
+
   // ---- Flatten (the pure render model) --------------------------------------
   // A pre-order walk in PGN reading order: each move, then any alternatives to the move that
   // FOLLOWS it as nested lines, then the main line continues. Rows are plain values — no node
@@ -386,6 +415,45 @@ var BiyaMoveTree = (function () {
     expect(r5[0].numberText === '1...', 'a black first move from a custom FEN gets the ellipsis');
     expect(r5[1].numberText === '2.', 'the following white move increments');
 
+    // 9. overwriteMain — "Line Already Exists" → Overwrite (board.tsx:1302-1329)
+    //    1.e4 e5 2.Nf3 with two side lines at move 1 for Black: 1...c5 and 1...e6.
+    var t9 = create();
+    play(t9, ['e4', 'e5', 'Nf3']);
+    goTo(t9, t9.root.children[0]);                       // after 1.e4
+    var c5 = addSan(t9, 'c5').node;
+    goTo(t9, t9.root.children[0]);
+    var e6 = addSan(t9, 'e6').node;
+    goTo(t9, t9.root.children[0]);
+    var after1 = t9.current;
+    var d5mv = E.parseSan(position(after1), 'd5');
+    var ow = overwriteMain(t9, d5mv);
+    expect(ow !== null && ow.created === true, 'overwrite plays the new move');
+    expect(after1.children[0] === ow.node && after1.children[0].san === 'd5',
+      'the new move IS the main line now');
+    expect(after1.children.length === 3 && after1.children[1] === c5 && after1.children[2] === e6,
+      'the other side lines survive, in their order — the deliberate deviation from length = 0');
+    expect(after1.children.every(function (n) { return n.san !== 'e5'; }),
+      'the replaced move is gone');
+    expect(mainlineSans(t9).join(' ') === 'e4 d5', 'and so is everything after it (2.Nf3)');
+    expect(t9.current === ow.node, 'the cursor lands on the new move');
+    goTo(t9, after1);
+    expect(overwriteMain(t9, E.parseSan(position(after1), 'd5')).created === false,
+      'overwriting with the move that is already main walks into it');
+    expect(after1.children.length === 3, 'and creates nothing');
+    goTo(t9, after1);
+    var e6mv = e6.move;
+    var walk = overwriteMain(t9, e6mv);
+    expect(walk.node === e6 && after1.children[0] === e6, 'overwriting with an existing side line promotes it');
+    expect(after1.children.map(function (n) { return n.san; }).join(',') === 'e6,c5',
+      'having replaced the old main move, and kept the rest in order');
+    goTo(t9, after1);
+    var before = after1.children.length;
+    expect(overwriteMain(t9, { from: 0, to: 63, promotion: null }) === null, 'an illegal move is refused');
+    expect(after1.children.length === before && t9.current === after1, 'and changes nothing');
+    var t9b = create();
+    var first = overwriteMain(t9b, E.parseSan(position(t9b.root), 'd4'));
+    expect(first.created && t9b.root.children.length === 1, 'with no continuation it is a plain move');
+
     return {
       passed: passed,
       failures: failures,
@@ -405,6 +473,7 @@ var BiyaMoveTree = (function () {
     pathTo: pathTo, nodeAtPath: nodeAtPath, lineTo: lineTo, historyKeys: historyKeys,
     mainline: mainline, mainlineSans: mainlineSans,
     promote: promote, promoteFully: promoteFully, remove: remove, removeAfter: removeAfter,
+    overwriteMain: overwriteMain,
     countSubtree: countSubtree, isDescendant: isDescendant,
     flatten: flatten,
     selfTest: selfTest

@@ -283,6 +283,33 @@ public final class MoveTree {
         return n
     }
 
+    /// "Overwrite — Replace X with Y", the answer to "Line Already Exists" that throws the existing
+    /// main continuation away (`BranchConfirmModal.tsx`; its handler is `board.tsx:1302-1329`).
+    ///
+    /// `children[0]` and everything after it go; `move` takes index 0, so it IS the main line from
+    /// here, and the cursor lands on it. Any OTHER side lines at this point stay, in their order.
+    ///
+    /// ⚠ DEVIATION, deliberate. The source ends with `parentChildren.length = 0`, which also throws
+    /// away every other side line at this point — though its own comment reads "Detach the mainline
+    /// child" and its button reads "Replace X". Porting that would silently erase variations, and
+    /// "nabubura ang variation" is the very complaint this ships to fix. `PORTING_NOTES.md` has it.
+    ///
+    /// Returns `nil`, changing nothing, if `move` is not legal here.
+    @discardableResult
+    public func overwriteMain(with move: Move) -> AddResult? {
+        let cur = current
+        guard let pos = cur.position, pos.legalMoves().contains(move) else { return nil }
+        if let main = cur.children.first, main.move != move { remove(main) }
+        guard let r = add(move: move) else { return nil }
+        // `add` appends a new node, or walks into an existing side line; either way it moves to the
+        // front by removal and insertion — `promote`'s `swapAt` would reorder the other siblings.
+        if let i = cur.children.firstIndex(where: { $0 === r.node }), i > 0 {
+            cur.children.remove(at: i)
+            cur.children.insert(r.node, at: 0)
+        }
+        return r
+    }
+
     // MARK: Flatten — the pure render model
 
     /// A pre-order walk in PGN reading order: each move, then any alternatives to the move that

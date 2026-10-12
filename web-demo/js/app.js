@@ -1197,19 +1197,25 @@
     var input = box.querySelector('#ep-name');
     input.value = draftName;
 
+    // The letter on its own, then the pieces in six columns — a white row and a black row, the
+    // same layout the Swift sheet's LazyVGrid gives.
     var row = box.querySelector('.ep-avatars');
+    function avatarButton(choice) {
+      var src = BiyaLogin.avatarSrc(choice);
+      var b = el('button', 'ep-avatar' + (choice === draftAvatar ? ' is-on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-label', BiyaLogin.avatarLabel(choice));
+      if (src === null) b.textContent = 'A';
+      else b.style.backgroundImage = 'url(' + src + ')';
+      b.onclick = function () { draftAvatar = choice; paintAvatars(); };
+      return b;
+    }
     function paintAvatars() {
       row.innerHTML = '';
-      P.avatars.forEach(function (choice) {
-        var lvl = BiyaLogin.coachLevel(choice);
-        var b = el('button', 'ep-avatar' + (choice === draftAvatar ? ' is-on' : ''));
-        b.type = 'button';
-        b.setAttribute('aria-label', lvl === null ? S.avatarLetterLabel : 'Coach ' + lvl);
-        if (lvl === null) b.textContent = 'A';
-        else b.style.backgroundImage = 'url(assets/characters/level-' + lvl + '.webp)';
-        b.onclick = function () { draftAvatar = choice; paintAvatars(); };
-        row.appendChild(b);
-      });
+      row.appendChild(avatarButton(P.letterAvatar));
+      var grid = el('div', 'ep-grid');
+      P.pieceAvatars.forEach(function (choice) { grid.appendChild(avatarButton(choice)); });
+      row.appendChild(grid);
     }
     paintAvatars();
 
@@ -1249,11 +1255,11 @@
     // this repo keeps getting burned by — the client reported every profile being called "Biyahero".
     var auth = BiyaLogin.shared();
     var who = auth.displayName();
-    var lvl = auth.avatarCoachLevel();
-    var badge = lvl === null
+    var src = BiyaLogin.avatarSrc(auth.avatar());
+    var badge = src === null
       ? '<div class="mono-badge">' + BiyaLogin.nameInitial(who) + '</div>'
-      : '<div class="mono-badge mono-badge-art" style="background-image:url(assets/characters/level-'
-        + lvl + '.webp)"></div>';
+      : '<div class="mono-badge mono-badge-art" role="img" aria-label="'
+        + BiyaLogin.avatarLabel(auth.avatar()) + '" style="background-image:url(' + src + ')"></div>';
     var card = el('div', 'profile-card',
       badge + '<div><div class="pname">' + who + '</div><div class="ptier">' + tier + '</div></div>' +
       '<div class="prating">' + store.puzzleRating + '<div style="font-size:10px;opacity:.8;font-weight:700">RATING</div></div>' +

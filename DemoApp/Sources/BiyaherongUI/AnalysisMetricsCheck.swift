@@ -901,6 +901,75 @@ public func biyaherongAnalysisMetricsCheck() -> AnalysisMetricsCheckResult {
     matches("branchOption", "borderLeftWidth", AnalysisModals.optionBorderWidth)
     matches("branchOptionMove", "fontSize", AnalysisModals.optionMoveSize)
     matches("branchOptionPreview", "fontSize", AnalysisModals.optionPreviewSize)
+    // ...the rest of Choose Continuation, drawn since 2026-10-12, and the chip's own geometry.
+    matches("modalOverlay", "padding", AnalysisModals.overlayPadding)
+    matches("modalOverlay", "paddingBottom", AnalysisModals.overlayPaddingBottom)
+    expect(sourceString("modalOverlay", "justifyContent") == "flex-end", "the picker sits at the bottom")
+    matches("branchModalTitle", "marginBottom", AnalysisModals.branchTitleGap)
+    matches("branchModalSub", "marginBottom", AnalysisModals.branchSubGap)
+    matches("branchOption", "marginBottom", AnalysisModals.optionGap)
+    matches("branchOptionPreview", "marginTop", AnalysisModals.optionPreviewGap)
+    matches("branchOptionArrow", "fontSize", AnalysisModals.optionArrowSize)
+    matches("branchOptionArrow", "marginLeft", AnalysisModals.optionArrowGap)
+    matches("branchCancelBtn", "borderRadius", AnalysisModals.cancelRadius)
+    matches("branchCancelBtn", "paddingVertical", AnalysisModals.cancelPaddingV)
+    matches("branchCancelBtn", "marginTop", AnalysisModals.cancelGap)
+    matches("branchCancelBtnText", "fontSize", AnalysisModals.cancelSize)
+    matches("altChip", "borderRadius", AnalysisLayout.chipRadius)
+    matches("altChip", "borderLeftWidth", AnalysisLayout.chipRuleWidth)
+    // The picker's copy and the continuation's inline colour are not style keys; the extractor scans
+    // them into their own blocks.
+    let selection = root["branchSelection"] as? [String: Any] ?? [:]
+    expect(selection["title"] as? String == AnalysisModals.branchTitle, "picker title is the source's")
+    expect(selection["subtitle"] as? String == AnalysisModals.branchSubtitle, "picker subtitle is the source's")
+    expect(selection["mainLineTag"] as? String == AnalysisModals.branchMainTag, "the main-line tag, spaces and all")
+    let continuation = root["stripContinuation"] as? [String: Any] ?? [:]
+    expect(continuation["arrow"] as? String == AnalysisSession.branchArrow,
+           "the continuation arrow is the source's")
+    // Line Already Exists — BranchConfirmModal.tsx, a separate file and so a separate block.
+    let confirm = root["branchConfirm"] as? [String: Any] ?? [:]
+    let confirmStyles = confirm["styles"] as? [String: Any] ?? [:]
+    let confirmCopy = confirm["copy"] as? [String: String] ?? [:]
+    func matchesConfirm(_ key: String, _ prop: String, _ mine: CGFloat) {
+        let real = ((confirmStyles[key] as? [String: Any])?[prop] as? NSNumber).map { CGFloat(truncating: $0) }
+        expect(real != nil && near(real!, mine),
+               "BranchConfirmModal \(key).\(prop): encoded \(mine) != source \(real.map { "\($0)" } ?? "missing")")
+    }
+    matchesConfirm("backdrop", "paddingHorizontal", AnalysisModals.confirmGutter)
+    matchesConfirm("card", "borderRadius", AnalysisModals.confirmRadius)
+    matchesConfirm("card", "padding", AnalysisModals.confirmPadding)
+    matchesConfirm("card", "maxWidth", AnalysisModals.confirmMaxWidth)
+    matchesConfirm("card", "borderWidth", AnalysisModals.confirmBorderWidth)
+    matchesConfirm("title", "fontSize", AnalysisModals.confirmTitleSize)
+    matchesConfirm("title", "marginBottom", AnalysisModals.confirmTitleGap)
+    matchesConfirm("title", "letterSpacing", AnalysisModals.confirmTitleTracking)
+    matchesConfirm("moveRow", "gap", AnalysisModals.pillRowGap)
+    matchesConfirm("moveRow", "marginBottom", AnalysisModals.pillRowMargin)
+    matchesConfirm("movePill", "borderRadius", AnalysisModals.pillRadius)
+    matchesConfirm("movePill", "paddingHorizontal", AnalysisModals.pillPaddingH)
+    matchesConfirm("movePill", "paddingVertical", AnalysisModals.pillPaddingV)
+    matchesConfirm("movePill", "minWidth", AnalysisModals.pillMinWidth)
+    matchesConfirm("movePillLabel", "fontSize", AnalysisModals.pillLabelSize)
+    matchesConfirm("movePillLabel", "letterSpacing", AnalysisModals.pillLabelTracking)
+    matchesConfirm("movePillLabel", "marginBottom", AnalysisModals.pillLabelGap)
+    matchesConfirm("movePillSan", "fontSize", AnalysisModals.pillSanSize)
+    matchesConfirm("moveSeparator", "fontSize", AnalysisModals.separatorSize)
+    matchesConfirm("subtitle", "fontSize", AnalysisModals.confirmSubSize)
+    matchesConfirm("subtitle", "lineHeight", AnalysisModals.confirmSubLineHeight)
+    matchesConfirm("subtitle", "marginBottom", AnalysisModals.confirmSubGap)
+    matchesConfirm("btnOverwrite", "borderRadius", AnalysisModals.actionRadius)
+    matchesConfirm("btnOverwrite", "paddingVertical", AnalysisModals.actionPaddingV)
+    matchesConfirm("btnOverwrite", "paddingHorizontal", AnalysisModals.actionPaddingH)
+    matchesConfirm("btnOverwrite", "marginBottom", AnalysisModals.actionGap)
+    matchesConfirm("btnOverwriteText", "fontSize", AnalysisModals.actionTextSize)
+    matchesConfirm("btnBack", "paddingVertical", AnalysisModals.backPaddingV)
+    matchesConfirm("btnBack", "borderWidth", AnalysisModals.backBorderWidth)
+    for (key, mine) in [("title", AnalysisModals.confirmTitle), ("currentLabel", AnalysisModals.confirmCurrent),
+                        ("newLabel", AnalysisModals.confirmNew), ("separator", AnalysisModals.confirmSeparator),
+                        ("subtitle", AnalysisModals.confirmSubtitle), ("overwrite", AnalysisModals.confirmOverwrite),
+                        ("newBranch", AnalysisModals.confirmNewBranch), ("cancel", AnalysisModals.confirmCancel)] {
+        expect(confirmCopy[key] == mine, "Line Already Exists copy \(key): encoded \(mine) != source \(confirmCopy[key] ?? "missing")")
+    }
     matches("varModalSheet", "borderTopLeftRadius", AnalysisModals.varSheetRadius)
     matches("varModalHandle", "width", AnalysisModals.varHandleW)
     matches("varModalHandle", "height", AnalysisModals.varHandleH)

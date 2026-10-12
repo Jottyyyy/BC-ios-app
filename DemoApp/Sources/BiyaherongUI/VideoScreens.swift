@@ -437,14 +437,19 @@ struct VideoPlayerScreen: View {
             // `AudioSession` docstring in Sound.swift for why this is scoped and not global.
             AudioSession.videoPlayback()
         }
-        .onDisappear {
-            player?.pause()
-            AudioSession.ambient()
-            // Restore portrait unconditionally, exactly as the source does on unmount
-            // (`play.tsx:76-78`) — leaving the screen while still fullscreen must not strand the
-            // rest of the app in landscape.
-            OrientationGate.set(landscape: false)
-        }
+        // ⚠ Deliberately NO `.onDisappear` here — and that is the 1.0.9 bug, not a style choice.
+        //
+        // The teardown (pause, back to `.ambient`, shut the orientation gate) used to live in one,
+        // read as "the user left the screen". `onDisappear` does not mean that. Fullscreen is a
+        // UIKit `.fullScreen` presentation, and UIKit takes the presenter's view off the window once
+        // it lands (WWDC19 503: "the presenting view can be removed by UIKit"); SwiftUI reports that
+        // as `onDisappear`. So pressing maximise ran the teardown on a video still playing — and
+        // `.ambient` is muted by the Ring/Silent switch, so the client heard the sound die the
+        // moment the player went landscape. Leaving fullscreen ran `onAppear` and brought it back,
+        // which is exactly why inline playback looked fixed.
+        //
+        // The teardown lives in `SystemVideoPlayer.dismantleUIViewController` now, which SwiftUI
+        // calls only when the player leaves SwiftUI's OWN tree. A UIKit presentation cannot do that.
     }
 }
 
@@ -472,15 +477,40 @@ private struct SystemVideoPlayer: UIViewControllerRepresentable {
         if controller.player !== player { controller.player = player }
     }
 
+    /// The player is LEAVING — and this is the one hook that means exactly that.
+    ///
+    /// SwiftUI calls it when the representable drops out of SwiftUI's own view tree: the back
+    /// button (`playing = nil`) or the Videos route closing. It is NOT called when fullscreen is
+    /// presented over the player, because a UIKit presentation never changes SwiftUI's tree —
+    /// which is precisely the difference `onDisappear` could not see. See `VideoPlayerScreen`.
+    ///
+    /// Shutting the gate here is the source's unmount restore (`play.tsx:76-78`): leaving must
+    /// not strand the rest of the app in landscape.
+    static func dismantleUIViewController(_ controller: AVPlayerViewController,
+                                          coordinator: Coordinator) {
+        controller.player?.pause()
+        AudioSession.ambient()
+        OrientationGate.set(landscape: false)
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    /// Each callback acts at once, then checks how the transition actually ended — because both
+    /// can be abandoned half-way. A swipe out of fullscreen that the user lets go of lands back IN
+    /// fullscreen, and WWDC19 503 calls the completion's `isCancelled` "the source of truth".
+    /// Without it, an abandoned swipe shut the gate under a video that was still fullscreen.
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
         func playerViewController(
             _ playerViewController: AVPlayerViewController,
             willBeginFullScreenPresentationWithAnimationCoordinator
                 coordinator: UIViewControllerTransitionCoordinator
         ) {
+            // Fullscreen claims its own sound, whatever any other lifecycle event did before it.
+            AudioSession.videoPlayback()
             OrientationGate.set(landscape: true)
+            coordinator.animate(alongsideTransition: nil, completion: { context in
+                if context.isCancelled { OrientationGate.set(landscape: false) }
+            })
         }
 
         func playerViewController(
@@ -489,6 +519,9 @@ private struct SystemVideoPlayer: UIViewControllerRepresentable {
                 coordinator: UIViewControllerTransitionCoordinator
         ) {
             OrientationGate.set(landscape: false)
+            coordinator.animate(alongsideTransition: nil, completion: { context in
+                if context.isCancelled { OrientationGate.set(landscape: true) }
+            })
         }
     }
 }
@@ -497,6 +530,7 @@ private struct SystemVideoPlayer: UIViewControllerRepresentable {
 /// building, so it gets the plain SwiftUI player and no gate — the same split `Haptics` makes.
 private struct SystemVideoPlayer: View {
     let player: AVPlayer
-    var body: some View { VideoPlayer(player: player) }
+    /// macOS has no UIKit presentation to fire this spuriously — here it really is leaving.
+    var body: some View { VideoPlayer(player: player).onDisappear { player.pause() } }
 }
 #endif

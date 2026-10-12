@@ -50,6 +50,7 @@ var TGATE = require(path.join(__dirname, 'trial_gate_check.js'));
 // The video player may rotate and must be audible; nothing else may rotate. Wiring only — UIKit
 // behaviour is a device check. Both bugs it guards shipped because nothing here looked.
 var ORIENT = require(path.join(__dirname, 'orientation_check.js'));
+var BRANCH = require(path.join(__dirname, 'branch_flow_check.js'));
 var OTREE = require(path.join(JS, 'opening-tree.js'));
 var OMET = require(path.join(JS, 'opening-metrics.js'));
 var ODOWN = require(path.join(JS, 'opening-download.js'));
@@ -177,6 +178,7 @@ record('home chrome invariants', HCHROME.selfTest());
 record('web shell wiring', WSHELL.selfTest());
 record('trial gate invariants', TGATE.selfTest());
 record('orientation + audio wiring', ORIENT.selfTest());
+record('analysis-board variations: drawn, asked, never erased', BRANCH.selfTest());
 record('opening-tree.selfTest', OTREE.selfTest());
 record('opening-metrics.selfTest', OMET.selfTest());
 record('opening-metrics vs RN source',

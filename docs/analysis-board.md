@@ -890,6 +890,64 @@ Two call sites still repaint by hand, and both are cases the funnel cannot reach
 domain tables and, as its own header says, cannot see the screen — which is the hole this shipped
 through.
 
+## Variations: drawn, asked about, never erased
+
+The client, 2026-10-12: *"Sa analysis board pala nabubura automatic yung variation. Isang line lang
+ang pwede sa apple. Gayahin natin sa android."* **Nothing was ever erased** — `MoveTree` keeps every
+move and has always made a different move a side line. The **strip** never drew them. The port cited
+`board.tsx:3049-3120` and stopped five lines short of the block that matters, `:3125-3158`: so a side
+line showed its first move as a chip and nothing after it. Play 5...Nf6 6.Bg5 7.e3 off the main
+line and two of the three moves appeared nowhere, no token was current, and the strip did not
+scroll. To a coach that is a variation vanishing, on a board that allows one line.
+
+What Android does, and what both ports do now:
+
+- **The branch continuation.** Off the main line, the strip ends with a gold `→` and the path from
+  where the line leaves the main line **up to the cursor** — gold numbers before White's moves only,
+  gold SAN, the cursor current. Exactly the source, limits included: it stops at the cursor, and a
+  side line inside a side line gets no chips. `StripToken.Kind` gained `branchArrow`, `branchNumber`
+  and `branchMove`; the strip scrolls to the LAST current token, because on a side line's first move
+  the chip and its continuation token are both current and the continuation is where you are.
+- **"Line Already Exists".** Play a move where the line already continues and the move is not part
+  of it, and nothing is played until you answer (`BranchConfirmModal.tsx`, raised by `executeMove`
+  at `board.tsx:1357-1368`): **Overwrite — Replace X with Y**, **New Branch — Add as variation**, or
+  **Cancel**. Replaying an existing move still walks into it, with no question.
+- **"Choose Continuation".** ▶ at a branch point: each option shows `{n.} SAN`, "(main line)" on the
+  first, a two-move preview of where it leads and an arrow, and the card sits at the **bottom**
+  (`modalOverlay` is `justifyContent: 'flex-end'`). It used to say "Which continuation?" over bare
+  SAN while carrying every `branchModal`/`branchOption*` metric unused.
+- **Chips** are the source's slate pill with a 2pt gold left rule, tinted gold while on the path —
+  not the solid gold fill they had.
+
+**One deliberate deviation.** RN's Overwrite ends with `parentChildren.length = 0`, which also throws
+away every *other* side line at that point — though its own comment says "Detach the mainline child"
+and its button says "Replace X". Porting that would silently erase variations, the very complaint
+being fixed. `MoveTree.overwriteMain(with:)` removes `children[0]`'s subtree only and inserts the new
+move at index 0, keeping the other side lines in their order (`promote`'s `swapAt` would reorder
+them, so it is not used). Recorded in `PORTING_NOTES.md`.
+
+**Not asked on purpose:** committing an engine line with ＋ (`previewCommit`). It plays a whole line
+at once; a modal halfway through would strand the rest of it, and a committed side line erases
+nothing — the one outcome the question exists to prevent cannot happen from there.
+
+**Left as it was:** long-press on a *main-line* move still opens the annotation picker (RN opens the
+variation menu there; that gesture is iOS's way in to annotations), and "Set as Main Line" still
+promotes the whole line.
+
+**Extract, don't transcribe.** None of the new values is typed from reading the source. The
+continuation's colours are inline literals in `renderHorizontalMoveTree`; the picker's copy is JSX
+text; the confirm modal lives in a file the extractor had never opened. `extract_board_styles.js`
+now emits all three — `stripContinuation`, `branchSelection`, `branchConfirm` (styles and copy) —
+and `analysis-metrics.js` `selfTestSource` plus `AnalysisMetricsCheck.swift` hold the encoded values
+to them. `tools/qa/branch_flow_check.js` closes the loop to Swift with no compiler: every new Swift
+constant equals its JS twin, the Core has the continuation and the one-line Overwrite, and a board
+move asks while an engine-line commit does not.
+
+**In the browser:** play 1.e4 e5 2.Nf3, step back twice, play 1...c5 → Line Already Exists → New
+Branch → play 2.Nf3 d6 3.d4 → the strip ends `→ c5 2. Nf3 d6 3. d4` in gold. ⏮ ▶ ▶ → Choose
+Continuation, with "(main line)" and previews. From 1.e4 play 1...d5 → Overwrite → the main line is
+`1. e4 d5` and the `1...c5` chip survives.
+
 ## Testing notes
 
 - `tools/qa/board_component_test.js` runs `chess-board.js` inside a `vm` context with a purpose-built fake

@@ -563,6 +563,23 @@ It is `AVPlayerViewController` now, wrapped in a `UIViewControllerRepresentable`
 "background audio" sentence is deleted rather than fixed: nothing makes it true, and
 `tools/qa/orientation_check.js` §4 now fails the gate if it comes back.
 
+**RESOLVED DECISION, CORRECTED 2026-10-12 — the player's teardown lives in
+`dismantleUIViewController`, never in `onDisappear`.** Round 1 put pause / `.ambient` / gate-shut in
+`VideoPlayerScreen.onDisappear` and its gate *required* it there. But fullscreen is a UIKit
+`.fullScreen` presentation, which takes the presenter's view off the window when it lands (WWDC19
+503), and SwiftUI reports that as `onDisappear` — so every maximise muted the video behind the
+Ring/Silent switch, paused it and shut the landscape gate; the client heard the sound die as it went
+landscape. `dismantleUIViewController` runs only when the representable leaves SwiftUI's own tree,
+which a UIKit presentation cannot cause. RN never hit this because its fullscreen presents nothing
+(a state flag plus an orientation lock on the same component). Also: both fullscreen callbacks read
+the transition's `isCancelled`, and `willBegin…` re-claims `.playback` itself.
+
+**`OrientationGate` is `@MainActor`.** It holds a `static var`, and all three packages are
+`swift-tools-version:6.0` with no language-mode override — Swift 6 mode, where nonisolated shared
+mutable state is a compile error. Every other `static var` holder in the module was already
+`@MainActor`; this one, written blind, was not. `swift_lint.js` now has an ISOLATION rule for the
+whole class.
+
 ### The networking allow-list is an EXACT pair, not a ceiling
 
 §12 now holds each language to two names rather than to a count. "At most two" would let a third
@@ -1381,7 +1398,26 @@ last hand-transcribed set of constants in this feature.
   browser). Same intent.
 - Long-pressing a **branch chip** opens the variation card rather than the annotation picker. The source
   reaches the card from a separate `varManageBtn`; folding it into the same gesture is an addition, and it
-  is the useful action on a chip.
+  is the useful action on a chip. (2026-10-12: so does a move in the branch continuation — it is off the
+  main line too, and the source's long-press on it opens the same menu.)
+- **PORT GAP, CLOSED 2026-10-12 — the strip's branch continuation.** The port cited `board.tsx:3049-3120`
+  and stopped five lines short of `:3125-3158`, so a side line drew its first move as a chip and nothing
+  after it. The client reported it as variations being erased and only one line being possible. Ported
+  exactly, including its limits: the path runs from the divergence to the cursor and no further, White's
+  moves only are numbered, and nested side lines get no chips.
+- **PORT GAP, CLOSED 2026-10-12 — "Line Already Exists" (`BranchConfirmModal.tsx`).** The source asks
+  Overwrite / New Branch / Cancel before branching; the port silently branched. Ported, with the copy and
+  every style value extracted from the modal's own file.
+- **DELIBERATE DEVIATION — Overwrite replaces ONE line.** The source's `handleBranchOverwrite` ends with
+  `parentChildren.length = 0`, dropping every other side line at that point as well, while its comment
+  says "Detach the mainline child" and its button says "Replace X with Y". Porting it would silently
+  erase variations — the very complaint being fixed. `MoveTree.overwriteMain(with:)` removes
+  `children[0]`'s subtree, puts the new move at index 0, and keeps the other side lines in their order.
+- **DELIBERATE DEVIATION — committing an engine line (＋) never asks.** The source has no multi-move
+  commit (its long-press plays one move through `executeMove`); ours commits a whole previewed line, and
+  a modal halfway through would strand the rest. A committed side line erases nothing.
+- "Choose Continuation" now matches the source (title, subtitle, `{n.} SAN`, "(main line)", the two-move
+  `buildBranchPreview`, the arrow, bottom-pinned). It had been "Which continuation?" over bare SAN.
 
 ### Where the engine runs (web-demo — REVERSES the Phase 4 "no Web Workers" decision)
 
@@ -2435,6 +2471,16 @@ repo's "anything that can hold a string by key", it already has a `UserDefaults`
 JS half wraps every access in `try/catch`: `localStorage` throws on some `file://` configurations, and
 a login screen that cannot read a key must still open — asserted with a storage double that throws on
 every call.
+
+### The profile avatar is a chess piece (RESOLVED DECISION, 2026-10-12)
+
+The RN profile uploads a photo; this app offers a choice among bundled art instead (no photo-library
+permission, no new privacy-manifest entry — see `docs/account.md`). 1.0.9 offered the five coach
+characters. The client asked to replace them: they are the client's family, and the bots are drawn
+from them. The choices are now the letter plus the twelve pieces, white row then black row, and each
+stored value **is** the asset base name (`"knight-b"`), so both languages map value → file with no
+table. **No migration code:** a `"coach-3"` saved on 1.0.9 fails `isValidAvatar` and the existing
+fail-closed load draws the letter — `replay_login.js` replays exactly that.
 
 ### `HomeAppIcon` was generalised, not duplicated
 

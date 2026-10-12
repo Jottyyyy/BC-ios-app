@@ -341,16 +341,26 @@ var BiyaAnalysisBoard = (function () {
 
   // `nagText` lives further down, beside the rest of the annotation layer.
 
+  /* The glyph that opens the branch continuation. branch_flow_check.js holds it to the literal
+   * board.tsx renders, as extracted into board_styles.json -> stripContinuation. */
+  var BRANCH_ARROW = '→';
+
   /**
-   * The horizontal move strip (board.tsx:3049-3120): the MAIN LINE as a flat token run, with each
-   * position's alternatives inserted inline as chips right after the main move they branch from.
+   * The horizontal move strip (board.tsx:3049-3158): the MAIN LINE as a flat token run, with each
+   * position's alternatives inserted inline as chips right after the main move they branch from,
+   * then — when the cursor is off the main line — the line it is actually on.
    * It is not a nested tree — that is what makes one horizontal scroller enough.
+   *
+   * The second half was missing until 2026-10-12, in both languages: the port stopped at :3120,
+   * five lines short of the continuation block, so a side line showed its first move as a chip and
+   * nothing after it. The client read that as variations being erased.
    */
   function stripTokens(s) {
     var main = T.mainline(s.tree);
     if (!main.length) return [];
     var onPath = {};
-    T.lineTo(s.tree.current).forEach(function (n) { onPath[n.id] = true; });
+    var line = T.lineTo(s.tree.current);
+    line.forEach(function (n) { onPath[n.id] = true; });
     var curId = s.tree.current.id;
     var out = [];
 
@@ -375,7 +385,45 @@ var BiyaAnalysisBoard = (function () {
         });
       });
     });
+
+    // The active branch continuation (board.tsx:3125-3158). Off the main line, the path from where
+    // it leaves the main line UP TO THE CURSOR — not past it, exactly as the source — after a gold
+    // arrow, numbered before White's moves only. lineTo starts at the root, which is not a move.
+    var mainIds = {};
+    main.forEach(function (n) { mainIds[n.id] = true; });
+    var path = line.slice(1);
+    var diverge = -1;
+    for (var i = 0; i < path.length; i++) if (!mainIds[path[i].id]) { diverge = i; break; }
+    if (!mainIds[curId] && diverge >= 0) {
+      out.push({ kind: 'arrow', text: BRANCH_ARROW, classification: null });
+      path.slice(diverge).forEach(function (n) {
+        if (n.color === E.WHITE) out.push({ kind: 'bnum', text: n.moveNumber + '.', classification: null });
+        out.push({
+          kind: 'bmove', id: n.id, text: n.san + nagText(n.nag),
+          active: n.id === curId, onPath: true, classification: null
+        });
+      });
+    }
     return out;
+  }
+
+  /**
+   * The two-move look-ahead under each "Choose Continuation" option (buildBranchPreview,
+   * board.tsx:2878-2892): the next two moves along the main line from `node`, numbered the PGN way —
+   * "N." before White, "N..." only when the preview OPENS on Black — then "…" when the line goes on.
+   * '' when `node` has no continuation. Twin of Swift's AnalysisSession.continuationPreview.
+   */
+  function continuationPreview(node) {
+    var parts = [], next = node.children[0] || null, count = 0;
+    while (next && count < 2) {
+      if (next.color === E.WHITE) parts.push(next.moveNumber + '.');
+      else if (count === 0) parts.push(next.moveNumber + '...');
+      parts.push(next.san + nagText(next.nag));
+      next = next.children[0] || null;
+      count++;
+    }
+    if (next) parts.push('…');
+    return parts.join(' ');
   }
 
   // ---- mutations -------------------------------------------------------------
@@ -397,6 +445,33 @@ var BiyaAnalysisBoard = (function () {
   }
   function playSan(s, san) {
     var r = T.addSan(s.tree, san);
+    if (r) invalidate(s);
+    return r;
+  }
+
+  /**
+   * The question to put to the user BEFORE `mv` is played, or null when there is none (executeMove,
+   * board.tsx:1349-1368). Only when this position already has a continuation and `mv` is not one of
+   * them: replaying an existing move walks into it, and a move into an empty position just plays.
+   * Null for an illegal move too. Twin of Swift's AnalysisSession.branchConflict(for:).
+   */
+  function branchConflict(s, mv) {
+    var cur = s.tree.current;
+    if (!cur.children.length) return null;
+    for (var i = 0; i < cur.children.length; i++) {
+      if (E.moveEquals(cur.children[i].move, mv)) return null;
+    }
+    var pos = T.position(cur);
+    if (pos == null) return null;
+    var legal = E.legalMoves(pos), ok = false;
+    for (i = 0; i < legal.length; i++) if (E.moveEquals(legal[i], mv)) { ok = true; break; }
+    if (!ok) return null;
+    return { move: mv, existingSan: cur.children[0].san, newSan: E.san(pos, mv) };
+  }
+
+  /** "Overwrite — Replace X with Y". See movetree.js overwriteMain, deviation included. */
+  function overwrite(s, mv) {
+    var r = T.overwriteMain(s.tree, mv);
     if (r) invalidate(s);
     return r;
   }
@@ -678,7 +753,10 @@ var BiyaAnalysisBoard = (function () {
     eq(toks[1].active, false, 'earlier tokens are not active');
     eq(toks[1].onPath, true, 'earlier tokens are on the path');
 
-    // 4. branching — the alternative appears inline as a chip
+    // 4. branching — the alternative appears inline as a chip, AND the line the cursor is on
+    //    is drawn after a gold arrow (board.tsx:3125-3158). Until 2026-10-12 this test asserted
+    //    the chip and stopped there — which is exactly how a strip that never drew the rest of a
+    //    side line passed: "one alternative chip" was true, and was the bug.
     goBack(s);                       // back to after 1.e4
     playSan(s, 'c5');                // a sibling of e5
     var branched = stripTokens(s);
@@ -689,6 +767,60 @@ var BiyaAnalysisBoard = (function () {
     eq(branched.filter(function (t) { return t.kind === 'move'; }).length, 2,
        'the main line still shows two moves');
     eq(T.mainline(s.tree)[1].san, 'e5', 'c5 is a variation, not the main line');
+    eq(branched.map(function (t) { return t.kind + ':' + t.text; }).slice(-2).join(' '),
+       'arrow:→ bmove:c5', 'off the main line, the strip ends with → and the line the cursor is on');
+    eq(branched[branched.length - 1].active, true, 'and the cursor token there is active');
+
+    // 4b. a side line several moves deep — the moves the client could not see
+    var sb = createSession();
+    ['e4', 'e5', 'Nf3', 'Nc6'].forEach(function (m) { playSan(sb, m); });
+    goToStart(sb); playSan(sb, 'e4');
+    eq(branchConflict(sb, E.parseSan(position(sb), 'e5')), null, 'replaying the main move asks nothing');
+    playSan(sb, 'e5'); goBack(sb);
+    var q = branchConflict(sb, E.parseSan(position(sb), 'c5'));
+    eq(q && q.existingSan + '>' + q.newSan, 'e5>c5', 'a different move where a line exists asks first');
+    ['c5', 'Nf3', 'd6', 'd4'].forEach(function (m) { playSan(sb, m); });
+    var deep = stripTokens(sb);
+    var tail = deep.slice(deep.findIndex(function (t) { return t.kind === 'arrow'; }));
+    eq(tail.map(function (t) { return t.text; }).join(' '), '→ c5 2. Nf3 d6 3. d4',
+       'every move of the side line is drawn, numbered before White only');
+    eq(tail.filter(function (t) { return t.kind === 'bnum'; }).length, 2, 'two gold numbers, both White');
+    eq(tail[tail.length - 1].active, true, 'the cursor (3.d4) is the active token');
+    eq(deep.filter(function (t) { return t.active; }).length, 1,
+       'and the only one — the chip is on the path, not current');
+    goBack(sb); goBack(sb);          // to 2.Nf3
+    var mid = stripTokens(sb);
+    eq(mid.slice(mid.findIndex(function (t) { return t.kind === 'arrow'; }))
+         .map(function (t) { return t.text; }).join(' '), '→ c5 2. Nf3',
+       'the continuation stops AT the cursor, exactly as the source does');
+    goToNode(sb, T.mainline(sb.tree)[3]);   // back on the main line, 2...Nc6
+    eq(stripTokens(sb).some(function (t) { return t.kind === 'arrow'; }), false,
+       'on the main line there is no continuation at all');
+    goToStart(sb);
+    eq(stripTokens(sb).some(function (t) { return t.kind === 'arrow'; }), false, 'nor at the root');
+    eq(stripTokens(sb).every(function (t) { return t.kind === 'arrow' || t.kind === 'bnum' || t.kind === 'bmove'
+         ? false : true; }), true, 'nothing branch-shaped leaks into the main-line tokens');
+
+    // 4c. the preview under each "Choose Continuation" option (board.tsx:2878-2892)
+    var after1 = T.mainline(sb.tree)[0];                 // 1.e4 — children e5 (main) and c5
+    eq(continuationPreview(after1.children[0]), '2. Nf3 Nc6', 'two moves, nothing after: no ellipsis');
+    eq(continuationPreview(after1.children[1]), '2. Nf3 d6 …', 'more beyond two moves: the ellipsis');
+    eq(continuationPreview(T.mainline(sb.tree)[0]), '1... e5 2. Nf3 …',
+       'opening on Black: N... once, then White numbered as usual');
+    eq(continuationPreview(T.mainline(sb.tree)[3]), '', 'a leaf has no preview');
+
+    // 4d. Overwrite and New Branch, through the session
+    var so = createSession();
+    ['e4', 'e5', 'Nf3'].forEach(function (m) { playSan(so, m); });
+    goToStart(so); playSan(so, 'e4'); playSan(so, 'e6'); goBack(so);  // a side line 1...e6
+    var c5mv = E.parseSan(position(so), 'c5');
+    so.snapshot = { fen: E.toFEN(position(so)), lines: [], score: null };
+    var ov = overwrite(so, c5mv);
+    eq(ov && ov.node.san, 'c5', 'Overwrite plays the new move');
+    eq(T.mainlineSans(so.tree).join(' '), 'e4 c5', 'it becomes the main line and the old one is gone');
+    eq(T.mainline(so.tree)[0].children.map(function (n) { return n.san; }).join(','), 'c5,e6',
+       'the other side line survives');
+    eq(so.snapshot, null, 'and the stale snapshot is dropped like any move');
 
     // 5. navigation clears the snapshot, always
     s.snapshot = { fen: E.toFEN(position(s)), lines: [], score: null };
@@ -1709,12 +1841,31 @@ var BiyaAnalysisBoard = (function () {
       return;
     }
     var activeEl = null;
+    var B = MET.BANDS;
     toks.forEach(function (t) {
       if (t.kind === 'num') { ui.strip.appendChild(el('span', 'an-num', esc(t.text))); return; }
+      // The branch continuation's arrow and numbers: the number style, recoloured (board.tsx:3129).
+      if (t.kind === 'arrow' || t.kind === 'bnum') {
+        var g = el('span', 'an-num', esc(t.text));
+        g.style.color = B.continuationColor;
+        ui.strip.appendChild(g);
+        return;
+      }
       var cls = t.kind === 'alt' ? 'an-alt' : 'an-move';
       if (t.active) cls += ' active';
       else if (t.onPath) cls += ' onpath';
       var b = el('button', cls, esc(t.text));
+      if (t.kind === 'bmove' && !t.active) b.style.color = B.continuationColor;
+      if (t.kind === 'alt') {
+        // altChip + altChipActive: a slate pill with a gold left rule, TINTED while on the path.
+        var lit = t.active || t.onPath;
+        b.style.background = lit ? B.chipActiveBg : B.chipBg;
+        b.style.color = lit ? B.chipTextActive : B.chipText;
+        b.style.border = '0';
+        b.style.borderLeft = B.chipRuleWidth + 'px solid ' + B.chipRuleColor;
+        b.style.borderRadius = B.chipRadius + 'px';
+        b.style.padding = B.chipPaddingV + 'px ' + B.chipPaddingH + 'px';
+      }
       // A reviewed move carries its tier's symbol, 9pt, right after the SAN (board.tsx:3092).
       // `good` has an empty symbol on purpose, so guard on the string, not on the key.
       var style = t.classification ? MET.CLASSIFICATIONS[t.classification] : null;
@@ -1724,12 +1875,14 @@ var BiyaAnalysisBoard = (function () {
         b.appendChild(mark);
       }
       b.onclick = function () { gotoId(t.id); };
-      // Long-press: a main-line move opens the annotation picker; a branch chip opens the
-      // variation card. Same 400ms the source's six delayLongPress props use.
-      attachLongPress(b, t.kind === 'alt'
+      // Long-press: a main-line move opens the annotation picker; a branch chip or a continuation
+      // move opens the variation card. Same 400ms the source's six delayLongPress props use.
+      attachLongPress(b, t.kind === 'alt' || t.kind === 'bmove'
         ? function () { showVariationCard(t.id); }
         : function () { showAnnotationPicker(t.id); });
       ui.strip.appendChild(b);
+      // The LAST active token wins: on a side line's first move, the chip and its continuation
+      // token are both active, and the continuation — at the end — is where the user is.
       if (t.active) activeEl = b;
     });
     // Keep the cursor in view, the way MoveRibbon does in the Swift twin.
@@ -1936,8 +2089,11 @@ var BiyaAnalysisBoard = (function () {
   }
   /**
    * Commit what is on screen into the move tree, as a real variation. `play` already branches when
-   * the move differs from the one on the main line and the strip already draws branch chips, so
-   * there is nothing new downstream.
+   * the move differs from the one on the main line, and the strip draws it.
+   *
+   * Never asks "Line Already Exists", deliberately — same as the Swift twin: this commits a whole
+   * line at once, a modal halfway through would strand the rest, and a committed side line erases
+   * nothing.
    */
   function previewCommit() {
     if (!preview) return;
@@ -1949,15 +2105,94 @@ var BiyaAnalysisBoard = (function () {
 
   function onBoardMove(e) {
     if (editing) return;                        // edit-mode taps arrive via square-select
-    var pos = position(session);
-    var m = findMove(pos, e.detail.from, e.detail.to, e.detail.promotion);
+    var m = findMove(position(session), e.detail.from, e.detail.to, e.detail.promotion);
     if (!m) return;
+    // Where the line already continues and this move is not part of it, ASK FIRST — nothing is
+    // played until the answer (executeMove, board.tsx:1349-1368). Twin of AnalysisVM.perform.
+    var q = branchConflict(session, m);
+    if (q) { showBranchConfirm(q); paintBoard(); return; }
+    commitBoardMove(m, false);
+  }
+
+  /** Play `m` — or, for "Overwrite", replace the main continuation with it. */
+  function commitBoardMove(m, replace) {
+    var pos = position(session);
     var mover = pos.squares[m.from];
     var castle = mover.kind === E.KING && Math.abs((m.to & 7) - (m.from & 7)) === 2;
     var capture = pos.squares[m.to] != null || (mover.kind === E.PAWN && m.to === pos.enPassant);
-    if (!play(session, m)) return;
+    if (!(replace ? overwrite(session, m) : play(session, m))) return;
     if (SND) SND.playForMove({ status: E.status(position(session)), capture: capture, castle: castle });
     afterMove(true);
+  }
+
+  /**
+   * "Line Already Exists" (BranchConfirmModal.tsx). Every value from MET.MODALS, which
+   * selfTestSource holds to the modal's own StyleSheet and copy in board_styles.json → branchConfirm.
+   * The backdrop does not dismiss on a tap, exactly as the source.
+   */
+  function showBranchConfirm(q) {
+    var M = MET.MODALS;
+    var fill = function (t) { return t.replace('{existing}', q.existingSan).replace('{new}', q.newSan); };
+    var scrim = el('div', 'an-confirm');
+    scrim.style.background = M.confirmScrim;
+    scrim.style.padding = '0 ' + M.confirmGutter + 'px';
+    var card = el('div', 'an-confirm-card');
+    card.style.cssText = 'background:' + M.confirmBg + ';border-radius:' + M.confirmRadius + 'px;padding:'
+      + M.confirmPadding + 'px;max-width:' + M.confirmMaxWidth + 'px;border:' + M.confirmBorderWidth
+      + 'px solid ' + M.confirmBorder;
+    var title = el('div', 'an-confirm-title', esc(M.confirmTitle));
+    title.style.cssText = 'color:' + M.confirmTitleColor + ';font-size:' + M.confirmTitleSize
+      + 'px;font-weight:700;letter-spacing:' + M.confirmTitleTracking + 'px;margin-bottom:'
+      + M.confirmTitleGap + 'px';
+    card.appendChild(title);
+    var row = el('div', 'an-confirm-row');
+    row.style.cssText = 'gap:' + M.pillRowGap + 'px;margin-bottom:' + M.pillRowMargin + 'px';
+    function pill(label, san, bg) {
+      var p = el('div', 'an-confirm-pill');
+      p.style.cssText = 'background:' + bg + ';border-radius:' + M.pillRadius + 'px;padding:'
+        + M.pillPaddingV + 'px ' + M.pillPaddingH + 'px;min-width:' + M.pillMinWidth + 'px';
+      var l = el('div', '', esc(label));
+      l.style.cssText = 'color:' + M.pillLabelColor + ';font-size:' + M.pillLabelSize
+        + 'px;font-weight:600;text-transform:uppercase;letter-spacing:' + M.pillLabelTracking
+        + 'px;margin-bottom:' + M.pillLabelGap + 'px';
+      var s = el('div', '', esc(san));
+      s.style.cssText = 'color:' + M.pillSanColor + ';font:700 ' + M.pillSanSize + 'px var(--mono)';
+      p.appendChild(l); p.appendChild(s);
+      return p;
+    }
+    row.appendChild(pill(M.confirmCurrent, q.existingSan, M.pillBg));
+    var sep = el('div', '', esc(M.confirmSeparator));
+    sep.style.cssText = 'color:' + M.separatorColor + ';font-size:' + M.separatorSize + 'px;font-weight:300';
+    row.appendChild(sep);
+    row.appendChild(pill(M.confirmNew, q.newSan, M.pillNewBg));
+    card.appendChild(row);
+    var bold = function (san) {
+      return '<b style="color:' + M.confirmSubBoldColor + ';font-weight:600">' + esc(san) + '</b>';
+    };
+    var sub = el('div', 'an-confirm-sub', esc(M.confirmSubtitle)
+      .replace('{existing}', bold(q.existingSan)).replace('{new}', bold(q.newSan)));
+    sub.style.cssText = 'color:' + M.confirmSubColor + ';font-size:' + M.confirmSubSize + 'px;line-height:'
+      + M.confirmSubLineHeight + 'px;margin-bottom:' + M.confirmSubGap + 'px';
+    card.appendChild(sub);
+    function action(text, bg, ink, weight, onTap) {
+      var b = el('button', 'an-confirm-btn', esc(text));
+      b.style.cssText = 'background:' + bg + ';color:' + ink + ';border-radius:' + M.actionRadius
+        + 'px;padding:' + M.actionPaddingV + 'px ' + M.actionPaddingH + 'px;margin-bottom:'
+        + M.actionGap + 'px;font-size:' + M.actionTextSize + 'px;font-weight:' + weight;
+      b.onclick = function () { scrim.remove(); onTap(); };
+      card.appendChild(b);
+      return b;
+    }
+    action(fill(M.confirmOverwrite), M.overwriteBg, M.overwriteColor, 600,
+      function () { commitBoardMove(q.move, true); });
+    action(M.confirmNewBranch, M.newBranchBg, M.newBranchColor, 700,
+      function () { commitBoardMove(q.move, false); });
+    var back = action(M.confirmCancel, 'transparent', M.backColor, 500, function () {});
+    back.style.padding = M.backPaddingV + 'px ' + M.actionPaddingH + 'px';
+    back.style.border = M.backBorderWidth + 'px solid ' + M.backBorder;
+    back.style.marginBottom = '0';
+    scrim.appendChild(card);
+    root.appendChild(scrim);
   }
 
   function gotoId(id) {
@@ -1978,17 +2213,58 @@ var BiyaAnalysisBoard = (function () {
   }
 
   /** goForward with several children has to ask which (board.tsx:1506-1516). */
+  /*
+   * "Choose Continuation" (board.tsx:4311-4352), rebuilt on 2026-10-12 with the Swift twin: it said
+   * "Which continuation?" over bare SAN. Every option now carries its number, a "(main line)" tag on
+   * the first, a two-move preview and an arrow, and the card sits at the BOTTOM (`modalOverlay` is
+   * justifyContent: flex-end). Values from MET.MODALS, held to the source by selfTestSource.
+   */
   function showBranchPicker(opts) {
+    var M = MET.MODALS;
     var sheet = el('div', 'an-sheet');
+    sheet.style.cssText = 'background:' + M.overlayScrim + ';align-items:flex-end;padding:'
+      + M.overlayPadding + 'px ' + M.overlayPadding + 'px ' + M.overlayPaddingBottom + 'px';
     var card = el('div', 'an-sheet-card');
-    card.appendChild(el('div', 'an-sheet-title', 'Which continuation?'));
+    card.style.cssText = 'background:' + M.branchBg + ';border-radius:' + M.branchRadius + 'px;padding:'
+      + M.branchPadding + 'px;width:' + M.branchWidth + 'px;max-width:100%;min-width:0;border:0';
+    var title = el('div', '', esc(M.branchTitle));
+    title.style.cssText = 'font-size:' + M.branchTitleSize + 'px;font-weight:800;color:' + M.branchTitleColor
+      + ';text-align:center;margin-bottom:' + M.branchTitleGap + 'px';
+    var sub = el('div', '', esc(M.branchSubtitle));
+    sub.style.cssText = 'font-size:' + M.branchSubSize + 'px;color:' + M.branchSubColor
+      + ';text-align:center;margin-bottom:' + M.branchSubGap + 'px';
+    card.appendChild(title); card.appendChild(sub);
     opts.forEach(function (n, i) {
-      var b = el('button', 'an-sheet-btn' + (i === 0 ? ' main' : ''),
-        esc(n.san) + (i === 0 ? ' <span class="an-sheet-tag">main line</span>' : ''));
+      var main = i === 0;
+      var b = el('button', 'an-branch-opt');
+      b.style.cssText = 'background:' + (main ? M.optionMainBg : M.optionBg) + ';border-radius:'
+        + M.optionRadius + 'px;padding:' + M.optionPaddingV + 'px ' + M.optionPaddingH + 'px;margin-bottom:'
+        + M.optionGap + 'px;border:0;border-left:' + M.optionBorderWidth + 'px solid '
+        + (main ? M.optionMainBorder : M.optionBorderColor);
+      var text = el('div', 'an-branch-opt-text');
+      var mv = el('div', '', esc(n.moveNumber + (n.color === E.WHITE ? '.' : '...') + ' ' + n.san
+        + nagText(n.nag) + (main ? M.branchMainTag : '')));
+      mv.style.cssText = 'font:800 ' + M.optionMoveSize + 'px var(--mono);color:' + M.optionMoveColor
+        + ';white-space:pre';
+      text.appendChild(mv);
+      var pv = continuationPreview(n);
+      if (pv) {
+        var p = el('div', '', esc(pv));
+        p.style.cssText = 'font:' + M.optionPreviewSize + 'px var(--mono);color:' + M.optionPreviewColor
+          + ';margin-top:' + M.optionPreviewGap + 'px';
+        text.appendChild(p);
+      }
+      var arrow = el('div', '', esc(M.branchArrow));
+      arrow.style.cssText = 'font-size:' + M.optionArrowSize + 'px;color:' + M.optionArrowColor
+        + ';margin-left:' + M.optionArrowGap + 'px';
+      b.appendChild(text); b.appendChild(arrow);
       b.onclick = function () { sheet.remove(); goForward(session, i); afterMove(true); };
       card.appendChild(b);
     });
-    var cancel = el('button', 'an-sheet-btn cancel', 'Cancel');
+    var cancel = el('button', 'an-branch-cancel', esc(M.branchCancel));
+    cancel.style.cssText = 'background:' + M.cancelBg + ';border-radius:' + M.cancelRadius + 'px;padding:'
+      + M.cancelPaddingV + 'px 0;margin-top:' + M.cancelGap + 'px;color:' + M.cancelColor + ';font-size:'
+      + M.cancelSize + 'px;font-weight:700';
     cancel.onclick = function () { sheet.remove(); };
     card.appendChild(cancel);
     sheet.appendChild(card);
@@ -3419,6 +3695,8 @@ var BiyaAnalysisBoard = (function () {
     evalLabel: evalLabel,
     isStale: isStale, wantsAnalysis: wantsAnalysis,
     stripTokens: stripTokens, nagText: nagText, PV_PREVIEW: PV_PREVIEW,
+    BRANCH_ARROW: BRANCH_ARROW, continuationPreview: continuationPreview,
+    branchConflict: branchConflict, overwrite: overwrite,
     previewStart: previewStart, previewStepped: previewStepped, previewJumped: previewJumped,
     previewTokensOf: previewTokensOf, previewCanStepForward: previewCanStepForward,
     previewMovesToCommit: previewMovesToCommit,

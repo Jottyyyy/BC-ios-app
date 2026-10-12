@@ -184,13 +184,19 @@ public struct ReviewSummary: Equatable, Sendable {
     }
 }
 
-/// One token of the horizontal move strip (board.tsx:3049-3120).
+/// One token of the horizontal move strip (board.tsx:3049-3158).
 public struct StripToken: Equatable, Sendable {
     /// Raw values match the JS twin's strings so the two tables can be diffed by eye.
     public enum Kind: String, Sendable, Equatable {
         case number = "num"
         case move
         case alternative = "alt"
+        /// The gold `→` that opens the active branch continuation (board.tsx:3129-3133).
+        case branchArrow = "arrow"
+        /// A move number inside that continuation — White's moves only, in gold.
+        case branchNumber = "bnum"
+        /// A move inside that continuation, in gold. Tappable, like any move.
+        case branchMove = "bmove"
     }
     public let kind: Kind
     /// The node this token navigates to; 0 for a move-number token.
@@ -206,6 +212,19 @@ public struct StripToken: Equatable, Sendable {
         self.kind = kind; self.id = id; self.text = text
         self.isCurrent = isCurrent; self.isOnPath = isOnPath
         self.classification = classification
+    }
+}
+
+/// What "Line Already Exists" asks before a move is played (`BranchConfirmModal.tsx`): the move
+/// the main line already continues with here, and the one just played instead.
+public struct BranchConflict: Equatable, Sendable {
+    public let move: Move
+    /// The "Current" pill — the main continuation that Overwrite would replace.
+    public let existingSAN: String
+    /// The "New" pill.
+    public let newSAN: String
+    public init(move: Move, existingSAN: String, newSAN: String) {
+        self.move = move; self.existingSAN = existingSAN; self.newSAN = newSAN
     }
 }
 
@@ -485,14 +504,27 @@ public final class AnalysisSession {
     /// The square the badge sits on: where the current move landed. nil at the root.
     public var annotationSquare: Int? { tree.current.move?.to }
 
-    /// The horizontal move strip (board.tsx:3049-3120): the MAIN LINE as a flat token run, with each
-    /// position's alternatives inserted inline as chips right after the main move they branch from.
+    /// The glyph that opens the branch continuation. `tools/qa/branch_flow_check.js` holds it to the
+    /// literal `board.tsx` renders, as extracted into `board_styles.json` → `stripContinuation`.
+    public static let branchArrow = "→"
+
+    /// The horizontal move strip (board.tsx:3049-3158): the MAIN LINE as a flat token run, with each
+    /// position's alternatives inserted inline as chips right after the main move they branch from,
+    /// then — when the cursor is off the main line — the line it is actually on.
     /// It is not a nested tree — that is what makes one horizontal scroller enough.
+    ///
+    /// ── The second half was missing until 2026-10-12, and the client reported it ─────────
+    /// The port cited `board.tsx:3049-3120` and stopped five lines short of the block that draws the
+    /// active branch (`:3125-3158`). So a side line showed its FIRST move as a chip and nothing
+    /// after it: play 5...Nf6 6.Bg5 7.e3 off the main line and two of the three moves appeared
+    /// nowhere, no token was current, and the strip did not scroll. The tree held every move all
+    /// along — "nabubura ang variation, isang line lang" was a strip that never drew them.
     public var stripTokens: [StripToken] {
         let main = tree.mainline()
         if main.isEmpty { return [] }
         var onPath = Set<Int>()
-        for n in MoveTree.line(to: tree.current) { onPath.insert(n.id) }
+        let line = MoveTree.line(to: tree.current)
+        for n in line { onPath.insert(n.id) }
         let curID = tree.current.id
         var out: [StripToken] = []
 
@@ -513,7 +545,46 @@ public final class AnalysisSession {
                                       isOnPath: onPath.contains(alt.id)))
             }
         }
+
+        // The active branch continuation (board.tsx:3125-3158). Off the main line, the path from
+        // where it leaves the main line UP TO THE CURSOR — not past it, exactly as the source —
+        // after a gold arrow, with a number before White's moves only. `line` starts at the root,
+        // which is never on the main line and is not a move, so it is dropped first.
+        let mainIDs = Set(main.map(\.id))
+        let path = line.dropFirst()
+        if !mainIDs.contains(curID), let diverge = path.firstIndex(where: { !mainIDs.contains($0.id) }) {
+            out.append(StripToken(kind: .branchArrow, id: 0, text: AnalysisSession.branchArrow,
+                                  isCurrent: false, isOnPath: false))
+            for n in path[diverge...] {
+                if n.color == .white {
+                    out.append(StripToken(kind: .branchNumber, id: 0, text: "\(n.moveNumber).",
+                                          isCurrent: false, isOnPath: false))
+                }
+                out.append(StripToken(kind: .branchMove, id: n.id,
+                                      text: n.san + AnalysisSession.nagText(n.nag),
+                                      isCurrent: n.id == curID, isOnPath: true))
+            }
+        }
         return out
+    }
+
+    /// The two-move look-ahead under each "Choose Continuation" option (`buildBranchPreview`,
+    /// board.tsx:2878-2892): the next two moves along the main line from `node`, numbered the PGN
+    /// way — `N.` before White, `N...` only when the preview OPENS on Black — then "…" when the line
+    /// goes on. Empty when `node` has no continuation.
+    public static func continuationPreview(_ node: MoveNode) -> String {
+        var parts: [String] = []
+        var next = node.children.first
+        var count = 0
+        while let n = next, count < 2 {
+            if n.color == .white { parts.append("\(n.moveNumber).") }
+            else if count == 0 { parts.append("\(n.moveNumber)...") }
+            parts.append(n.san + nagText(n.nag))
+            next = n.children.first
+            count += 1
+        }
+        if next != nil { parts.append("…") }
+        return parts.joined(separator: " ")
     }
 
     /// Load a different game into this session — opening a saved one, or restoring a draft.
@@ -596,6 +667,27 @@ public final class AnalysisSession {
     @discardableResult
     public func play(_ move: Move) -> MoveTree.AddResult? {
         let r = tree.add(move: move)
+        if r != nil { invalidate() }
+        return r
+    }
+
+    /// The question to put to the user BEFORE `move` is played, or `nil` when there is none
+    /// (`executeMove`, board.tsx:1349-1368). Only when this position already has a continuation
+    /// and `move` is not one of them: replaying an existing move walks into it, and a move into an
+    /// empty position simply plays. Also `nil` for an illegal move, which `play` would refuse.
+    public func branchConflict(for move: Move) -> BranchConflict? {
+        let cur = tree.current
+        guard let main = cur.children.first,
+              !cur.children.contains(where: { $0.move == move }),
+              let pos = cur.position, pos.legalMoves().contains(move) else { return nil }
+        return BranchConflict(move: move, existingSAN: main.san, newSAN: pos.san(for: move))
+    }
+
+    /// "Overwrite — Replace X with Y". See `MoveTree.overwriteMain(with:)`, including the one
+    /// deliberate deviation from the source: the OTHER side lines here survive.
+    @discardableResult
+    public func overwrite(_ move: Move) -> MoveTree.AddResult? {
+        let r = tree.overwriteMain(with: move)
         if r != nil { invalidate() }
         return r
     }

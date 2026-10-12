@@ -523,6 +523,19 @@ enum AnalysisLayout {
     static let tokenRadius: CGFloat = 3
     static let chipPaddingH: CGFloat = 8
     static let chipPaddingV: CGFloat = 4
+    /// The chip's own look (`altChip`, `altChipActive`, `altChipText*`), used since 2026-10-12: a
+    /// slate pill with a gold left rule, TINTED gold — not filled — while it is on the cursor's path.
+    /// The chip used to draw `surfaceAlt2` with no rule and a solid gold fill, none of it the source's.
+    static let chipBg = AnalysisPalette.surfaceAlt
+    static let chipRadius: CGFloat = 6
+    static let chipRuleWidth: CGFloat = 2
+    static let chipRuleColor = AnalysisPalette.gold
+    static let chipActiveBg = Theme.c(0xFDB022, 0.18)
+    static let chipText = AnalysisPalette.textSecondary
+    static let chipTextActive = AnalysisPalette.gold
+    /// The active branch continuation (board.tsx:3125-3158). An INLINE literal in the source, held to
+    /// `board_styles.json` → `stripContinuation` by `tools/qa/branch_flow_check.js`.
+    static let continuationColor = AnalysisPalette.gold
     /// The gap before a reviewed move's classification symbol (`marginLeft: 1`, board.tsx:3092).
     static let classMarkGap: CGFloat = 1
 
@@ -1229,6 +1242,96 @@ enum AnalysisModals {
     static let optionMainBg = Theme.c(0xFDB022, 0.10)
     static let optionMoveSize: CGFloat = 15
     static let optionPreviewSize: CGFloat = 12
+    // ...and the rest of it, which the picker never drew until 2026-10-12: it said "Which
+    // continuation?" over bare SAN while every number above sat unused.
+    /// `modalOverlay`: a lighter scrim than the PGN sheet's, and the card pinned to the BOTTOM.
+    static let overlayScrim = Theme.c(0x000000, 0.6)
+    static let overlayPadding: CGFloat = 20
+    static let overlayPaddingBottom: CGFloat = 40
+    static let branchTitleColor = AnalysisPalette.textPrimary
+    static let branchTitleGap: CGFloat = 4
+    static let branchSubColor = AnalysisPalette.textSecondaryAlt
+    static let branchSubGap: CGFloat = 16
+    static let optionGap: CGFloat = 8
+    static let optionMoveColor = AnalysisPalette.textPrimary
+    static let optionPreviewColor = AnalysisPalette.textSecondaryAlt
+    static let optionPreviewGap: CGFloat = 3
+    static let optionArrowSize: CGFloat = 18
+    static let optionArrowColor = AnalysisPalette.gold
+    static let optionArrowGap: CGFloat = 10
+    static let cancelBg = AnalysisPalette.surfaceAlt
+    static let cancelRadius: CGFloat = 10
+    static let cancelPaddingV: CGFloat = 11
+    static let cancelGap: CGFloat = 4
+    static let cancelColor = AnalysisPalette.textSecondary
+    static let cancelSize: CGFloat = 14
+    static let branchTitle = "Choose Continuation"
+    static let branchSubtitle = "Multiple lines available — pick one to follow:"
+    static let branchMainTag = "  (main line)"
+    static let branchArrow = "→"
+    static let branchCancel = "Cancel"
+
+    // Line Already Exists (BranchConfirmModal.tsx — its own file; board_styles.json → branchConfirm)
+    static let confirmScrim = Theme.c(0x000000, 0.72)
+    static let confirmGutter: CGFloat = 20
+    static let confirmBg = Theme.c(0x162032)
+    static let confirmRadius: CGFloat = 16
+    static let confirmPadding: CGFloat = 24
+    static let confirmMaxWidth: CGFloat = 400
+    static let confirmBorder = Theme.c(0x2A3A4E)
+    static let confirmBorderWidth: CGFloat = 1
+    static let confirmTitleColor = Theme.c(0xFFFFFF)
+    static let confirmTitleSize: CGFloat = 17
+    static let confirmTitleGap: CGFloat = 16
+    static let confirmTitleTracking: CGFloat = 0.3
+    static let pillRowGap: CGFloat = 10
+    static let pillRowMargin: CGFloat = 14
+    static let pillBg = Theme.c(0x1E3050)
+    static let pillNewBg = Theme.c(0x1A3828)
+    static let pillRadius: CGFloat = 8
+    static let pillPaddingH: CGFloat = 14
+    static let pillPaddingV: CGFloat = 8
+    static let pillMinWidth: CGFloat = 64
+    static let pillLabelColor = Theme.c(0x8899AA)
+    static let pillLabelSize: CGFloat = 9
+    static let pillLabelTracking: CGFloat = 0.5
+    static let pillLabelGap: CGFloat = 2
+    static let pillSanColor = AnalysisPalette.gold
+    static let pillSanSize: CGFloat = 16
+    static let separatorColor = Theme.c(0x4A6080)
+    static let separatorSize: CGFloat = 18
+    static let confirmSubColor = Theme.c(0x8899AA)
+    static let confirmSubSize: CGFloat = 13
+    static let confirmSubLineHeight: CGFloat = 18
+    static let confirmSubGap: CGFloat = 20
+    static let confirmSubBoldColor = Theme.c(0xCCDDEE)
+    static let actionRadius: CGFloat = 10
+    static let actionPaddingV: CGFloat = 13
+    static let actionPaddingH: CGFloat = 16
+    static let actionGap: CGFloat = 10
+    static let actionTextSize: CGFloat = 13
+    static let overwriteBg = Theme.c(0xC62828)
+    static let overwriteColor = Theme.c(0xFFFFFF)
+    static let newBranchBg = AnalysisPalette.gold
+    static let newBranchColor = AnalysisPalette.onGold
+    static let backPaddingV: CGFloat = 11
+    static let backBorder = Theme.c(0x3A4A5E)
+    static let backBorderWidth: CGFloat = 1
+    static let backColor = Theme.c(0x8899AA)
+    static let confirmTitle = "Line Already Exists"
+    static let confirmCurrent = "Current"
+    static let confirmNew = "New"
+    static let confirmSeparator = "→"
+    static let confirmSubtitle = "The mainline continues with {existing}. What would you like to do with {new}?"
+    static let confirmOverwrite = "Overwrite  —  Replace {existing} with {new}"
+    static let confirmNewBranch = "New Branch  —  Add as variation"
+    static let confirmCancel = "Cancel"
+
+    /// Fill `{existing}` / `{new}` — the two SANs every templated line of the modal carries.
+    static func fillBranch(_ template: String, existing: String, new: String) -> String {
+        template.replacingOccurrences(of: "{existing}", with: existing)
+            .replacingOccurrences(of: "{new}", with: new)
+    }
 
     // Variation card (renderVariationModal:4357)
     static let varSheetBg = Theme.c(0x1A2634)

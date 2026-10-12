@@ -77,6 +77,19 @@ while ((pm = pinRe.exec(src)) !== null) {
   expect(!r.missing, `AnalysisMetricsCheck asserts ${block}.${key}.${prop}, which the source has no value for`);
 }
 
+// `matchesConfirm("card", "padding", …)` reads the "Line Already Exists" modal, which lives in its own
+// file (BranchConfirmModal.tsx) and so in its own top-level block, `branchConfirm.styles`.
+const confirmRe = /\bmatchesConfirm\("([^"]+)",\s*"([^"]+)"/g;
+let cm, confirmLookups = 0;
+while ((cm = confirmRe.exec(src)) !== null) {
+  const [, key, prop] = cm;
+  const style = ((styles.branchConfirm || {}).styles || {})[key];
+  confirmLookups++;
+  expect(!!style && Object.prototype.hasOwnProperty.call(style, prop),
+    `AnalysisMetricsCheck asserts branchConfirm.styles.${key}.${prop}, which the source has no value for`);
+}
+expect(confirmLookups >= 20, `only ${confirmLookups} branchConfirm lookups found — the parser stopped matching`);
+
 expect(checked > 100, `only ${checked} source lookups found — the parser probably stopped matching`);
 
 const result = {

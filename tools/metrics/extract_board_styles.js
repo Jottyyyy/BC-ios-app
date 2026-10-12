@@ -152,6 +152,101 @@ const evalGraph = {
     ? Number(/borderRadius: (\d+)/.exec(graphText)[1]) : undefined,
 };
 
+// ---- Variations: the strip's branch continuation, and both branch modals ----------
+//
+// Three things the StyleSheet walk cannot see, all of which the port needs and none of which may be
+// retyped:
+//
+//  1. `renderHorizontalMoveTree`'s active branch continuation (board.tsx:3125-3158) colours its
+//     arrow, numbers and moves with INLINE literals, not style keys. The port stopped five lines
+//     above that block, and the client reported the result as variations being erased.
+//  2. "Choose Continuation" keeps its styles in the StyleSheet, but its COPY in JSX text.
+//  3. "Line Already Exists" lives in its own file, `BranchConfirmModal.tsx`, which this extractor
+//     had never read — styles and copy both.
+//
+// A targeted text scan, like the eval graph's: cruder than the AST walk, but re-derived on every
+// run. Every miss is FATAL, the same as a missing render function — a quiet `undefined` is how a
+// check ends up asserting nothing.
+
+const BRANCH_TSX = path.join(FRONTEND, 'app', '(app)', 'user', 'analysis-board', 'BranchConfirmModal.tsx');
+if (!fs.existsSync(BRANCH_TSX)) { console.error('FATAL: missing ' + BRANCH_TSX); process.exit(1); }
+const boardText = fs.readFileSync(BOARD_TSX, 'utf8');
+const branchText = fs.readFileSync(BRANCH_TSX, 'utf8');
+
+function mustMatch(re, text, what) {
+  const m = re.exec(text);
+  if (!m) { console.error('FATAL: could not extract ' + what); process.exit(1); }
+  return m[1];
+}
+/** `const name = …` up to the next top-level-in-component `const`, which ends a render function. */
+function fnBody(text, name) {
+  const at = text.indexOf('  const ' + name + ' = ');
+  if (at < 0) { console.error('FATAL: function not found in board.tsx: ' + name); process.exit(1); }
+  const next = text.indexOf('\n  const ', at + 1);
+  return text.slice(at, next < 0 ? undefined : next);
+}
+/** Turn the modal's JSX placeholders into the neutral `{existing}` / `{new}` both ports fill in. */
+const placeholders = (s) => s.replace(/\{existingMainlineSan\}/g, '{existing}')
+  .replace(/\{newMoveSan\}/g, '{new}');
+
+const horiz = fnBody(boardText, 'renderHorizontalMoveTree');
+const cont = horiz.slice(horiz.indexOf('!isOnMainLine)'));
+if (cont.length === horiz.length) { console.error('FATAL: branch continuation block not found'); process.exit(1); }
+const stripContinuation = {
+  _source: 'board.tsx renderHorizontalMoveTree — the `if (currentNode && !isOnMainLine)` block',
+  _note: 'Inline literals: the colours here are NOT in any style key. Shown from where the line leaves '
+       + 'the main line up to the cursor, numbered before White only.',
+  arrow: mustMatch(/key="branch-arrow"[\s\S]*?\? '[^']*' : '([^']+)'/, cont, 'continuation arrow'),
+  arrowStyle: mustMatch(/key="branch-arrow" style=\{\[styles\.(\w+)/, cont, 'arrow base style'),
+  arrowColor: mustMatch(/key="branch-arrow" style=\{\[styles\.\w+, \{[^}]*color: '([^']+)'/, cont, 'arrow colour'),
+  numberColor: mustMatch(/key=\{`bnum-[^`]*`\} style=\{\[styles\.\w+, \{[^}]*color: '([^']+)'/, cont, 'number colour'),
+  moveStyle: mustMatch(/key=\{`branch-[\s\S]*?style=\{\[styles\.(\w+), \{/, cont, 'move base style'),
+  moveColor: mustMatch(/key=\{`branch-[\s\S]*?styles\.\w+, \{[^}]*color: '([^']+)' \}/, cont, 'move colour'),
+};
+
+const selection = fnBody(boardText, 'renderBranchSelectionModal');
+const preview = fnBody(boardText, 'buildBranchPreview');
+const branchSelection = {
+  _source: 'board.tsx renderBranchSelectionModal + buildBranchPreview — copy only; styles are in stylesheets',
+  title: mustMatch(/<Text style=\{styles\.branchModalTitle\}>([^<]+)<\/Text>/, selection, 'picker title'),
+  subtitle: mustMatch(/<Text style=\{styles\.branchModalSub\}>([^<]+)<\/Text>/, selection, 'picker subtitle'),
+  mainLineTag: mustMatch(/i === 0 \? '([^']+)' : ''/, selection, 'main-line tag'),
+  arrow: mustMatch(/<Text style=\{styles\.branchOptionArrow\}>([^<]+)<\/Text>/, selection, 'option arrow'),
+  cancel: mustMatch(/<Text style=\{styles\.branchCancelBtnText\}>([^<]+)<\/Text>/, selection, 'picker cancel'),
+  previewMoves: Number(mustMatch(/count < (\d+)/, preview, 'preview length')),
+  previewEllipsis: mustMatch(/if \(n\) text \+= '([^']+)'/, preview, 'preview ellipsis'),
+};
+
+// The subtitle is JSX text interleaved with two bold <Text> runs. JSX trims each line and drops
+// newlines that sit next to a tag, and `{' '}` is a literal space — so: trim, join, then substitute.
+const subtitleJsx = mustMatch(/<Text style=\{styles\.subtitle\}>([\s\S]*?)<\/Text>\s*\n\s*<TouchableOpacity/,
+  branchText, 'confirm subtitle');
+const confirmSubtitle = placeholders(subtitleJsx.split('\n').map((l) => l.trim()).filter(Boolean).join('')
+  .replace(/\{' '\}/g, ' ')
+  .replace(/<Text style=\{styles\.subtitleBold\}>(\{\w+\})<\/Text>/g, '$1'));
+const pillLabels = [];
+for (const m of branchText.matchAll(/<Text style=\{styles\.movePillLabel\}>([^<]+)<\/Text>/g)) pillLabels.push(m[1]);
+if (pillLabels.length !== 2) { console.error('FATAL: expected two pill labels, got ' + pillLabels.length); process.exit(1); }
+const button = (key) => placeholders(mustMatch(
+  new RegExp('<Text style=\\{styles\\.' + key + '\\}>\\s*([\\s\\S]*?)\\s*</Text>'), branchText, key));
+const branchConfirm = {
+  _source: 'BYAHERONG-COACH-FRONTEND/app/(app)/user/analysis-board/BranchConfirmModal.tsx',
+  _note: 'Raised by executeMove (board.tsx:1357-1368) when a move is played where a continuation '
+       + 'exists and the move is not one of them. `{existing}`/`{new}` are the two SANs.',
+  copy: {
+    title: mustMatch(/<Text style=\{styles\.title\}>([^<]+)<\/Text>/, branchText, 'confirm title'),
+    currentLabel: pillLabels[0],
+    newLabel: pillLabels[1],
+    separator: mustMatch(/<Text style=\{styles\.moveSeparator\}>([^<]+)<\/Text>/, branchText, 'separator'),
+    subtitle: confirmSubtitle,
+    overwrite: button('btnOverwriteText'),
+    newBranch: button('btnNewBranchText'),
+    cancel: button('btnBackText'),
+  },
+  styles: RN.collectStyleSheets(ts, RN.parse(ts, BRANCH_TSX), RN.createEvaluator(ts, SEED)).stylesheets.styles,
+};
+if (!branchConfirm.styles) { console.error('FATAL: BranchConfirmModal.tsx StyleSheet not found'); process.exit(1); }
+
 // ---- Device-derived values ------------------------------------------------------
 //
 // Anything the source computed from `Dimensions.get('window')` has been FOLDED against the
@@ -304,6 +399,9 @@ const out = {
     values: deviceDerived,
   },
   evalGraph: evalGraph,
+  stripContinuation: stripContinuation,
+  branchSelection: branchSelection,
+  branchConfirm: branchConfirm,
   renderConstants: Object.assign({
     _note: 'Geometry that lives inside a render function, where no StyleSheet can hold it. Each '
          + 'expression is flattened into signed additive terms so a consumer asserts the DIRECTION '
