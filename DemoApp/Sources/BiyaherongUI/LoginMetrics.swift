@@ -1,4 +1,5 @@
 import SwiftUI
+import BiyaherongCoachCore
 
 // The login screen's PURE layer: the band budget, every fixed size, the palette, the type scale,
 // the drifting-piece table, the timings, the copy, and the session predicate.
@@ -361,7 +362,7 @@ enum LoginSession {
 /// (`profile/index.tsx:247-256`, `:112-133`). The image half cannot be copied: a photo picker would
 /// mean `NSPhotoLibraryUsageDescription`, a privacy-manifest entry, and a new surface for App
 /// Review on a listing that has already been rejected four times. So the avatar is a CHOICE among
-/// art the app already ships — the five coach characters in `Characters/`, loaded by `CoachArt` —
+/// art the app already ships — the twelve chess pieces in `Pieces/`, drawn by `PieceImage` —
 /// which gives the player a picture with no permission, no upload and no new review surface.
 enum LoginProfile {
 
@@ -386,29 +387,54 @@ enum LoginProfile {
         return String(collapsed.prefix(maxNameLength))
     }
 
-    /// The avatar is the letter, or one of the five coach characters.
+    /// The avatar is the letter, or one of the twelve chess pieces.
+    ///
+    /// ── Why pieces, and not the coach characters 1.0.9 offered ─────────────────
+    /// The five coach illustrations are the client's family — the bots are drawn from them — and
+    /// the client asked that they stop being something any player can wear as a profile picture.
+    /// They stay exactly where they belong, on the coaches in Play vs Coach. The pieces are the
+    /// board's own art: already bundled in both languages, already attributed (CC BY-SA), so the
+    /// change costs no asset, no licence and no permission.
     static let letterAvatar = "letter"
-    static let coachAvatarPrefix = "coach-"
-    static let coachLevels = [1, 2, 3, 4, 5]
+
+    /// White row, then black row, King first — the order the picker draws them.
+    ///
+    /// Each value IS the piece's asset base name, `"<kind>-<w|b>"` — the same name
+    /// `PieceArt.assetName` builds and the same file `web-demo/assets/pieces/` serves — so a stored
+    /// value names its file directly and neither language needs a translation table.
+    /// `tools/qa/replay_login.js` checks that every value resolves to a file in BOTH places.
+    static let pieceAvatars = [
+        "king-w", "queen-w", "rook-w", "bishop-w", "knight-w", "pawn-w",
+        "king-b", "queen-b", "rook-b", "bishop-b", "knight-b", "pawn-b",
+    ]
 
     /// Every valid value, in the order the picker shows them.
-    static var avatars: [String] {
-        [letterAvatar] + coachLevels.map { "\(coachAvatarPrefix)\($0)" }
-    }
+    static var avatars: [String] { [letterAvatar] + pieceAvatars }
 
-    /// `"coach-3"` → `3`; anything else → `nil`, which the UI reads as "draw the letter".
+    /// `"knight-b"` → a black knight; anything else → `nil`, which the UI reads as "draw the letter".
     ///
     /// Fail closed, exactly like `isSignedIn`: a hand-edited or half-written key draws the initial
-    /// rather than crashing on an index, because the avatar is decoration and the screen is not.
-    static func coachLevel(_ raw: String?) -> Int? {
-        guard let raw, raw.hasPrefix(coachAvatarPrefix) else { return nil }
-        guard let n = Int(raw.dropFirst(coachAvatarPrefix.count)), coachLevels.contains(n) else { return nil }
-        return n
+    /// rather than breaking the card, because the avatar is decoration and the screen is not. That
+    /// is also the whole upgrade path — a `"coach-3"` saved by 1.0.9 is not in the list, so it reads
+    /// back as the letter, and nothing needs migrating.
+    static func piece(_ raw: String?) -> Piece? {
+        guard let raw, pieceAvatars.contains(raw) else { return nil }
+        let parts = raw.split(separator: "-")
+        let kind: PieceKind
+        switch parts[0] {
+        case "king":   kind = .king
+        case "queen":  kind = .queen
+        case "rook":   kind = .rook
+        case "bishop": kind = .bishop
+        case "knight": kind = .knight
+        default:       kind = .pawn
+        }
+        return Piece(parts[1] == "w" ? .white : .black, kind)
     }
 
     static func isValidAvatar(_ raw: String?) -> Bool {
         guard let raw else { return false }
-        return raw == letterAvatar || coachLevel(raw) != nil
+        return raw == letterAvatar || piece(raw) != nil
     }
 
     /// The circled letter, when no coach picture is chosen.

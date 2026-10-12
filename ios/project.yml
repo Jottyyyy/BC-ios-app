@@ -84,7 +84,11 @@ targets:
         # reach the public App Store. 1.0.9 is the client's first round of bug reports against it:
         # the position editor's missing repaint, the video's portrait lock and silent session, and a
         # Profile screen with no way to edit anything. See CHANGELOG.md.
-        MARKETING_VERSION: "1.0.9"
+        # 1.0.9 (58) was submitted 2026-10-08. 1.0.10 is the client's second round: Analysis Board
+        # variations drawn and asked about like Android, chess-piece avatars instead of the coach
+        # characters, and the video's sound dying on maximise. If 1.0.9 is still unreleased when 59
+        # is uploaded, this may stay "1.0.9" — Apple refuses only a version string already live.
+        MARKETING_VERSION: "1.0.10"
         # Build number, unique per version string. Version 1.0.4 already reached build 37 in
         # App Store Connect, so continuing at 38 keeps the sequence monotonic across the whole
         # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
@@ -107,7 +111,8 @@ targets:
         # 1.0.8 (57) was approved and released. Two paragraphs of warning above did not stop it,
         # because nothing READS this file to check — the drift is only ever noticed by a rejected
         # upload. 58 is therefore the floor.
-        CURRENT_PROJECT_VERSION: "58"
+        # 1.0.9 (58) was uploaded and submitted on 2026-10-08, so 59 is the floor now.
+        CURRENT_PROJECT_VERSION: "59"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone

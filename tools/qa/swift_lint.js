@@ -134,6 +134,66 @@ files.forEach(function (f) {
   });
 });
 
+// ---- isolation check --------------------------------------------------------
+// All three packages are `swift-tools-version:6.0` with no language-mode override, so every module
+// builds in the Swift 6 LANGUAGE MODE, where nonisolated shared mutable state is a hard compile
+// error (SE-0412), not a warning. A stored `static var` — or a file-scope `var` — therefore has to
+// be isolated: `@MainActor` on the declaration or on its enclosing type, an enclosing `actor`, or
+// an explicit `nonisolated(unsafe)` that a reader can see and question.
+//
+// Why a regex rule earns a place here: `OrientationGate` shipped on 2026-10-08 as a plain
+// `public enum` holding a `static var`, written with no compiler in reach — the one stored static
+// in the UI module that was not `@MainActor`, and nothing on this checkout could see it.
+// `main.swift` is exempt: top-level code there is implicitly main-actor isolated.
+var STATIC_VAR = /^(\s*)((?:[@\w()]+\s+)*?)static\s+var\s+(\w+)\s*(?::[^{=]*)?(?:=.*)?$/;
+var GLOBAL_VAR = /^((?:[@\w()]+\s+)*?)var\s+(\w+)\b/;
+var TYPE_DECL = /^(\s*)(?:(?:@\w+(?:\([^)]*\))?|public|internal|private|fileprivate|final|open|indirect)\s+)*(enum|struct|class|actor|extension)\s+\w/;
+var ISOLATED = /@MainActor|nonisolated\(unsafe\)/;
+var isolationChecked = 0;
+
+/** True when one of the attribute-only lines directly above `i` says `@MainActor`. */
+function attributedAbove(lines, i) {
+  for (var j = i - 1; j >= 0 && /^\s*@\w/.test(lines[j]); j--) {
+    if (/@MainActor/.test(lines[j])) return true;
+  }
+  return false;
+}
+
+files.forEach(function (f) {
+  if (/(^|\/)main\.swift$/.test(f)) return;
+  var full = path.isAbsolute(f) ? f : path.join(ROOT, f);
+  if (!fs.existsSync(full)) return;
+  // Line comments go first, so a docstring that QUOTES `static var` cannot raise a false alarm.
+  var lines = fs.readFileSync(full, 'utf8').split('\n')
+    .map(function (l) { return l.replace(/\/\/.*$/, ''); });
+
+  lines.forEach(function (l, i) {
+    var name = null, ok = false;
+    var s = STATIC_VAR.exec(l);
+    if (s) {
+      name = 'static var ' + s[3];
+      ok = ISOLATED.test(s[2]) || attributedAbove(lines, i);
+      // Walk up to the nearest declaration indented LESS than this one: the enclosing type.
+      for (var k = i - 1; !ok && k >= 0; k--) {
+        var t = TYPE_DECL.exec(lines[k]);
+        if (!t || t[1].length >= s[1].length) continue;
+        ok = t[2] === 'actor' || /@MainActor/.test(lines[k]) || attributedAbove(lines, k);
+        break;
+      }
+    } else {
+      var g = GLOBAL_VAR.exec(l);
+      if (g) { name = 'var ' + g[2] + ' (file scope)'; ok = ISOLATED.test(g[1]) || attributedAbove(lines, i); }
+    }
+    if (!name) return;
+    isolationChecked++;
+    if (!ok) {
+      console.log('  ISOLATION ' + f + ':' + (i + 1) + '  ' + name + ' is nonisolated mutable state — '
+        + 'a compile error in the Swift 6 language mode; make it (or its type) @MainActor');
+      bad++;
+    }
+  });
+});
+
 // ---- access-level check -----------------------------------------------------
 // "Method cannot be declared public because its result uses an internal type" is a hard compile
 // error, it is invisible to a bracket matcher, and it is exactly what a module written without a
@@ -202,7 +262,8 @@ Object.keys(sources).forEach(function (rel) {
 });
 
 console.log(bad ? '\nX ' + bad + ' structural problem(s) in ' + files.length + ' file(s)'
-                : '\nOK — ' + files.length + ' file(s) structurally sound');
+                : '\nOK — ' + files.length + ' file(s) structurally sound, '
+                  + isolationChecked + ' mutable static(s) isolated');
 
 // The ACCESS rule needs the WHOLE module to know which types are internal. Given an explicit file
 // list it only sees those files, so every unknown type reads as "not internal" and the rule

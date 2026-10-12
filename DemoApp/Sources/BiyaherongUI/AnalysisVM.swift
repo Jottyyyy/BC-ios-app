@@ -51,6 +51,10 @@ final class AnalysisVM: ObservableObject {
     @Published var autoplaySpeed = AnalysisTables.defaultAutoplaySpeed
     /// Non-empty while the branch picker is up (board.tsx:1506-1516).
     @Published var branchOptions: [MoveNode] = []
+    /// Set while "Line Already Exists" is up (board.tsx:1357-1368): a move was played where the line
+    /// already continues, and nothing has happened yet — the user chooses Overwrite, New Branch or
+    /// Cancel. Until 2026-10-12 the port had no such question and silently made a side line.
+    @Published var branchConflict: BranchConflict?
 
     /// How hard the engine may work (☰ > Engine).
     ///
@@ -305,15 +309,19 @@ final class AnalysisVM: ObservableObject {
     }
 
     /// Commit what is on screen into the move tree, as a real variation. `perform` already creates
-    /// a branch when the move differs from the one on the main line, and the strip already draws
-    /// branch chips, so there is nothing new downstream.
+    /// a branch when the move differs from the one on the main line, and the strip draws it.
+    ///
+    /// `askingFirst: false`, deliberately: this commits a whole engine line in one go, and a
+    /// "Line Already Exists" modal halfway through a multi-move commit would strand the rest of it.
+    /// A committed line becomes a side line, which never erases anything — the one outcome the
+    /// prompt exists to prevent is not reachable from here.
     func previewCommit() {
         guard let p = preview else { return }
         let moves = p.movesToCommit
         preview = nil
         for uci in moves {
             guard let m = session.position.move(forUCI: uci) else { break }
-            perform(m)
+            perform(m, askingFirst: false)
         }
         Haptics.play(.success)
     }
@@ -375,12 +383,22 @@ final class AnalysisVM: ObservableObject {
         perform(Move(from: pp.from, to: pp.to, promotion: kind))
     }
 
-    private func perform(_ m: Move) {
+    /// Play a move from the board — or, where the line already continues and this move is not part
+    /// of it, ASK FIRST (`executeMove`, board.tsx:1349-1368). Nothing is played until the answer.
+    ///
+    /// `askingFirst` is false only for `previewCommit` and for the answer itself; `overwrite` is
+    /// true only for the answer "Overwrite".
+    private func perform(_ m: Move, askingFirst: Bool = true, overwrite: Bool = false) {
+        if askingFirst, let question = session.branchConflict(for: m) {
+            deselect()
+            branchConflict = question
+            return
+        }
         let before = session.position
         guard let moving = before.squares[m.from] else { return }
         let isCastle = moving.kind == .king && abs(Square.file(m.to) - Square.file(m.from)) == 2
         let isCapture = moveIsCapture(before, m)
-        guard session.play(m) != nil else { return }
+        guard (overwrite ? session.overwrite(m) : session.play(m)) != nil else { return }
 
         animate(m, from: before, moving: moving)
         SoundManager.shared.playMove(isCastle: isCastle, isCapture: isCapture,
@@ -450,6 +468,27 @@ final class AnalysisVM: ObservableObject {
         afterNavigation()
     }
     func cancelBranch() { branchOptions = [] }
+
+    /// The "Choose Continuation" preview under one option (board.tsx:2878-2892).
+    func branchPreview(_ node: MoveNode) -> String { AnalysisSession.continuationPreview(node) }
+
+    // "Line Already Exists" — the three answers (BranchConfirmModal.tsx).
+
+    /// Replace the main continuation with the new move. The other side lines here survive — the one
+    /// deliberate deviation from the source; see `MoveTree.overwriteMain(with:)`.
+    func branchOverwrite() {
+        guard let q = branchConflict else { return }
+        branchConflict = nil
+        perform(q.move, askingFirst: false, overwrite: true)
+    }
+    /// Keep the main line and add the new move beside it — what the port did silently before.
+    func branchNewVariation() {
+        guard let q = branchConflict else { return }
+        branchConflict = nil
+        perform(q.move, askingFirst: false)
+    }
+    /// Play nothing.
+    func branchCancel() { branchConflict = nil }
 
     /// Jump to a move-strip token.
     func goTo(id: Int) {

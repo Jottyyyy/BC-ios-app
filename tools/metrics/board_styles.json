@@ -50,6 +50,153 @@
     "curveWidth": 1.5,
     "containerRadius": 6
   },
+  "stripContinuation": {
+    "_source": "board.tsx renderHorizontalMoveTree — the `if (currentNode && !isOnMainLine)` block",
+    "_note": "Inline literals: the colours here are NOT in any style key. Shown from where the line leaves the main line up to the cursor, numbered before White only.",
+    "arrow": "→",
+    "arrowStyle": "movesStripNum",
+    "arrowColor": "#FDB022",
+    "numberColor": "#FDB022",
+    "moveStyle": "movesStripMove",
+    "moveColor": "#FDB022"
+  },
+  "branchSelection": {
+    "_source": "board.tsx renderBranchSelectionModal + buildBranchPreview — copy only; styles are in stylesheets",
+    "title": "Choose Continuation",
+    "subtitle": "Multiple lines available — pick one to follow:",
+    "mainLineTag": "  (main line)",
+    "arrow": "→",
+    "cancel": "Cancel",
+    "previewMoves": 2,
+    "previewEllipsis": "…"
+  },
+  "branchConfirm": {
+    "_source": "BYAHERONG-COACH-FRONTEND/app/(app)/user/analysis-board/BranchConfirmModal.tsx",
+    "_note": "Raised by executeMove (board.tsx:1357-1368) when a move is played where a continuation exists and the move is not one of them. `{existing}`/`{new}` are the two SANs.",
+    "copy": {
+      "title": "Line Already Exists",
+      "currentLabel": "Current",
+      "newLabel": "New",
+      "separator": "→",
+      "subtitle": "The mainline continues with {existing}. What would you like to do with {new}?",
+      "overwrite": "Overwrite  —  Replace {existing} with {new}",
+      "newBranch": "New Branch  —  Add as variation",
+      "cancel": "Cancel"
+    },
+    "styles": {
+      "backdrop": {
+        "flex": 1,
+        "backgroundColor": "rgba(0,0,0,0.72)",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "paddingHorizontal": 20
+      },
+      "card": {
+        "backgroundColor": "#162032",
+        "borderRadius": 16,
+        "padding": 24,
+        "width": "100%",
+        "maxWidth": 400,
+        "borderWidth": 1,
+        "borderColor": "#2A3A4E"
+      },
+      "title": {
+        "color": "#FFFFFF",
+        "fontSize": 17,
+        "fontWeight": "700",
+        "textAlign": "center",
+        "marginBottom": 16,
+        "letterSpacing": 0.3
+      },
+      "moveRow": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "marginBottom": 14,
+        "gap": 10
+      },
+      "movePill": {
+        "backgroundColor": "#1E3050",
+        "borderRadius": 8,
+        "paddingHorizontal": 14,
+        "paddingVertical": 8,
+        "alignItems": "center",
+        "minWidth": 64
+      },
+      "movePillNew": {
+        "backgroundColor": "#1A3828"
+      },
+      "movePillLabel": {
+        "color": "#8899AA",
+        "fontSize": 9,
+        "fontWeight": "600",
+        "textTransform": "uppercase",
+        "letterSpacing": 0.5,
+        "marginBottom": 2
+      },
+      "movePillSan": {
+        "color": "#FDB022",
+        "fontSize": 16,
+        "fontWeight": "700",
+        "fontFamily": "monospace"
+      },
+      "moveSeparator": {
+        "color": "#4A6080",
+        "fontSize": 18,
+        "fontWeight": "300"
+      },
+      "subtitle": {
+        "color": "#8899AA",
+        "fontSize": 13,
+        "lineHeight": 18,
+        "textAlign": "center",
+        "marginBottom": 20
+      },
+      "subtitleBold": {
+        "color": "#CCDDEE",
+        "fontWeight": "600"
+      },
+      "btnOverwrite": {
+        "backgroundColor": "#C62828",
+        "borderRadius": 10,
+        "paddingVertical": 13,
+        "paddingHorizontal": 16,
+        "alignItems": "center",
+        "marginBottom": 10
+      },
+      "btnOverwriteText": {
+        "color": "#FFFFFF",
+        "fontSize": 13,
+        "fontWeight": "600"
+      },
+      "btnNewBranch": {
+        "backgroundColor": "#FDB022",
+        "borderRadius": 10,
+        "paddingVertical": 13,
+        "paddingHorizontal": 16,
+        "alignItems": "center",
+        "marginBottom": 10
+      },
+      "btnNewBranchText": {
+        "color": "#0F1A2E",
+        "fontSize": 13,
+        "fontWeight": "700"
+      },
+      "btnBack": {
+        "borderRadius": 10,
+        "paddingVertical": 11,
+        "paddingHorizontal": 16,
+        "alignItems": "center",
+        "borderWidth": 1,
+        "borderColor": "#3A4A5E"
+      },
+      "btnBackText": {
+        "color": "#8899AA",
+        "fontSize": 13,
+        "fontWeight": "500"
+      }
+    }
+  },
   "renderConstants": {
     "_note": "Geometry that lives inside a render function, where no StyleSheet can hold it. Each expression is flattened into signed additive terms so a consumer asserts the DIRECTION of an offset, not only its size. `squareToPixel` is included because it defines the anchor every one of these offsets is measured from — it returns the square CENTRE.",
     "squareToPixel": {

@@ -3304,7 +3304,9 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 }
 .pedit:hover { background: rgba(0, 0, 0, .22); }
 /* The chosen coach picture, in the same circle the initial used. */
-.mono-badge-art { background-size: cover; background-position: center; color: transparent; }
+/* A chess piece, not a photo: drawn at three quarters of the badge and never cropped, matching the
+   Swift card, where a full-size piece's base would stand outside the shape. */
+.mono-badge-art { background-size: 75%; background-position: center; background-repeat: no-repeat; color: transparent; }
 
 .ep-scrim {
   position: fixed; inset: 0; z-index: 998;
@@ -3324,11 +3326,12 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   border-radius: 10px; border: 1px solid rgba(255, 255, 255, .22);
   background: rgba(255, 255, 255, .06); color: inherit; font: inherit; font-size: 16px;
 }
-.ep-avatars { display: flex; gap: 10px; flex-wrap: wrap; }
+.ep-avatars { display: flex; flex-direction: column; gap: 10px; }
+.ep-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; justify-items: center; }
 .ep-avatar {
   width: 46px; height: 46px; flex: 0 0 auto; cursor: pointer;
   border-radius: 50%; border: 1px solid rgba(255, 255, 255, .22);
-  background: rgba(255, 255, 255, .06) center / cover no-repeat;
+  background: rgba(255, 255, 255, .06) center / 75% no-repeat;
   color: inherit; font-weight: 800; font-size: 15px;
 }
 .ep-avatar.is-on { border: 3px solid var(--gold, #fdb022); }
@@ -3338,3 +3341,21 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
   border: 1px solid rgba(255, 255, 255, .22); background: transparent; color: inherit;
 }
 .ep-save { background: var(--gold, #fdb022); color: #10203a; border-color: transparent; }
+
+/* Choose Continuation and Line Already Exists (2026-10-12). Colours, sizes and spacing come inline
+   from MET.MODALS, which selfTestSource holds to the RN source; only layout lives here. */
+.an-branch-opt {
+  display: flex; align-items: center; width: 100%; cursor: pointer; text-align: left;
+}
+.an-branch-opt-text { flex: 1; min-width: 0; }
+.an-branch-cancel { display: block; width: 100%; border: 0; cursor: pointer; font-family: var(--font); }
+.an-confirm {
+  position: absolute; inset: 0; z-index: 41; display: flex; align-items: center; justify-content: center;
+}
+.an-confirm-card { width: 100%; box-sizing: border-box; }
+.an-confirm-title, .an-confirm-sub { text-align: center; font-family: var(--font); }
+.an-confirm-row { display: flex; align-items: center; justify-content: center; }
+.an-confirm-pill { display: flex; flex-direction: column; align-items: center; box-sizing: border-box; }
+.an-confirm-btn {
+  display: block; width: 100%; border: 0; cursor: pointer; text-align: center; font-family: var(--font);
+}

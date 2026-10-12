@@ -91,6 +91,7 @@ struct AnalysisBoardScreen: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .background(AnalysisPalette.screenBg)
             .overlay(alignment: .center) { branchPicker }
+            .overlay(alignment: .center) { branchConfirm }
             .overlay(alignment: .center) { reviewModal }
             .overlay(alignment: .bottom) { librarySheets }
             .overlay(alignment: .leading) {
@@ -516,44 +517,209 @@ struct AnalysisBoardScreen: View {
     // `goForward` with several children has to ask which (board.tsx:1506-1516). An overlay rather
     // than a `.sheet`: this module has no sheet anywhere, and `.fullScreenCover` does not exist on
     // macOS. `PromotionOverlay` set the precedent.
+    //
+    // Rebuilt on 2026-10-12 to the source's "Choose Continuation" (board.tsx:4311-4352): it said
+    // "Which continuation?" over bare SAN, centred, with none of the `branchModal`/`branchOption*`
+    // metrics it had been carrying. Every option now shows its move number, a "(main line)" tag on
+    // the first, a two-move preview of where it leads, and an arrow — and it sits at the BOTTOM,
+    // because `modalOverlay` is `justifyContent: 'flex-end'`.
 
     @ViewBuilder
     private var branchPicker: some View {
         if !vm.branchOptions.isEmpty {
-            ZStack {
-                Color.black.opacity(AnalysisLayout.scrimOpacity)
+            ZStack(alignment: .bottom) {
+                AnalysisModals.overlayScrim
+                    .ignoresSafeArea()
                     .onTapGesture { vm.cancelBranch() }
-                VStack(spacing: AnalysisLayout.toolGap) {
-                    Text("Which continuation?")
-                        .font(Theme.nunito(AnalysisType.status, .extraBold))
-                        .foregroundStyle(AnalysisPalette.textMuted)
+                VStack(spacing: 0) {
+                    Text(AnalysisModals.branchTitle)
+                        .font(Theme.nunito(AnalysisModals.branchTitleSize, .extraBold))
+                        .foregroundStyle(AnalysisModals.branchTitleColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, AnalysisModals.branchTitleGap)
+                    Text(AnalysisModals.branchSubtitle)
+                        .font(Theme.nunito(AnalysisModals.branchSubSize))
+                        .foregroundStyle(AnalysisModals.branchSubColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, AnalysisModals.branchSubGap)
                     ForEach(Array(vm.branchOptions.enumerated()), id: \.offset) { index, node in
-                        Button { vm.chooseBranch(index) } label: {
-                            Text(node.san)
-                                .font(AnalysisType.mono(AnalysisType.stripMove, .bold))
-                                .foregroundStyle(index == 0
-                                                 ? AnalysisPalette.onGold : AnalysisPalette.textPrimary)
-                                .frame(maxWidth: .infinity)
-                                .padding(AnalysisLayout.sheetPadding)
-                                .background(index == 0
-                                            ? AnalysisPalette.gold : AnalysisPalette.surfaceAlt,
-                                            in: RoundedRectangle(cornerRadius: AnalysisLayout.toolBtnRadius))
-                        }
-                        .buttonStyle(.plain)
+                        Button { vm.chooseBranch(index) } label: { branchOption(node, isMain: index == 0) }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, AnalysisModals.optionGap)
                     }
                     Button { vm.cancelBranch() } label: {
-                        Text("Cancel")
-                            .font(Theme.nunito(AnalysisType.status, .semiBold))
-                            .foregroundStyle(AnalysisPalette.textMuted)
+                        Text(AnalysisModals.branchCancel)
+                            .font(Theme.nunito(AnalysisModals.cancelSize, .bold))
+                            .foregroundStyle(AnalysisModals.cancelColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, AnalysisModals.cancelPaddingV)
+                            .background(AnalysisModals.cancelBg,
+                                        in: RoundedRectangle(cornerRadius: AnalysisModals.cancelRadius))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, AnalysisModals.cancelGap)
+                }
+                .padding(AnalysisModals.branchPadding)
+                .frame(maxWidth: AnalysisModals.branchWidth)
+                .background(AnalysisModals.branchBg,
+                            in: RoundedRectangle(cornerRadius: AnalysisModals.branchRadius))
+                .padding(.horizontal, AnalysisModals.overlayPadding)
+                .padding(.bottom, AnalysisModals.overlayPaddingBottom)
+            }
+        }
+    }
+
+    /// One option: `{n.} SAN` (+ the main-line tag), the preview under it, an arrow at the end; a
+    /// slate row with a muted left rule, or a gold-tinted one with a gold rule for the main line.
+    private func branchOption(_ node: MoveNode, isMain: Bool) -> some View {
+        let number = "\(node.moveNumber)" + (node.color == .white ? "." : "...")
+        let preview = vm.branchPreview(node)
+        return HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: AnalysisModals.optionPreviewGap) {
+                Text(number + " " + node.san + AnalysisSession.nagText(node.nag)
+                     + (isMain ? AnalysisModals.branchMainTag : ""))
+                    .font(AnalysisType.mono(AnalysisModals.optionMoveSize, .heavy))
+                    .foregroundStyle(AnalysisModals.optionMoveColor)
+                if !preview.isEmpty {
+                    Text(preview)
+                        .font(AnalysisType.mono(AnalysisModals.optionPreviewSize))
+                        .foregroundStyle(AnalysisModals.optionPreviewColor)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(AnalysisModals.branchArrow)
+                .font(Theme.nunito(AnalysisModals.optionArrowSize))
+                .foregroundStyle(AnalysisModals.optionArrowColor)
+                .padding(.leading, AnalysisModals.optionArrowGap)
+        }
+        .padding(.horizontal, AnalysisModals.optionPaddingH)
+        .padding(.vertical, AnalysisModals.optionPaddingV)
+        .background(isMain ? AnalysisModals.optionMainBg : AnalysisModals.optionBg)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(isMain ? AnalysisModals.optionMainBorder : AnalysisModals.optionBorderColor)
+                .frame(width: AnalysisModals.optionBorderWidth)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: AnalysisModals.optionRadius))
+    }
+
+    // MARK: - Line Already Exists
+    //
+    // `BranchConfirmModal.tsx`, raised by `executeMove` (board.tsx:1357-1368) when a move is played
+    // where the line already continues and the move is not part of it. NOTHING has been played yet:
+    // Overwrite replaces the main continuation, New Branch adds a side line, Cancel plays nothing.
+    // The port had no such question until 2026-10-12 — it made a side line silently every time,
+    // and the strip never drew past a side line's first move, so the coach saw his variation vanish.
+    //
+    // The backdrop does not dismiss on tap, exactly as the source: its only way out is a button
+    // (or Android's back key, which iOS does not have).
+
+    @ViewBuilder
+    private var branchConfirm: some View {
+        if let q = vm.branchConflict {
+            ZStack {
+                AnalysisModals.confirmScrim.ignoresSafeArea()
+                VStack(spacing: 0) {
+                    Text(AnalysisModals.confirmTitle)
+                        .font(Theme.nunito(AnalysisModals.confirmTitleSize, .bold))
+                        .tracking(AnalysisModals.confirmTitleTracking)
+                        .foregroundStyle(AnalysisModals.confirmTitleColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, AnalysisModals.confirmTitleGap)
+                    HStack(spacing: AnalysisModals.pillRowGap) {
+                        confirmPill(AnalysisModals.confirmCurrent, q.existingSAN, fill: AnalysisModals.pillBg)
+                        Text(AnalysisModals.confirmSeparator)
+                            .font(Theme.nunito(AnalysisModals.separatorSize))
+                            .foregroundStyle(AnalysisModals.separatorColor)
+                        confirmPill(AnalysisModals.confirmNew, q.newSAN, fill: AnalysisModals.pillNewBg)
+                    }
+                    .padding(.bottom, AnalysisModals.pillRowMargin)
+                    Text(confirmSubtitle(q))
+                        .font(Theme.nunito(AnalysisModals.confirmSubSize))
+                        .foregroundStyle(AnalysisModals.confirmSubColor)
+                        .lineSpacing(AnalysisModals.confirmSubLineHeight - AnalysisModals.confirmSubSize)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, AnalysisModals.confirmSubGap)
+                    confirmAction(AnalysisModals.fillBranch(AnalysisModals.confirmOverwrite,
+                                                            existing: q.existingSAN, new: q.newSAN),
+                                  ink: AnalysisModals.overwriteColor, fill: AnalysisModals.overwriteBg,
+                                  weight: .semiBold) { vm.branchOverwrite() }
+                    confirmAction(AnalysisModals.confirmNewBranch,
+                                  ink: AnalysisModals.newBranchColor, fill: AnalysisModals.newBranchBg,
+                                  weight: .bold) { vm.branchNewVariation() }
+                    Button { vm.branchCancel() } label: {
+                        Text(AnalysisModals.confirmCancel)
+                            .font(Theme.nunito(AnalysisModals.actionTextSize, .medium))
+                            .foregroundStyle(AnalysisModals.backColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, AnalysisModals.backPaddingV)
+                            .padding(.horizontal, AnalysisModals.actionPaddingH)
+                            .overlay(RoundedRectangle(cornerRadius: AnalysisModals.actionRadius)
+                                .stroke(AnalysisModals.backBorder, lineWidth: AnalysisModals.backBorderWidth))
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(AnalysisLayout.sheetPadding)
-                .background(AnalysisPalette.surface,
-                            in: RoundedRectangle(cornerRadius: AnalysisLayout.sheetRadius))
-                .frame(maxWidth: AnalysisLayout.sheetMaxWidth)
+                .padding(AnalysisModals.confirmPadding)
+                .frame(maxWidth: AnalysisModals.confirmMaxWidth)
+                .background(AnalysisModals.confirmBg,
+                            in: RoundedRectangle(cornerRadius: AnalysisModals.confirmRadius))
+                .overlay(RoundedRectangle(cornerRadius: AnalysisModals.confirmRadius)
+                    .stroke(AnalysisModals.confirmBorder, lineWidth: AnalysisModals.confirmBorderWidth))
+                .padding(.horizontal, AnalysisModals.confirmGutter)
             }
         }
+    }
+
+    /// "CURRENT" over the existing move, "NEW" over the one just played.
+    private func confirmPill(_ label: String, _ san: String, fill: Color) -> some View {
+        VStack(spacing: AnalysisModals.pillLabelGap) {
+            Text(label.uppercased())
+                .font(Theme.nunito(AnalysisModals.pillLabelSize, .semiBold))
+                .tracking(AnalysisModals.pillLabelTracking)
+                .foregroundStyle(AnalysisModals.pillLabelColor)
+            Text(san)
+                .font(AnalysisType.mono(AnalysisModals.pillSanSize, .bold))
+                .foregroundStyle(AnalysisModals.pillSanColor)
+        }
+        .padding(.horizontal, AnalysisModals.pillPaddingH)
+        .padding(.vertical, AnalysisModals.pillPaddingV)
+        .frame(minWidth: AnalysisModals.pillMinWidth)
+        .background(fill, in: RoundedRectangle(cornerRadius: AnalysisModals.pillRadius))
+    }
+
+    /// The sentence with both SANs as brighter, bolder runs (`subtitleBold`).
+    private func confirmSubtitle(_ q: BranchConflict) -> AttributedString {
+        var out = AttributedString()
+        var rest = Substring(AnalysisModals.confirmSubtitle)
+        while let open = rest.range(of: "{"), let close = rest[open.upperBound...].range(of: "}") {
+            out += AttributedString(String(rest[..<open.lowerBound]))
+            var san = AttributedString(rest[open.upperBound..<close.lowerBound] == "existing"
+                                       ? q.existingSAN : q.newSAN)
+            san.font = Theme.nunito(AnalysisModals.confirmSubSize, .semiBold)
+            san.foregroundColor = AnalysisModals.confirmSubBoldColor
+            out += san
+            rest = rest[close.upperBound...]
+        }
+        out += AttributedString(String(rest))
+        return out
+    }
+
+    /// Overwrite (red) and New Branch (gold) — full-width, stacked, as the source lays them out.
+    private func confirmAction(_ title: String, ink: Color, fill: Color, weight: NunitoWeight,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.nunito(AnalysisModals.actionTextSize, weight))
+                .foregroundStyle(ink)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AnalysisModals.actionPaddingV)
+                .padding(.horizontal, AnalysisModals.actionPaddingH)
+                .background(fill, in: RoundedRectangle(cornerRadius: AnalysisModals.actionRadius))
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, AnalysisModals.actionGap)
     }
 }
 
@@ -562,7 +728,8 @@ struct AnalysisBoardScreen: View {
 // (The review modal is composed above, as `reviewModal`; its own file is AnalysisReviewModal.swift.)
 
 /// Main line as a flat token run, with each position's alternatives inline as chips right after the
-/// move they branch from. Auto-scrolls to the cursor, copying `MoveRibbon` (Graphics.swift:129-158).
+/// move they branch from — then, off the main line, a gold `→` and the line the cursor is on.
+/// Auto-scrolls to the cursor, copying `MoveRibbon` (Graphics.swift:129-158).
 struct AnalysisMoveStrip: View {
     let tokens: [StripToken]
     let onTap: (Int) -> Void
@@ -598,7 +765,9 @@ struct AnalysisMoveStrip: View {
         }
     }
 
-    private var currentIndex: Int? { tokens.firstIndex { $0.isCurrent } }
+    /// The LAST current token: on a side line's first move both its chip and its continuation token
+    /// are current, and the continuation — at the end of the strip — is where the user is.
+    private var currentIndex: Int? { tokens.lastIndex { $0.isCurrent } }
 
     @ViewBuilder
     private func tokenView(_ token: StripToken) -> some View {
@@ -607,7 +776,12 @@ struct AnalysisMoveStrip: View {
             Text(token.text)
                 .font(AnalysisType.mono(AnalysisType.stripNum, .semibold))
                 .foregroundStyle(AnalysisPalette.textMuted)
-        case .move:
+        case .branchArrow, .branchNumber:
+            // The source draws both on `movesStripNum`, recoloured gold (board.tsx:3129-3139).
+            Text(token.text)
+                .font(AnalysisType.mono(AnalysisType.stripNum, .semibold))
+                .foregroundStyle(AnalysisLayout.continuationColor)
+        case .move, .branchMove:
             Button { onTap(token.id) } label: {
                 HStack(spacing: 0) {
                     Text(token.text)
@@ -634,14 +808,20 @@ struct AnalysisMoveStrip: View {
                 onLongPress(token.id)
             }
         case .alternative:
+            // `altChip` + `altChipActive` (board.tsx:3110-3118): a slate pill with a gold left rule,
+            // tinted — not filled — while it is current OR on the cursor's path.
+            let lit = token.isCurrent || token.isOnPath
             Button { onTap(token.id) } label: {
                 Text(token.text)
                     .font(AnalysisType.mono(AnalysisType.altChip, .semibold))
-                    .foregroundStyle(colour(token))
+                    .foregroundStyle(lit ? AnalysisLayout.chipTextActive : AnalysisLayout.chipText)
                     .padding(.horizontal, AnalysisLayout.chipPaddingH)
                     .padding(.vertical, AnalysisLayout.chipPaddingV)
-                    .background(token.isCurrent ? AnalysisPalette.gold : AnalysisPalette.surfaceAlt2,
-                                in: RoundedRectangle(cornerRadius: AnalysisLayout.toolBtnRadius))
+                    .background(lit ? AnalysisLayout.chipActiveBg : AnalysisLayout.chipBg)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(AnalysisLayout.chipRuleColor).frame(width: AnalysisLayout.chipRuleWidth)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: AnalysisLayout.chipRadius))
             }
             .buttonStyle(.plain)
             .onLongPressGesture(minimumDuration: AnalysisTiming.longPressSeconds) {
@@ -650,8 +830,11 @@ struct AnalysisMoveStrip: View {
         }
     }
 
+    /// Main-line moves: muted, gold along the path, ink-on-gold at the cursor. A continuation move is
+    /// always on the path, and is drawn in the source's own continuation colour.
     private func colour(_ token: StripToken) -> Color {
         if token.isCurrent { return AnalysisPalette.onGold }
+        if token.kind == .branchMove { return AnalysisLayout.continuationColor }
         if token.isOnPath { return AnalysisPalette.gold }
         return AnalysisPalette.textSecondary
     }

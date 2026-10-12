@@ -168,7 +168,16 @@ this app can offer without making that manifest a lie — the local design is th
 **The avatar is a choice, not an upload.** The RN original posts an image to Laravel
 (`profile/index.tsx:112-133`); copying that would need `NSPhotoLibraryUsageDescription`, a privacy
 manifest entry and a new App Review surface on a listing already rejected four times. Instead the
-picker offers the letter plus the five coach characters the app already bundles in `Characters/`.
+picker offers the letter plus **the twelve chess pieces** the board already draws — a white row and
+a black row, from `Pieces/` in Swift (`PieceImage`) and `assets/pieces/` in the browser.
+
+**Why pieces and not the coach characters (changed 2026-10-12).** 1.0.9 offered the five coach
+illustrations. Those are the client's family — the bots are drawn from them — and the client asked
+that they stop being a profile picture anyone can pick: *"Lagay natin avatar apple yung mga chess
+pieces nalang."* The coaches keep their art in Play vs Coach; only the avatar choice changed. Each
+stored value **is** the piece's asset name (`"knight-b"`), so the value names its file in both
+languages with no table. A `"coach-3"` saved on 1.0.9 is no longer a valid value and reads back as
+the letter — the existing fail-closed load is the whole migration, and `replay_login.js` replays it.
 
 Two rules worth keeping in mind:
 
@@ -182,7 +191,7 @@ Two rules worth keeping in mind:
 | File | What it holds |
 |---|---|
 | `DemoApp/…/LoginAppleAuth.swift` | the real `ASAuthorizationController` call — **the only file in the package that imports `AuthenticationServices`** — plus the anchor ladder and the captured error code |
-| `DemoApp/…/LoginMetrics.swift` → `LoginProfile` | the name/avatar keys, `sanitize`, `coachLevel`, `isValidAvatar`, `initial` — all pure, all replayed |
+| `DemoApp/…/LoginMetrics.swift` → `LoginProfile` | the name/avatar keys, `sanitize`, `pieceAvatars`, `piece`, `isValidAvatar`, `initial` — all pure, all replayed |
 | `DemoApp/…/PhoneView.swift` → `EditProfileSheet` | the edit sheet: draft state, name field, avatar picker |
 | `DemoApp/…/AccountDeletion.swift` | the eraser. Deliberately does **not** import StoreKit |
 | `DemoApp/…/LoginMetrics.swift` | the pure layer: `LoginAuth` (the state machine), `LoginAccountData` (both lists), the copy |

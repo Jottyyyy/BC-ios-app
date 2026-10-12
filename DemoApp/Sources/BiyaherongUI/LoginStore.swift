@@ -42,7 +42,7 @@ final class LoginStore: ObservableObject {
     /// stored string cannot drift.
     @Published private(set) var customName: String?
 
-    /// `LoginProfile.letterAvatar`, or `"coach-1"…"coach-5"`.
+    /// `LoginProfile.letterAvatar`, or one of `LoginProfile.pieceAvatars` (`"king-w"`…`"pawn-b"`).
     @Published private(set) var avatar: String = LoginProfile.letterAvatar
 
     /// What every screen draws.
@@ -58,8 +58,8 @@ final class LoginStore: ObservableObject {
     /// is the player's own, typed on this device and kept on it.
     var displayName: String { customName ?? LoginStrings.defaultDisplayName }
 
-    /// The coach picture to draw, or `nil` for the circled initial.
-    var avatarCoachLevel: Int? { LoginProfile.coachLevel(avatar) }
+    /// The chess piece to draw, or `nil` for the circled initial.
+    var avatarPiece: Piece? { LoginProfile.piece(avatar) }
 
     var providerLabel: String { LoginSession.providerLabel(provider) }
 

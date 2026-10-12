@@ -758,25 +758,52 @@ function run() {
     expect(/guard !collapsed\.isEmpty else \{ return nil \}/.test(SW),
       'Swift returns nil for empty, so there is one representation of "unset" and not two');
 
-    // -- the avatar vocabulary ------------------------------------------------------------------
-    eq(P.avatars.join(','), 'letter,coach-1,coach-2,coach-3,coach-4,coach-5', 'the avatar choices');
+    // -- the avatar vocabulary: the letter + twelve chess pieces ---------------------------------
+    // 1.0.9 offered the five coach characters, which are the client's family; on 2026-10-12 the
+    // client asked for chess pieces instead. The coaches keep their art in Play vs Coach.
+    const PIECES = ['king-w', 'queen-w', 'rook-w', 'bishop-w', 'knight-w', 'pawn-w',
+                    'king-b', 'queen-b', 'rook-b', 'bishop-b', 'knight-b', 'pawn-b'];
+    eq(P.avatars.join(','), ['letter'].concat(PIECES).join(','),
+      'the avatar choices: the letter, a white row, a black row');
     expect(SW.includes('static let letterAvatar = "letter"'), 'Swift names the letter avatar');
-    expect(SW.includes('static let coachAvatarPrefix = "coach-"'), 'and the coach prefix');
-    expect(SW.includes('static let coachLevels = [1, 2, 3, 4, 5]'), 'and the five levels');
-    for (const [raw, want] of [['coach-1', 1], ['coach-5', 5], ['coach-0', null], ['coach-6', null],
-                               ['coach-', null], ['coach-x', null], ['letter', null], ['', null]]) {
-      eq(L.coachLevel(raw), want, `coachLevel(${JSON.stringify(raw)})`);
+    const swPieces = ((SW.match(/static let pieceAvatars = \[([\s\S]*?)\]/) || [])[1] || '')
+      .match(/"[^"]+"/g) || [];
+    eq(swPieces.map((q) => q.slice(1, -1)).join(','), P.pieceAvatars.join(','),
+      'and the Swift piece list is the JS one, value for value and in order');
+    expect(!/coachAvatarPrefix|coachLevels|func coachLevel/.test(code(SW)),
+      'no coach-avatar vocabulary survives in LoginProfile');
+
+    // The value IS the asset name — the convention PieceArt.assetName builds — so the mapping
+    // needs no table. Pinned on both sides of that claim.
+    const pieceArt = read(UI, 'PieceArt.swift');
+    expect(/return "\\\(kind\)-\\\(piece\.color == \.white \? "w" : "b"\)"/.test(pieceArt),
+      'PieceArt.assetName is still "<kind>-<w|b>", which is what makes value == file name hold');
+    for (const kind of ['king', 'queen', 'rook', 'bishop', 'knight']) {
+      expect(new RegExp(`case "${kind}":\\s+kind = \\.${kind}`).test(SW),
+        `Swift LoginProfile.piece maps "${kind}"`);
     }
-    for (const [raw, want] of [['letter', true], ['coach-3', true], ['coach-9', false],
-                               ['nonsense', false], ['', false]]) {
+    expect(/default:\s+kind = \.pawn/.test(SW) && /parts\[1\] == "w" \? \.white : \.black/.test(SW),
+      'and pawns and colours — the only two cases left to the default');
+    for (const v of PIECES) {
+      const [kind, color] = v.split('-');
+      const got = L.avatarPiece(v);
+      eq(got && `${got.kind}-${got.color}`, `${kind}-${color}`, `avatarPiece(${v}) round-trips`);
+      eq(L.avatarLabel(v), `${color === 'w' ? 'White' : 'Black'} ${kind}`, `and is announced as such`);
+      eq(L.avatarSrc(v), `assets/pieces/${v}.svg`, `and draws its own file`);
+      // Every choice the picker offers has art on disk, in BOTH trees, or it draws an empty circle.
+      expect(fs.existsSync(path.join(UI, 'Pieces', `${v}.svg`)), `${v}.svg is in the SwiftPM bundle`);
+      expect(fs.existsSync(path.join(ROOT, 'web-demo', 'assets', 'pieces', `${v}.svg`)),
+        `${v}.svg is in web-demo`);
+    }
+    eq(L.avatarLabel('letter'), L.STRINGS.avatarLetterLabel, 'the letter is announced as "Letter"');
+    // A value saved by 1.0.9 must read back as the letter — that is the entire upgrade path.
+    for (const [raw, want] of [['coach-3', null], ['letter', null], ['king', null], ['king-x', null],
+                               ['King-w', null], ['', null], [null, null]]) {
+      eq(L.avatarPiece(raw), want, `avatarPiece(${JSON.stringify(raw)}) fails closed`);
+    }
+    for (const [raw, want] of [['letter', true], ['knight-b', true], ['coach-3', false],
+                               ['coach-9', false], ['nonsense', false], ['', false]]) {
       eq(L.isValidAvatar(raw), want, `isValidAvatar(${JSON.stringify(raw)})`);
-    }
-    // Every choice the picker offers has art on disk, in BOTH trees, or it draws an empty circle.
-    for (const level of P.coachLevels) {
-      expect(fs.existsSync(path.join(UI, 'Characters', `level-${level}.webp`)),
-        `level-${level}.webp is in the SwiftPM bundle`);
-      expect(fs.existsSync(path.join(ROOT, 'web-demo', 'assets', 'characters', `level-${level}.webp`)),
-        `level-${level}.webp is in web-demo`);
     }
 
     // -- the initial, which two screens used to disagree about ----------------------------------
@@ -793,15 +820,21 @@ function run() {
       eq(s1.displayName(), L.STRINGS.defaultDisplayName, 'an unset name falls back to the brand word');
       eq(s1.customName(), null, 'and customName stays null rather than becoming the fallback');
       s1.setDisplayName('  Deniel  Causo ');
-      s1.setAvatar('coach-4');
+      s1.setAvatar('knight-b');
       eq(s1.displayName(), 'Deniel Causo', 'the name is sanitised on the way in');
       // The point of persisting: a NEW store over the same storage must see it.
       const s2 = L.createStore(mem);
       eq(s2.displayName(), 'Deniel Causo', 'and survives a reload');
-      eq(s2.avatar(), 'coach-4', 'as does the avatar');
-      eq(s2.avatarCoachLevel(), 4, 'which resolves to a level');
-      expect(s2.setAvatar('coach-9') === false, 'an unknown avatar is refused, not stored');
-      eq(s2.avatar(), 'coach-4', 'and the last good value stands');
+      eq(s2.avatar(), 'knight-b', 'as does the avatar');
+      eq(JSON.stringify(s2.avatarPiece()), JSON.stringify({ kind: 'knight', color: 'b' }),
+        'which resolves to a black knight');
+      expect(s2.setAvatar('coach-4') === false, 'a 1.0.9 coach avatar is refused, not stored');
+      eq(s2.avatar(), 'knight-b', 'and the last good value stands');
+      // The upgrade path, replayed: a device that saved a coach on 1.0.9 opens on the letter.
+      const old = L.memoryStorage();
+      old.setItem(P.avatarKey, 'coach-3');
+      eq(L.createStore(old).avatar(), P.letterAvatar, 'a stored "coach-3" loads as the letter');
+      eq(L.createStore(old).avatarPiece(), null, 'and draws no picture');
       s2.setDisplayName('');
       eq(s2.displayName(), L.STRINGS.defaultDisplayName, 'emptying the field restores the default');
       eq(L.createStore(mem).customName(), null, 'and the key is removed, not blanked');
@@ -821,9 +854,21 @@ function run() {
     expect(/\.sheet\(isPresented: \$editingProfile\)/.test(phone), 'and ProfilePhone presents it');
     expect(/TextField\(LoginStrings\.namePlaceholder, text: \$draftName\)/.test(phone),
       'with a name field bound to a DRAFT, not to the store');
-    expect(/ForEach\(LoginProfile\.avatars, id: \\\.self\)/.test(phone)
-      || /ForEach\(LoginProfile\.avatars/.test(phone),
-      'and an avatar picker over LoginProfile.avatars');
+    expect(/avatarButton\(LoginProfile\.letterAvatar\)/.test(phone)
+      && /ForEach\(LoginProfile\.pieceAvatars, id: \\\.self\)/.test(phone),
+      'and an avatar picker offering the letter and every piece');
+    // Neither the card nor the sheet may reach for the coach art again — that is the client's
+    // family. (The "Your coaches" row above them legitimately does; it shows the bots.)
+    const avatarCode = ((phone.match(/private var profileAvatar: some View \{[\s\S]*?\n    \}/) || [''])[0])
+      + ((phone.match(/private struct EditProfileSheet: View \{[\s\S]*?\n\}/) || [''])[0]);
+    expect(avatarCode.length > 200, 'the avatar code is findable — the next two rest on it');
+    expect(!/CoachArt/.test(avatarCode), 'no profile avatar draws CoachArt');
+    expect(/PieceImage\(piece: piece/.test(avatarCode), 'both draw the board\'s own PieceImage');
+    expect(/var avatarPiece: Piece\? \{ LoginProfile\.piece\(avatar\) \}/.test(store),
+      'LoginStore exposes the piece through LoginProfile.piece, the single parser');
+    const profileJs = code(read(JS, 'app.js'));
+    expect(!/characters\/level/.test(profileJs.slice(profileJs.indexOf('function openEditProfile'))),
+      'and the browser profile no longer points at the coach characters');
     const appJs = code(read(JS, 'app.js'));
     expect(/function openEditProfile\(\)/.test(appJs), 'the browser twin has the editor too');
     expect(/auth\.setDisplayName\(input\.value\)/.test(appJs), 'and Save reaches the store');

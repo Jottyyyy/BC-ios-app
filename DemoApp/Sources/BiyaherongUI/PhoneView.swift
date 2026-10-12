@@ -849,17 +849,21 @@ struct ProfilePhone: View {
         }
     }
 
-    /// The circled initial, or the coach picture the player chose.
+    /// The circled initial, or the chess piece the player chose.
     ///
     /// Not `HomeAvatar`: that one is sized from the Home header's own metrics and carries a gold
-    /// ring this card does not want. It takes the same `profileImage` shape though, and the same
-    /// `LoginProfile.initial`, so the two cannot disagree about a name any more.
+    /// ring this card does not want. It uses the same `LoginProfile.initial` though, so the two
+    /// cannot disagree about a name any more.
+    ///
+    /// The piece is drawn at three quarters of the circle, not the full 64: `PieceImage` treats its
+    /// size as a board SQUARE, and a rook's base reaches far enough into that square's lower corners
+    /// to stand outside a circle inscribed in it.
     @ViewBuilder
     private var profileAvatar: some View {
         ZStack {
             Circle().fill(Theme.onGold.opacity(0.14))
-            if let level = login.avatarCoachLevel, let art = CoachArt.image(level: level) {
-                art.resizable().scaledToFill().clipShape(Circle())
+            if let piece = login.avatarPiece {
+                PieceImage(piece: piece, size: 48)
             } else {
                 Text(initial).font(Theme.nunito(30, .extraBold)).foregroundStyle(Theme.onGold)
             }
@@ -947,16 +951,16 @@ private struct EditProfileSheet: View {
                     Text(LoginStrings.avatarFieldLabel)
                         .font(Theme.nunito(13, .semiBold))
                         .foregroundStyle(Theme.mutedForeground)
-                    // A plain wrap rather than a LazyVGrid: six fixed items, and the grid would
-                    // bring its own sizing rules to a row that is already the right width.
-                    HStack(spacing: 12) {
-                        ForEach(LoginProfile.avatars, id: \.self) { choice in
-                            Button { draftAvatar = choice } label: {
-                                avatarSwatch(choice)
-                            }
-                            .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
-                            .accessibilityLabel(LoginProfile.coachLevel(choice).map { "Coach \($0)" }
-                                ?? LoginStrings.avatarLetterLabel)
+                    // The letter on its own, then the set as the board reads it: six columns, so
+                    // the twelve pieces fall into a white row and a black row. A grid rather than
+                    // one HStack — thirteen fixed 44pt swatches cannot fit the 339pt a 375pt-wide
+                    // phone leaves inside this padding, and flexible columns shrink the gaps
+                    // instead of the art.
+                    avatarButton(LoginProfile.letterAvatar)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6),
+                              spacing: 10) {
+                        ForEach(LoginProfile.pieceAvatars, id: \.self) { choice in
+                            avatarButton(choice)
                         }
                     }
                 }
@@ -986,21 +990,33 @@ private struct EditProfileSheet: View {
         }
     }
 
-    /// One picker swatch: the coach picture, or a circled "A" standing in for the initial.
+    /// One tappable choice. VoiceOver hears "Black knight", from the same `PieceArt.label` the
+    /// board uses, or "Letter".
+    private func avatarButton(_ choice: String) -> some View {
+        Button { draftAvatar = choice } label: {
+            avatarSwatch(choice)
+        }
+        .buttonStyle(DimButtonStyle(pressedOpacity: LoginLayout.pressedButton))
+        .accessibilityLabel(LoginProfile.piece(choice).map { PieceArt.label(for: $0) }
+            ?? LoginStrings.avatarLetterLabel)
+    }
+
+    /// One picker swatch: the piece, or a glyph standing in for the initial. The piece sits at the
+    /// same three-quarter scale as on the card, for the same reason — see `profileAvatar`.
     @ViewBuilder
     private func avatarSwatch(_ choice: String) -> some View {
         let selected = choice == draftAvatar
         ZStack {
             Circle().fill(Theme.card)
-            if let level = LoginProfile.coachLevel(choice), let art = CoachArt.image(level: level) {
-                art.resizable().scaledToFill().clipShape(Circle())
+            if let piece = LoginProfile.piece(choice) {
+                PieceImage(piece: piece, size: 33)
             } else {
                 Image(systemName: "textformat")
                     .font(Theme.nunito(16, .bold))
                     .foregroundStyle(Theme.mutedForeground)
             }
         }
-        .frame(width: 48, height: 48)
+        .frame(width: 44, height: 44)
         .overlay(Circle().stroke(selected ? Theme.gold : Theme.mutedForeground.opacity(0.25),
                                  lineWidth: selected ? 3 : 1))
     }

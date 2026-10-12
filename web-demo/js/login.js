@@ -216,17 +216,22 @@ var BiyaLogin = (function () {
    *
    * The avatar is a CHOICE among bundled art rather than an upload. The RN original posts an image
    * to Laravel (profile/index.tsx:112-133); copying that would mean a photo-library permission and
-   * a new App Review surface on a listing already rejected four times. */
+   * a new App Review surface on a listing already rejected four times.
+   *
+   * The art is the twelve chess pieces. 1.0.9 offered the five coach characters, which are the
+   * client's family — the bots are drawn from them — and the client asked that they stop being a
+   * profile picture anyone can pick. They stay on the coaches in Play vs Coach. */
   var PROFILE = {
     nameKey: 'biya.auth.name.v1',
     avatarKey: 'biya.auth.avatar.v1',
     maxNameLength: 24,
     letterAvatar: 'letter',
-    coachAvatarPrefix: 'coach-',
-    coachLevels: [1, 2, 3, 4, 5]
+    /* White row, then black row, King first. Each value IS the asset base name — the file in
+     * assets/pieces/ here and in Swift's Pieces/ — so a stored value names its file directly. */
+    pieceAvatars: ['king-w', 'queen-w', 'rook-w', 'bishop-w', 'knight-w', 'pawn-w',
+                   'king-b', 'queen-b', 'rook-b', 'bishop-b', 'knight-b', 'pawn-b']
   };
-  PROFILE.avatars = [PROFILE.letterAvatar].concat(
-    PROFILE.coachLevels.map(function (n) { return PROFILE.coachAvatarPrefix + n; }));
+  PROFILE.avatars = [PROFILE.letterAvatar].concat(PROFILE.pieceAvatars);
 
   /* Trim, collapse whitespace runs, cap, and treat empty as unset.
    * Returns null rather than '' so there is exactly ONE representation of "no name chosen". */
@@ -237,19 +242,32 @@ var BiyaLogin = (function () {
     return collapsed.slice(0, PROFILE.maxNameLength);
   }
 
-  /* 'coach-3' -> 3; anything else -> null, which the UI reads as "draw the letter". Fail closed,
-   * exactly like isSignedIn: a hand-edited key draws the initial rather than breaking the screen. */
-  function coachLevel(raw) {
-    if (typeof raw !== 'string' || raw.indexOf(PROFILE.coachAvatarPrefix) !== 0) return null;
-    var tail = raw.slice(PROFILE.coachAvatarPrefix.length);
-    if (!/^[0-9]+$/.test(tail)) return null;
-    var n = Number(tail);
-    return PROFILE.coachLevels.indexOf(n) >= 0 ? n : null;
+  /* 'knight-b' -> { kind: 'knight', color: 'b' }; anything else -> null, which the UI reads as
+   * "draw the letter". Twin of Swift's LoginProfile.piece. Fail closed, exactly like isSignedIn: a
+   * hand-edited key draws the initial rather than breaking the screen — and that is the whole
+   * upgrade path too, since a 'coach-3' saved by 1.0.9 is not in the list and reads back as the
+   * letter. */
+  function avatarPiece(raw) {
+    if (typeof raw !== 'string' || PROFILE.pieceAvatars.indexOf(raw) < 0) return null;
+    var parts = raw.split('-');
+    return { kind: parts[0], color: parts[1] };
+  }
+
+  /* The file a piece avatar draws — the value IS the asset name, so there is nothing to look up. */
+  function avatarSrc(raw) {
+    return avatarPiece(raw) === null ? null : 'assets/pieces/' + raw + '.svg';
+  }
+
+  /* Accessible name, matching Swift's PieceArt.label: "Black knight", or "Letter". */
+  function avatarLabel(raw) {
+    var p = avatarPiece(raw);
+    if (p === null) return STRINGS.avatarLetterLabel;
+    return (p.color === 'w' ? 'White' : 'Black') + ' ' + p.kind;
   }
 
   function isValidAvatar(raw) {
     if (typeof raw !== 'string') return false;
-    return raw === PROFILE.letterAvatar || coachLevel(raw) !== null;
+    return raw === PROFILE.letterAvatar || avatarPiece(raw) !== null;
   }
 
   /* The circled letter. Uppercased and trimmed, matching Swift's LoginProfile.initial. */
@@ -441,7 +459,7 @@ var BiyaLogin = (function () {
       /* The name the player typed, or null. The CARD falls back; this does not. */
       customName: function () { return customName; },
       avatar: function () { return avatar; },
-      avatarCoachLevel: function () { return coachLevel(avatar); },
+      avatarPiece: function () { return avatarPiece(avatar); },
       /* This used to be `return STRINGS.defaultDisplayName;` — a getter that ignored the session
        * and handed back a constant, so every browser and every device showed "Biyahero". The
        * comment beside the caller in app.js claimed "the name comes from the session now, not a
@@ -934,7 +952,8 @@ var BiyaLogin = (function () {
     leftoverFor: leftoverFor, heroTopFor: heroTopFor,
     driftPoint: driftPoint, usedKinds: usedKinds,
     isSignedIn: isSignedIn, providerLabel: providerLabel,
-    sanitizeName: sanitizeName, coachLevel: coachLevel, isValidAvatar: isValidAvatar,
+    sanitizeName: sanitizeName, avatarPiece: avatarPiece, avatarSrc: avatarSrc,
+    avatarLabel: avatarLabel, isValidAvatar: isValidAvatar,
     nameInitial: nameInitial,
     AUTH_PHASES: AUTH_PHASES, AUTH_EVENTS: AUTH_EVENTS, SIMULATED_AUTH: SIMULATED_AUTH,
     ACCOUNT_DATA: ACCOUNT_DATA,

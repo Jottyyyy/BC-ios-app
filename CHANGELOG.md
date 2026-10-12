@@ -9,6 +9,73 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-12 (fixed) — Client round 2: variations like Android, chess-piece avatars, and the sound that died on maximise
+
+Three reports against 1.0.9, on one branch at the client's request. One is a regression of a round-1
+fix, and **round 1's own gate had pinned it as a requirement**. Version **1.0.10 (59)**.
+
+**1 · "Sa analysis board nabubura automatic yung variation. Isang line lang ang pwede sa apple.
+Gayahin natin sa android."** Nothing was ever erased — `MoveTree` keeps every move and has always made
+a different move a side line. **The strip never drew them.** The port cited `board.tsx:3049-3120` and
+stopped five lines short of the block that draws the line the cursor is on (`:3125-3158`), so a side
+line showed its first move as a chip and nothing after it: play 5...Nf6 6.Bg5 7.e3 off the main line
+and two of the three moves appeared nowhere. Both languages had the gap, and the browser self-test
+asserted "one alternative chip" — true, and the bug. Now, exactly as Android:
+- **the branch continuation**: off the main line the strip ends `→ c5 2. Nf3 d6 3. d4` in gold, from
+  the divergence to the cursor, White numbered only (`StripToken.Kind` + `branchArrow`/`branchNumber`/
+  `branchMove`);
+- **"Line Already Exists"** (`BranchConfirmModal.tsx`): a move played where the line continues asks
+  Overwrite / New Branch / Cancel before anything is played. The port had silently branched;
+- **"Choose Continuation"**: ▶ at a branch shows `{n.} SAN`, "(main line)", a two-move preview and an
+  arrow, pinned to the bottom — it had been "Which continuation?" over bare SAN;
+- **chips** in the source's slate-with-gold-rule, tinted on the path.
+
+One **deliberate deviation**: RN's Overwrite does `parentChildren.length = 0`, wiping every *other*
+side line too, under a button that says "Replace X". Porting that would bring the complaint straight
+back. `MoveTree.overwriteMain(with:)` replaces one line and keeps the rest in order. Committing an
+engine line with ＋ never asks (a modal mid-commit would strand the line, and a side line erases
+nothing). Every new colour, size and string is **extracted**: `extract_board_styles.js` now reads the
+continuation's inline literals, the picker's JSX copy, and `BranchConfirmModal.tsx` — a file it had
+never opened — into `stripContinuation`, `branchSelection` and `branchConfirm`.
+
+**2 · "Lagay natin avatar … chess pieces nalang."** The five coach characters 1.0.9 offered as avatars
+are the client's family. The picker is now the letter plus the **twelve pieces** (white row, black
+row), drawn with the board's own `PieceImage`; each stored value is the asset name (`"knight-b"`), so
+no table maps it. A `"coach-3"` saved on 1.0.9 reads back as the letter through the existing
+fail-closed load — no migration code. The coaches keep their art in Play vs Coach.
+
+**3 · "Pag pinipindut yung maximize nawawala yung sound — akala ko naayos na ito."** Round 1's
+teardown — pause, back to `.ambient`, shut the orientation gate — sat in `VideoPlayerScreen.onDisappear`.
+Fullscreen is a UIKit `.fullScreen` presentation, which takes the presenter's view off the window when
+it lands (WWDC19 503), and **SwiftUI reports that as `onDisappear`**. So every maximise muted the video
+behind the Ring/Silent switch, paused it and shut the landscape gate; leaving fullscreen ran `onAppear`
+and restored it, which is why inline looked fixed. The teardown now lives in
+`dismantleUIViewController`, which only a real removal from SwiftUI's tree reaches; the screen has no
+`onDisappear` at all. Both fullscreen callbacks now honour `isCancelled` (an abandoned swipe out of
+fullscreen used to shut the gate under a fullscreen video), and `willBegin` re-claims `.playback`.
+**`orientation_check.js` had required the teardown in `onDisappear`** — those assertions are inverted.
+
+**Also: `OrientationGate` was not `@MainActor`.** It holds a `static var`, and all three packages build
+in the Swift 6 language mode, where that is a compile error; every other static-state type in the
+module was already isolated. Fixed, and `swift_lint.js` gains an **ISOLATION** rule over every stored
+`static var` and file-scope `var` (9 found, all isolated now; dropping the annotation from
+`OrientationGate` or `PieceArt` fails it). The committed `project.pbxproj` version fields, stale at
+1.0.8 (55), now match `project.yml`.
+
+**Gate.** `js_goldens` 36,323 → **36,986** across **88** suites, green. New
+`tools/qa/branch_flow_check.js` (262: every new Swift constant equals its JS twin, the Core's
+continuation and one-line Overwrite, who asks and who does not), `orientation_check` 28 → 35,
+`replay_login` 607 → 672, the analysis self-test 291, `MoveTree` 72, `selfTestSource` 491,
+`swift_source_keys` 177. ParityRunner `analysis_session` floor 235 → 256 (21 new checks, written
+blind). **Mutation-proved: 51/51 killed** — 12 video, 12 avatar, 27 analysis, including the shipped
+bug in each language. Both web-demo flows were also driven in headless Chrome over the DevTools
+protocol: the side line draws in the source's gold, all three answers do what they say, the profile
+offers 13 choices that all load, and zero page errors.
+
+**Cannot be verified here** (no Swift compiler, no UIKit): the sound and orientation through
+fullscreen, and the new SwiftUI overlays — device steps in `docs/tutorial-videos.md` and
+`docs/analysis-board.md`. `web-demo/` updated for all three.
+
 ### 2026-10-08 (fixed) — Four client bugs against the live 1.0.8, and the four holes they came through
 
 1.0.8 (57) reached the App Store on 2026-10-06. These are the client's first reports against it.

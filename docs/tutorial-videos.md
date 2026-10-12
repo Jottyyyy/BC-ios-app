@@ -210,6 +210,36 @@ The RN reference has the same defect and is no guide — it sets no audio mode, 
 to `playsInSilentModeIOS: false`, i.e. `.ambient`. The Android build is silenced by its mute switch
 too.
 
+### Where the teardown lives — and why not in `onDisappear` (the 1.0.9 bug)
+
+1.0.9 fixed the sound inline and the client reported it gone again the moment the player went
+fullscreen: *"kapag nilalandscape nawawala yung kanta… akala ko naayos na ito."* The cause was the
+fix's own teardown. Pause, back to `.ambient` and shut the orientation gate sat in
+`VideoPlayerScreen.onDisappear`, read as "the user left". **`onDisappear` does not mean that.**
+`AVPlayerViewController`'s fullscreen is a UIKit `.fullScreen` presentation, and UIKit takes the
+presenter's view off the window once it lands — WWDC19 session 503: *"the presenting view can be
+removed by UIKit"*. SwiftUI reports that as `onDisappear`. So every maximise ran:
+
+1. `willBeginFullScreenPresentation…` → gate opens → landscape
+2. the presentation lands → **`onDisappear`** → `.ambient` (muted by the Ring/Silent switch), pause,
+   gate shut under a fullscreen video
+3. exit fullscreen → `onAppear` → `.playback` again — which is why inline looked fixed
+
+The teardown now lives in `SystemVideoPlayer.dismantleUIViewController`, which SwiftUI calls only
+when the player leaves **SwiftUI's own tree** — the back button, or the Videos route closing. A UIKit
+presentation never changes that tree, so fullscreen cannot reach it. The screen has **no**
+`onDisappear` at all, and `orientation_check.js` §3 fails if one comes back. Two more hardenings:
+`willBegin…` re-claims `.playback` itself, and both callbacks read the transition's `isCancelled`
+(WWDC19's "source of truth") so an abandoned swipe out of fullscreen does not shut the gate under a
+video that is still fullscreen.
+
+⚠ **The round-1 gate pinned the bug.** `orientation_check.js` used to *require* that `onDisappear`
+restore `.ambient` and portrait. Those assertions are inverted now, not deleted — a check that
+asserts a teardown in the wrong hook is how this shipped green.
+
+Android never had this problem because it never presents anything: RN's "fullscreen" is the same
+component with a state flag and an orientation lock (`play.tsx:113-123`), so nothing disappears.
+
 ## The transport, and the rule it lives under
 
 `ContentClient.swift` is the **second of exactly two** files in the app allowed to open a
@@ -272,3 +302,14 @@ visitor and says nothing about the screen. The translation is in `app.js`, where
 already lives.)
 
 On a Mac: `cd DemoApp && swift build`, then run the demo and open the tile.
+
+**On a phone — the only place orientation and the audio category can be seen.** No gate here can
+run UIKit; `orientation_check.js` pins the wiring, not the behaviour. With the **Ring/Silent switch
+ON**:
+
+1. Play a video inline → sound.
+2. Maximise → it goes **landscape, keeps playing, and keeps its sound**. (1.0.9 went silent here.)
+3. Start a swipe down out of fullscreen and let go → still fullscreen, still landscape.
+4. Exit fullscreen → portrait, still playing, still sound.
+5. Back out of the player → every other screen is portrait and will not rotate; play a puzzle →
+   move sounds are silent again, as the switch says.

@@ -219,6 +219,13 @@ var BiyaAnalysisMetrics = (function () {
     engineMaxRows: 5, engineLineLimit: 2,
     // Move-strip tokens and branch chips — real values (movesStripMove, altChip).
     tokenPaddingH: 5, tokenPaddingV: 2, tokenRadius: 3, chipPaddingH: 8, chipPaddingV: 4,
+    // The chip's own look (altChip, altChipActive, altChipText*), used since 2026-10-12: a slate pill
+    // with a gold left rule, tinted gold — not filled — when it is on the cursor's path.
+    chipBg: '#37474F', chipRadius: 6, chipRuleWidth: 2, chipRuleColor: '#FDB022',
+    chipActiveBg: 'rgba(253,176,34,0.18)', chipText: '#90A4AE', chipTextActive: '#FDB022',
+    // The active branch continuation (board.tsx:3125-3158) — inline literals in the source, so
+    // they come from board_styles.json → stripContinuation rather than any style key.
+    continuationColor: '#FDB022',
     // Engine rows — real values (engineChipEval.width, engineLineRow).
     // DEVIATION on engineEvalWidth: source 36, sized for the 9pt eval it used to hold. At 13pt a
     // mate score (M-3) or a two-digit eval (+10.5) clips, so the column grows with the type.
@@ -575,6 +582,37 @@ var BiyaAnalysisMetrics = (function () {
     optionBg: '#37474F', optionRadius: 10, optionPaddingV: 12, optionPaddingH: 14,
     optionBorderWidth: 3, optionBorderColor: '#546E7A', optionMainBorder: '#FDB022',
     optionMainBg: 'rgba(253,176,34,0.10)', optionMoveSize: 15, optionPreviewSize: 12,
+    // ...and the rest of it, which the picker never drew until 2026-10-12: it said "Which
+    // continuation?" over bare SAN while every number above sat unused.
+    overlayScrim: 'rgba(0,0,0,0.6)', overlayPadding: 20, overlayPaddingBottom: 40,
+    branchTitleColor: '#ECEFF1', branchTitleGap: 4, branchSubColor: '#8BA3C7', branchSubGap: 16,
+    optionGap: 8, optionMoveColor: '#ECEFF1', optionPreviewColor: '#8BA3C7', optionPreviewGap: 3,
+    optionArrowSize: 18, optionArrowColor: '#FDB022', optionArrowGap: 10,
+    cancelBg: '#37474F', cancelRadius: 10, cancelPaddingV: 11, cancelGap: 4,
+    cancelColor: '#90A4AE', cancelSize: 14,
+    branchTitle: 'Choose Continuation', branchSubtitle: 'Multiple lines available — pick one to follow:',
+    branchMainTag: '  (main line)', branchArrow: '→', branchCancel: 'Cancel',
+    previewMoves: 2, previewEllipsis: '…',
+    // Line Already Exists (BranchConfirmModal.tsx — its own file; board_styles.json → branchConfirm)
+    confirmScrim: 'rgba(0,0,0,0.72)', confirmGutter: 20,
+    confirmBg: '#162032', confirmRadius: 16, confirmPadding: 24, confirmMaxWidth: 400,
+    confirmBorder: '#2A3A4E', confirmBorderWidth: 1,
+    confirmTitleColor: '#FFFFFF', confirmTitleSize: 17, confirmTitleGap: 16, confirmTitleTracking: 0.3,
+    pillRowGap: 10, pillRowMargin: 14,
+    pillBg: '#1E3050', pillNewBg: '#1A3828', pillRadius: 8, pillPaddingH: 14, pillPaddingV: 8,
+    pillMinWidth: 64, pillLabelColor: '#8899AA', pillLabelSize: 9, pillLabelTracking: 0.5,
+    pillLabelGap: 2, pillSanColor: '#FDB022', pillSanSize: 16,
+    separatorColor: '#4A6080', separatorSize: 18,
+    confirmSubColor: '#8899AA', confirmSubSize: 13, confirmSubLineHeight: 18, confirmSubGap: 20,
+    confirmSubBoldColor: '#CCDDEE',
+    actionRadius: 10, actionPaddingV: 13, actionPaddingH: 16, actionGap: 10, actionTextSize: 13,
+    overwriteBg: '#C62828', overwriteColor: '#FFFFFF', newBranchBg: '#FDB022', newBranchColor: '#0F1A2E',
+    backPaddingV: 11, backBorder: '#3A4A5E', backBorderWidth: 1, backColor: '#8899AA',
+    confirmTitle: 'Line Already Exists', confirmCurrent: 'Current', confirmNew: 'New',
+    confirmSeparator: '→',
+    confirmSubtitle: 'The mainline continues with {existing}. What would you like to do with {new}?',
+    confirmOverwrite: 'Overwrite  —  Replace {existing} with {new}',
+    confirmNewBranch: 'New Branch  —  Add as variation', confirmCancel: 'Cancel',
     // Variation card (renderVariationModal:4357)
     varSheetBg: '#1A2634', varSheetRadius: 20, varHandleW: 36, varHandleH: 4,
     varMainColor: '#FDB022', varSubColor: '#78909C',
@@ -1547,6 +1585,116 @@ var BiyaAnalysisMetrics = (function () {
     same('branchOptionMain', 'backgroundColor', MODALS.optionMainBg);
     same('branchOptionMove', 'fontSize', MODALS.optionMoveSize);
     same('branchOptionPreview', 'fontSize', MODALS.optionPreviewSize);
+    same('modalOverlay', 'backgroundColor', MODALS.overlayScrim);
+    same('modalOverlay', 'padding', MODALS.overlayPadding);
+    same('modalOverlay', 'paddingBottom', MODALS.overlayPaddingBottom);
+    same('modalOverlay', 'justifyContent', 'flex-end', 'the picker sits at the BOTTOM of the screen');
+    same('branchModalTitle', 'color', MODALS.branchTitleColor);
+    same('branchModalTitle', 'marginBottom', MODALS.branchTitleGap);
+    same('branchModalSub', 'color', MODALS.branchSubColor);
+    same('branchModalSub', 'marginBottom', MODALS.branchSubGap);
+    same('branchOption', 'marginBottom', MODALS.optionGap);
+    same('branchOptionMove', 'color', MODALS.optionMoveColor);
+    same('branchOptionPreview', 'color', MODALS.optionPreviewColor);
+    same('branchOptionPreview', 'marginTop', MODALS.optionPreviewGap);
+    same('branchOptionArrow', 'fontSize', MODALS.optionArrowSize);
+    same('branchOptionArrow', 'color', MODALS.optionArrowColor);
+    same('branchOptionArrow', 'marginLeft', MODALS.optionArrowGap);
+    same('branchCancelBtn', 'backgroundColor', MODALS.cancelBg);
+    same('branchCancelBtn', 'borderRadius', MODALS.cancelRadius);
+    same('branchCancelBtn', 'paddingVertical', MODALS.cancelPaddingV);
+    same('branchCancelBtn', 'marginTop', MODALS.cancelGap);
+    same('branchCancelBtnText', 'color', MODALS.cancelColor);
+    same('branchCancelBtnText', 'fontSize', MODALS.cancelSize);
+
+    // The picker's COPY lives in JSX text, and the continuation's colours in inline literals —
+    // neither is a style key, so the extractor scans them into their own blocks.
+    var SEL = src.branchSelection || {}, CONT = src.stripContinuation || {};
+    expect(SEL.title === MODALS.branchTitle, 'picker title is the source\'s: ' + SEL.title);
+    expect(SEL.subtitle === MODALS.branchSubtitle, 'picker subtitle is the source\'s');
+    expect(SEL.mainLineTag === MODALS.branchMainTag, 'the main-line tag, leading spaces and all');
+    expect(SEL.arrow === MODALS.branchArrow && SEL.cancel === MODALS.branchCancel, 'picker arrow and cancel');
+    expect(SEL.previewMoves === MODALS.previewMoves && SEL.previewEllipsis === MODALS.previewEllipsis,
+      'the preview is two moves and an ellipsis, as buildBranchPreview builds it');
+    expect(CONT.arrowColor === BANDS.continuationColor && CONT.numberColor === BANDS.continuationColor
+      && CONT.moveColor === BANDS.continuationColor,
+      'the branch continuation is drawn in the source\'s inline colour: ' + CONT.moveColor);
+    expect(CONT.arrowStyle === 'movesStripNum' && CONT.moveStyle === 'movesStripMove',
+      'and on the strip\'s own number and move styles, which TYPE already encodes');
+    same('altChip', 'backgroundColor', BANDS.chipBg);
+    same('altChip', 'borderRadius', BANDS.chipRadius);
+    same('altChip', 'borderLeftWidth', BANDS.chipRuleWidth);
+    same('altChip', 'borderLeftColor', BANDS.chipRuleColor);
+    same('altChipActive', 'backgroundColor', BANDS.chipActiveBg);
+    same('altChipText', 'color', BANDS.chipText);
+    same('altChipTextActive', 'color', BANDS.chipTextActive);
+
+    // Line Already Exists — a separate file, so a separate block.
+    var BC = src.branchConfirm || { styles: {}, copy: {} }, C = BC.styles;
+    function sameBC(styleKey, prop, mine) {
+      var real = C[styleKey] ? C[styleKey][prop] : undefined;
+      expect(real === mine, 'BranchConfirmModal ' + styleKey + '.' + prop + ': encoded ' + mine
+        + ' != source ' + real);
+    }
+    sameBC('backdrop', 'backgroundColor', MODALS.confirmScrim);
+    sameBC('backdrop', 'paddingHorizontal', MODALS.confirmGutter);
+    sameBC('card', 'backgroundColor', MODALS.confirmBg);
+    sameBC('card', 'borderRadius', MODALS.confirmRadius);
+    sameBC('card', 'padding', MODALS.confirmPadding);
+    sameBC('card', 'maxWidth', MODALS.confirmMaxWidth);
+    sameBC('card', 'borderColor', MODALS.confirmBorder);
+    sameBC('card', 'borderWidth', MODALS.confirmBorderWidth);
+    sameBC('title', 'color', MODALS.confirmTitleColor);
+    sameBC('title', 'fontSize', MODALS.confirmTitleSize);
+    sameBC('title', 'marginBottom', MODALS.confirmTitleGap);
+    sameBC('title', 'letterSpacing', MODALS.confirmTitleTracking);
+    sameBC('moveRow', 'gap', MODALS.pillRowGap);
+    sameBC('moveRow', 'marginBottom', MODALS.pillRowMargin);
+    sameBC('movePill', 'backgroundColor', MODALS.pillBg);
+    sameBC('movePillNew', 'backgroundColor', MODALS.pillNewBg);
+    sameBC('movePill', 'borderRadius', MODALS.pillRadius);
+    sameBC('movePill', 'paddingHorizontal', MODALS.pillPaddingH);
+    sameBC('movePill', 'paddingVertical', MODALS.pillPaddingV);
+    sameBC('movePill', 'minWidth', MODALS.pillMinWidth);
+    sameBC('movePillLabel', 'color', MODALS.pillLabelColor);
+    sameBC('movePillLabel', 'fontSize', MODALS.pillLabelSize);
+    sameBC('movePillLabel', 'letterSpacing', MODALS.pillLabelTracking);
+    sameBC('movePillLabel', 'marginBottom', MODALS.pillLabelGap);
+    sameBC('movePillLabel', 'textTransform', 'uppercase');
+    sameBC('movePillSan', 'color', MODALS.pillSanColor);
+    sameBC('movePillSan', 'fontSize', MODALS.pillSanSize);
+    sameBC('moveSeparator', 'color', MODALS.separatorColor);
+    sameBC('moveSeparator', 'fontSize', MODALS.separatorSize);
+    sameBC('subtitle', 'color', MODALS.confirmSubColor);
+    sameBC('subtitle', 'fontSize', MODALS.confirmSubSize);
+    sameBC('subtitle', 'lineHeight', MODALS.confirmSubLineHeight);
+    sameBC('subtitle', 'marginBottom', MODALS.confirmSubGap);
+    sameBC('subtitleBold', 'color', MODALS.confirmSubBoldColor);
+    ['btnOverwrite', 'btnNewBranch'].forEach(function (k) {
+      sameBC(k, 'borderRadius', MODALS.actionRadius);
+      sameBC(k, 'paddingVertical', MODALS.actionPaddingV);
+      sameBC(k, 'paddingHorizontal', MODALS.actionPaddingH);
+      sameBC(k, 'marginBottom', MODALS.actionGap);
+    });
+    ['btnOverwriteText', 'btnNewBranchText', 'btnBackText'].forEach(function (k) {
+      sameBC(k, 'fontSize', MODALS.actionTextSize);
+    });
+    sameBC('btnOverwrite', 'backgroundColor', MODALS.overwriteBg);
+    sameBC('btnOverwriteText', 'color', MODALS.overwriteColor);
+    sameBC('btnNewBranch', 'backgroundColor', MODALS.newBranchBg);
+    sameBC('btnNewBranchText', 'color', MODALS.newBranchColor);
+    sameBC('btnBack', 'borderRadius', MODALS.actionRadius);
+    sameBC('btnBack', 'paddingVertical', MODALS.backPaddingV);
+    sameBC('btnBack', 'borderColor', MODALS.backBorder);
+    sameBC('btnBack', 'borderWidth', MODALS.backBorderWidth);
+    sameBC('btnBackText', 'color', MODALS.backColor);
+    var CC = BC.copy || {};
+    [['title', 'confirmTitle'], ['currentLabel', 'confirmCurrent'], ['newLabel', 'confirmNew'],
+     ['separator', 'confirmSeparator'], ['subtitle', 'confirmSubtitle'], ['overwrite', 'confirmOverwrite'],
+     ['newBranch', 'confirmNewBranch'], ['cancel', 'confirmCancel']].forEach(function (p) {
+      expect(CC[p[0]] === MODALS[p[1]], 'Line Already Exists copy "' + p[0] + '": encoded '
+        + JSON.stringify(MODALS[p[1]]) + ' != source ' + JSON.stringify(CC[p[0]]));
+    });
     same('varModalSheet', 'backgroundColor', MODALS.varSheetBg);
     same('varModalSheet', 'borderTopLeftRadius', MODALS.varSheetRadius);
     same('varModalHandle', 'width', MODALS.varHandleW);

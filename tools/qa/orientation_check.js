@@ -54,6 +54,17 @@ const code = (src) => src.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join(
 const sliceStruct = (src, name) =>
   (src.match(new RegExp('struct ' + name + ': View \\{[\\s\\S]*?\\n\\}')) || [''])[0];
 
+/**
+ * One fullscreen delegate callback's body, so an assertion about ENTER cannot be satisfied by a
+ * line in EXIT — the two sit a dozen lines apart and a file-wide regex happily straddles them.
+ */
+const callback = (src, name) =>
+  (code(src).match(new RegExp(name + '[\\s\\S]*?\\n        \\}')) || [''])[0];
+
+/** The representable's teardown — the only code that runs when the player really leaves. */
+const dismantle = (src) =>
+  (code(src).match(/static func dismantleUIViewController\([\s\S]*?\n    \}/) || [''])[0];
+
 // ---- 1. the plist list, in both files that declare it ------------------------
 {
   const yml = read('ios', 'project.yml');
@@ -99,6 +110,10 @@ const sliceStruct = (src, name) =>
   const gate = read('DemoApp', 'Sources', 'BiyaherongUI', 'OrientationGate.swift');
   expect(/public private\(set\) static var allowsLandscape = false/.test(gate),
     'OrientationGate.allowsLandscape is private(set) and defaults to portrait');
+  // Mutable static state in a Swift 6 language-mode package is a compile ERROR unless isolated, and
+  // `set` reaches main-actor-only UIKit. It shipped without this; swift_lint.js now sweeps the rest.
+  expect(/@MainActor\s*\npublic enum OrientationGate/.test(gate),
+    'OrientationGate is @MainActor — nonisolated static state does not compile in Swift 6 mode');
   expect(/allowsLandscape \? \.landscape : \.portrait/.test(gate),
     'the mask is landscape-or-portrait — the source LOCKS landscape rather than permitting it');
   // Skipping this call is why the modern geometry API looks broken: the request is intersected
@@ -116,16 +131,30 @@ const sliceStruct = (src, name) =>
   // SwiftUI's VideoPlayer has no fullscreen callbacks, which is the entire reason for the wrapper.
   expect(/UIViewControllerRepresentable/.test(vs) && /AVPlayerViewController\(\)/.test(vs),
     'the player is AVPlayerViewController — VideoPlayer exposes no fullscreen callbacks');
-  expect(/willBeginFullScreenPresentationWithAnimationCoordinator[\s\S]{0,260}OrientationGate\.set\(landscape: true\)/.test(vs),
+  const willBegin = callback(vs, 'willBeginFullScreenPresentationWithAnimationCoordinator');
+  const willEnd = callback(vs, 'willEndFullScreenPresentationWithAnimationCoordinator');
+  expect(willBegin.includes('OrientationGate.set(landscape: true)'),
     'entering fullscreen opens the orientation gate');
-  expect(/willEndFullScreenPresentationWithAnimationCoordinator[\s\S]{0,260}OrientationGate\.set\(landscape: false\)/.test(vs),
+  expect(willEnd.includes('OrientationGate.set(landscape: false)'),
     'leaving fullscreen shuts it');
+  // Both transitions can be abandoned half-way — a swipe out of fullscreen that the user lets go of
+  // lands back IN fullscreen. WWDC19 503: the completion's isCancelled is "the source of truth".
+  expect(/isCancelled \{ OrientationGate\.set\(landscape: false\) \}/.test(willBegin),
+    'an abandoned ENTER puts the gate back to portrait');
+  expect(/isCancelled \{ OrientationGate\.set\(landscape: true\) \}/.test(willEnd),
+    'an abandoned EXIT reopens it — the video is still fullscreen');
 
-  // The source restores portrait on unmount too (play.tsx:76-78): exiting the screen while still
-  // fullscreen must not strand the rest of the app in landscape.
-  const onDisappear = (screen.match(/\.onDisappear \{[\s\S]*?\n        \}/) || [''])[0];
-  expect(onDisappear.includes('OrientationGate.set(landscape: false)'),
-    'onDisappear restores portrait — leaving mid-fullscreen must not strand the app in landscape');
+  // ⚠ INVERTED on 2026-10-12. Round 1 asserted the opposite — that onDisappear restores portrait
+  // and the .ambient session — and so pinned the bug as a requirement. A fullscreen presentation
+  // fires onDisappear too (UIKit takes the presenter's view off the window), so that "leaving"
+  // teardown ran on every maximise and the client heard the sound die as the player went
+  // landscape. Teardown now lives where only a real removal from SwiftUI's tree can reach it.
+  expect(!/\.onDisappear/.test(code(screen)),
+    'VideoPlayerScreen has NO onDisappear — fullscreen fires it, and teardown there muted every maximise');
+  expect(dismantle(vs).includes('pause()'),
+    'dismantleUIViewController pauses the player — the one hook that means "leaving"');
+  expect(dismantle(vs).includes('OrientationGate.set(landscape: false)'),
+    'and shuts the gate — leaving must not strand the app in landscape (play.tsx:76-78)');
 
   // The player must survive a redraw. Built inline in `body`, every invalidation handed the view a
   // fresh AVPlayer seeked to zero.
@@ -151,9 +180,16 @@ const sliceStruct = (src, name) =>
   const onAppear = (screen.match(/\.onAppear \{[\s\S]*?\n        \}/) || [''])[0];
   expect(onAppear.includes('AudioSession.videoPlayback()'),
     'the player claims .playback when it appears');
-  const onDisappear = (screen.match(/\.onDisappear \{[\s\S]*?\n        \}/) || [''])[0];
-  expect(onDisappear.includes('AudioSession.ambient()'),
-    'and gives it back when it leaves — .playback app-wide would play move sounds through a muted phone');
+  expect(dismantle(vs).includes('AudioSession.ambient()'),
+    'and gives it back only when the player truly leaves — .playback app-wide would play move sounds through a muted phone');
+  expect(callback(vs, 'willBeginFullScreenPresentationWithAnimationCoordinator')
+    .includes('AudioSession.videoPlayback()'),
+    'fullscreen re-claims .playback on entry, whatever ran before it');
+  // Exactly ONE place in the player gives the category back. A second one is how round 1 shipped a
+  // teardown that fired on maximise.
+  const ambientCalls = (code(vs).match(/AudioSession\.ambient\(\)/g) || []).length;
+  expect(ambientCalls === 1,
+    `VideoScreens restores .ambient in exactly one place (dismantle); found ${ambientCalls}`);
 
   // There must be exactly one owner of the category. A second setCategory site is how the
   // process-wide value became order-dependent in the first place.

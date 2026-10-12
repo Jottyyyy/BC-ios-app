@@ -1128,6 +1128,68 @@ do {
     h.check(alts.first?.isCurrent == true, "the chip is current because the cursor is on it")
     h.check(s.stripTokens.filter { $0.kind == .move }.count == 2, "the main line still shows two moves")
     h.check(s.tree.mainline()[1].san == "e5", "c5 is a variation, not the main line")
+    // ...AND the line the cursor is on, after a gold arrow (board.tsx:3125-3158). Until 2026-10-12
+    // this section stopped at the chip — which is how a strip that never drew a side line past its
+    // first move passed: "one alternative chip" was true, and was the bug.
+    let tail2 = s.stripTokens.suffix(2).map { "\($0.kind.rawValue):\($0.text)" }.joined(separator: " ")
+    h.check(tail2 == "arrow:→ bmove:c5", "off the main line the strip ends with → and the cursor's line: \(tail2)")
+    h.check(s.stripTokens.last?.isCurrent == true, "and the cursor token there is current")
+
+    // 4b. a side line several moves deep — the moves the client could not see. Twin of the
+    //     analysis.js self-test of the same number; the JS runs on every checkout, this on a Mac.
+    if let sb = newSession() {
+        for m in ["e4", "e5", "Nf3", "Nc6"] { sb.play(san: m) }
+        sb.goToStart(); sb.play(san: "e4")
+        h.check(sb.branchConflict(for: sb.position.move(forSAN: "e5")!) == nil,
+                "replaying the main move asks nothing")
+        sb.play(san: "e5"); sb.goBack()
+        let q = sb.branchConflict(for: sb.position.move(forSAN: "c5")!)
+        h.check(q?.existingSAN == "e5" && q?.newSAN == "c5", "a different move where a line exists asks first")
+        for m in ["c5", "Nf3", "d6", "d4"] { sb.play(san: m) }
+        let deep = sb.stripTokens
+        let from = deep.firstIndex { $0.kind == .branchArrow } ?? deep.endIndex
+        let tail = deep[from...].map(\.text).joined(separator: " ")
+        h.check(tail == "→ c5 2. Nf3 d6 3. d4", "every move of the side line is drawn: \(tail)")
+        h.check(deep[from...].filter { $0.kind == .branchNumber }.count == 2, "two gold numbers, both White")
+        h.check(deep.last?.isCurrent == true, "the cursor (3.d4) is current")
+        h.check(deep.filter(\.isCurrent).count == 1, "and the only current token — the chip is on the path")
+        sb.goBack(); sb.goBack()
+        let mid = sb.stripTokens
+        let midFrom = mid.firstIndex { $0.kind == .branchArrow } ?? mid.endIndex
+        h.check(mid[midFrom...].map(\.text).joined(separator: " ") == "→ c5 2. Nf3",
+                "the continuation stops AT the cursor, exactly as the source does")
+        sb.goTo(sb.tree.mainline()[3])
+        h.check(!sb.stripTokens.contains { $0.kind == .branchArrow }, "on the main line there is no continuation")
+        sb.goToStart()
+        h.check(!sb.stripTokens.contains { $0.kind == .branchArrow }, "nor at the root")
+
+        // 4c. the Choose Continuation preview (board.tsx:2878-2892)
+        let after1 = sb.tree.mainline()[0]
+        h.check(AnalysisSession.continuationPreview(after1.children[0]) == "2. Nf3 Nc6",
+                "two moves and nothing after: no ellipsis")
+        h.check(AnalysisSession.continuationPreview(after1.children[1]) == "2. Nf3 d6 …",
+                "more beyond two moves: the ellipsis")
+        h.check(AnalysisSession.continuationPreview(after1) == "1... e5 2. Nf3 …",
+                "opening on Black: N... once, then White numbered as usual")
+        h.check(AnalysisSession.continuationPreview(sb.tree.mainline()[3]) == "", "a leaf has no preview")
+    } else { h.check(false, "a second session for the branch tests") }
+
+    // 4d. Overwrite — replaces the main continuation, KEEPS the other side lines (the deliberate
+    //     deviation from the source's `parentChildren.length = 0`).
+    if let so = newSession() {
+        for m in ["e4", "e5", "Nf3"] { so.play(san: m) }
+        so.goToStart(); so.play(san: "e4"); so.play(san: "e6"); so.goBack()
+        let r = so.overwrite(so.position.move(forSAN: "c5")!)
+        h.check(r?.node.san == "c5", "Overwrite plays the new move")
+        h.check(so.tree.mainlineSANs() == ["e4", "c5"], "it becomes the main line and the old one is gone")
+        h.check(so.tree.mainline()[0].children.map(\.san) == ["c5", "e6"], "the other side line survives")
+        h.check(so.tree.current === r?.node, "the cursor lands on the new move")
+        let before = so.tree.mainline()[0]
+        so.goTo(before)
+        let walked = so.overwrite(before.children[1].move!)
+        h.check(walked?.created == false && before.children.map(\.san) == ["e6"],
+                "overwriting with an existing side line promotes it, replacing the old main move")
+    } else { h.check(false, "a third session for the overwrite tests") }
 
     // 5. navigation always clears the snapshot (board.tsx:1457-1470)
     let fakeSnap = AnalysisSnapshot(fen: s.position.fen, depth: 1, nodes: 1, lines: [],
@@ -3376,7 +3438,7 @@ h.requireMinCounts([
     "perft": 17, "chess_ai": 2, "san_parse": 9000, "notation_extra": 30, "draw_rules": 30,
     "movetree": 35, "pgn_tokens": 180, "pgn_split": 35, "pgn_roundtrip": 35, "search": 66,
     "engine_settings": 70,
-    "eco": 1200, "review_book": 1500, "analysis_session": 235, "analysis_store": 80,
+    "eco": 1200, "review_book": 1500, "analysis_session": 256, "analysis_store": 80,
     "position_editor": 80,
     // No golden file: the source is TypeScript, not a Laravel controller, so there is no PHP
     // oracle. The differential partner is web-demo/js/opening-tree.js, compared source-to-source

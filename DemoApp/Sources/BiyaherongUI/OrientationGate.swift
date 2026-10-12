@@ -23,7 +23,8 @@ import UIKit
 /// overrides the supported orientations **at runtime**: `tutorial-videos/play.tsx:73-79` locks
 /// portrait on mount and restores it on unmount, and `:113-123` swaps to `OrientationLock.LANDSCAPE`
 /// on fullscreen and back on exit. That runtime layer is the thing the port never had. This file is
-/// its Swift equivalent, down to the unmount restore — see `VideoPlayerScreen.onDisappear`.
+/// its Swift equivalent, down to the unmount restore — see `SystemVideoPlayer.dismantleUIViewController`
+/// (NOT `onDisappear`: a fullscreen presentation fires that too, which was the 1.0.9 sound bug).
 ///
 /// ── Why an enum with a static, and not an ObservableObject ────────────────────
 /// The reader is `UIApplicationDelegate`, which UIKit calls on its own schedule from outside any
@@ -35,13 +36,24 @@ import UIKit
 /// orientation is behaviour. `tools/qa/orientation_check.js` asserts the WIRING — that the plist
 /// and the generated project agree, and that the delegate consults this flag — which is the most a
 /// machine here can do. The rest is a device check, written down in `docs/tutorial-videos.md`.
+///
+/// ── Why `@MainActor` ──────────────────────────────────────────────────────────
+/// `allowsLandscape` is mutable static state, and this package builds in the Swift 6 language mode
+/// (`swift-tools-version:6.0`), where nonisolated shared mutable state is an ERROR, not a warning.
+/// `set` also reaches `UIApplication.shared`, which is main-actor isolated. Every other type in
+/// this module that holds a `static var` — `PieceArt`, `CoachArt`, `HomeArt`, `BiyaherongBuild`,
+/// `Haptics.enabled` — is `@MainActor` for the same reason; this one shipped without it, written
+/// with no compiler in reach. All three callers (the app delegate, the representable, and the
+/// player's delegate) are main-actor isolated already, so the annotation costs nothing.
+@MainActor
 public enum OrientationGate {
 
     /// False everywhere except inside the video player's fullscreen presentation.
     ///
     /// `private(set)` on purpose: a second writer is how an app ends up stuck in landscape on a
-    /// screen that cannot draw it. The only mutator is `set(landscape:)` below, and its only two
-    /// callers are the player's two fullscreen delegate callbacks.
+    /// screen that cannot draw it. The only mutator is `set(landscape:)` below, and every caller of
+    /// it lives in `SystemVideoPlayer`: the two fullscreen callbacks (plus their cancellation
+    /// undo) and `dismantleUIViewController`.
     public private(set) static var allowsLandscape = false
 
     /// The mask the app delegate hands back to UIKit.
