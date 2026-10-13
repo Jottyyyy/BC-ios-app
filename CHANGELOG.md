@@ -9,6 +9,50 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-13 (fixed) — Puzzle Turbo: the lag before the next puzzle
+
+A premium student of Deniel's: *"Hindi daw smooth, parang may lag or loading time para sa next
+puzzle."* Same build as round 2, **1.0.10 (59)**, which had not been built yet.
+
+**The delays were not the problem.** 500 ms to advance and 300 ms before the setup move are
+Android's own (`rush-game.tsx:515`, `:48`) and are unchanged. Four things around them were wrong,
+and all four happened at the moment Turbo swaps boards:
+
+1. **No ✓ on a correct move.** Android shows one on every correct move (`:449-457`); both of our
+   twins only ever drew the ✕. A solve was half a second of nothing, because Turbo has no chime,
+   and then a new board appeared. That reads as loading. Like Android, there is now one dot at a
+   time, the newest keeps its full 500 ms, and the dot is cleared when the next puzzle mounts.
+   Before, `mount` cancelled the pending clear, so a ✕ could ride onto the next puzzle.
+2. **The clock skipped a second at every new puzzle** (3- and 5-minute modes). Its publisher was a
+   `let` on a view that every serve rebuilds, so the timer restarted once per puzzle. It is now
+   `@State`, and the same fix is in the rated solver.
+3. **Every render rebuilt every piece.** `piecesFrom` minted a fresh `UUID()` per piece per call. The
+   ids now come from the square. This fixes all five puzzle modes, Play vs Coach and the Opening
+   Tree, which call it the same way.
+4. **Each serve was 257 SQLite statements plus a full rewrite of the progress file, on the main
+   thread.** The file only grows, so the cost grew with every puzzle played. A serve is now one
+   query, which reads the rating beside the id, and the write runs on a serial background queue.
+   `reset()` drains that queue first, so deleting an account still leaves no file behind.
+
+Also corrected: a comment and two doc lines that said Turbo keeps a one-puzzle lookahead. Neither
+language ever had one.
+
+**`web-demo/` updated** for #1 (`puzzle-turbo.js`). #2–#4 are Swift-only: the browser's clock is a
+`setInterval`, its board is a DOM component, and its store is `localStorage`.
+
+**Gates:**
+- `replay_puzzle_vm.js` §14: the ✓, the newest-wins clear, the clear before `mount`, no `let` Timer
+  publisher anywhere in the package, square ids, the one-statement pool, and the off-main write and
+  drain.
+- `puzzle_screen_test.js`: drives a run move by move on a fake clock, under both orders for timers
+  due at the same instant.
+- `puzzle_corpus_check.js`: pins both sampling queries to an index-only plan.
+
+**Device checks** (no gate here can see these):
+- 3-minute Turbo: the ✓ appears the instant the piece lands, and the next puzzle comes with no hitch.
+- The clock ticks every second through a puzzle change.
+- A ✕ never carries onto the next puzzle.
+
 ### 2026-10-12 (fixed) — Client round 2: variations like Android, chess-piece avatars, and the sound that died on maximise
 
 Three reports against 1.0.9, on one branch at the client's request. One is a regression of a round-1

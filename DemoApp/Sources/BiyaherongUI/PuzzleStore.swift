@@ -143,12 +143,23 @@ final class PuzzleStore {
     /// `theme_rating_index` primary key. Neither ever scans.
     fileprivate func candidateIds(center: Int, window: Int?, theme: String?, seen: Set<Int>,
                               limit: Int, random: Bool) -> [Int] {
+        candidates(center: center, window: window, theme: theme, seen: seen,
+                   limit: limit, random: random).map(\.id)
+    }
+
+    /// The same sample as `candidateIds`, with each row's rating read in the SAME statement.
+    ///
+    /// The pool used to take the ids and then run `SELECT rating … WHERE id = ?` once per id — 256
+    /// prepare/step/finalize round trips on every serve, on the main thread, at the moment Turbo
+    /// swaps in its next puzzle. Both tables carry the rating beside the id, so one query answers.
+    fileprivate func candidates(center: Int, window: Int?, theme: String?, seen: Set<Int>,
+                                limit: Int, random: Bool) -> [PuzzleSelection.Candidate] {
         var sql: String
         if let t = theme, !t.isEmpty {
-            sql = "SELECT puzzle_id FROM theme_rating_index WHERE theme = ?"
+            sql = "SELECT puzzle_id, rating FROM theme_rating_index WHERE theme = ?"
             if window != nil { sql += " AND rating BETWEEN ? AND ?" }
         } else {
-            sql = "SELECT id FROM puzzles WHERE 1 = 1"
+            sql = "SELECT id, rating FROM puzzles WHERE 1 = 1"
             if window != nil { sql += " AND rating BETWEEN ? AND ?" }
         }
         // Over-fetch so the seen filter, applied in Swift, still leaves a full sample. Binding a
@@ -164,10 +175,15 @@ final class PuzzleStore {
             sqlite3_bind_int(stmt, i, Int32(center + w)); i += 1
         }
         sqlite3_bind_int(stmt, i, Int32(limit + min(seen.count, limit * 4)))
-        var out: [Int] = []
+        var out: [PuzzleSelection.Candidate] = []
         while sqlite3_step(stmt) == SQLITE_ROW && out.count < limit {
             let id = Int(sqlite3_column_int(stmt, 0))
-            if !seen.contains(id) { out.append(id) }
+            // Themes stay empty, as `candidate(_:)` leaves them: the ladder filters on themes
+            // through the SQL above, never through this list.
+            if !seen.contains(id) {
+                out.append(PuzzleSelection.Candidate(id: id, rating: Int(sqlite3_column_int(stmt, 1)),
+                                                     themes: []))
+            }
         }
         return out
     }
@@ -247,16 +263,14 @@ struct SQLitePuzzlePool: PuzzleSelection.PuzzlePool {
 
     func windowUnseen(center: Int, window: Int, theme: String?,
                       seen: Set<Int>) -> [PuzzleSelection.Candidate] {
-        store.candidateIds(center: center, window: window, theme: theme, seen: seen,
-                           limit: PuzzleStore.sampleLimit, random: true)
-             .compactMap { store.candidate($0) }
+        store.candidates(center: center, window: window, theme: theme, seen: seen,
+                         limit: PuzzleStore.sampleLimit, random: true)
     }
 
     /// Tier 2 drops the rating window and keeps only the theme filter.
     func anyUnseen(theme: String?, seen: Set<Int>) -> [PuzzleSelection.Candidate] {
-        store.candidateIds(center: 0, window: nil, theme: theme, seen: seen,
-                           limit: PuzzleStore.sampleLimit, random: true)
-             .compactMap { store.candidate($0) }
+        store.candidates(center: 0, window: nil, theme: theme, seen: seen,
+                         limit: PuzzleStore.sampleLimit, random: true)
     }
 
     func closest(center: Int, theme: String?) -> PuzzleSelection.Candidate? {

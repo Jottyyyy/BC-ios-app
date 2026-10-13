@@ -47,6 +47,20 @@ func move(fromUci uci: String, in pos: ChessPosition) -> Move? {
     return pos.legalMoves().first { $0.from == from && $0.to == to && $0.promotion == promo }
 }
 
+/// The board's pieces, each identified by the SQUARE it stands on.
+///
+/// This used to mint a fresh `UUID()` per piece per call — and the puzzle solver, Play vs Coach and
+/// the Opening Tree all call it from a body or a computed property, so every render handed SwiftUI
+/// thirty-odd pieces it had never seen. It threw every piece view away and built them again (a
+/// `Canvas` and a shadow each) on every tap, move and new puzzle: the hitch the client felt in Puzzle
+/// Turbo, where the board changes every few seconds. A square-derived id is the same on every call,
+/// so only the squares that changed are redrawn. It is still unique — one per square — which is all
+/// `mutatePieces` needs from a board it was handed.
 func piecesFrom(_ pos: ChessPosition) -> [BoardPiece] {
-    (0..<64).compactMap { sq in pos.squares[sq].map { BoardPiece(id: UUID(), square: sq, piece: $0) } }
+    (0..<64).compactMap { sq in pos.squares[sq].map { BoardPiece(id: squareID(sq), square: sq, piece: $0) } }
+}
+
+/// A fixed id per square: the square index in the last byte, zeros elsewhere.
+func squareID(_ sq: Int) -> UUID {
+    UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, UInt8(sq)))
 }

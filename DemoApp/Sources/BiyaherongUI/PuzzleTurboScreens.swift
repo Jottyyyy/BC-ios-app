@@ -228,9 +228,18 @@ struct PuzzleTurboRunScreen: View {
     @State private var result: PuzzleProgress.RushResult?
     @State private var showQuit = false
     @State private var feedback: (square: String, correct: Bool)?
+    /// Which dot a scheduled clear belongs to. The source's `showMoveFeedback` clears the previous
+    /// timer before it starts a new one, so the NEWEST dot always gets its full 500 ms; a clear that
+    /// finds a different number here has been superseded and does nothing.
+    @State private var feedbackSeq = 0
     @State private var secondsLeft: Int?
 
-    private let tick = Timer.publish(every: PuzzleSolverVM.tickSeconds, on: .main, in: .common)
+    /// `@State`, not `let`. `PuzzleHubScreen` observes the store and every serve publishes, so this
+    /// struct is rebuilt once per puzzle; a `let` built a NEW publisher each time, `onReceive`
+    /// re-subscribed, and the one-second timer restarted — the clock skipped a second at every new
+    /// puzzle. `@State` keeps the first; the ones later inits build are never subscribed, and an
+    /// autoconnecting publisher starts no timer until something subscribes.
+    @State private var tick = Timer.publish(every: PuzzleSolverVM.tickSeconds, on: .main, in: .common)
         .autoconnect()
 
     var body: some View {
@@ -451,6 +460,11 @@ struct PuzzleTurboRunScreen: View {
         } else {
             run = TurboRun.start(profileRating: store.state.profile.rating, mode: mode)
         }
+        // A ✓ on EVERY correct move, the last one included — `showMoveFeedback(move.to, true)` in
+        // both of the source's correct branches (rush-game.tsx:449-457). Without it a solve was half
+        // a second of nothing (Turbo has no chime) and then a new board: the client's "parang may
+        // loading time para sa next puzzle".
+        engine.onCorrect = { c in showFeedback(c.played, correct: true) }
         engine.onSolved = { _ in solved() }
         engine.onWrong = { w in missed(w) }
         next()
@@ -463,8 +477,22 @@ struct PuzzleTurboRunScreen: View {
             return
         }
         run = TurboRun.served(run, now: PuzzleHubStore.nowMs())
+        // The source's `mountPuzzle` clears the dot before the new board appears. Leaving it to the
+        // scheduled clear is not enough: `mount` cancels every pending task, that clear included,
+        // so a ✕ whose clear lost the race to the advance stayed on the NEXT puzzle.
+        feedback = nil
         engine.mount(p)
         refreshClock()
+    }
+
+    /// One dot at a time, and the newest keeps its full `turboFeedbackMs` — see `feedbackSeq`.
+    private func showFeedback(_ played: String, correct: Bool) {
+        feedbackSeq += 1
+        let seq = feedbackSeq
+        feedback = (String(played.dropFirst(2).prefix(2)), correct)
+        engine.schedule(PuzzleSession.Timing.turboFeedbackMs) {
+            if feedbackSeq == seq { feedback = nil }
+        }
     }
 
     private func solved() {
@@ -476,8 +504,7 @@ struct PuzzleTurboRunScreen: View {
     private func missed(_ w: PuzzleSession.Wrong) {
         run = TurboRun.missed(run)
         // The piece STAYS where it landed — Turbo's policy says so, and the dot marks the square.
-        feedback = (String(w.played.dropFirst(2).prefix(2)), false)
-        engine.schedule(PuzzleSession.Timing.turboFeedbackMs) { feedback = nil }
+        showFeedback(w.played, correct: false)
         if checkEnd() { return }
         engine.schedule(w.policy.advanceMs ?? PuzzleSession.Timing.turboAdvanceMs) { next() }
     }
