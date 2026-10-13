@@ -189,7 +189,8 @@ function run() {
       'Turbo leaves the piece on the wrong square');
     eq(SESSION.WRONG_POLICY.turbo.offersRetry, false, 'and offers no Retry');
     const missed = funcBody(turbo, 'missed');
-    expect(missed !== null && /feedback = \(/.test(missed), 'the screen shows a feedback dot');
+    expect(missed !== null && /showFeedback\(w\.played, correct: false\)/.test(missed),
+      'the screen shows a ✕ dot, through the one function that owns the dot');
     expect(missed !== null && /TurboRun\.missed\(/.test(missed), 'and spends a life');
     expect(missed !== null && /w\.policy\.advanceMs/.test(missed),
       'and takes the advance delay from the POLICY, not a number of its own');
@@ -329,6 +330,87 @@ function run() {
         + 'share buttons were, and it is invisible on screen');
     }
     expect(Object.keys(FILES).length >= 6, 'and six screen files were swept');
+  }
+
+  // ── 14. Turbo: nothing stalls between a solve and the next board ─────────────────
+  //
+  // The client: "hindi smooth, parang may lag or loading time para sa next puzzle". The delays
+  // are the source's own (500 ms advance, 300 ms setup) and stay; what was wrong was everything
+  // around them, and each line below is one of the four ways it went wrong.
+  {
+    // (a) A ✓ on every correct move — rush-game.tsx:449-457 calls showMoveFeedback(…, true) in
+    //     both correct branches. Without it a solve was half a second of nothing.
+    // The RUN screen's start() — the lobby above it in the same file has one of its own.
+    const runScreen = turbo.slice(turbo.indexOf('struct PuzzleTurboRunScreen'));
+    const start = funcBody(runScreen, 'start');
+    expect(start !== null
+           && /engine\.onCorrect = \{ c in showFeedback\(c\.played, correct: true\) \}/.test(start),
+      'a correct Turbo move shows a ✓ dot, as the source does');
+    const show = funcBody(turbo, 'showFeedback');
+    expect(show !== null && /feedbackSeq \+= 1/.test(show) && /feedback = \(/.test(show),
+      'showing a dot bumps the sequence');
+    expect(show !== null && /engine\.schedule\(PuzzleSession\.Timing\.turboFeedbackMs\)/.test(show)
+           && /if feedbackSeq == seq \{ feedback = nil \}/.test(show),
+      'and its clear fires only if no newer dot replaced it — the source\'s clearTimeout');
+    const missed = funcBody(turbo, 'missed') || '';
+    expect(!/feedback = /.test(missed), 'the ✕ no longer sets the dot behind showFeedback\'s back');
+
+    // (b) Cleared on mount — the source's mountPuzzle does, and `mount` cancels the clear task.
+    const next = funcBody(turbo, 'next') || '';
+    const cleared = next.indexOf('feedback = nil');
+    expect(cleared >= 0 && cleared < next.indexOf('engine.mount('),
+      'next() clears the dot BEFORE the new board mounts, so a ✕ never rides onto it');
+
+    // (c) A clock publisher held in @State. As a `let` it was rebuilt with the struct on every
+    //     serve, `onReceive` re-subscribed, and the clock skipped a second per puzzle.
+    for (const [name, src] of [['turbo', turbo], ['play', play]]) {
+      expect(/@State private var tick = Timer\.publish\(/.test(src),
+        `the ${name} solver keeps its tick publisher in @State`);
+    }
+    const anyLetTimer = fs.readdirSync(UI).filter(f => f.endsWith('.swift'))
+      .filter(f => /\blet\s+\w+\s*=\s*Timer\.publish\(/.test(read(UI, f)));
+    eq(anyLetTimer.join(', '), '',
+      'no view in the package holds a Timer publisher in a `let` (it restarts on every rebuild)');
+
+    // (d) The board keeps its piece views. A fresh UUID per piece per call made SwiftUI discard
+    //     and rebuild every piece on every render.
+    const helpers = read(UI, 'BoardHelpers.swift');
+    const pf = funcBody(helpers, 'piecesFrom');
+    expect(pf !== null && !/UUID\(\)/.test(pf) && /squareID\(sq\)/.test(pf),
+      'piecesFrom identifies a piece by its square, never by a fresh UUID');
+    const sid = funcBody(helpers, 'squareID');
+    expect(sid !== null && /UInt8\(sq\)/.test(sid) && !/UUID\(\)/.test(sid),
+      'and squareID is a pure function of the square');
+    for (const f of ['PuzzleSolverParts.swift', 'CoachScreens.swift', 'OpeningTreeScreens.swift']) {
+      expect(!/BoardPiece\(id: UUID\(\)/.test(read(UI, f)),
+        `${f} builds no render-time pieces with a fresh UUID`);
+    }
+
+    // (e) One statement per sample, not 1 + 256.
+    const pstore = read(UI, 'PuzzleStore.swift');
+    const pool = pstore.slice(pstore.indexOf('struct SQLitePuzzlePool'));
+    for (const fn of ['windowUnseen', 'anyUnseen']) {
+      const body = funcBody(pool, fn) || '';
+      expect(/store\.candidates\(/.test(body) && !/store\.candidate\(/.test(body),
+        `the pool's ${fn} reads ratings in its sampling query, not one statement per id`);
+    }
+    const cands = funcBody(pstore, 'candidates') || '';
+    expect(/SELECT puzzle_id, rating FROM theme_rating_index/.test(cands)
+           && /SELECT id, rating FROM puzzles/.test(cands)
+           && /sqlite3_column_int\(stmt, 1\)/.test(cands),
+      'and that query selects the rating beside the id in both of its tables');
+
+    // (f) The progress file is encoded and written off the main thread, in order.
+    const persist = funcBody(store, 'persist') || '';
+    const hop = persist.indexOf('writer.async {');
+    expect(hop >= 0 && persist.indexOf('encode(snapshot)') > hop
+           && persist.indexOf('.write(to: file') > hop && !/encode\(state\)/.test(persist),
+      'persist() encodes a snapshot and writes it on the writer queue, not the main thread');
+    expect(/static let writer = DispatchQueue\(label:/.test(store) && !/\.concurrent/.test(store),
+      'and that queue is serial, so writes land in the order they were made');
+    const reset = funcBody(store, 'reset') || '';
+    expect(reset.indexOf('writer.sync {}') > reset.indexOf('persist()') && /persist\(\)/.test(reset),
+      'reset() drains the queue, so deleting an account cannot have a late write restore the file');
   }
 
   return finish();

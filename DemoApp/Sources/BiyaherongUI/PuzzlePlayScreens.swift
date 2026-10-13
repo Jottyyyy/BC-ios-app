@@ -307,7 +307,9 @@ struct PuzzlePlaySolverScreen: View {
     @State private var ratingDelta: Int?
     @State private var startedAt: Int?
 
-    private let tick = Timer.publish(every: PuzzleSolverVM.tickSeconds, on: .main, in: .common)
+    /// `@State`, not `let` — the same restart-on-rebuild the Turbo clock had; see
+    /// `PuzzleTurboRunScreen.tick`. Every serve rebuilds this struct too.
+    @State private var tick = Timer.publish(every: PuzzleSolverVM.tickSeconds, on: .main, in: .common)
         .autoconnect()
 
     var body: some View {

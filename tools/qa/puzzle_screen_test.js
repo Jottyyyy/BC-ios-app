@@ -735,6 +735,94 @@ function run() {
        'leaving a TIMED run saves no draft — a paused clock would be meaningless');
     S.BiyaPuzzleTurbo.leave();
 
+    // The feedback dot, driven move by move — the client's "parang may loading time para sa next
+    // puzzle". The source shows a ✓ on EVERY correct move (rush-game.tsx:449-457), keeps one dot
+    // whose newest owner gets its full 500 ms (:100-104), and clears it when the next puzzle
+    // mounts (:285-287). A fake clock stands in for setTimeout, so the 300/500 ms sequence runs
+    // exactly; it runs under BOTH orders for timers due at the same instant, because "the clear
+    // happened to fire first" is the only reason the old code ever looked right.
+    const TIMING = S.BiyaPuzzleSession.TIMING;
+    const SETUP_MS = TIMING.opponentDelayMs.turbo;
+    for (const order of ['fifo', 'lifo']) {
+      const realST = S.setTimeout, realCT = S.clearTimeout, realCreate = S.BiyaPuzzleBoard.create;
+      let now = 0, ids = 0;
+      const due = [];
+      S.setTimeout = (fn, ms) => { due.push({ id: ++ids, at: now + (ms || 0), fn }); return ids; };
+      S.clearTimeout = (id) => { const i = due.findIndex(t => t.id === id); if (i >= 0) due.splice(i, 1); };
+      const tick = (ms) => {
+        const end = now + ms;
+        for (;;) {
+          due.sort((a, b) => a.at - b.at || (order === 'fifo' ? a.id - b.id : b.id - a.id));
+          if (!due.length || due[0].at > end) break;
+          const t = due.shift();
+          now = t.at;
+          t.fn();
+        }
+        now = end;
+      };
+      let solver = null;
+      S.BiyaPuzzleBoard.create = (o) => (solver = realCreate(o));
+      try {
+        APP.reset();
+        view = makeNode('div');
+        S.BiyaPuzzleTurbo.renderRun(view, 3, null, () => {});
+        root = view.children[0];
+        byClass(root, 'pzrr-board')[0].getBoundingClientRect = () => ({ width: 400, height: 400 });
+        const dots = () => byClass(root, 'pzrr-fb');
+        const play = (uci) => solver.submit(uci.slice(0, 2), uci.slice(2, 4), uci[4]);
+        const expected = () => solver.session.puzzle.moves[solver.session.moveIndex];
+
+        // A correct move — the first puzzle is a warmup mate-in-1, so it is also the last one.
+        tick(SETUP_MS);
+        const first = solver.puzzle.id;
+        eq(play(expected()).kind, 'correct', `[${order}] the stored move is correct`);
+        eq(dots().length, 1, `[${order}] a correct move shows a feedback dot at once`);
+        expect(dots()[0] && dots()[0].classList.contains('ok') && dots()[0].textContent === '✓',
+          `[${order}] and it is the green ✓ — the source's showMoveFeedback(…, true)`);
+        tick(TIMING.turboAdvanceMs);
+        expect(solver.puzzle.id !== first, `[${order}] 500 ms later the next puzzle is mounted`);
+        eq(dots().length, 0, `[${order}] and no dot rides onto it`);
+
+        // A wrong move: the ✕, gone with its puzzle in either order.
+        tick(SETUP_MS);
+        const want = expected();
+        const wrong = S.Engine.legalMoves(solver.session.position).map(m => S.Engine.moveUci(m))
+          .find(u => u !== want && u.slice(0, 4) !== want.slice(0, 4)
+                && S.Engine.status(S.Engine.makeMove(solver.session.position,
+                     S.Engine.parseUci(solver.session.position, u))) !== 'checkmate');
+        eq(play(wrong).kind, 'wrong', `[${order}] an off-book move is wrong`);
+        expect(dots().length === 1 && dots()[0].classList.contains('bad'),
+          `[${order}] and shows the ✕`);
+        tick(TIMING.turboAdvanceMs);
+        eq(dots().length, 0, `[${order}] which the next puzzle clears, whichever timer fires first`);
+
+        // Newest dot wins: a multi-move puzzle puts a second ✓ up 300 ms after the first, and the
+        // first one's 500 ms clear must not take it down. Solve warmups until one arrives.
+        let multi = false;
+        for (let n = 0; n < 40 && !multi; n++) {
+          tick(SETUP_MS);
+          if (solver.session.puzzle.moves.length >= 4) { multi = true; break; }
+          play(expected());
+          tick(TIMING.turboAdvanceMs);
+        }
+        expect(multi, `[${order}] the ramp reaches a puzzle with a reply in it`);
+        if (multi) {
+          eq(play(expected()).kind, 'correct', `[${order}] its first move is correct`);
+          tick(SETUP_MS);           // the reply lands
+          play(expected());                                // the second ✓, 300 ms after the first
+          eq(dots().length, 1, `[${order}] one dot at a time — the second replaced the first`);
+          tick(TIMING.turboFeedbackMs - SETUP_MS);
+          eq(dots().length, 1,
+            `[${order}] the FIRST dot's clear leaves the newer one up — the source's clearTimeout`);
+        }
+      } finally {
+        S.BiyaPuzzleTurbo.leave();
+        S.setTimeout = realST;
+        S.clearTimeout = realCT;
+        S.BiyaPuzzleBoard.create = realCreate;
+      }
+    }
+
     // Every exit routes through endRushRun — checked in the source, because a second exit path
     // is exactly how the original ended up recording nothing on a quit.
     const tsrc = fs.readFileSync(path.join(JS, 'puzzle-turbo.js'), 'utf8');
@@ -745,7 +833,7 @@ function run() {
       'which refuses to run twice, so a clock expiry plus a navigation writes one row, not two');
     // Part 7.6: no prefetch buffer reached the screen.
     for (const banned of ['BUFFER_MAX', 'BUFFER_REFILL', 'BUFFER_PARALLEL']) {
-      expect(tsrc.indexOf(banned) < 0, `no ${banned} — Turbo keeps one lookahead, not a buffer`);
+      expect(tsrc.indexOf(banned) < 0, `no ${banned} — Turbo serves when it advances, from no buffer`);
     }
     APP.reset();
   }

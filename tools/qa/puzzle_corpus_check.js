@@ -206,6 +206,19 @@ function run() {
       `puzzle -> themes seeks: ${themesOf}`);
     const daily = plan(`SELECT puzzle_id FROM daily_pool WHERE day_index = ?`, 0);
     expect(/SEARCH/.test(daily) && !/SCAN/.test(daily), `the daily lookup seeks: ${daily}`);
+    // The device pool's sampling queries, verbatim (`PuzzleStore.candidates`). They read the rating
+    // beside the id so a serve is ONE statement, not 1 + 256 — which is only free while both stay
+    // answerable from the index alone. A plan that had to visit the table per row would put back a
+    // smaller version of the per-id cost the change removed.
+    const sample = plan(`SELECT id, rating FROM puzzles WHERE 1 = 1 AND rating BETWEEN ? AND ?
+                         ORDER BY RANDOM() LIMIT ?`, 650, 750, 256);
+    expect(/SEARCH puzzles USING COVERING INDEX/.test(sample),
+      `the rated/Turbo sample reads id AND rating from the index alone: ${sample}`);
+    const themed = plan(`SELECT puzzle_id, rating FROM theme_rating_index WHERE theme = ?
+                         AND rating BETWEEN ? AND ? ORDER BY RANDOM() LIMIT ?`,
+                        'mateIn1', 550, 650, 256);
+    expect(/SEARCH theme_rating_index USING PRIMARY KEY/.test(themed) && !/SCAN/.test(themed),
+      `and so does the themed one, from tri's own key: ${themed}`);
   }
 
   // ---- 8. daily_pool -------------------------------------------------------------------

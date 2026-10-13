@@ -20,9 +20,12 @@ import BiyaherongCoachCore
 ///
 /// ## No prefetch buffer
 /// The original kept a 20-deep buffer in rated mode and a 12-deep one with six parallel fetches in
-/// Turbo, purely to hide network latency. A local SQLite read is sub-millisecond. Turbo's single
-/// lookahead calls `serveStreak` while the current puzzle is on screen and holds the one result;
-/// a queue would reintroduce the double-serve the seen set exists to prevent (Part 7.6).
+/// Turbo, purely to hide network latency. A local SQLite read does not need hiding — provided it IS
+/// one read: the pool fetches each sample's ratings in the same statement, and the file write runs
+/// off the main thread (`persist()`). There is no lookahead either; this comment once claimed Turbo
+/// had one, and neither language ever did. Turbo serves when it advances, because its next target
+/// depends on whether this puzzle is solved or missed. A queue would also reintroduce the
+/// double-serve the seen set exists to prevent (Part 7.6).
 // Internal, like every other view and view-model in this package: only `Roots.swift` is public,
 // because only the app entry points cross the module boundary. Declaring this public would also be
 // a compile error — `PuzzleStore.Puzzle` is internal, and a public signature cannot name it.
@@ -132,6 +135,10 @@ final class PuzzleHubStore: ObservableObject {
     func reset(now: Int = PuzzleHubStore.nowMs()) {
         state = PuzzleProgress.seed(now: now)
         persist()
+        // Drain before returning. Deleting an account calls this and then removes the file; with
+        // the writes off the main thread, one still queued (a serve's, or this reset's) would land
+        // AFTER the removal and put the file back. Rare and tiny, so blocking here costs nothing.
+        PuzzleHubStore.writer.sync {}
     }
 
     // MARK: - Persistence
@@ -154,13 +161,26 @@ final class PuzzleHubStore: ObservableObject {
 
     /// Best-effort and deliberately silent. Losing a write costs one puzzle's progress; throwing
     /// mid-solve would cost the session.
+    ///
+    /// Encoded and written OFF the main thread. This runs on every serve, and the file only grows —
+    /// `seen` and `attempts` are never trimmed — so doing it inline put a cost that rose with every
+    /// puzzle ever played at exactly the moment Turbo swaps in its next board. `state` is a value,
+    /// so the snapshot is fixed when this is called; the queue is serial, so the writes land in the
+    /// order they were made; `.atomic` means a reader never sees half a file.
     func persist() {
         guard let file else { return }
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.sortedKeys]
-        guard let data = try? enc.encode(state) else { return }
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
-        try? data.write(to: file, options: .atomic)
+        let snapshot = state
+        PuzzleHubStore.writer.async {
+            let enc = JSONEncoder()
+            enc.outputFormatting = [.sortedKeys]
+            guard let data = try? enc.encode(snapshot) else { return }
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            try? data.write(to: file, options: .atomic)
+        }
     }
+
+    /// One serial queue for every write, so two quick serves can never land out of order.
+    private static let writer = DispatchQueue(label: "biyaherong.puzzle-progress.writer",
+                                              qos: .utility)
 }

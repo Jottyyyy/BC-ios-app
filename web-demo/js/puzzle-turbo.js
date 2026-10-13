@@ -311,6 +311,10 @@ var BiyaPuzzleTurbo = (function () {
       mode: 'turbo',
       sound: play,
       onPhase: paint,
+      // A ✓ on EVERY correct move, the last one included — `showMoveFeedback(move.to, true)` in
+      // both of the source's correct branches (rush-game.tsx:449-457). Without it a solve was half
+      // a second of nothing and then a new board, which reads as loading.
+      onCorrect: function (outcome) { showFeedbackDot(true, outcome); },
       onSolved: onSolved,
       onWrong: onWrong,
     });
@@ -332,6 +336,9 @@ var BiyaPuzzleTurbo = (function () {
     if (!r.puzzle) { finish('finished'); return; }
     puzzle = r.puzzle;
     run = TR.served(run, Date.now());   // starts the clock on the FIRST puzzle only
+    // The source's `mountPuzzle` clears the dot before the new board appears, rather than
+    // leaving it to a timer the mount is about to cancel.
+    clearFeedbackDot();
     solver.mount(puzzle);
     paint();
   }
@@ -414,6 +421,9 @@ var BiyaPuzzleTurbo = (function () {
     var col = black ? 7 - file : file;
     var row = black ? rank : 7 - rank;
     var r = square * G.radiusFactor;
+    // One dot at a time, and the newest keeps its full 500 ms: the source clears the previous
+    // timer before it starts the next (`showMoveFeedback`, rush-game.tsx:100-104).
+    clearFeedbackDot();
     var dot = el('div', 'pzrr-fb' + (correct ? ' ok' : ' bad'), correct ? '✓' : '✕');
     dot.style.left = ((col + G.colOffset) * square + G.leftSign * r * G.leftFactor) + 'px';
     dot.style.top = (row * square + G.topSign * r * G.topFactor) + 'px';
@@ -423,7 +433,16 @@ var BiyaPuzzleTurbo = (function () {
     dot.style.fontSize = (r * G.glyphFactor) + 'px';
     dot.style.lineHeight = (r * G.glyphLineFactor) + 'px';
     ui.boardBand.appendChild(dot);
-    solver.schedule(function () { dot.remove(); }, TIMING.turboFeedbackMs);
+    ui.feedbackDot = dot;
+    solver.schedule(function () {
+      if (ui && ui.feedbackDot === dot) clearFeedbackDot();
+    }, TIMING.turboFeedbackMs);
+  }
+
+  function clearFeedbackDot() {
+    if (!ui || !ui.feedbackDot) return;
+    ui.feedbackDot.remove();
+    ui.feedbackDot = null;
   }
 
   /**

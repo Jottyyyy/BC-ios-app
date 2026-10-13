@@ -138,9 +138,12 @@ every match: that is still a uniform pick once composed with a uniform picker, a
 only thing the ladder branches on — is preserved exactly.
 
 **No prefetching.** The original kept a 20-deep buffer in rated mode and a 12-deep buffer with six
-parallel HTTP fetches in Turbo, purely to hide network latency. A local read is sub-millisecond.
-Turbo's single lookahead needs no API: it calls `nextStreak` while the current puzzle is on screen
-and holds the one result.
+parallel HTTP fetches in Turbo, purely to hide network latency. A local read needs no hiding,
+provided it really is one read. On the device the sample's ratings come back in the same statement
+(`PuzzleStore.candidates`, which once cost 1 + 256), and the progress file is written off the main
+thread. **There is no lookahead.** This paragraph once said Turbo kept one, and neither language
+ever did. Turbo serves when it advances, because its next target depends on whether the current
+puzzle is solved or missed.
 
 ### `PuzzleProgress` · `web-demo/js/puzzle-progress.js`
 
@@ -364,6 +367,22 @@ Built from `turboRun.renderConstants.renderMoveFeedback` as **signed terms** —
 badge in the wrong corner in *both* languages. The flip is asymmetric too: `col = black ? 7 - file
 : file` but `row = black ? rank : 7 - rank`. Both signs have their own mutant.
 
+**It shows on every correct move as well as on a wrong one.** The source calls
+`showMoveFeedback(move.to, true)` in both of its correct branches (`rush-game.tsx:449-457`). The port
+drew only the ✕, so a solve was half a second of nothing (Turbo has no chime) and then a new board.
+The client reported that as *"parang may lag or loading time para sa next puzzle"*. Two more rules
+come from the source:
+
+- **One dot, newest wins.** `showMoveFeedback` clears the previous timer before starting the next
+  (`:100-104`). A dot put up 300 ms after another keeps its full 500 ms. Swift numbers each dot
+  (`feedbackSeq`), and the browser compares the node.
+- **Cleared when the next puzzle mounts**, as `mountPuzzle` does (`:285-287`). Leaving it to the
+  timer was a race, because `mount` cancels every pending task, that clear included. A ✕ whose
+  clear lost to the advance stayed on the next puzzle.
+
+`puzzle_screen_test.js` drives this move by move on a fake clock, under both orders for timers due
+at the same instant.
+
 ## How to test
 
 ```bash
@@ -436,7 +455,7 @@ Mechanical, run by `node tools/qa/js_goldens.js`:
 - [x] **22.2** no hostname, `fetch`, `XMLHttpRequest`, `WebSocket` or `EventSource` in any of the
       feature's 17 files — checked, not assumed, because the RN source really does call chess.com
 - [x] **22.6** leaving the Streak solver and returning hands back the *identical* puzzle
-- [x] no prefetch buffer — Turbo keeps one lookahead
+- [x] no prefetch buffer — Turbo serves when it advances
 - [x] every sound a screen requests is one of the four real keys
 - [x] every `--pz*` CSS property the stylesheet reads is written by a screen
 - [x] every delay matches the source call site that schedules it
@@ -447,6 +466,7 @@ By hand in the browser, with audio on:
 - [ ] Streak chimes when the run ends (a wrong move), Turbo when the run ends (lives, clock or quit)
 - [ ] Turbo's clock turns gold at 30 s and red at 10 s
 - [ ] a wrong Turbo move leaves the piece where it landed, under a red ✕
+- [ ] a correct Turbo move shows a green ✓ the instant it lands, and no dot survives onto the next puzzle
 - [ ] three lives spent → **"Out of Lives!"**, not "Time's Up!"
 - [ ] an infinite run left mid-way is offered back by Resume; a timed one is not
 - [ ] piece pickup buzzes on an Android device
@@ -479,6 +499,28 @@ Screens **ask** the shared derivations rather than restating them —
 delay arrives in the wrong-move outcome. Sounds go through `PuzzleSounds`, never
 `SoundManager.playMove` (whose check/castle chain is the Play screen's). Haptics go through
 `Haptics.play(.pickUp)`.
+
+### What made Turbo stutter (2026-10-13)
+
+The client reported *"hindi smooth, parang may lag or loading time para sa next puzzle"*. The
+delays are the source's own and were not touched. What had gone wrong was everything around them,
+and every one of these sat on the moment Turbo swaps boards:
+
+- **The clock skipped a second on every new puzzle.** The tick publisher was a `let` on the view.
+  `PuzzleHubScreen` observes the store and every serve publishes, so the struct was rebuilt per
+  puzzle, `onReceive` re-subscribed, and the timer restarted. It is now `@State` in both timed
+  solvers. `replay_puzzle_vm.js` §14 refuses a `let` Timer publisher anywhere in the package.
+- **Every render rebuilt every piece.** `piecesFrom` minted a fresh `UUID()` per piece per call,
+  and the solver, Play vs Coach and the Opening Tree call it from a body or a computed property. So
+  SwiftUI threw away every piece view (a `Canvas` and a shadow) on every tap, move and mount. Ids
+  now come from the square (`squareID`): stable across calls, unique within a board.
+- **A serve was 257 SQLite statements.** One sampling query, then one `SELECT rating` per id.
+  `candidates` reads the rating in the same row, and `puzzle_corpus_check.js` pins both sampling
+  queries to an index-only plan.
+- **Every serve re-encoded and rewrote the whole progress file on the main thread.** `seen` and
+  `attempts` are never trimmed, so that cost grew with every puzzle ever played. `persist()` now
+  hands a snapshot to a serial queue. `reset()` drains the queue, so deleting an account cannot have
+  a late write put the file back.
 
 ### Two promotion dialogs
 
