@@ -122,6 +122,10 @@
   <script src="js/review.js"></script>
   <script src="js/opening-book.js"></script>
   <script src="js/analysis-metrics.js"></script>
+  <!-- The ONE board theme (Profile → Board Theme). Reads analysis-metrics.js's table at load and
+       paints the saved choice onto the document root before any board draws — so it sits
+       right after that table and before every screen. -->
+  <script src="js/board-theme.js"></script>
   <!-- The engine strength presets (☰ > Engine). Read by analysis.js and cross-checked by
        analysis-metrics.js's self-test; neither needs it at load time, so it sits here. -->
   <script src="js/engine-settings.js"></script>

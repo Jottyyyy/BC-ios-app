@@ -53,7 +53,7 @@ it erases what the account produced on this device — and deliberately keeps tw
 
 | | Keys |
 |---|---|
-| **Erased** | `biya.auth.session.v1`, `biya.coach.takeback.v1`, `biya.analysis.engine.v1`, every `biya.coach.draft.v1.*` |
+| **Erased** | `biya.auth.session.v1`, `biya.auth.name.v1`, `biya.auth.avatar.v1`, `biya.coach.takeback.v1`, `biya.analysis.engine.v1`, `biya.board.theme.v1` (Profile → Board Theme; the live store is also reset), every `biya.coach.draft.v1.*` |
 | **Erased (files)** | `puzzle-progress.json`, `pairing.json`, `openings.json`, `analysis-library.json` in `Application Support/Biyaherong/` |
 | **KEPT** | `biya.store.subscription.v1`, `biya.store.usage.v1` |
 

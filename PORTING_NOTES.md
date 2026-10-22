@@ -47,6 +47,38 @@ Every constant used is extracted or already in `PuzzleMetrics`.
 
 ---
 
+## One board theme, chosen in Profile (2026-10-22, client round 3)
+
+*"Hindi mapalitan kulay sa chessboard ng puzzle."*
+
+### DEVIATION REMOVED: "the RN board had one colour pair"
+
+`AnalysisMetrics.swift` and `analysis-metrics.js` both said the three themes were new. They were
+not: `contexts/BoardThemeContext.tsx` defines the same three, persists the choice
+(`@board_theme`), and the Profile screen offers them under "Applies to all chess boards"
+(`profile/index.tsx:534-571`). Believing the comment is how the port came to keep them on one
+screen. It is parity now: one saved setting, every board, chosen in Profile.
+
+### EXTRACTED, not typed
+
+The themes (labels with their swatch emoji, hexes, default), the card copy and every number of
+the picker are pulled by `extract_board_styles.js` into `board_styles.json` → `boardThemes`, and
+`board_theme_check.js` holds both languages to it. Only the classic pair was extracted before.
+
+### DECISION: the Analysis Board keeps its ☰ row, as a shortcut
+
+The source's menu has no theme row; ours had one because the theme had nowhere else to live. It
+stays — it cycles the same app-wide setting — because removing a control the client has used is
+a change nobody asked for.
+
+### DECISION: delete-account erases it
+
+The same class as `biya.analysis.engine.v1`: a preference the account made on this device. RN
+does not clear `@board_theme` on logout; neither do we (sign-out keeps it). The live store is
+reset too, or the next change would write the deleted value straight back.
+
+---
+
 ## The paywall opens on Monthly (2026-09-10)
 
 Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*

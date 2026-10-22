@@ -68,8 +68,8 @@
 
   /* board — Classic Brown, the pair the real RN board draws
      (tools/metrics/puzzle_styles.json -> shared.board.lightSquare/darkSquare).
-     Read ONLY by <chess-board>; js/analysis.js sets its own per-theme values on the
-     analysis root, so the Analysis Board's theme picker is unaffected. */
+     Read ONLY by <chess-board>. This is the DEFAULT: js/board-theme.js overrides both on the
+     document root with the saved Profile → Board Theme choice, which every board inherits. */
   --board-light: #F0D9B5;
   --board-dark: #B58863;
   --hl-last: rgba(253, 176, 34, .32);

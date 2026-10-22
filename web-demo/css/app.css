@@ -266,6 +266,25 @@ textarea::-webkit-scrollbar { width: 0; height: 0; }
 .profile-card .ptier { font-size: 13px; opacity: .85; }
 .profile-card .prating { margin-left: auto; text-align: right; font-family: var(--mono); font-weight: 800; font-size: 20px; }
 
+/* Profile → Board Theme (client round 3). Every number arrives as a --bt-* property from
+   js/board-theme.js, extracted from RN profile/index.tsx; none is typed here. */
+.bt-card { background: var(--bt-card-fill); border-radius: var(--bt-card-r); padding: var(--bt-card-pad); }
+.bt-title { font-size: var(--bt-title-fs); font-weight: 700; color: var(--bt-title-color);
+            margin-bottom: var(--bt-title-mb); }
+.bt-sub { font-size: var(--bt-sub-fs); color: var(--bt-sub-color); margin-bottom: var(--bt-sub-mb); }
+.bt-option { display: flex; align-items: center; gap: var(--bt-gap); width: 100%; box-sizing: border-box;
+             padding: var(--bt-pad); border-radius: var(--bt-r); margin-top: var(--bt-mt);
+             background: var(--bt-fill); border: var(--bt-active-border) solid transparent;
+             cursor: pointer; font-family: var(--font); text-align: left; }
+.bt-option.bt-active { background: var(--bt-active-fill); border-color: var(--bt-active-color); }
+.bt-mini { display: grid; grid-template-columns: repeat(4, var(--bt-mini-sq));
+           width: var(--bt-mini); height: var(--bt-mini); border-radius: var(--bt-mini-r);
+           overflow: hidden; flex: none; }
+.bt-mini span { width: var(--bt-mini-sq); height: var(--bt-mini-sq); }
+.bt-label { flex: 1; font-size: var(--bt-label-fs); font-weight: 600; color: var(--bt-label-color); }
+.bt-active .bt-label { color: var(--bt-label-active); }
+.bt-check { font-size: var(--bt-check-fs); font-weight: 700; color: var(--bt-check-color); }
+
 .tier-card .tier-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hairline); }
 .tier-card .tier-row:first-of-type { border-top: 0; }
 .tier-row .tname { font-weight: 700; font-size: 14px; }

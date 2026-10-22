@@ -94,16 +94,38 @@ Horizontal centring is the parent stack's job, which a `VStack` already does.
 source: `tools/metrics/puzzle_styles.json` → `shared.board.lightSquare` / `darkSquare`, extracted by
 `tools/metrics/extract_puzzle_styles.js` from the real RN board (`components/DragDropChessBoard.tsx`).
 
+That is the **default**. Since 2026-10-22 the player chooses the pair — see *One theme, every
+board* below — and Classic Brown is what a fresh install draws.
+
 | Writer | Where |
 |---|---|
-| Swift, every board | `BoardStyle`'s defaults — `AnalysisMetrics.swift`, `var light = BoardTheme.classic.light` |
-| Browser, every board | `--board-light` / `--board-dark` on `:root` — `web-demo/css/theme.css` |
+| Swift, every board | `BoardView.lightSquare`/`darkSquare` → `BoardThemeStore.shared.theme` (`BoardThemeStore.swift`) |
+| Swift, a board that opts out | `BoardStyle.light`/`dark` with `followsAppTheme: false` — defaults `BoardTheme.classic`; **no board does today** |
+| Browser, every board | `--board-light` / `--board-dark` on `:root` — `web-demo/css/theme.css` default, overridden by `js/board-theme.js` |
 | Browser, no-stylesheet fallback | the `var(--board-light, …)` defaults in `chess-board.js`'s `:host` block |
-| Analysis Board only | `BoardTheme` / `BOARD_THEMES` — a per-screen override, `classic` by default |
+| The three themes | `BoardTheme` / `BOARD_THEMES` — extracted, `tools/metrics/board_styles.json` → `boardThemes` |
 
-Nothing else may write one. A screen that wants a different board does it by passing
-`style:` (Swift) or setting the two custom properties on its own root (browser), the way the
-Analysis Board's theme picker does — never by restating a hex.
+Nothing else may write one — never by restating a hex.
+
+### One theme, every board (client round 3, 2026-10-22)
+
+*"Hindi mapalitan kulay sa chessboard ng puzzle."* The RN app has always had **one** theme, saved
+(`contexts/BoardThemeContext.tsx`), chosen on **Profile → ♟️ Board Theme — "Applies to all chess
+boards"**, and read by every `DragDropChessBoard`. The port kept the three themes as an unsaved
+property of the Analysis Board, behind a comment calling them a deviation — so the five puzzle
+modes, Play vs Coach and the Opening Tree were always brown, and the Analysis Board forgot its
+choice on every visit.
+
+- **Swift.** `BoardThemeStore` (`biya.board.theme.v1`) holds it. `BoardView` observes the store,
+  so every board follows with **no call-site change** — the puzzle solvers pass no `style:` at all.
+  `AnalysisVM.theme` is now a view of the store; its ☰ row is a shortcut to the same setting.
+  Profile carries `BoardThemePickerCard`: a 4 × 4 mini board, the source's label and a gold ✓.
+- **Browser.** `js/board-theme.js` saves the same key and paints `--board-light`/`--board-dark` on
+  the document root at load, which every `<chess-board>` inherits. Profile has the same card.
+- **Delete account** erases the key and resets the live store to Classic Brown.
+- **Gate:** `tools/qa/board_theme_check.js` — themes and picker vs the extraction in both
+  languages, the key, the resolution in `BoardView`, the Profile wiring, and the browser module
+  executed. Thirteen mutants in `puzzle_core_mutation_test.js`; all die.
 
 **This was wrong for the whole life of the port, in both languages at once.** The extraction had
 carried the brown pair since the puzzle screens landed and *nothing read it*: `BoardStyle` and

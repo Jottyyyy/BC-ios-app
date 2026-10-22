@@ -9,6 +9,40 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-22 (fixed) — One board theme, chosen in Profile, on every board
+
+Client round 3: *"Also hindi mapalitan kulay sa chessboard ng puzzle."* The RN app has **one**
+saved theme (`contexts/BoardThemeContext.tsx`), chosen on Profile under **"♟️ Board Theme —
+Applies to all chess boards"** and read by every `DragDropChessBoard`. The port kept the same three
+themes as an unsaved `@Published` on `AnalysisVM`, reachable only from the Analysis Board's ☰ menu
+and labelled *"DEVIATION: the RN board had one colour pair"* — which it never had. So the five
+puzzle modes, Play vs Coach and the Opening Tree were always Classic Brown, and the Analysis Board
+forgot its own choice on every visit. The spec had asked for exactly this setting
+(`BIYAHERONG-PORT-SPEC.md:1880`, *"Persist it once, read it everywhere"*).
+
+- **`BoardThemeStore`** (new, `biya.board.theme.v1`) holds the choice. **`BoardView` observes it**,
+  so all nine boards follow with no call-site change; `BoardStyle.followsAppTheme` (default true)
+  is the opt-out, and no board uses it.
+- **Profile → ♟️ Board Theme**: the source's card — a 4 × 4 mini board per theme, its label with
+  the swatch emoji, a gold ✓ on the one in use.
+- **Analysis Board ☰ → Board Theme** stays, as a shortcut to the same setting.
+- **Delete account** erases the key and resets the live store.
+- **Extracted, not typed:** `extract_board_styles.js` now reads `BoardThemeContext.tsx` and the
+  Profile card into `board_styles.json` → `boardThemes` (95 lines added, nothing else changed).
+
+**`web-demo/` updated**: `js/board-theme.js` saves the same key and paints `--board-light` /
+`--board-dark` on the document root at load, which every `<chess-board>` inherits; Profile has the
+same card; the browser Analysis Board's private `boardTheme` is gone.
+
+**Gate:** new `tools/qa/board_theme_check.js` (141) — themes and picker against the extraction in
+both languages, one key classified for delete-account, every board resolving from the store,
+Profile and ☰ writing it, and the browser module executed. **13 mutants, all killed (196/196
+overall).** `js_goldens` 37,088 → 37,246 across **89** suites.
+
+**Device checks:** Profile → Tournament Green, then open any puzzle mode, Play vs Coach and the
+Opening Tree — all green · relaunch — still green · ☰ → Board Theme on the Analysis Board changes
+Profile's ✓ too.
+
 ### 2026-10-22 (fixed) — Rated puzzles: back no longer re-rolls, Solution no longer leaks, and the new rating shows
 
 Client round 3, against the live **1.0.10 (59)**: three text reports, plus a 75 s screen recording

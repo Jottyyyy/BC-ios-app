@@ -778,6 +778,12 @@ struct ProfilePhone: View {
                     }
                 }
 
+                // Profile is where the source puts it (`profile/index.tsx:534-571`), under
+                // "Applies to all chess boards" — and it is the only place a puzzle player would
+                // look, since no solver has a settings control of its own (client round 3).
+                BoardThemePickerCard(store: BoardThemeStore.shared)
+                    .padding(.horizontal, 18)
+
                 phoneCard(PaywallStrings.premium) {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 6) {
@@ -895,6 +901,7 @@ struct ProfilePhone: View {
     /// progress straight back. Reset, then erase, then sign out.
     private func deleteAccount() {
         store.reset()
+        BoardThemeStore.shared.forget()
         AccountDeletion.eraseAll()
         withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { login.signOut() }
     }

@@ -466,6 +466,7 @@ enum LoginAccountData {
         "biya.auth.avatar.v1",      // LoginProfile.avatarKey — their chosen avatar
         "biya.coach.takeback.v1",   // CoachStore.takeBackKey
         "biya.analysis.engine.v1",  // EngineSettings.storageKey
+        "biya.board.theme.v1",      // BoardThemeStore.storageKey — Profile → Board Theme
     ]
 
     /// Cleared by prefix: a saved coach game is one key each, so there is no fixed list of them.

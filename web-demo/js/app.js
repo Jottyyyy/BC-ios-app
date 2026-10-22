@@ -229,6 +229,7 @@
     sheet.querySelector('.lg-confirm-yes').onclick = function () {
       close();
       eraseAccountData();
+      BiyaBoardTheme.forget();     // the key went with the rest; repaint the boards to match
       signOut();
     };
     document.querySelector('.app-card').appendChild(sheet);
@@ -1300,6 +1301,13 @@
     avs += '</div>';
     cc.innerHTML = '<div class="card-label">Your coaches</div>' + avs;
     wrap.appendChild(cc);
+
+    // Board theme — where the source puts it (profile/index.tsx:534-571), and the one setting
+    // every board in the app reads (client round 3: the puzzle boards could not be recoloured).
+    var bt = el('div', 'bt-wrap');
+    BiyaBoardTheme.applyPickerMetrics(bt);
+    bt.appendChild(BiyaBoardTheme.pickerCard(function () { renderProfile(); }));
+    wrap.appendChild(bt);
 
     // Subscription — its state and the route to the paywall.
     var PW = BiyaPremium, sub = PW.shared(), acc = sub.access();
