@@ -88,7 +88,10 @@ targets:
         # variations drawn and asked about like Android, chess-piece avatars instead of the coach
         # characters, and the video's sound dying on maximise. If 1.0.9 is still unreleased when 59
         # is uploaded, this may stay "1.0.9" — Apple refuses only a version string already live.
-        MARKETING_VERSION: "1.0.10"
+        # 1.0.10 (59) went live in October. 1.0.11 is the client's third round: rated puzzles that
+        # resume after back and show the new rating, the engine panel that leaked onto the next
+        # puzzle, one board theme chosen in Profile for every board, and the new Chess Clock.
+        MARKETING_VERSION: "1.0.11"
         # Build number, unique per version string. Version 1.0.4 already reached build 37 in
         # App Store Connect, so continuing at 38 keeps the sequence monotonic across the whole
         # app and avoids any "build already exists" ambiguity. Bump this for each manual upload;
@@ -112,7 +115,8 @@ targets:
         # because nothing READS this file to check — the drift is only ever noticed by a rejected
         # upload. 58 is therefore the floor.
         # 1.0.9 (58) was uploaded and submitted on 2026-10-08, so 59 is the floor now.
-        CURRENT_PROJECT_VERSION: "59"
+        # 1.0.10 (59) was submitted 2026-10-13 and is live, so 60 is the floor now.
+        CURRENT_PROJECT_VERSION: "60"
         # iPhone only. Declaring iPad ("1,2") without UIRequiresFullScreen makes the app
         # multitasking-capable, which Apple then requires to support ALL FOUR orientations —
         # otherwise App Store Connect rejects with ITMS-90474. The UI is a portrait phone

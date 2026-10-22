@@ -9,6 +9,49 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-22 (added) — The Chess Clock, as the seventh Home tile — and 1.0.11 (60)
+
+Client round 3: *"maglagay ka ng isa pang feature, chess clock parang ganito … dapat naadjust kung
+anong gusto … 7 na cards na … pero dapat hindi padin nasscroll down."* Free for everyone (the
+client's decision), fully offline. Full description: **`docs/chess-clock.md`**.
+
+- **The clock.** Two halves facing each other, the top one turned 180° for the player across the
+  table. Tap your half after you move; the first tap starts the *other* clock and makes that side
+  White — each half's chip carries the board's own king art, not a ♔/♚ font glyph. Moves counted per side; `+3s` flashes when an increment is paid; amber at 30 s, red with
+  tenths at 10 s; *⏱ Time's up* / *🏆 Wins on time* at the flag.
+- **Adjustable.** Presets by speed (Bullet 1|0 → Classical 90|30) or Custom: minutes and seconds per
+  player, *Different time per player* for a coach giving odds, and None / **Increment** / **Delay**
+  (1–60 s). The last control and the sound switch are remembered (`biya.clock.v1`).
+- **The bar**: ✕ · ↺ reset (asks first mid-game) · ⏸/▶ · ⏱ time control · 🔊/🔇.
+- **On the device**: the screen stays lit only while the clock runs; leaving the app pauses the
+  game; each tap buzzes and clicks.
+- **Home, still not scrolling.** The bottom band was built as a *Donate | Membership* pair and kept
+  Donate's height after Donate was removed. The clock takes that half — `[⏱️ Chess Clock | ✈️
+  Premium]` — so the six grid cards are pixel-identical to before on every device; a fourth grid
+  row would have cut each by ~19% on an iPhone SE. The tile names the last control: *Blitz · 5 | 3*.
+
+There is **no RN or Laravel original**, so nothing could be extracted and there is no PHP oracle.
+`ChessClock` is Foundation-only Core with a new ParityRunner group, `chess_clock`, written as step
+scripts; **`tools/qa/chess_clock_check.js`** (414) executes every one of them through the JS twin,
+asserts the group's floor (**221**) equals what the table produces, compares every constant,
+preset, string and metric between the languages, pins the screen's decisions (rotation not
+landscape, `@State` tick, monotonic uptime, idle timer released on every exit, pause on background,
+ungated tile), and drives the browser screen on a fake clock. **18 mutants, all killed — 214/214
+overall.** `home_chrome_check` (two banners, nine callbacks) and `trial_gate_check` (four ungated
+callbacks, `clock` in `OPEN_ROUTES`) changed deliberately. `js_goldens` 37,246 → **37,698** across
+**90** suites.
+
+**Version 1.0.11 (60)** in `ios/project.yml` and `project.pbxproj` together (1.0.10 (59) is live).
+
+**`web-demo/` updated**: `js/chess-clock.js` (core + screen), the tile in `home.js`, the `clock`
+route in `app.js`, styles in `app.css`. Wake Lock stands in for the idle timer where the browser has
+it.
+
+**Cannot be verified here** (no Swift compiler, no device): the Swift screen compiles and lays out ·
+the rotated half is readable across a table · the screen stays lit through a long think ·
+backgrounding pauses · sound with the mute switch on and off. `swift run ParityRunner` on the Mac
+runs the same 221 checks in Swift.
+
 ### 2026-10-22 (fixed) — One board theme, chosen in Profile, on every board
 
 Client round 3: *"Also hindi mapalitan kulay sa chessboard ng puzzle."* The RN app has **one**

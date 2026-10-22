@@ -412,6 +412,7 @@ function run() {
       ['biya.coach.takeback.v1', read(UI, 'CoachStore.swift'), 'CoachStore.takeBackKey'],
       ['biya.analysis.engine.v1', read(CORE, 'EngineSettings.swift'), 'EngineSettings.storageKey'],
       ['biya.board.theme.v1', read(UI, 'BoardThemeStore.swift'), 'BoardThemeStore.storageKey'],
+      ['biya.clock.v1', read(UI, 'ChessClockMetrics.swift'), 'ChessClockPrefs.storageKey'],
       ['biya.coach.draft.v1.', read(CORE, 'CoachGame.swift'), 'CoachGame.draftKeyPrefix'],
       ['biya.store.subscription.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.snapshotKey'],
       ['biya.store.usage.v1', read(UI, 'PremiumStore.swift'), 'PremiumStore.usageKey'],

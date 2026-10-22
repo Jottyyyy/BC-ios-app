@@ -26,6 +26,9 @@ public struct HomeScreen: View {
     /// icon and font ~19% smaller than the design, because this box is already inset by the safe
     /// areas and the tab bar. The *layout* still uses the real container — only the scalar differs.
     var scaleBasis: CGSize?
+    /// The Chess Clock tile's second line — the last control used, `Blitz · 5 | 3`. An input like
+    /// every other dynamic value here; the host reads it from `ChessClockPrefs`.
+    var clockSubtitle: String
 
     var onAvatar: () -> Void
     var onPuzzles: () -> Void
@@ -34,6 +37,7 @@ public struct HomeScreen: View {
     var onOpeningTrainer: () -> Void
     var onPlayCoach: () -> Void
     var onPairing: () -> Void
+    var onClock: () -> Void
     var onMembership: () -> Void
 
     public init(userName: String = "",
@@ -42,6 +46,7 @@ public struct HomeScreen: View {
                 subscriptionEndsAt: Date? = nil,
                 isColorful: Bool = false,
                 scaleBasis: CGSize? = nil,
+                clockSubtitle: String = "",
                 onAvatar: @escaping () -> Void = {},
                 onPuzzles: @escaping () -> Void = {},
                 onAnalysis: @escaping () -> Void = {},
@@ -49,6 +54,7 @@ public struct HomeScreen: View {
                 onOpeningTrainer: @escaping () -> Void = {},
                 onPlayCoach: @escaping () -> Void = {},
                 onPairing: @escaping () -> Void = {},
+                onClock: @escaping () -> Void = {},
                 onMembership: @escaping () -> Void = {}) {
         self.userName = userName
         self.profileImage = profileImage
@@ -56,6 +62,7 @@ public struct HomeScreen: View {
         self.subscriptionEndsAt = subscriptionEndsAt
         self.isColorful = isColorful
         self.scaleBasis = scaleBasis
+        self.clockSubtitle = clockSubtitle
         self.onAvatar = onAvatar
         self.onPuzzles = onPuzzles
         self.onAnalysis = onAnalysis
@@ -63,6 +70,7 @@ public struct HomeScreen: View {
         self.onOpeningTrainer = onOpeningTrainer
         self.onPlayCoach = onPlayCoach
         self.onPairing = onPairing
+        self.onClock = onClock
         self.onMembership = onMembership
     }
 
@@ -89,6 +97,8 @@ public struct HomeScreen: View {
                               isPremium: isPremium,
                               isColorful: isColorful,
                               subscriptionEndsAt: subscriptionEndsAt,
+                              clockSubtitle: clockSubtitle,
+                              onClock: onClock,
                               onMembership: onMembership)
                     .padding(.horizontal, HomeLayout.screenPaddingH)
                     .padding(.bottom, HomeLayout.bannerMarginBottom)

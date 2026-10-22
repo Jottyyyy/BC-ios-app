@@ -298,7 +298,8 @@ var BiyaLogin = (function () {
       'biya.auth.avatar.v1',      /* LoginProfile.avatarKey — their chosen avatar */
       'biya.coach.takeback.v1',   /* CoachStore.takeBackKey */
       'biya.analysis.engine.v1',  /* EngineSettings.storageKey */
-      'biya.board.theme.v1'       /* BoardThemeStore.storageKey — Profile → Board Theme */
+      'biya.board.theme.v1',      /* BoardThemeStore.storageKey — Profile → Board Theme */
+      'biya.clock.v1'             /* ChessClockPrefs.storageKey — last control + sound */
     ],
     erasedKeyPrefixes: ['biya.coach.draft.v1.'],   /* CoachGame.draftKeyPrefix */
     /* Swift-side mechanism: on iOS these are files in Application Support/Biyaherong. The browser

@@ -112,7 +112,8 @@
    *
    * And `locked()` has a third term: a store that could not be reached does not wall anybody. See
    * `storeUnavailable` in premium.js.                                                            */
-  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1, analysis: 1 };
+  // `clock` joined them in round 3: the client made the Chess Clock free for everyone.
+  var OPEN_ROUTES = { login: 1, paywall: 1, home: 1, profile: 1, analysis: 1, clock: 1 };
   function locked() {
     return BiyaLogin.shared().isSignedIn()
       && !BiyaPremium.shared().isPremium()
@@ -127,6 +128,8 @@
     // changes — the leaf renderers reached directly (renderGame, renderCoachSelect) are all
     // non-home and always follow a render().
     view.classList.remove('flush');
+    // The clock's tick and wake lock outlive its DOM; any route but its own stops them.
+    if (current !== 'clock') BiyaChessClock.leave();
     // The trial gate's backstop. Every transition is intercepted at its source — the Home tiles in
     // renderHome, which is now the only source there is — but an entitlement can lapse BETWEEN
     // taps (the demo
@@ -161,6 +164,7 @@
     else if (current === 'puzzle-streak-solve') renderStreakSolver();
     else if (current === 'puzzle-turbo') renderTurboHome();
     else if (current === 'puzzle-turbo-run') renderTurboRun();
+    else if (current === 'clock') renderClock();
     // NOTE: this trailing else silently renders the OLD sample-puzzle tab for any unknown id — a
     // new screen MUST get its own branch above, or it will look like that with no error anywhere.
     else renderPuzzles();
@@ -786,6 +790,8 @@
     // entitlement, the way `PhoneApp` passes `isPremium:` / `subscriptionEndsAt:` to `HomeScreen`.
     var sub = BiyaPremium.shared();
     BiyaHome.setPremium(sub.isPremium(), sub.expiresAt() ? new Date(sub.expiresAt()) : null);
+    // The clock tile names the last control used, the way PhoneApp passes `clockSubtitle:`.
+    BiyaHome.setClockSubtitle(BiyaChessClock.homeSubtitle(BiyaChessClock.loadPrefs().control));
     BiyaHome.render(view, function (action) {
       // Only the actions with a real destination in this demo are wired; the rest are the empty
       // callbacks the screen is designed around (§12).
@@ -798,7 +804,7 @@
       // over the screen the user was already on, and its button opens the paywall for anyone who
       // wants the plan picker. The GATE is unchanged — same predicate, same exemptions, same
       // single choke point — only its destination is one step back.
-      if (locked() && action !== 'avatar' && action !== 'membership' && action !== 'analysis') { showTrialOffer(false); return; }
+      if (locked() && action !== 'avatar' && action !== 'membership' && action !== 'analysis' && action !== 'clock') { showTrialOffer(false); return; }
       if (action === 'puzzles') { current = 'puzzles'; render(); }
       else if (action === 'playCoach') { current = 'play'; render(); }
       else if (action === 'analysis') { current = 'analysis'; render(); }
@@ -816,9 +822,16 @@
       else if (action === 'videos') videosGo();
       // home.js has emitted 'membership' since the banner was drawn; this is where it goes.
       else if (action === 'membership') goPaywall();
+      // The Chess Clock (round 3) — free, so it sits outside the gate above like the board.
+      else if (action === 'clock') { current = 'clock'; render(); }
     });
     // ...and a few seconds after the app settles, offer the trial. Once per page load, once a day.
     armTrialOffer();
+  }
+
+  /** The Chess Clock — see js/chess-clock.js. Closing it returns Home, like every tile. */
+  function renderClock() {
+    BiyaChessClock.render(view, function () { current = 'home'; render(); });
   }
 
   /* ======================================================================== *

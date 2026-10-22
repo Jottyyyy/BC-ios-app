@@ -201,6 +201,9 @@
   <!-- The login gate. app.js reads BiyaLogin at BOOT to decide the first screen, so this must load
        before it. Nothing else reads it. -->
   <script src="js/login.js"></script>
+  <!-- The Chess Clock (round 3). app.js reads it in renderHome for the tile's subtitle, so it
+       must load before app.js. -->
+  <script src="js/chess-clock.js"></script>
   <!-- The subscription. ORDER MATTERS: premium.js reads BiyaDailyLimits at load time for the
        PHP-pinned free-tier caps, and app.js reads BiyaPremium for every gate. -->
   <script src="js/daily-limits.js"></script>

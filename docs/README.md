@@ -43,6 +43,9 @@ Feature- and subsystem-level documentation for this repo.
   the 1.0.7 rejection.
 - [`home-screen.md`](home-screen.md) — the landing dashboard: four bands, a never-scrolling 3×2 grid of six
   equal cards, the Sky/Colorful themes, and the hourly Taglish quote.
+- [`chess-clock.md`](chess-clock.md) — the **Chess Clock**, free and offline: two facing halves, presets
+  from Bullet to Classical or a custom control with odds and increment/delay, reached from Home's bottom
+  band. The one feature with no RN original, so the two languages run one script table to check each other.
 - [`analysis-board.md`](analysis-board.md) — the offline analysis screen, and the one that is **free
   for everyone**: move tree, local engine, ECO book, game review, persistence, Setup Position, PGN
   import/export, and the pure metrics layer extracted from the real RN StyleSheet.

@@ -5,6 +5,65 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The Chess Clock (2026-10-22, client round 3)
+
+The client asked for a chess clock "parang ganito" (a picture of a standard two-halves clock app),
+fully adjustable, as a seventh Home card that does not make Home scroll. Free for everyone.
+
+### INVENTED: the whole feature
+
+There is no clock in the RN app or the Laravel backend, so nothing here is ported and there is no
+oracle. `ChessClock.swift` (Core) and `web-demo/js/chess-clock.js` are twins checked against each
+other: the ParityRunner `chess_clock` group is written as step scripts that
+`tools/qa/chess_clock_check.js` executes through the JS. Every constant below is invented and
+lives in exactly one place per language, compared key for key.
+
+| Constant | Value | Why |
+|---|---|---|
+| Speed bands | base + 40 × bonus: < 180 s Bullet, < 480 Blitz, < 1500 Rapid | lichess's estimate — the names players already use |
+| Presets | 1\|0 1\|1 2\|1 · 3\|0 3\|2 5\|0 5\|3 · 10\|0 10\|5 15\|10 20\|0 · 30\|0 30\|20 60\|30 90\|30 | the common controls, each in its own band (asserted) |
+| Default | 5 \| 3 | a common club blitz control; the last one used is remembered after that |
+| Limits | 1 s – 9:59:59 per side; bonus 0–60 s | a clock cannot start at zero, and a custom field cannot overflow its display |
+| Low / critical | 30 s / 10 s | Puzzle Turbo's thresholds (RN `rush-game.tsx`), so "running out" means one thing in the app |
+| Tenths | below 10 s, display rounded **up** | it never reads `0:00` with time left |
+| Tick | 100 ms | the coarsest that never skips a tenth |
+| `+3s` flash | 1.2 s | long enough to read at arm's length |
+| Palette | green `#2E9E57`→`#45BF6E`, amber `#FDB022`, red `#E5484D`, navy `#1A2942`/`#0F1A2E` | the app's own Play green, gold and navy; Turbo's amber and red |
+
+### DECISION: the first press starts the OTHER clock, and that side is White
+
+A real clock is started by Black pressing to run White's clock. Whoever taps first has "moved", so
+the opposite half runs and is labelled White. Only the running half can end a turn.
+
+### DECISION: Fischer increment and simple delay; no Bronstein
+
+Increment is what online chess uses; simple (US) delay is what US Chess events use. Bronstein delay
+plays almost identically to increment from the player's side and would be a third option to explain.
+
+### DECISION: portrait with the top half rotated, not landscape
+
+The reference picture is exactly that, and it keeps `OrientationGate` with one writer (the video
+player). Nothing about the app's orientation changes.
+
+### DECISION: backgrounding pauses; the screen stays awake only while running
+
+A clock that ran on behind a phone call would lose a game nobody was playing. `isIdleTimerDisabled`
+is process-wide, so the screen clears it on every path out of a running clock.
+
+### DECISION: Home's bottom band, not a fourth grid row
+
+The band was built as a Donate | Membership pair and kept Donate's height after Donate was removed.
+The clock takes that half: the grid and its six cards are unchanged on every device. A fourth row
+would have cut each card by ~19% on an SE.
+
+### DECISION: free, and its preferences are erased with the account
+
+Free by the client's decision (ungated in both languages, like the Analysis Board). `biya.clock.v1`
+is a preference the account made on this device — the same class as the engine preset — so
+delete-account erases it and resets the live store.
+
+---
+
 ## Rated Play: the draft, the stats row and the engine panel (2026-10-22, client round 3)
 
 Five reports against the live 1.0.10, all Swift-only — the web twin did each right from the start.

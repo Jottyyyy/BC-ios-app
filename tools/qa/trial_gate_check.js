@@ -124,9 +124,10 @@ const APP_CODE = code(APP);
   const jsOpen = APP.match(/var OPEN_ROUTES = \{([^}]*)\}/);
   expect(!!jsOpen, 'app.js declares OPEN_ROUTES');
   const jsKeys = jsOpen ? jsOpen[1].split(',').map((s) => s.split(':')[0].trim()).filter(Boolean) : [];
-  expect(jsKeys.sort().join(',') === 'analysis,home,login,paywall,profile',
-    `OPEN_ROUTES is ${jsKeys.join(',')}, expected home + profile + analysis + the login gate and `
-    + 'the paywall it routes to');
+  // `clock` since round 3: the client made the Chess Clock free for everyone.
+  expect(jsKeys.sort().join(',') === 'analysis,clock,home,login,paywall,profile',
+    `OPEN_ROUTES is ${jsKeys.join(',')}, expected home + profile + analysis + clock + the login `
+    + 'gate and the paywall it routes to');
 }
 
 // ── 3. Every wired Home tile goes through the gate ──────────────────────────────
@@ -146,9 +147,12 @@ const APP_CODE = code(APP);
   expect(wired.onAnalysis === false,
     'onAnalysis stays open — the Analysis Board is free for everyone, paid or not, and '
     + 'docs/subscription.md has listed it as free since the paywall landed');
+  // The Chess Clock (round 3): free for everyone, by the client's decision — offline, nothing to
+  // sell behind it, and a reason to open the app every day.
+  expect(wired.onClock === false, 'onClock stays open — the Chess Clock is free for everyone');
   const ungated = Object.keys(wired).filter((k) => !wired[k]);
-  expect(ungated.length === 3,
-    `${ungated.length} ungated Home callbacks (${ungated.join(', ')}), expected 3`);
+  expect(ungated.length === 4,
+    `${ungated.length} ungated Home callbacks (${ungated.join(', ')}), expected 4`);
 
   // Pushed routes are reachable ONLY from those tiles, which is what makes wrapping them enough.
   for (const flag of ['showAnalysis = true', 'showCoach = true', 'showPairing = true',
@@ -157,8 +161,8 @@ const APP_CODE = code(APP);
     expect(hits <= 2, `${flag} is set ${hits} times — a second entry point would bypass the gate`);
   }
 
-  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership' && action !== 'analysis'\) \{ showTrialOffer\(false\); return; \}/
-    .test(APP_CODE), 'app.js gates the Home tiles with the same three exemptions');
+  expect(/if \(locked\(\) && action !== 'avatar' && action !== 'membership' && action !== 'analysis' && action !== 'clock'\) \{ showTrialOffer\(false\); return; \}/
+    .test(APP_CODE), 'app.js gates the Home tiles with the same four exemptions');
 
   // Round 5: a locked tap raises the OFFER CARD, not the full paywall. The gate is unchanged —
   // same predicate, same exemptions, same single choke point — but its destination moved, and a

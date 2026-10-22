@@ -261,17 +261,23 @@ struct HomeBanner: View {
     }
 }
 
-/// The Membership banner, alone on its band.
+/// The bottom band: **Chess Clock** on the left, Membership on the right — a pair again.
 ///
-/// It used to be the right half of a pair; the left half was Donate, which Apple does not permit
-/// an app to collect through, and whose tap was never wired to anything anyway. What is left keeps
-/// the row rather than becoming a bare banner, because the row owns the band height the grid is
-/// measured against.
+/// It was always built as a pair. The left half was Donate, which Apple does not permit an app to
+/// collect through, and whose tap was never wired to anything; Membership stood alone in a row
+/// that kept Donate's height, because the row owns the band the grid is measured against.
+///
+/// The Chess Clock (client round 3, 2026-10-22) is the seventh destination, and the client asked
+/// that Home still not scroll. A fourth grid row would have cut every card by ~19% on an SE and
+/// squeezed the coach card's icon to almost nothing; the half Donate left behind costs the grid
+/// NOTHING — same band, same height, six cards pixel-identical to before.
 struct HomeBannerRow: View {
     let metrics: HomeScreenMetrics
     let isPremium: Bool
     let isColorful: Bool
     let subscriptionEndsAt: Date?
+    let clockSubtitle: String
+    let onClock: () -> Void
     let onMembership: () -> Void
 
     private var subtitleColor: Color {
@@ -284,6 +290,18 @@ struct HomeBannerRow: View {
 
     var body: some View {
         HStack(spacing: HomeLayout.bannerGap) {
+            Button(action: onClock) {
+                HomeBanner(emoji: ChessClockStrings.homeEmoji,
+                           title: ChessClockStrings.title,
+                           titleColor: Theme.foreground,
+                           subtitle: clockSubtitle,
+                           subtitleColor: subtitleColor,
+                           fill: isColorful ? HomePalette.clock : Theme.card,
+                           border: isColorful ? nil : HomePalette.bannerBorder,
+                           height: metrics.bannerHeight)
+            }
+            .buttonStyle(.homeBanner)
+            .accessibilityLabel(Text(ChessClockStrings.title))
             Button(action: onMembership) {
                 HomeBanner(emoji: HomeMembership.emoji(isPremium: isPremium),
                            title: HomeMembership.title(isPremium: isPremium),
