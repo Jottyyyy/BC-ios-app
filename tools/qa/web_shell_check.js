@@ -52,7 +52,7 @@ const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, ' ');
 /** Every word that names a route. A bare one of these next to `current` is the bug §6 exists for. */
 const ROUTE_WORDS = new Set([
   'home', 'login', 'paywall', 'profile', 'play', 'analysis', 'videos', 'openings', 'puzzles',
-  'pairing', 'coach-color', 'coach-game',
+  'pairing', 'coach-color', 'coach-game', 'clock',
 ]);
 
 // ── 1. Every stylesheet on disk is linked, and every link resolves ──────────────

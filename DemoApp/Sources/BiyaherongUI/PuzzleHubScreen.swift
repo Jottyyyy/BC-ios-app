@@ -174,9 +174,14 @@ struct PuzzleHubScreen: View {
         switch route {
         case .playHome:
             // The allowance is spent HERE, on the way into the solver — a failed attempt still
-            // costs a use, exactly as the original counted them.
+            // costs a use, exactly as the original counted them. Resuming the puzzle the player
+            // backed out of is not a new puzzle, so it costs nothing and is never capped.
             PuzzlePlayHomeScreen(store: store,
                                  onPlay: {
+                                     if store.resumablePlay() != nil {
+                                         path.append(.playSolver)
+                                         return
+                                     }
                                      gate(Entitlement.Mode.regular, ratedCapMessage) {
                                          path.append(.playSolver)
                                      }

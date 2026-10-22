@@ -147,7 +147,9 @@ struct PuzzleStatsCards: View {
     var body: some View {
         VStack(spacing: PuzzleStatsStyle.cardMarginBottom) {
             if let acc = PuzzleStats.accuracy(store.state) { accuracyCard(acc) }
-            sparklineCard
+            // Under two attempts there is no line to draw, and the web drops the whole card rather
+            // than show an empty box (`sparkCard` returns null) — so does this.
+            if hasSparkline { sparklineCard }
             activityCard
             themeCard
         }
@@ -172,11 +174,19 @@ struct PuzzleStatsCards: View {
                 Text(PuzzleStrings.solvedOf(acc.solved, acc.attempted))
                     .font(Theme.nunito(PuzzleStatsStyle.accuracySubSize, .regular))
                     .foregroundStyle(PuzzlePalette.textSecondary)
-                Text("\(acc.percent)")
+                // Through the shared formatter, never `Text("\(acc.percent)")`: a `Double` interpolated
+                // into a `Text` literal becomes a `LocalizedStringKey`, which formats it as `%lf` —
+                // the "91.700000" in the client's round-3 recording, with no "%" either.
+                Text(AnalysisTables.accuracyText(acc.percent))
                     .font(Theme.nunito(PuzzleStatsStyle.accuracySize, .bold))
                     .foregroundStyle(PuzzleStatsStyle.accuracyColor(acc.percent))
             }
         }
+    }
+
+    private var hasSparkline: Bool {
+        PuzzleStats.sparkline(store.state, width: 1, height: 1,
+                              yMargin: PuzzleStatsStyle.sparkYMargin) != nil
     }
 
     private var sparklineCard: some View {
@@ -194,7 +204,9 @@ struct PuzzleStatsCards: View {
             HStack(alignment: .bottom, spacing: PuzzleStatsStyle.barRowMarginTop) {
                 ForEach(bars, id: \.dayKey) { bar in
                     VStack(spacing: 0) {
-                        Text("\(bar.count)")
+                        // Blank on an empty day, as the spec has it (Part 10.1) and the web draws
+                        // it — a row of "0"s over the stubs read as data rather than as no data.
+                        Text(bar.count > 0 ? String(bar.count) : "")
                             .font(Theme.nunito(PuzzleStatsStyle.barCountSize, .regular))
                             .foregroundStyle(PuzzlePalette.textSecondary)
                             .frame(height: PuzzleStatsStyle.barCountHeight)
@@ -249,7 +261,7 @@ struct PuzzleStatsCards: View {
                             }
                         }
                         .frame(height: PuzzleStatsStyle.themeTrackHeight)
-                        Text("\(row.percent)")
+                        Text(String(row.percent) + "%")
                             .font(Theme.nunito(PuzzleStatsStyle.themePctSize, .regular))
                             .foregroundStyle(PuzzlePalette.textSecondary)
                             .frame(minWidth: PuzzleStatsStyle.themePctMinWidth, alignment: .trailing)
@@ -290,8 +302,11 @@ struct PuzzleSparkline: View {
                 .frame(width: geo.size.width, height: geo.size.height)
             }
         }
-        .padding(PuzzleStatsStyle.sparkPadding)
-        .background(PuzzlePalette.cardAlt,
+        // No inset here. `sparkPadding` (32) is the card's own 16 + 16, a WIDTH the web subtracts
+        // (`width - S.sparkPadding`) — and `card` already applies it. Used as an inset on all four
+        // sides it took 64 pt out of a 52 pt box, the reader got a height of 0, and every point
+        // landed on one invisible line: the empty "Your Rating" card in the client's recording.
+        .background(PuzzlePalette.screenBg,
                     in: RoundedRectangle(cornerRadius: PuzzleStatsStyle.sparkRadius))
     }
 }
@@ -319,15 +334,10 @@ struct PuzzlePlaySolverScreen: View {
             VStack(spacing: 0) {
                 PuzzleScreenHeader(title: PuzzleStrings.puzzle, subtitle: nil,
                                    titleSize: PuzzleType.dailySolverTitle,
-                                   onBack: { engine.leave(); onExit() }) {
-                    Text(PuzzleDisplay.formatTime(elapsed))
-                        .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
-                        .foregroundStyle(PuzzlePalette.textPrimary)
-                        .monospacedDigit()
-                }
+                                   onBack: { leaveScreen(); onExit() })
                 infoStrip
                 PuzzleBoardBand(engine: engine, edge: geo.size.width)
-                deltaRow
+                statsRow
                 PuzzleBottomPanel(engine: engine, onNext: next)
                 if PuzzleDisplay.hasEnginePanel(engine.mode) { PuzzleEnginePanelView(engine: engine) }
                 Spacer(minLength: 0)
@@ -336,7 +346,7 @@ struct PuzzlePlaySolverScreen: View {
             .background(PuzzlePalette.screenBg)
             .overlay { promotion }
             .onAppear(perform: startIfNeeded)
-            .onDisappear { engine.leave() }
+            .onDisappear(perform: leaveScreen)
             .onReceive(tick) { _ in
                 guard let startedAt, engine.session?.phase == .playing else { return }
                 elapsed = (PuzzleHubStore.nowMs() - startedAt) / PuzzleSolverVM.msPerSecond
@@ -364,41 +374,121 @@ struct PuzzlePlaySolverScreen: View {
             .padding(.horizontal, PuzzleSolverStyle.infoStripPaddingH)
     }
 
-    @ViewBuilder
-    private var deltaRow: some View {
-        if let delta = PuzzleDisplay.deltaStyle(ratingDelta) {
-            Text(delta.text)
-                .font(Theme.nunito(PuzzleType.solverRatingDelta, .bold))
-                .foregroundStyle(delta.color)
-                .padding(.top, PuzzleSolverStyle.ratingDeltaMarginTop)
+    /// Band 4 — `Your Rating {rating}` over its delta · ⏱ · `Puzzle {rating}` (spec Part 10.2,
+    /// RN `play-puzzle/index.tsx:900-921`, web `puzzle-solver.js` `paintStats`).
+    ///
+    /// It was never built: the port moved the timer into the header and kept only a bare "+12"
+    /// under the board, so a player who wanted their new rating had to back out to the hub to read
+    /// it — which is the round-3 report, and which also re-rolled the puzzle. The rating is read
+    /// live from the store, so it is the NEW rating the instant `finish` records the attempt.
+    private var statsRow: some View {
+        let delta = PuzzleDisplay.deltaStyle(ratingDelta)
+        return HStack(alignment: .top, spacing: 0) {
+            stat(PuzzleStrings.yourRating) {
+                Text("\(store.state.profile.rating)")
+                    .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
+                    .foregroundStyle(PuzzlePalette.gold)
+                    .monospacedDigit()
+                // Always laid out, blank until a result exists — the web's `min-height: 1em` — so
+                // the row does not grow, and push the buttons down, the moment the delta lands.
+                Text(delta?.text ?? " ")
+                    .font(Theme.nunito(PuzzleType.solverRatingDelta, .bold))
+                    .foregroundStyle(delta?.color ?? .clear)
+                    .padding(.top, PuzzleSolverStyle.ratingDeltaMarginTop)
+            }
+            stat(PuzzleStrings.clock) {
+                Text(PuzzleDisplay.formatTime(elapsed))
+                    .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
+                    .foregroundStyle(PuzzlePalette.textPrimary)
+                    .monospacedDigit()
+            }
+            stat(PuzzleStrings.puzzle) {
+                Text(engine.puzzle.map { "\($0.rating)" } ?? PuzzleStrings.noRating)
+                    .font(Theme.nunito(PuzzleType.solverStatValue, .bold))
+                    .foregroundStyle(PuzzlePalette.gold)
+                    .monospacedDigit()
+            }
         }
+        .padding(.horizontal, PuzzleSolverStyle.statsPaddingH)
+        .padding(.vertical, PuzzleSolverStyle.statsPaddingV)
+        .frame(maxWidth: .infinity)
+        .background(PuzzlePalette.card)
     }
 
+    /// One stats column: a label over its value, centred — `.pz-stat` in the web twin.
+    private func stat<V: View>(_ label: String, @ViewBuilder _ value: () -> V) -> some View {
+        VStack(spacing: 0) {
+            Text(label)
+                .font(Theme.nunito(PuzzleType.solverStatLabel, .medium))
+                .foregroundStyle(PuzzlePalette.textSecondary)
+                .padding(.bottom, PuzzleSolverStyle.statLabelMarginBottom)
+            value()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Resume the puzzle the player backed out of, or serve a fresh one.
+    ///
+    /// The Core has carried `PlayPuzzleDraft` since the port (spec Part 10.2: "restore silently on
+    /// entry if it is under 24 hours old"); no Swift screen ever called it, so backing out of a
+    /// hard puzzle and pressing Play again served a different one — a free skip, and the client's
+    /// round-3 report. The web twin restored it all along.
     private func startIfNeeded() {
         guard engine.session == nil else { return }
         engine.onSolved = { _ in finish(correct: true) }
         engine.onWrong = { _ in finish(correct: false) }
+        if let restored = store.resumablePlay() {
+            ratingDelta = nil
+            elapsed = 0
+            startedAt = PuzzleHubStore.nowMs()
+            engine.mount(restored)
+            return
+        }
         next()
     }
 
-    /// Serve, and reset the clock and the delta with it. `serveRated` commits `seen` and persists.
+    /// Serve, and reset the clock and the delta with it. `serveRated` commits `seen` and persists;
+    /// the draft is written at the same moment, so leaving by ANY route — the chevron, the tab
+    /// bar, the app being killed — finds this puzzle waiting.
     private func next() {
         ratingDelta = nil
         elapsed = 0
         startedAt = PuzzleHubStore.nowMs()
         guard let p = store.serveRated() else { return }
+        store.mutate { s in
+            PuzzleProgress.savePlayDraft(&s, puzzleId: p.id, now: PuzzleHubStore.nowMs())
+        }
         engine.mount(p)
+    }
+
+    /// Leaving with an unsolved puzzle refreshes the draft, so its 24 h run from when the player
+    /// LEFT — RN saves on blur (`:231-243`) and the web on the back button. A solved puzzle has no
+    /// draft to refresh: `finish` already cleared it.
+    private func leaveScreen() {
+        if let p = engine.puzzle, let phase = engine.session?.phase, phase != .solved,
+           store.state.playDraft?.puzzleId == p.id {
+            store.mutate { s in
+                PuzzleProgress.savePlayDraft(&s, puzzleId: p.id, now: PuzzleHubStore.nowMs())
+            }
+        }
+        engine.leave()
     }
 
     /// Rated submission, exactly once per puzzle — `recordRatedAttempt` enforces that itself, and
     /// the delta is held in view state so a Retry cannot blank it.
+    ///
+    /// A solve clears the draft; a wrong move keeps it, as RN and the web do, so backing out after
+    /// a miss brings the same puzzle back. That cannot be counted twice: a repeat returns
+    /// `firstAttempt == false` with no change, and no delta is shown for it.
     private func finish(correct: Bool) {
         guard let p = engine.puzzle else { return }
         let res = store.mutate { s in
-            PuzzleProgress.recordRatedAttempt(&s, puzzleId: p.id, isCorrect: correct,
-                                              puzzleRating: p.rating, themes: p.themes,
-                                              solveTimeSeconds: elapsed,
-                                              now: PuzzleHubStore.nowMs())
+            let r = PuzzleProgress.recordRatedAttempt(&s, puzzleId: p.id, isCorrect: correct,
+                                                      puzzleRating: p.rating, themes: p.themes,
+                                                      solveTimeSeconds: elapsed,
+                                                      now: PuzzleHubStore.nowMs())
+            if correct { s.playDraft = nil }
+            return r
         }
         if res.firstAttempt { ratingDelta = res.ratingChange }
     }

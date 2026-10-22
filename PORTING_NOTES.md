@@ -5,6 +5,139 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## The Chess Clock (2026-10-22, client round 3)
+
+The client asked for a chess clock "parang ganito" (a picture of a standard two-halves clock app),
+fully adjustable, as a seventh Home card that does not make Home scroll. Free for everyone.
+
+### INVENTED: the whole feature
+
+There is no clock in the RN app or the Laravel backend, so nothing here is ported and there is no
+oracle. `ChessClock.swift` (Core) and `web-demo/js/chess-clock.js` are twins checked against each
+other: the ParityRunner `chess_clock` group is written as step scripts that
+`tools/qa/chess_clock_check.js` executes through the JS. Every constant below is invented and
+lives in exactly one place per language, compared key for key.
+
+| Constant | Value | Why |
+|---|---|---|
+| Speed bands | base + 40 × bonus: < 180 s Bullet, < 480 Blitz, < 1500 Rapid | lichess's estimate — the names players already use |
+| Presets | 1\|0 1\|1 2\|1 · 3\|0 3\|2 5\|0 5\|3 · 10\|0 10\|5 15\|10 20\|0 · 30\|0 30\|20 60\|30 90\|30 | the common controls, each in its own band (asserted) |
+| Default | 5 \| 3 | a common club blitz control; the last one used is remembered after that |
+| Limits | 1 s – 9:59:59 per side; bonus 0–60 s | a clock cannot start at zero, and a custom field cannot overflow its display |
+| Low / critical | 30 s / 10 s | Puzzle Turbo's thresholds (RN `rush-game.tsx`), so "running out" means one thing in the app |
+| Tenths | below 10 s, display rounded **up** | it never reads `0:00` with time left |
+| Tick | 100 ms | the coarsest that never skips a tenth |
+| `+3s` flash | 1.2 s | long enough to read at arm's length |
+| Palette | green `#2E9E57`→`#45BF6E`, amber `#FDB022`, red `#E5484D`, navy `#1A2942`/`#0F1A2E` | the app's own Play green, gold and navy; Turbo's amber and red |
+
+### DECISION: the first press starts the OTHER clock, and that side is White
+
+A real clock is started by Black pressing to run White's clock. Whoever taps first has "moved", so
+the opposite half runs and is labelled White. Only the running half can end a turn.
+
+### DECISION: Fischer increment and simple delay; no Bronstein
+
+Increment is what online chess uses; simple (US) delay is what US Chess events use. Bronstein delay
+plays almost identically to increment from the player's side and would be a third option to explain.
+
+### DECISION: portrait with the top half rotated, not landscape
+
+The reference picture is exactly that, and it keeps `OrientationGate` with one writer (the video
+player). Nothing about the app's orientation changes.
+
+### DECISION: backgrounding pauses; the screen stays awake only while running
+
+A clock that ran on behind a phone call would lose a game nobody was playing. `isIdleTimerDisabled`
+is process-wide, so the screen clears it on every path out of a running clock.
+
+### DECISION: Home's bottom band, not a fourth grid row
+
+The band was built as a Donate | Membership pair and kept Donate's height after Donate was removed.
+The clock takes that half: the grid and its six cards are unchanged on every device. A fourth row
+would have cut each card by ~19% on an SE.
+
+### DECISION: free, and its preferences are erased with the account
+
+Free by the client's decision (ungated in both languages, like the Analysis Board). `biya.clock.v1`
+is a preference the account made on this device — the same class as the engine preset — so
+delete-account erases it and resets the live store.
+
+---
+
+## Rated Play: the draft, the stats row and the engine panel (2026-10-22, client round 3)
+
+Five reports against the live 1.0.10, all Swift-only — the web twin did each right from the start.
+What is recorded here is the decisions, not the fixes; `docs/puzzle-hub.md` has those.
+
+### PORTED, late: the 24 h draft — and a miss keeps it
+
+`PlayPuzzleDraft` has been in the Core since the port (spec Part 10.2, RN
+`play-puzzle/index.tsx:205-243`); no Swift screen called it. It is now written on **every serve**
+(RN writes on blur; serving-time covers the tab bar and a killed app as well as the chevron) and
+refreshed on leaving. A **solve** clears it and a **miss keeps it**, exactly as RN and the web do,
+so backing out after a wrong move brings that puzzle back. RN's version of that path is a latent
+bug — Laravel answers the second submit with 400 "already solved" and RN retries it forever
+(`puzzleCache.ts:154`). Not reproduced: `recordRatedAttempt` already returns `firstAttempt: false`
+with no change on a repeat, and the screen shows no delta for it.
+
+### DECISION: a resume spends no allowance
+
+RN's draft path skips `canPlayPuzzle` entirely (`:205-223`); our gate lives on the hub's Play
+button, upstream of the solver, so it had to be told. A resume is not a new puzzle, so the hub
+checks `resumablePlay()` **before** `gate(...)` — a free user who backs out at 5/5 can still get back
+to the puzzle they were on.
+
+### PORTED, late: Band 4, the stats row
+
+Spec Part 10.2 and RN `:900-921`: `Your Rating {rating}` + delta · ⏱ · `Puzzle {rating}`. The port
+had moved the clock into the header and kept only the delta. Every metric and string it needed
+was already extracted and unused. One string is new: `PuzzleStrings.noRating` (`"—"`), the web's
+pre-mount placeholder, so neither language types it.
+
+### FIXED: `sparkPadding` is a width, not an inset
+
+`32` is the card's 16 + 16 that the web subtracts from the chart's width. Swift applied it as
+`.padding(32)` on all four sides of a 52 pt box, which left a 0 pt chart. Under two attempts the
+card is now dropped rather than drawn empty, as the web drops it.
+
+### INVENTED: nothing
+
+Every constant used is extracted or already in `PuzzleMetrics`.
+
+---
+
+## One board theme, chosen in Profile (2026-10-22, client round 3)
+
+*"Hindi mapalitan kulay sa chessboard ng puzzle."*
+
+### DEVIATION REMOVED: "the RN board had one colour pair"
+
+`AnalysisMetrics.swift` and `analysis-metrics.js` both said the three themes were new. They were
+not: `contexts/BoardThemeContext.tsx` defines the same three, persists the choice
+(`@board_theme`), and the Profile screen offers them under "Applies to all chess boards"
+(`profile/index.tsx:534-571`). Believing the comment is how the port came to keep them on one
+screen. It is parity now: one saved setting, every board, chosen in Profile.
+
+### EXTRACTED, not typed
+
+The themes (labels with their swatch emoji, hexes, default), the card copy and every number of
+the picker are pulled by `extract_board_styles.js` into `board_styles.json` → `boardThemes`, and
+`board_theme_check.js` holds both languages to it. Only the classic pair was extracted before.
+
+### DECISION: the Analysis Board keeps its ☰ row, as a shortcut
+
+The source's menu has no theme row; ours had one because the theme had nowhere else to live. It
+stays — it cycles the same app-wide setting — because removing a control the client has used is
+a change nobody asked for.
+
+### DECISION: delete-account erases it
+
+The same class as `biya.analysis.engine.v1`: a preference the account made on this device. RN
+does not clear `@board_theme` on logout; neither do we (sign-out keeps it). The live store is
+reset too, or the next change would write the deleted value straight back.
+
+---
+
 ## The paywall opens on Monthly (2026-09-10)
 
 Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*

@@ -126,10 +126,26 @@ enum AnalysisPalette {
 
 // MARK: - Board themes and square fill
 
-/// DEVIATION: the RN board had one colour pair. Three user-selectable themes are new (spec 3.2).
+/// The three board themes — the RN app's own, `contexts/BoardThemeContext.tsx`, extracted to
+/// `tools/metrics/board_styles.json` → `boardThemes` and checked there by `board_theme_check.js`.
+///
+/// This used to call the three a deviation from a one-pair RN board. There never was one: the RN
+/// app has had these three, app-wide and saved, all along. Believing the comment is how the port came to
+/// keep them inside the Analysis Board only (client round 3). `BoardThemeStore` holds the choice.
 enum BoardTheme: String, CaseIterable, Identifiable, Sendable {
     case classic, green, blue
     var id: String { rawValue }
+
+    /// The source's swatch, which its label carries in front of the words ("🟫 Classic Brown").
+    var swatch: String {
+        switch self {
+        case .classic: return "🟫"
+        case .green: return "🟩"
+        case .blue: return "🟦"
+        }
+    }
+    /// The full source label, swatch first — what the Profile picker draws.
+    var pickerLabel: String { swatch + " " + label }
 
     var label: String {
         switch self {
@@ -182,6 +198,10 @@ struct BoardStyle: Equatable {
     var ringInset: CGFloat = 3
     var ringLineWidth: CGFloat = 4
     var replacesFill: Bool = false
+    /// Squares from the app-wide `BoardThemeStore` rather than from `light`/`dark` above. On by
+    /// default, so every board follows Profile → Board Theme without its call site knowing; `light`
+    /// and `dark` remain the fallback a board gets when it opts out.
+    var followsAppTheme: Bool = true
 
     /// A method, not a stored property, so no arithmetic has to appear in a view body.
     /// (The base name must differ from `dotRatio` — Swift will not let a stored property and a

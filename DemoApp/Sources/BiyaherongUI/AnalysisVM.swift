@@ -45,7 +45,17 @@ final class AnalysisVM: ObservableObject {
     // MARK: - View-only state
 
     @Published var flipped = false { didSet { session.flipped = flipped } }
-    @Published var theme: BoardTheme = .default
+    /// The APP's board theme, not this screen's. It used to be its own unsaved `@Published` here,
+    /// which is why the Analysis Board forgot it on every visit and no other board ever saw it
+    /// (client round 3). The ☰ row still cycles it; Profile → Board Theme sets it; both write the
+    /// one `BoardThemeStore` that every board draws.
+    var theme: BoardTheme {
+        get { BoardThemeStore.shared.theme }
+        set {
+            objectWillChange.send()          // the menu row's label reads it
+            BoardThemeStore.shared.theme = newValue
+        }
+    }
     @Published var autoAnalyze = true
     @Published var autoplaying = false
     @Published var autoplaySpeed = AnalysisTables.defaultAutoplaySpeed
@@ -930,7 +940,8 @@ final class AnalysisVM: ObservableObject {
 
     /// The four sections, built fresh each time so the toggle labels and dots reflect the moment.
     /// Board Theme is the one row the source's menu does not have: offline there is no Master DB
-    /// item to sit here, and the theme picker had nowhere else to live.
+    /// item to sit here. It is a shortcut now, not the only picker — it cycles the same app-wide
+    /// setting Profile → Board Theme chooses, so a change here repaints every board.
     func menuSections() -> [AnalysisMenuSection] {
         [
             AnalysisMenuSection(title: "Game", items: [

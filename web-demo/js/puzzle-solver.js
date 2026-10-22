@@ -341,7 +341,7 @@ var BiyaPuzzleSolver = (function () {
     ui.delta.textContent = d ? d.text : '';
     ui.delta.style.color = d ? d.color : 'transparent';
     ui.timer.textContent = MET.formatTime(elapsedSeconds());
-    ui.puzzleRating.textContent = puzzle ? String(puzzle.rating) : '—';
+    ui.puzzleRating.textContent = puzzle ? String(puzzle.rating) : MET.STR.noRating;
   }
 
   function paintEngine() {
@@ -534,8 +534,7 @@ var BiyaPuzzleSolver = (function () {
     view.appendChild(root);
 
     // Restore a draft under 24h silently, else serve a fresh puzzle.
-    var draft = PROG.loadPlayDraft(APP.state(), Date.now());
-    var restored = draft ? APP.DATA.byId[draft.puzzleId] : null;
+    var restored = APP.resumablePlay(Date.now());
     if (restored) { ratingDelta = null; mount(restored); } else { nextPuzzle(); }
   }
 

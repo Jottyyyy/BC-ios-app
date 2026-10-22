@@ -259,7 +259,11 @@ var BiyaHome = (function () {
   /* ============================== rendering ============================== */
 
   var ART = 'assets/images/';
-  var state = { isColorful: false, isPremium: false, subscriptionEndsAt: null, userName: '' };
+  var state = { isColorful: false, isPremium: false, subscriptionEndsAt: null, userName: '',
+                clockSubtitle: '' };
+  /** The Chess Clock tile's copy — `ChessClockStrings.homeEmoji` / `.title`, compared by
+   *  chess_clock_check.js. The subtitle is an input, the last control used. */
+  var CLOCK_TILE = { emoji: '⏱️', title: 'Chess Clock' };
   var timer = null;
 
   function el(tag, cls, html) {
@@ -383,10 +387,18 @@ var BiyaHome = (function () {
     root.appendChild(el('div', 'home-quote',
       '<div class="hq-text"></div><div class="hq-attrib">' + esc(ATTRIBUTION) + '</div>'));
 
-    // Bottom banner. It was a Donate/Membership pair; Apple does not permit an app to collect
-    // donations, so Membership is alone and `.home-banner`'s `flex: 1 1 0` widens it to the band.
-    // The band KEEPS its two-line height — see the note on metricsFor/bannerHeight.
+    // Bottom band: Chess Clock | Membership. It was built as a Donate/Membership pair; Apple does
+    // not permit an app to collect donations, so Membership stood alone in a band that KEPT its
+    // two-line height (see metricsFor/bannerHeight). The clock (client round 3) takes Donate's
+    // half — the seventh destination, at no cost to the six cards above it.
     var banners = el('div', 'home-banners');
+    banners.appendChild(buildBanner({
+      emoji: CLOCK_TILE.emoji,
+      title: CLOCK_TILE.title,
+      sub: state.clockSubtitle,
+      skin: state.isColorful ? 'clock' : '',
+      onTap: function () { if (onTap) onTap('clock'); }
+    }));
     var style = membershipStyle(state.isPremium, state.isColorful);
     banners.appendChild(buildBanner({
       emoji: membershipEmoji(state.isPremium),
@@ -431,6 +443,7 @@ var BiyaHome = (function () {
      it — so the avatar drew its "?" fallback on every render. The signed-in user supplies it now,
      matching `PhoneApp`'s `HomeScreen(userName: loginStore.displayName …)`. */
   function setUserName(v) { state.userName = v == null ? '' : String(v); }
+  function setClockSubtitle(v) { state.clockSubtitle = v == null ? '' : String(v); }
 
   return {
     // pure
@@ -442,7 +455,7 @@ var BiyaHome = (function () {
     selfTest: selfTest,
     // view
     render: render, state: state, setColorful: setColorful, setPremium: setPremium,
-    setUserName: setUserName
+    setUserName: setUserName, setClockSubtitle: setClockSubtitle, CLOCK_TILE: CLOCK_TILE
   };
 })();
 

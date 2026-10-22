@@ -1,7 +1,8 @@
 # home-screen — the app's landing dashboard
 
 A dark-navy, **never-scrolling**, single-viewport dashboard: a header, a 3×2 grid of six equal cards, an
-hourly-rotating Taglish quote, and a bottom banner. **It is the app root** — every other screen
+hourly-rotating Taglish quote, and a bottom band of two half tiles — **⏱️ Chess Clock** and the membership
+banner (see [`chess-clock.md`](chess-clock.md)). **It is the app root** — every other screen
 is raised over it by a tile and closed by its own back button.
 
 It is **presentation only** — no networking, no persistence, no navigation. Every dynamic value is a view
@@ -153,7 +154,14 @@ why the tile pressed, dimmed, and did nothing at all.
 | `isColorful` | Which theme renders |
 | `scaleBasis` | The size the responsive scalar derives from — see below |
 
-Plus eight tap callbacks (avatar, six cards, the membership banner), all defaulting to `{}`.
+Plus nine tap callbacks (avatar, six cards, the Chess Clock, the membership banner), all defaulting to
+`{}`, and `clockSubtitle` — the last clock control used, `Blitz · 5 | 3`.
+
+**The seventh destination (2026-10-22).** The client asked for the Chess Clock as a seventh card with Home
+still not scrolling. It takes the LEFT half of the bottom band — the half Donate left behind, whose height
+the band never gave up — so the grid, the six cards and every device's layout are exactly as before. It is
+**ungated**: free for everyone, like the Analysis Board. `home_chrome_check.js` §4 now expects two banners
+(clock left, membership right) and §6 nine callbacks; `trial_gate_check.js` four ungated callbacks.
 `onSearch` and `onDonate` were removed with the controls that raised them.
 
 **The header mark is the brand logo, and it is now the same picture as the app icon.**

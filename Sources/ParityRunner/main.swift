@@ -3427,6 +3427,225 @@ do {
     h.check(fromWire == fromPaste, "a downloaded tree equals the pasted tree of the same games")
 }
 
+// MARK: - Chess Clock (client round 3)
+//
+// No oracle exists: the clock has no RN or Laravel original. The partner is
+// web-demo/js/chess-clock.js, and the tables below are written in a small step language precisely
+// so that `tools/qa/chess_clock_check.js` can pull them out of THIS file and run every step through
+// the JS twin — so each expectation has been executed somewhere, not just typed. Keep the step
+// grammar in sync with that file:
+//
+//   control  "<top>[/<bottom>][+<inc>|d<delay>]"      seconds; e.g. "180+2", "300/60+1", "60d5"
+//   actions  press|ignore <side> @t  ·  tick|flag @t  ·  pause @t  ·  resume @t  ·  reset
+//   checks   state <s> · active|white|flagged|bonused <side|none> · moves <side> <n>
+//            left <side> <ms> @t · delay <ms> @t
+//
+// `press` expects the press to count, `ignore` expects it not to; `tick` expects no flag, `flag`
+// expects this tick to raise one.
+
+func clockControl(_ spec: String) -> TimeControl? {
+    var rest = Substring(spec)
+    var bonus = TimeControl.Bonus.none
+    var bonusSeconds = 0
+    if let i = rest.firstIndex(where: { $0 == "+" || $0 == "d" }) {
+        bonus = rest[i] == "+" ? .increment : .delay
+        guard let b = Int(rest[rest.index(after: i)...]) else { return nil }
+        bonusSeconds = b
+        rest = rest[..<i]
+    }
+    let parts = rest.split(separator: "/").compactMap { Int($0) }
+    guard parts.count == 1 || parts.count == 2 else { return nil }
+    return TimeControl(topSeconds: parts[0], bottomSeconds: parts.count == 2 ? parts[1] : parts[0],
+                       bonus: bonus, bonusSeconds: bonusSeconds)
+}
+
+func runClockScript(_ name: String, _ spec: String, _ steps: [String]) {
+    guard let control = clockControl(spec) else {
+        h.check(false, "\(name): unparseable control \(spec)")
+        return
+    }
+    var clock = ChessClock(control: control)
+    for (n, step) in steps.enumerated() {
+        let ctx = "\(name), step \(n + 1) `\(step)`"
+        var words = step.split(separator: " ").map(String.init)
+        var at = 0
+        if let last = words.last, last.hasPrefix("@"), let t = Int(last.dropFirst()) {
+            at = t
+            words.removeLast()
+        }
+        let side = words.count > 1 ? ClockSide(rawValue: words[1]) : nil
+        let named: (ClockSide?) -> String = { $0?.rawValue ?? "none" }
+        switch words.first ?? "" {
+        case "press":
+            guard let side else { h.check(false, "\(ctx): no side"); continue }
+            h.check(clock.press(side, at: at), "\(ctx): the press should count")
+        case "ignore":
+            guard let side else { h.check(false, "\(ctx): no side"); continue }
+            h.check(!clock.press(side, at: at), "\(ctx): the press should be ignored")
+        case "tick": h.check(!clock.tick(at: at), "\(ctx): no flag yet")
+        case "flag": h.check(clock.tick(at: at), "\(ctx): this tick raises the flag")
+        case "pause": clock.pause(at: at)
+        case "resume": clock.resume(at: at)
+        case "reset": clock.reset()
+        case "state": h.check(clock.status.rawValue == words[1], "\(ctx): got \(clock.status.rawValue)")
+        case "active": h.check(named(clock.active) == words[1], "\(ctx): got \(named(clock.active))")
+        case "white": h.check(named(clock.white) == words[1], "\(ctx): got \(named(clock.white))")
+        case "flagged": h.check(named(clock.flagged) == words[1], "\(ctx): got \(named(clock.flagged))")
+        case "bonused":
+            h.check(named(clock.lastBonused) == words[1], "\(ctx): got \(named(clock.lastBonused))")
+        case "moves":
+            guard let side else { h.check(false, "\(ctx): no side"); continue }
+            h.check(clock.moves(side) == Int(words[2]), "\(ctx): got \(clock.moves(side))")
+        case "left":
+            guard let side else { h.check(false, "\(ctx): no side"); continue }
+            let got = clock.remainingMs(side, at: at)
+            h.check(got == Int(words[2]), "\(ctx): got \(got)")
+        case "delay":
+            let got = clock.delayLeftMs(at: at)
+            h.check(got == Int(words[1]), "\(ctx): got \(got)")
+        default: h.check(false, "\(ctx): unknown step")
+        }
+    }
+}
+
+h.begin("chess_clock")
+do {
+    let clockScripts: [(String, String, [String])] = [
+        ("a press starts the OTHER clock, and that side is White", "180+2", [
+            "state ready", "active none", "white none",
+            "left top 180000 @0", "left bottom 180000 @0",
+            "tick @5000", "left top 180000 @5000",
+            "press bottom @1000", "state running", "active top", "white top",
+            "left top 180000 @1000", "left top 179000 @2000", "left bottom 180000 @2000",
+            "ignore bottom @2500", "moves bottom 0", "moves top 0",
+            "press top @4000", "active bottom", "moves top 1", "bonused top",
+            "left top 179000 @4000", "left top 179000 @9000", "left bottom 175000 @9000",
+            "press bottom @10000", "moves bottom 1", "bonused bottom", "active top",
+            "left bottom 176000 @10000", "moves top 1",
+        ]),
+        ("either half may start, and sudden death pays nothing", "60", [
+            "press top @0", "white bottom", "active bottom",
+            "press bottom @10000", "left bottom 50000 @10000", "bonused none",
+            "left top 60000 @10000",
+            "press top @25000", "left top 45000 @25000", "moves top 1", "moves bottom 1",
+        ]),
+        ("the flag falls at zero, not a millisecond before", "10", [
+            "press bottom @0",
+            "tick @9999", "left top 1 @9999", "state running",
+            "flag @10000", "state flagged", "flagged top", "left top 0 @10000", "active top",
+            "ignore top @10001", "ignore bottom @10001", "left bottom 10000 @20000",
+            "pause @20000", "state flagged", "resume @20000", "state flagged",
+            "tick @30000", "bonused none",
+        ]),
+        ("a press after the time ran out flags instead of moving", "5+2", [
+            "press bottom @0", "ignore top @6000",
+            "state flagged", "flagged top", "moves top 0", "left top 0 @6000", "bonused none",
+        ]),
+        ("pause freezes both clocks, and taps while paused do nothing", "300", [
+            "press bottom @0", "left top 290000 @10000",
+            "pause @10000", "state paused", "active top", "left top 290000 @60000",
+            "ignore top @60000", "ignore bottom @60000", "tick @90000",
+            "resume @60000", "state running", "left top 289000 @61000",
+            "press top @61000", "moves top 1", "active bottom", "left bottom 300000 @61000",
+        ]),
+        ("a delay is free time at the start of every turn", "60d5", [
+            "press bottom @0",
+            "left top 60000 @3000", "delay 2000 @3000",
+            "left top 60000 @5000", "delay 0 @5000", "left top 59000 @6000",
+            "press top @8000", "bonused none", "left top 57000 @8000",
+            "left bottom 60000 @12000", "delay 1000 @12000", "left bottom 59500 @13500",
+        ]),
+        ("a delay survives a pause and is not handed out again", "60d5", [
+            "press bottom @0", "pause @3000", "delay 2000 @9000",
+            "resume @10000", "left top 60000 @11000", "left top 59000 @13000", "delay 0 @13000",
+        ]),
+        ("unused delay is lost, never banked", "30d10", [
+            "press bottom @0", "press top @2000", "left top 30000 @2000", "bonused none",
+        ]),
+        ("odds: each half keeps its own time", "300/60+1", [
+            "left top 300000 @0", "left bottom 60000 @0",
+            "press top @0", "white bottom",
+            "press bottom @20000", "left bottom 41000 @20000", "left top 300000 @20000",
+            "press top @50000", "left top 271000 @50000",
+        ]),
+        ("an increment may carry a clock past where it started", "10+5", [
+            "press bottom @0", "press top @1000", "left top 14000 @1000",
+        ]),
+        ("a zero-second bonus is no bonus", "60+0", [
+            "press bottom @0", "press top @1000", "left top 59000 @1000", "bonused none",
+        ]),
+        ("reset keeps the control and clears the game", "180+2", [
+            "press bottom @0", "press top @5000", "moves top 1",
+            "reset", "state ready", "active none", "white none", "flagged none", "bonused none",
+            "moves top 0", "left top 180000 @99000", "left bottom 180000 @99000",
+        ]),
+        ("out-of-range controls are clamped, not trusted", "0/99999+999", [
+            "left top 1000 @0", "left bottom 35999000 @0",
+            "press top @0", "press bottom @1000", "left bottom 36058000 @1000",
+        ]),
+    ]
+    for (name, spec, steps) in clockScripts { runClockScript(name, spec, steps) }
+
+    // What the clock READS — never 0:00 with time left; tenths for the last ten seconds.
+    let clockFormats: [(Int, String)] = [
+        (300000, "5:00"), (299001, "5:00"), (299000, "4:59"), (60000, "1:00"), (59999, "1:00"),
+        (10000, "0:10"), (9901, "0:10"), (9900, "0:09.9"), (9801, "0:09.9"), (9800, "0:09.8"),
+        (101, "0:00.2"), (100, "0:00.1"), (1, "0:00.1"), (0, "0:00.0"), (-500, "0:00.0"),
+        (3600000, "1:00:00"), (3599001, "1:00:00"), (3599000, "59:59"), (5400000, "1:30:00"),
+        (35999000, "9:59:59"),
+    ]
+    for (ms, text) in clockFormats {
+        h.check(ClockFormat.display(ms) == text, "display(\(ms)) == \"\(text)\", got \(ClockFormat.display(ms))")
+    }
+    let clockLevels: [(Int, String)] = [
+        (30001, "normal"), (30000, "low"), (10001, "low"), (10000, "critical"), (0, "critical"),
+    ]
+    for (ms, level) in clockLevels {
+        h.check(ClockFormat.level(ms).rawValue == level, "level(\(ms)) == \(level)")
+    }
+
+    // Labels and speed bands — lichess's estimate, base + 40 x bonus.
+    let clockLabels: [(String, String, String)] = [
+        ("60", "1 | 0", "bullet"), ("60+1", "1 | 1", "bullet"), ("120+1", "2 | 1", "bullet"),
+        ("90", "1:30 | 0", "bullet"),
+        ("180", "3 | 0", "blitz"), ("180+2", "3 | 2", "blitz"), ("300+3", "5 | 3", "blitz"),
+        ("300d3", "5 | d3", "blitz"), ("300/60+1", "5 / 1 | 1", "blitz"),
+        ("300+5", "5 | 5", "rapid"), ("600", "10 | 0", "rapid"), ("900+10", "15 | 10", "rapid"),
+        ("1200", "20 | 0", "rapid"),
+        ("1500", "25 | 0", "classical"), ("1800+20", "30 | 20", "classical"),
+        ("3600", "60 | 0", "classical"), ("3630", "1:00:30 | 0", "classical"),
+        ("5400+30", "90 | 30", "classical"), ("60+0", "1 | 0", "bullet"), ("60d0", "1 | 0", "bullet"),
+    ]
+    for (spec, label, category) in clockLabels {
+        guard let c = clockControl(spec) else { h.check(false, "unparseable \(spec)"); continue }
+        h.check(c.label == label, "label(\(spec)) == \"\(label)\", got \(c.label)")
+        h.check(c.category.rawValue == category, "category(\(spec)) == \(category), got \(c.category.rawValue)")
+    }
+    let clockClamps: [(String, String)] = [
+        ("0/99999+999", "0:01 / 9:59:59 | 60"), ("60+0", "1 | 0"), ("60d0", "1 | 0"), ("60d61", "1 | d60"),
+    ]
+    for (spec, label) in clockClamps {
+        guard let c = clockControl(spec) else { h.check(false, "unparseable \(spec)"); continue }
+        h.check(c.clamped().label == label, "clamped(\(spec)).label == \"\(label)\", got \(c.clamped().label)")
+    }
+    // Two controls that play identically compare equal once clamped.
+    h.check(clockControl("60+0")?.clamped() == clockControl("60")?.clamped(), "60+0 is 60 once clamped")
+    h.check(clockControl("60d0")?.clamped() == clockControl("60")?.clamped(), "60d0 is 60 once clamped")
+
+    // The preset table: every preset sits in its own band, bands in order, and the default is one.
+    let bands = TimeControl.Category.allCases
+    var lastBand = 0
+    for p in TimeControl.presets {
+        let band = bands.firstIndex(of: p.category) ?? -1
+        h.check(band >= lastBand, "preset \(p.label) does not go back a band")
+        lastBand = band
+    }
+    h.check(Set(TimeControl.presets.map(\.category)).count == bands.count, "every band has a preset")
+    h.check(TimeControl.presets.contains(TimeControl.default), "the default control is a preset")
+    h.check(TimeControl.default.label == "5 | 3", "the default is 5 | 3")
+    h.check(ClockSide.top.other == .bottom && ClockSide.bottom.other == .top, "the sides are each other's")
+}
+
 // MARK: - Done
 
 // Every mandatory group must contribute at least its expected floor of assertions
@@ -3448,6 +3667,10 @@ h.requireMinCounts([
     // an interactive board needs, including the transposition decision. 110 -> 114: Square.isBackRank,
     // which the explorer`s promotion asks instead of reaching into CoachLayout. RAISED, never lowered.
     "opening_tree": 114,
+    // No oracle either: the clock has no RN or Laravel original. Its partner is
+    // web-demo/js/chess-clock.js — tools/qa/chess_clock_check.js replays every script in the group
+    // through it AND asserts this floor equals the number of checks the table makes.
+    "chess_clock": 221,
     "puzzle_session": 600, "puzzle_selection": 1100, "puzzle_progress": 70,
     "swiss_pairings": 27, "rr_pairings": 29, "tiebreakers": 13, "standings": 1, "serving": 45,
     "scoring": 12, "misc": 19, "swiss_scenario": 65, "rr_scenario": 67,

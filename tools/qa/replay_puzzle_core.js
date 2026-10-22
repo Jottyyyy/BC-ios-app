@@ -522,7 +522,7 @@ function run() {
                        'homeShare', 'homePlay', 'currentRating', 'best', 'accuracy', 'activity',
                        'themePerformance', 'statsEmpty', 'loading', 'whiteToMove', 'blackToMove',
                        'solved', 'wrongMove', 'viewingSolution', 'yourRating', 'clock', 'puzzle',
-                       'noTime', 'solution', 'nextPuzzle', 'retry', 'solutionBtn', 'analyzing',
+                       'noTime', 'noRating', 'solution', 'nextPuzzle', 'retry', 'solutionBtn', 'analyzing',
                        'engineSuggestions', 'refresh', 'savePuzzle', 'savedToBoard',
                        'choosePromotion', 'saveName', 'saveNamePlaceholder', 'saveNotes',
                        'saveNotesPlaceholder', 'cancel', 'save',

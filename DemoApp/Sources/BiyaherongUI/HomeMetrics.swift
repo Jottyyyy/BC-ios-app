@@ -338,6 +338,7 @@ enum HomePalette {
     static let playCoach = Theme.c(0x1B1050)         // deep indigo — makes the gold ring blaze
     static let pairing = Theme.c(0x0D2137)           // very dark navy
     static let membership = Theme.c(0x5E35B1)        // deep purple
+    static let clock = Theme.c(0x2E9E57)             // the clock's own running green
 
     /// Sky theme, Pairing card ONLY: the swiss artwork is too low-contrast to read on the standard
     /// translucent-blue backdrop, so its icon circle is filled solid teal instead (§6c).

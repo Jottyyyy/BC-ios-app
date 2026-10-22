@@ -87,6 +87,15 @@ struct BoardView: View {
     // sites in PhoneView.swift and PuzzleView.swift.
     @State private var dragFrom: Int? = nil
     @State private var dragPoint: CGPoint? = nil
+    /// Profile → Board Theme. Observed HERE, not threaded through every call site: the five puzzle
+    /// solvers, Play vs Coach and the Opening Tree pass no `style:` at all, which is exactly why
+    /// they were all stuck on Classic Brown (client round 3). Private and defaulted, so it stays out
+    /// of the memberwise initializer — see the note above `style`.
+    @ObservedObject private var appTheme = BoardThemeStore.shared
+
+    /// The square pair this board draws: the app-wide theme, unless `style` opted out.
+    private var lightSquare: Color { style.followsAppTheme ? appTheme.theme.light : style.light }
+    private var darkSquare: Color { style.followsAppTheme ? appTheme.theme.dark : style.dark }
 
     private var square: CGFloat { boardSize / 8 }
     private var occupied: Set<Int> { Set(pieces.map { $0.square }) }
@@ -222,11 +231,11 @@ struct BoardView: View {
         // Two fill models. The original board TINTS translucent layers over the square colour; the
         // Analysis Board REPLACES it outright (spec 3.3), with a strict precedence. `style` picks.
         let base: Color = {
-            guard style.replacesFill else { return isLight ? style.light : style.dark }
+            guard style.replacesFill else { return isLight ? lightSquare : darkSquare }
             if isSelected { return style.selected }
             if let custom = customHighlights[sq] { return custom }
             if isLast { return style.lastMove }
-            return isLight ? style.light : style.dark
+            return isLight ? lightSquare : darkSquare
         }()
         return ZStack {
             Rectangle().fill(base)

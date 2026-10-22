@@ -40,6 +40,9 @@ var BiyaAnalysisBoard = (function () {
   // How hard the engine is allowed to work. Pure and shared with the Swift side; this screen only
   // stores the choice and reads the resolved numbers back out.
   var ES = isNode ? require('./engine-settings.js') : BiyaEngineSettings;
+  // The APP's board theme (Profile → Board Theme). This screen used to keep its own unsaved copy,
+  // which is why it forgot it on every visit and no other board ever saw it (client round 3).
+  var BT = isNode ? require('./board-theme.js') : BiyaBoardTheme;
   // Saving serialises the tree to a full PGN — headers included, unlike the source's movetext-only
   // `generatePgn()`, which is why a custom start position survives a round trip here.
   var P = isNode ? require('./pgn.js') : BiyaPGN;
@@ -1347,7 +1350,6 @@ var BiyaAnalysisBoard = (function () {
   var debounceTimer = null;
   var autoplayTimer = null;
   var autoplaySpeed = MET.DEFAULT_AUTOPLAY_SPEED;
-  var boardTheme = MET.DEFAULT_BOARD_THEME;
   // Unlike the three view-state vars around it, this one PERSISTS: a preset is a deliberate choice
   // about battery, and having to make it again after every reload would be its own bug.
   var engineSettings = ES.load();
@@ -1543,8 +1545,8 @@ var BiyaAnalysisBoard = (function () {
     // The FITTED size, not the source's 11px: CSS has no minimumScaleFactor, so the browser has to
     // be handed a size that already fits the rail or it would clip where SwiftUI shrinks.
     set('--an-fs-rail', MET.evalLabelFontSize() + 'px');
-    set('--board-light', MET.BOARD_THEMES[boardTheme].light);
-    set('--board-dark', MET.BOARD_THEMES[boardTheme].dark);
+    set('--board-light', BT.colors().light);
+    set('--board-dark', BT.colors().dark);
     // Review modal — every value from accModalStyles, via the metrics layer.
     var R = MET.REVIEW, G = MET.GRAPH_STYLE;
     set('--an-rv-scrim', R.scrim);
@@ -3053,9 +3055,9 @@ var BiyaAnalysisBoard = (function () {
     return body.length > 55 ? body.slice(0, 55) + '…' : body;
   }
 
+  /** A shortcut to the app-wide setting, so a change here repaints every board, not this one. */
   function cycleTheme() {
-    var keys = Object.keys(MET.BOARD_THEMES);
-    boardTheme = keys[(keys.indexOf(boardTheme) + 1) % keys.length];
+    BT.cycle();
     applyMetrics(root);
   }
 
@@ -3101,9 +3103,9 @@ var BiyaAnalysisBoard = (function () {
           toggle: showArrows, run: function () { showArrows = !showArrows; paintArrows(); } },
         { icon: '⚙️', label: 'Engine  ' + ES.resolve(engineSettings).label, run: showEngineSettings },
         { icon: '⏱️', label: 'Autoplay Speed', run: showAutoplaySpeeds },
-        // Not in the source's menu: offline there is no Master DB row to sit here, and the board
-        // theme had nowhere else to live once ☰ stopped being its stand-in button.
-        { icon: '🎨', label: 'Board Theme  ' + MET.BOARD_THEMES[boardTheme].label, run: cycleTheme }
+        // Not in the source's menu: offline there is no Master DB row to sit here. A shortcut to
+        // the same setting Profile → Board Theme chooses, so it repaints every board in the app.
+        { icon: '🎨', label: 'Board Theme  ' + BT.colors().label, run: cycleTheme }
       ] }
     ];
 

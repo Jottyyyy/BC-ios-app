@@ -47,6 +47,9 @@ final class PuzzleSolverEngine: ObservableObject {
     private var tasks: [Task<Void, Never>] = []
     /// Bumped on every new search so a late progress hop from an abandoned one is dropped.
     private var engineToken = 0
+    /// Stops the search itself, not just its results. The token above only drops what a search
+    /// reports; without this one an abandoned search kept a core busy for its full 3 s budget.
+    private var engineSearch: CancelToken?
     private var alive = true
 
     init(mode: PuzzleSession.Mode) { self.mode = mode }
@@ -54,9 +57,15 @@ final class PuzzleSolverEngine: ObservableObject {
     // MARK: - Mount
 
     /// Every mode's mount is identical (Part 5.3); only the opponent delay differs.
+    ///
+    /// The engine panel is reset HERE, with the board. It used to survive `mount`, so the client
+    /// tapped Solution, then Next Puzzle, and played the next puzzle under the last one's
+    /// "Engine Suggestions" until he left the screen. The web twin has always cleared it
+    /// (`puzzle-solver.js` `mount`).
     func mount(_ p: PuzzleStore.Puzzle) {
         cancel()
         alive = true
+        engineLines = []
         puzzle = p
         session = PuzzleSession.create(puzzle: p.session, mode: mode)
         deselect()
@@ -198,6 +207,9 @@ final class PuzzleSolverEngine: ObservableObject {
         engineLines = []
         let token = engineToken + 1
         engineToken = token
+        engineSearch?.cancel()
+        let search = CancelToken()
+        engineSearch = search
         Task.detached(priority: .userInitiated) { [weak self] in
             let local = LocalEngine()
             _ = local.analyze(
@@ -209,7 +221,7 @@ final class PuzzleSolverEngine: ObservableObject {
                 limits: SearchLimits(maxDepth: AnalysisEngineLimits.maxDepth,
                                      multiPV: AnalysisEngineLimits.multiPV),
                 historyKeys: [],
-                shouldCancel: { Date() > deadline },
+                shouldCancel: { search.isCancelled || Date() > deadline },
                 onProgress: { snap in
                     Task { @MainActor in
                         guard let self, self.engineToken == token else { return }
@@ -226,8 +238,9 @@ final class PuzzleSolverEngine: ObservableObject {
     /// `AnalysisSession.engineRows(from:)` already turns a snapshot into panel rows — eval text,
     /// SAN and the PV preview — so this reuses it rather than re-deriving the same three.
     ///
-    /// The count is trimmed per mode: Play shows three lines and Thematic two, and
-    /// `PuzzleDisplay.engineLineCount` is what knows which.
+    /// The count is trimmed per mode: Play shows two lines and Thematic three
+    /// (`PuzzleEnginePanel.playLines` / `thematicLines`), and `PuzzleDisplay.engineLineCount` is
+    /// what knows which.
     @MainActor
     private func adoptEngine(_ snapshot: AnalysisSnapshot) {
         engineLines = Array(AnalysisSession.engineRows(from: snapshot)
@@ -307,16 +320,21 @@ final class PuzzleSolverEngine: ObservableObject {
     /// puzzle behind an already-showing results overlay.
     func schedule(_ ms: Int, _ body: @escaping @MainActor () -> Void) { after(ms, body) }
 
+    /// Cancels every continuation AND any search in flight. A search belongs to the puzzle it was
+    /// started on, so whatever cancels that puzzle's timers abandons it too — otherwise a search
+    /// still inside its 3 s budget wrote the old position's lines onto the next puzzle.
     func cancel() {
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
+        engineToken += 1
+        engineSearch?.cancel()
+        engineSearch = nil
+        engineBusy = false
     }
 
     /// Cancel, and refuse to fire anything further — a solver that has left the screen.
     func leave() {
         alive = false
-        engineToken += 1          // abandon any search in flight
-        engineBusy = false
         cancel()
     }
 
@@ -488,13 +506,17 @@ struct PuzzleBottomPanel: View {
 ///
 /// Shown after the solution is revealed. The line count differs by mode (`engineLineCount`), which
 /// is why it is asked for rather than assumed.
+///
+/// Only while `.reviewing` — the one phase the web twin builds it in (`paintBottom`). Lines alone
+/// were the old condition, and lines outlived their puzzle; the phase cannot, because `mount`
+/// starts every puzzle in a fresh session.
 struct PuzzleEnginePanelView: View {
     @ObservedObject var engine: PuzzleSolverEngine
 
     var body: some View {
         let lines = engine.engineLines
         Group {
-            if !lines.isEmpty {
+            if !lines.isEmpty, engine.session?.phase == .reviewing {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(PuzzleStrings.engineSuggestions)
                         .font(Theme.nunito(PuzzleEnginePanel.titleSize, .bold))

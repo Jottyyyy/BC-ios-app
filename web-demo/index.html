@@ -122,6 +122,10 @@
   <script src="js/review.js"></script>
   <script src="js/opening-book.js"></script>
   <script src="js/analysis-metrics.js"></script>
+  <!-- The ONE board theme (Profile → Board Theme). Reads analysis-metrics.js's table at load and
+       paints the saved choice onto the document root before any board draws — so it sits
+       right after that table and before every screen. -->
+  <script src="js/board-theme.js"></script>
   <!-- The engine strength presets (☰ > Engine). Read by analysis.js and cross-checked by
        analysis-metrics.js's self-test; neither needs it at load time, so it sits here. -->
   <script src="js/engine-settings.js"></script>
@@ -197,6 +201,9 @@
   <!-- The login gate. app.js reads BiyaLogin at BOOT to decide the first screen, so this must load
        before it. Nothing else reads it. -->
   <script src="js/login.js"></script>
+  <!-- The Chess Clock (round 3). app.js reads it in renderHome for the tile's subtitle, so it
+       must load before app.js. -->
+  <script src="js/chess-clock.js"></script>
   <!-- The subscription. ORDER MATTERS: premium.js reads BiyaDailyLimits at load time for the
        PHP-pinned free-tier caps, and app.js reads BiyaPremium for every gate. -->
   <script src="js/daily-limits.js"></script>

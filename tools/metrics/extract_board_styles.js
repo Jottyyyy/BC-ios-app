@@ -247,6 +247,69 @@ const branchConfirm = {
 };
 if (!branchConfirm.styles) { console.error('FATAL: BranchConfirmModal.tsx StyleSheet not found'); process.exit(1); }
 
+// ---- Board themes: ONE app-wide setting (client round 3, 2026-10-22) -------------------------
+//
+// "Hindi mapalitan kulay sa chessboard ng puzzle." The RN app has one persisted theme, chosen on
+// the Profile screen ("Applies to all chess boards") and read by every `DragDropChessBoard`. The
+// port kept three themes inside the Analysis Board's ☰ menu, unsaved, and every other board drew
+// Classic Brown. The colours, the labels and the picker come from the two files that define them,
+// so none of it is typed by hand — the same text-scan approach as the branch modal above.
+const THEME_TSX = path.join(FRONTEND, 'contexts', 'BoardThemeContext.tsx');
+const PROFILE_TSX = path.join(FRONTEND, 'app', '(app)', 'user', 'profile', 'index.tsx');
+for (const f of [THEME_TSX, PROFILE_TSX]) {
+  if (!fs.existsSync(f)) { console.error('FATAL: missing ' + f); process.exit(1); }
+}
+const themeText = fs.readFileSync(THEME_TSX, 'utf8');
+const profileText = fs.readFileSync(PROFILE_TSX, 'utf8');
+const themeTable = mustMatch(/export const BOARD_THEMES[^=]*=\s*\{([\s\S]*?)\n\};/, themeText, 'BOARD_THEMES');
+const themeRows = [];
+for (const m of themeTable.matchAll(/(\w+):\s*\{\s*name:\s*'(\w+)',\s*label:\s*'([^']+)',\s*light:\s*'(#[0-9A-Fa-f]{6})',\s*dark:\s*'(#[0-9A-Fa-f]{6})'\s*\}/g)) {
+  if (m[1] !== m[2]) { console.error('FATAL: theme key ' + m[1] + ' names itself ' + m[2]); process.exit(1); }
+  themeRows.push({ key: m[1], label: m[3], light: m[4].toUpperCase(), dark: m[5].toUpperCase() });
+}
+if (themeRows.length !== 3) { console.error('FATAL: expected three board themes, got ' + themeRows.length); process.exit(1); }
+// The section's JSX, from its own comment to the next section's — the Appearance card above it
+// uses the same style keys, so an unanchored match would read the wrong card.
+const pickerStart = profileText.indexOf('Board Theme Settings');
+const pickerEnd = profileText.indexOf('{/* ──', pickerStart + 1);
+if (pickerStart < 0 || pickerEnd < 0) { console.error('FATAL: Board Theme card not found in profile'); process.exit(1); }
+const picker = profileText.slice(pickerStart, pickerEnd);
+/** JSX text such as `{"♟️"} Board Theme` — decode the JS string escapes it embeds. */
+const jsxText = (s) => s.replace(/\{"((?:\\u[0-9A-Fa-f]{4})+)"\}/g, (_, esc) => JSON.parse('"' + esc + '"'));
+const profileStyles = RN.collectStyleSheets(ts, RN.parse(ts, PROFILE_TSX), RN.createEvaluator(ts, SEED))
+  .stylesheets.styles;
+const PICKER_KEYS = ['sectionCard', 'sectionTitle', 'sectionSubtitle', 'themeOption', 'themeOptionActive',
+  'miniBoard', 'miniRow', 'miniSquare', 'themeOptionLabel', 'themeOptionLabelActive', 'themeCheckmark'];
+const pickerStyles = {};
+for (const k of PICKER_KEYS) {
+  if (!profileStyles || !profileStyles[k]) { console.error('FATAL: profile style missing: ' + k); process.exit(1); }
+  pickerStyles[k] = profileStyles[k];
+}
+const miniCells = mustMatch(/\{\[([\d, ]+)\]\.map\(\(r\)/, picker, 'mini board rows').split(',').length;
+const boardThemes = {
+  _source: 'BYAHERONG-COACH-FRONTEND/contexts/BoardThemeContext.tsx + app/(app)/user/profile/index.tsx '
+         + '(the "Board Theme Settings" card)',
+  _note: 'One setting for every board, saved by the app (RN: AsyncStorage "@board_theme"). `label` is the '
+       + 'source\'s full label, swatch emoji included; the picker draws it, the Analysis menu row draws '
+       + 'the words after the swatch.',
+  storageKey: mustMatch(/const STORAGE_KEY = '([^']+)'/, themeText, 'theme storage key'),
+  default: mustMatch(/useState<BoardThemeColors>\(BOARD_THEMES\.(\w+)\)/, themeText, 'default theme'),
+  themes: themeRows,
+  copy: {
+    title: jsxText(mustMatch(/<Text style=\{styles\.sectionTitle\}>([^<]+)<\/Text>/, picker, 'picker title')),
+    subtitle: mustMatch(/<Text style=\{styles\.sectionSubtitle\}>([^<]+)<\/Text>/, picker, 'picker subtitle'),
+    check: jsxText(mustMatch(/styles\.themeCheckmark\}>([^<]+)<\/Text>/, picker, 'picker checkmark')),
+  },
+  mini: {
+    cells: miniCells,
+    // Which corner is light. Asserted rather than assumed: it is the one rule a hand port gets
+    // backwards without anything looking wrong.
+    lightWhen: mustMatch(/backgroundColor: (\(r \+ c\) % 2 === 0) \? t\.light : t\.dark/, picker,
+      'mini board parity'),
+  },
+  styles: pickerStyles,
+};
+
 // ---- Device-derived values ------------------------------------------------------
 //
 // Anything the source computed from `Dimensions.get('window')` has been FOLDED against the
@@ -402,6 +465,7 @@ const out = {
   stripContinuation: stripContinuation,
   branchSelection: branchSelection,
   branchConfirm: branchConfirm,
+  boardThemes: boardThemes,
   renderConstants: Object.assign({
     _note: 'Geometry that lives inside a render function, where no StyleSheet can hold it. Each '
          + 'expression is flattened into signed additive terms so a consumer asserts the DIRECTION '

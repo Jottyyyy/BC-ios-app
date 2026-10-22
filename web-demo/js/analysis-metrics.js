@@ -104,11 +104,14 @@ var BiyaAnalysisMetrics = (function () {
   };
 
   // ---- Board themes (spec 3.2) ----------------------------------------------
-  // DEVIATION: the RN board had a single colour pair. Three user-selectable themes are new.
+  // The RN app's own three (`contexts/BoardThemeContext.tsx`), app-wide and saved — this used to
+  // call them a deviation, which they never were. `swatch` + ' ' + `label` is the source's full
+  // label; board_theme_check.js compares all of it with tools/metrics/board_styles.json.
+  // The CHOICE lives in board-theme.js, shared by every board.
   var BOARD_THEMES = {
-    classic: { label: 'Classic Brown', light: '#F0D9B5', dark: '#B58863' },
-    green: { label: 'Tournament Green', light: '#EEEED2', dark: '#769656' },
-    blue: { label: 'Blue', light: '#BFD4E0', dark: '#6B8FA8' }
+    classic: { swatch: '🟫', label: 'Classic Brown', light: '#F0D9B5', dark: '#B58863' },
+    green: { swatch: '🟩', label: 'Tournament Green', light: '#EEEED2', dark: '#769656' },
+    blue: { swatch: '🟦', label: 'Blue', light: '#BFD4E0', dark: '#6B8FA8' }
   };
   var DEFAULT_BOARD_THEME = 'classic';
 

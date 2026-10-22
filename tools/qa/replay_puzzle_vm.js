@@ -413,6 +413,124 @@ function run() {
       'reset() drains the queue, so deleting an account cannot have a late write restore the file');
   }
 
+  // ── 15. Rated Play: the five round-3 reports against 1.0.10 ──────────────────────
+  //
+  // Every one was a Swift-only defect the web twin never had, and none of them was asserted — the
+  // rated solver was the one screen this file barely read. Each block below pins one report.
+  {
+    const hub = read(UI, 'PuzzleHubScreen.swift');
+    const APP = require(path.join(JS, 'puzzle-app.js'));
+    const PROG = APP.PROG;
+
+    // (a) "Kapag nag back ka nagpapalit ng puzzle." The Core's PlayPuzzleDraft was never called.
+    const resumable = funcBody(store, 'resumablePlay') || '';
+    expect(/var s = state/.test(resumable)
+           && /PuzzleProgress\.loadPlayDraft\(&s, now:/.test(resumable)
+           && /puzzle\(id: d\.puzzleId\)/.test(resumable),
+      'resumablePlay() reads the 24 h draft on a COPY of the state and loads its puzzle');
+    const start = funcBody(play, 'startIfNeeded') || '';
+    const restoreAt = start.indexOf('store.resumablePlay()');
+    const mountAt = start.indexOf('engine.mount(restored)');
+    const serveAt = start.indexOf('next()');
+    expect(restoreAt >= 0 && mountAt > restoreAt && serveAt > mountAt
+           && /return\s*\}\s*next\(\)/.test(start),
+      'entering the rated solver resumes the draft BEFORE it would serve a new puzzle');
+    // The order alone is not enough: `if false, let restored = …` keeps every call in place and
+    // never resumes. The condition must be the draft and nothing else.
+    expect(/\bif let restored = store\.resumablePlay\(\) \{/.test(start),
+      'and the resume is conditioned on the draft alone');
+    const nextFn = funcBody(play, 'next') || '';
+    expect(nextFn.indexOf('PuzzleProgress.savePlayDraft(') > nextFn.indexOf('store.serveRated()')
+           && nextFn.indexOf('PuzzleProgress.savePlayDraft(') < nextFn.indexOf('engine.mount(p)'),
+      'every serve writes the draft before mounting, so leaving by ANY route finds it');
+    const finishFn = funcBody(play, 'finish') || '';
+    expect(/if correct \{ s\.playDraft = nil \}/.test(finishFn),
+      'a solve clears the draft — and only a solve (a miss keeps it, as RN and the web do)');
+    expect(/if res\.firstAttempt \{ ratingDelta = res\.ratingChange \}/.test(finishFn),
+      'a resumed, already-attempted puzzle shows no delta: the repeat is not rated');
+    const leaveFn = funcBody(play, 'leaveScreen') || '';
+    expect(/phase != \.solved/.test(leaveFn) && /savePlayDraft\(/.test(leaveFn)
+           && /engine\.leave\(\)/.test(leaveFn),
+      'leaving refreshes the draft of an unsolved puzzle, then leaves the engine');
+    expect(/onBack: \{ leaveScreen\(\); onExit\(\) \}/.test(play)
+           && /\.onDisappear\(perform: leaveScreen\)/.test(play),
+      'both exits — the chevron and the pop — go through leaveScreen');
+    // The hub must not charge for a resume, and must check BEFORE the gate.
+    const playHome = hub.slice(hub.indexOf('case .playHome:'), hub.indexOf('case .playSolver:'));
+    const resumeAt = playHome.indexOf('store.resumablePlay() != nil');
+    const gateAt = playHome.indexOf('gate(Entitlement.Mode.regular');
+    expect(resumeAt >= 0 && gateAt > resumeAt,
+      'the hub lets a resume through BEFORE spending a rated allowance');
+    // …and the JS twin settles what the draft does.
+    {
+      const st = PROG.seed(1000);
+      PROG.savePlayDraft(st, 42, 1000);
+      eq(PROG.loadPlayDraft(st, 1000 + 1000).puzzleId, 42, 'JS: a fresh draft restores');
+      eq(PROG.loadPlayDraft(st, 1000 + 24 * 3600 * 1000 + 1), null, 'JS: past 24 h it does not');
+    }
+    const jsApp = fs.readFileSync(path.join(JS, 'app.js'), 'utf8');
+    expect(/if \(BiyaPuzzleApp\.resumablePlay\(\)\) \{ puzzleGo\('puzzle-solve'\); return; \}\s*gate\(BiyaPremium\.MODE\.regular/.test(jsApp),
+      'the web hub skips the allowance for a resume too');
+
+    // (b) "Solution → Next Puzzle → may engine suggestion pa." mount() never reset the panel.
+    const mount = funcBody(parts, 'mount') || '';
+    expect(mount.indexOf('cancel()') >= 0 && /engineLines = \[\]/.test(mount)
+           && mount.indexOf('engineLines = []') < mount.indexOf('session = PuzzleSession.create'),
+      'mount() clears the engine lines with the board, before the new session exists');
+    const cancelFn = funcBody(parts, 'cancel') || '';
+    expect(/engineToken \+= 1/.test(cancelFn) && /engineSearch\?\.cancel\(\)/.test(cancelFn)
+           && /engineBusy = false/.test(cancelFn),
+      'cancel() abandons the search in flight — its results AND its CPU');
+    const runEngineFn = funcBody(parts, 'runEngine') || '';
+    expect(/shouldCancel: \{ search\.isCancelled \|\| Date\(\) > deadline \}/.test(runEngineFn),
+      'the search itself stops when cancelled, not only at its 3 s deadline');
+    const panel = parts.slice(parts.indexOf('struct PuzzleEnginePanelView'));
+    expect(/if !lines\.isEmpty, engine\.session\?\.phase == \.reviewing \{/.test(panel),
+      'the panel draws only while reviewing — the one phase the web builds it in');
+    const thematicJs = fs.readFileSync(path.join(JS, 'puzzle-thematic.js'), 'utf8');
+    const tNext = thematicJs.slice(thematicJs.indexOf('function next()'));
+    expect(tNext.indexOf("ui.engine.innerHTML = ''") >= 0
+           && tNext.indexOf("ui.engine.innerHTML = ''") < tNext.indexOf('solver.mount(puzzle)'),
+      'the web Thematic screen empties its engine rows before the next puzzle mounts');
+
+    // (c) "+12" alone — the stats row (spec Band 4) was never built.
+    expect(/statsRow\s*\n\s*PuzzleBottomPanel/.test(play) && !/deltaRow/.test(play),
+      'the rated solver draws the stats row between the board and the buttons');
+    const stats = play.slice(play.indexOf('private var statsRow'), play.indexOf('private func stat<'));
+    for (const [what, re] of [
+      ['the live rating from the store', /Text\("\\\(store\.state\.profile\.rating\)"\)/],
+      ['the delta under it', /PuzzleDisplay\.deltaStyle\(ratingDelta\)/],
+      ['the clock', /PuzzleDisplay\.formatTime\(elapsed\)/],
+      ["the puzzle's rating", /engine\.puzzle\.map/],
+      ['the three extracted labels', /PuzzleStrings\.yourRating[\s\S]*PuzzleStrings\.clock[\s\S]*PuzzleStrings\.puzzle\)/],
+    ]) expect(re.test(stats), 'the stats row shows ' + what);
+    const header = play.slice(play.indexOf('PuzzleScreenHeader(title: PuzzleStrings.puzzle'),
+                              play.indexOf('infoStrip\n'));
+    expect(!/formatTime/.test(header), 'and the clock left the header for it, as in the web twin');
+
+    // (d) "Accuracy 91.700000" — a Double interpolated into a Text literal is `%lf`.
+    expect(/Text\(AnalysisTables\.accuracyText\(acc\.percent\)\)/.test(play)
+           && !/Text\("\\\(acc\.percent\)"\)/.test(play),
+      'accuracy is formatted by the shared one-decimal formatter, with its "%"');
+    const allUI = fs.readdirSync(UI).filter(f => f.endsWith('.swift'))
+      .filter(f => /Text\("\\\(\w+(\.\w+)*\.(percent|pct|accuracy)\)"\)/.test(read(UI, f)));
+    eq(allUI.join(', '), '', 'no screen interpolates a percentage straight into a Text literal');
+    expect(/Text\(String\(row\.percent\) \+ "%"\)/.test(play), 'theme rows carry their "%"');
+    expect(/Text\(bar\.count > 0 \? String\(bar\.count\) : ""\)/.test(play),
+      'an empty activity day shows no "0"');
+
+    // (e) The empty "Your Rating" card — a 32 pt inset on every side of a 52 pt box.
+    const spark = play.slice(play.indexOf('struct PuzzleSparkline'), play.indexOf('struct PuzzlePlaySolverScreen'));
+    expect(!/\.padding\(PuzzleStatsStyle\.sparkPadding\)/.test(spark),
+      'the sparkline is not inset by sparkPadding — that is a width, and the card already applies it');
+    expect(/\.background\(PuzzlePalette\.screenBg/.test(spark), 'on the spec\'s #0F1A2E box');
+    expect(/if hasSparkline \{ sparklineCard \}/.test(play),
+      'and the card is dropped, not drawn empty, under two attempts — as the web drops it');
+    eq(MET.STATS.sparkPadding, 32, 'JS: sparkPadding is the card\'s 16 + 16');
+    expect(/width - S\.sparkPadding/.test(fs.readFileSync(path.join(JS, 'puzzle-home.js'), 'utf8')),
+      'JS: and the web subtracts it from the width, never insets the box');
+  }
+
   return finish();
 }
 

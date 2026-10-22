@@ -178,13 +178,21 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
   expect(!/HomePalette\.sponsor|static let sponsor/.test(HMET),
     'HomeMetrics still declares HomePalette.sponsor');
 
-  // Exactly one banner is built, in each language.
+  // Exactly two banners, in each language: the Chess Clock in Donate's old half (client round 3,
+  // 2026-10-22), Membership in its own. A third would cost the band its two-line height or the
+  // grid its rows; a Donate coming back is caught above.
   const row = PARTS.slice(PARTS.indexOf('struct HomeBannerRow: View {'));
   const swiftBanners = (row.match(/HomeBanner\(emoji:/g) || []).length;
-  expect(swiftBanners === 1, `HomeBannerRow builds ${swiftBanners} banners, expected 1`);
+  expect(swiftBanners === 2, `HomeBannerRow builds ${swiftBanners} banners, expected 2`);
   const jsBanners = (HOME_JS.match(/banners\.appendChild\(buildBanner\(/g) || []).length;
-  expect(jsBanners === 1, `home.js builds ${jsBanners} banners, expected 1`);
-  expect(/Button\(action: onMembership\)/.test(row), 'and the survivor is Membership');
+  expect(jsBanners === 2, `home.js builds ${jsBanners} banners, expected 2`);
+  const clockAt = row.indexOf('Button(action: onClock)');
+  const memberAt = row.indexOf('Button(action: onMembership)');
+  expect(clockAt >= 0 && memberAt > clockAt,
+    'the Chess Clock takes the LEFT half, where Donate was, and Membership keeps the right');
+  const jsClock = HOME_JS.indexOf("onTap('clock')");
+  const jsMember = HOME_JS.indexOf("onTap('membership')");
+  expect(jsClock >= 0 && jsMember > jsClock, 'in the browser too');
 }
 
 // ── 5. The band the grid is measured against did NOT shrink ─────────────────────
@@ -202,7 +210,8 @@ for (const [name, src] of Object.entries(BROWSER)) CODE[name] = code(src);
   const decls = (SCREEN.match(/^\s{4}var on[A-Z]\w*: \(\) -> Void$/gm) || []).length;
   const params = (SCREEN.match(/^\s+on[A-Z]\w*: @escaping \(\) -> Void = \{\}[,)]/gm) || []).length;
   const assigns = (SCREEN.match(/^\s+self\.on[A-Z]\w* = on[A-Z]\w*$/gm) || []).length;
-  expect(decls === 8, `HomeScreen declares ${decls} callbacks, expected 8 (was 10)`);
+  // 8 -> 9: `onClock`, the Chess Clock tile (round 3). Was 10 before search and Donate went.
+  expect(decls === 9, `HomeScreen declares ${decls} callbacks, expected 9`);
   expect(params === decls, `${params} init parameters against ${decls} properties`);
   expect(assigns === decls, `${assigns} assignments against ${decls} properties`);
 }

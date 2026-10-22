@@ -9,6 +9,134 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-22 (added) — The Chess Clock, as the seventh Home tile — and 1.0.11 (60)
+
+Client round 3: *"maglagay ka ng isa pang feature, chess clock parang ganito … dapat naadjust kung
+anong gusto … 7 na cards na … pero dapat hindi padin nasscroll down."* Free for everyone (the
+client's decision), fully offline. Full description: **`docs/chess-clock.md`**.
+
+- **The clock.** Two halves facing each other, the top one turned 180° for the player across the
+  table. Tap your half after you move; the first tap starts the *other* clock and makes that side
+  White — each half's chip carries the board's own king art, not a ♔/♚ font glyph. Moves counted per side; `+3s` flashes when an increment is paid; amber at 30 s, red with
+  tenths at 10 s; *⏱ Time's up* / *🏆 Wins on time* at the flag.
+- **Adjustable.** Presets by speed (Bullet 1|0 → Classical 90|30) or Custom: minutes and seconds per
+  player, *Different time per player* for a coach giving odds, and None / **Increment** / **Delay**
+  (1–60 s). The last control and the sound switch are remembered (`biya.clock.v1`).
+- **The bar**: ✕ · ↺ reset (asks first mid-game) · ⏸/▶ · ⏱ time control · 🔊/🔇.
+- **On the device**: the screen stays lit only while the clock runs; leaving the app pauses the
+  game; each tap buzzes and clicks.
+- **Home, still not scrolling.** The bottom band was built as a *Donate | Membership* pair and kept
+  Donate's height after Donate was removed. The clock takes that half — `[⏱️ Chess Clock | ✈️
+  Premium]` — so the six grid cards are pixel-identical to before on every device; a fourth grid
+  row would have cut each by ~19% on an iPhone SE. The tile names the last control: *Blitz · 5 | 3*.
+
+There is **no RN or Laravel original**, so nothing could be extracted and there is no PHP oracle.
+`ChessClock` is Foundation-only Core with a new ParityRunner group, `chess_clock`, written as step
+scripts; **`tools/qa/chess_clock_check.js`** (414) executes every one of them through the JS twin,
+asserts the group's floor (**221**) equals what the table produces, compares every constant,
+preset, string and metric between the languages, pins the screen's decisions (rotation not
+landscape, `@State` tick, monotonic uptime, idle timer released on every exit, pause on background,
+ungated tile), and drives the browser screen on a fake clock. **18 mutants, all killed — 214/214
+overall.** `home_chrome_check` (two banners, nine callbacks) and `trial_gate_check` (four ungated
+callbacks, `clock` in `OPEN_ROUTES`) changed deliberately. `js_goldens` 37,246 → **37,698** across
+**90** suites.
+
+**Version 1.0.11 (60)** in `ios/project.yml` and `project.pbxproj` together (1.0.10 (59) is live).
+
+**`web-demo/` updated**: `js/chess-clock.js` (core + screen), the tile in `home.js`, the `clock`
+route in `app.js`, styles in `app.css`. Wake Lock stands in for the idle timer where the browser has
+it.
+
+**Cannot be verified here** (no Swift compiler, no device): the Swift screen compiles and lays out ·
+the rotated half is readable across a table · the screen stays lit through a long think ·
+backgrounding pauses · sound with the mute switch on and off. `swift run ParityRunner` on the Mac
+runs the same 221 checks in Swift.
+
+### 2026-10-22 (fixed) — One board theme, chosen in Profile, on every board
+
+Client round 3: *"Also hindi mapalitan kulay sa chessboard ng puzzle."* The RN app has **one**
+saved theme (`contexts/BoardThemeContext.tsx`), chosen on Profile under **"♟️ Board Theme —
+Applies to all chess boards"** and read by every `DragDropChessBoard`. The port kept the same three
+themes as an unsaved `@Published` on `AnalysisVM`, reachable only from the Analysis Board's ☰ menu
+and labelled *"DEVIATION: the RN board had one colour pair"* — which it never had. So the five
+puzzle modes, Play vs Coach and the Opening Tree were always Classic Brown, and the Analysis Board
+forgot its own choice on every visit. The spec had asked for exactly this setting
+(`BIYAHERONG-PORT-SPEC.md:1880`, *"Persist it once, read it everywhere"*).
+
+- **`BoardThemeStore`** (new, `biya.board.theme.v1`) holds the choice. **`BoardView` observes it**,
+  so all nine boards follow with no call-site change; `BoardStyle.followsAppTheme` (default true)
+  is the opt-out, and no board uses it.
+- **Profile → ♟️ Board Theme**: the source's card — a 4 × 4 mini board per theme, its label with
+  the swatch emoji, a gold ✓ on the one in use.
+- **Analysis Board ☰ → Board Theme** stays, as a shortcut to the same setting.
+- **Delete account** erases the key and resets the live store.
+- **Extracted, not typed:** `extract_board_styles.js` now reads `BoardThemeContext.tsx` and the
+  Profile card into `board_styles.json` → `boardThemes` (95 lines added, nothing else changed).
+
+**`web-demo/` updated**: `js/board-theme.js` saves the same key and paints `--board-light` /
+`--board-dark` on the document root at load, which every `<chess-board>` inherits; Profile has the
+same card; the browser Analysis Board's private `boardTheme` is gone.
+
+**Gate:** new `tools/qa/board_theme_check.js` (141) — themes and picker against the extraction in
+both languages, one key classified for delete-account, every board resolving from the store,
+Profile and ☰ writing it, and the browser module executed. **13 mutants, all killed (196/196
+overall).** `js_goldens` 37,088 → 37,246 across **89** suites.
+
+**Device checks:** Profile → Tournament Green, then open any puzzle mode, Play vs Coach and the
+Opening Tree — all green · relaunch — still green · ☰ → Board Theme on the Analysis Board changes
+Profile's ✓ too.
+
+### 2026-10-22 (fixed) — Rated puzzles: back no longer re-rolls, Solution no longer leaks, and the new rating shows
+
+Client round 3, against the live **1.0.10 (59)**: three text reports, plus a 75 s screen recording
+(transcribed with Whisper) that added a fourth and showed a fifth nobody mentioned. Version
+**1.0.11 (60)**. Every one is a Swift-only defect: the web twin did each right from the day it was
+written, and no gate compared the two on any of them.
+
+1. **"Sa puzzle kapag nag back ka nagpapalit ng puzzle."** Backing out of a rated puzzle and
+   pressing Play served a different one — a free skip of a hard puzzle. The Core has carried the
+   24 h `PlayPuzzleDraft` since the port (spec Part 10.2, RN `play-puzzle/index.tsx:205-243`); no
+   Swift screen ever called it. Now every serve writes it, leaving refreshes it, entering resumes it
+   through `PuzzleHubStore.resumablePlay()`, and a solve clears it. A miss keeps it, as RN and the
+   web do; the repeat cannot be rated twice (`recordRatedAttempt` → `firstAttempt: false`). A
+   resume **spends no free-tier allowance** — RN's draft path skips `canPlayPuzzle` the same way.
+2. **"Click solution → next puzzle → may engine suggestion pa."** `PuzzleSolverEngine.mount()`
+   reset the board and never the panel, so the last puzzle's "Engine Suggestions" sat under every
+   following puzzle until the screen was left. Worse, `cancel()` never bumped the token, so a search
+   still inside its 3 s budget could write the old position's lines onto the new puzzle. `mount()`
+   now clears the lines, `cancel()` abandons the search — its results through the token and its
+   CPU through a `CancelToken` — and the panel draws only while `.reviewing`. Thematic shared the
+   engine and the bug; the web Thematic screen had a DOM-level cousin (hidden rows that reappeared
+   on the next solve), fixed too.
+3. **"+12" and nothing else** (video 0:44–1:12). Spec Band 4, the stats row, was never built:
+   `Your Rating {rating}` over its delta · ⏱ · `Puzzle {rating}` (RN `:900-921`). It reads the store
+   live, so it is the new rating the instant the attempt lands. The clock moved into it from the
+   header, as in the web twin.
+4. **`Accuracy 91.700000`** (seen in the video). `Text("\(acc.percent)")` on a `Double` builds a
+   `LocalizedStringKey`, which formats it `%lf`, with no `%`. Now `AnalysisTables.accuracyText` →
+   `91.7%`; theme rows carry their `%`; an empty day shows no `0`.
+5. **The empty "Your Rating" card** (seen in the video). `sparkPadding` (32) is a *width* — the
+   card's 16 + 16 — and Swift applied it as an inset on all four sides of a 52 pt box: a 0 pt chart.
+   No inset now, on the spec's `#0F1A2E`, and the card is dropped rather than drawn empty under two
+   attempts.
+
+Also: a swapped comment (Play shows **two** engine lines, Thematic three) and `PuzzleStrings.noRating`
+(`"—"`, both languages) so the Puzzle column's placeholder is not typed in either.
+
+**`web-demo/` updated**: `resumablePlay()` in `puzzle-app.js` is the one answer the solver and the
+hub's free pass share, and the Thematic rows. #2–#5 were already right in the browser.
+
+**Gates.** `replay_puzzle_vm.js` §15 (all five, in Swift: 155 → 188 decisions) and a new
+`puzzle_screen_test.js` §3d' that renders the rated web solver on a fake clock and drives it
+through back-and-re-enter, a miss, Solution, Next and a solve (494 → 517). **Mutation-proved:
+15 new mutants, 183/183 killed** — one survived the first run (`if false, let restored = …` kept
+every call in order), and the gate was tightened until it died. `js_goldens` 37,031 → 37,088.
+
+**Device checks** (no gate here can see them): back out mid-puzzle and press Play — the same
+position, and the free counter does not move · Solution then Next — no panel under the new puzzle ·
+solve one — the stats row shows the new rating beside `+N` · the hub reads `91.7%` and draws the
+line.
+
 ### 2026-10-13 (fixed) — Puzzle Turbo: the lag before the next puzzle
 
 A premium student of Deniel's: *"Hindi daw smooth, parang may lag or loading time para sa next

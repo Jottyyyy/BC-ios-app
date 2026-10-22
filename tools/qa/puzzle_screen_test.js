@@ -326,6 +326,11 @@ function run() {
     eq(byClass(r2, 'pzs-bars').length, 1, 'the bar chart appears');
     eq(byClass(r2, 'pzs-bar-col').length, 7, 'with seven columns');
     expect(byClass(r2, 'pzs-theme-row').length > 0, 'and the theme rows');
+    // One decimal and a "%" — the Swift twin printed "91.700000" with neither (round 3).
+    expect(/^\d{1,3}\.\d%$/.test(textOf(r2, 'pzs-acc')[0]),
+      `accuracy reads like "91.7%": got ${textOf(r2, 'pzs-acc')[0]}`);
+    expect(textOf(r2, 'pzs-theme-pct').every(t => /^\d{1,3}%$/.test(t)),
+      'and every theme row carries its "%"');
     const poly = walk(r2).filter(n => n.tagName === 'POLYLINE')[0];
     expect(!!poly, 'the sparkline is a polyline');
     expect(poly.getAttribute('points').split(' ').length === 12,
@@ -598,6 +603,115 @@ function run() {
     expect(/endStreakRun\([^)]*bestBefore/.test(ksrc),
       'and hands THAT to endStreakRun, so the new-best badge can actually fire');
     APP.reset();
+  }
+
+  // =====================================================================================
+  // 3d'. Rated Play, driven move by move — the round-3 reports against 1.0.10
+  // =====================================================================================
+  //
+  // §4 below leaves this screen's render path "to the browser", and that is how none of the
+  // round-3 behaviour was pinned in either language. The stubbed board the Streak and Turbo
+  // solvers already render with is enough for this one too: back out and re-enter, a wrong move,
+  // the Solution panel, Next, and a solve, each with what the stats row must then say.
+  {
+    const APP = S.BiyaPuzzleApp;
+    const PROG = S.BiyaPuzzleProgress;
+    const E = S.Engine;
+    const SETUP_MS = S.BiyaPuzzleSession.TIMING.opponentDelayMs.play;
+    const realST = S.setTimeout, realCT = S.clearTimeout;
+    const realSI = S.setInterval, realCI = S.clearInterval;
+    let now = 0, ids = 0;
+    const due = [];
+    S.setTimeout = (fn, ms) => { due.push({ id: ++ids, at: now + (ms || 0), fn }); return ids; };
+    S.clearTimeout = (id) => { const i = due.findIndex(t => t.id === id); if (i >= 0) due.splice(i, 1); };
+    // The solve clock only repaints the timer, which nothing here reads; a real interval would
+    // also keep this process alive past a failed assertion.
+    S.setInterval = () => 0;
+    S.clearInterval = () => {};
+    const tick = (ms) => {
+      const end = now + ms;
+      for (;;) {
+        due.sort((a, b) => a.at - b.at || a.id - b.id);
+        if (!due.length || due[0].at > end) break;
+        const t = due.shift();
+        now = t.at;
+        t.fn();
+      }
+      now = end;
+    };
+    const board = (root) => byClass(root, 'pz-board')[0].children[0];
+    const playUci = (root, u) => board(root)._on.move[0]({
+      detail: { from: E.sqIndex(u.slice(0, 2)), to: E.sqIndex(u.slice(2, 4)), promotion: null } });
+    const button = (root, label) => byClass(root, 'pz-btn').find(b => b.textContent === label);
+    try {
+      APP.reset();
+      let view = makeNode('div');
+      S.BiyaPuzzleSolver.render(view, () => {});
+      let root = view.children[0];
+      tick(SETUP_MS);
+      const d0 = APP.state().playDraft;
+      expect(!!(d0 && APP.DATA.byId[d0.puzzleId]), 'serving a rated puzzle writes its draft');
+      const first = APP.DATA.byId[d0.puzzleId];
+      eq(textOf(root, 'pz-stat-label').join('|'),
+         [MET.STR.yourRating, MET.STR.clock, MET.STR.puzzle].join('|'),
+         'the stats row: Your Rating · ⏱ · Puzzle');
+      eq(textOf(root, 'pz-rating')[0], '1200', 'with the player\'s live rating');
+      eq(textOf(root, 'pz-prating')[0], String(first.rating), 'and the puzzle\'s own');
+      eq(textOf(root, 'pz-delta')[0], '', 'and no delta before a result');
+
+      // "Kapag nag back ka nagpapalit ng puzzle" — back out, come back: the same puzzle.
+      const seenBefore = PROG.seenSet(APP.state()).size;
+      byClass(root, 'pz-back')[0].onclick();
+      view = makeNode('div');
+      S.BiyaPuzzleSolver.render(view, () => {});
+      root = view.children[0];
+      tick(SETUP_MS);
+      eq(APP.state().playDraft.puzzleId, first.id, 're-entering resumes the SAME puzzle');
+      eq(PROG.seenSet(APP.state()).size, seenBefore, 'without serving — or burning — a new one');
+      eq(textOf(root, 'pz-prating')[0], String(first.rating), 'and the stats row says so');
+      expect(APP.resumablePlay() === first, 'resumablePlay() names it, for the hub\'s free pass');
+
+      // A wrong move: the delta, AND the rating it produced, right under the board.
+      const pos = E.fromFEN(board(root)._fen);
+      const want = first.moves[1];
+      const wrong = E.legalMoves(pos).map(m => E.moveUci(m))
+        .find(u => u.length === 4 && u !== want.slice(0, 4)
+              && E.status(E.makeMove(pos, E.parseUci(pos, u))) !== 'checkmate');
+      playUci(root, wrong);
+      const afterMiss = APP.state().profile.rating;
+      expect(afterMiss < 1200, 'a miss costs rating');
+      eq(textOf(root, 'pz-rating')[0], String(afterMiss),
+         'the stats row shows the NEW rating at once — no trip back to the hub');
+      expect(/^-\d+$/.test(textOf(root, 'pz-delta')[0]), 'with its signed delta under it');
+      eq(APP.state().playDraft && APP.state().playDraft.puzzleId, first.id,
+         'a miss keeps the draft, as RN and the Swift do');
+
+      // "Click solution → next puzzle → may engine suggestion pa."
+      button(root, MET.STR.solutionBtn).onclick();
+      eq(byClass(root, 'pz-engine').length, 1, 'Solution opens the engine panel');
+      button(root, MET.STR.nextPuzzle).onclick();
+      tick(SETUP_MS);
+      eq(byClass(root, 'pz-engine').length, 0, 'Next Puzzle takes the panel away with the puzzle');
+      eq(textOf(root, 'pz-delta')[0], '', 'and the old delta');
+      const second = APP.DATA.byId[APP.state().playDraft.puzzleId];
+      expect(second && second !== first, 'Next serves a new puzzle and drafts IT');
+
+      // A solve: the gain, the new rating beside it, and the draft gone.
+      for (let i = 1; i < second.moves.length; i += 2) {
+        playUci(root, second.moves[i].slice(0, 4));
+        tick(SETUP_MS * 2);      // the reply, then the solve beat after it
+      }
+      eq(APP.state().playDraft, null, 'a solve clears the draft');
+      eq(textOf(root, 'pz-rating')[0], String(APP.state().profile.rating),
+         'the stats row shows the rating the solve produced');
+      expect(/^\+\d+$/.test(textOf(root, 'pz-delta')[0]), 'beside a "+N"');
+      expect(APP.resumablePlay() === null, 'and there is nothing left to resume');
+    } finally {
+      S.BiyaPuzzleSolver.leave();
+      S.setTimeout = realST; S.clearTimeout = realCT;
+      S.setInterval = realSI; S.clearInterval = realCI;
+      APP.reset();
+    }
   }
 
   // =====================================================================================

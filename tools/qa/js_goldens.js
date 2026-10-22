@@ -51,6 +51,8 @@ var TGATE = require(path.join(__dirname, 'trial_gate_check.js'));
 // behaviour is a device check. Both bugs it guards shipped because nothing here looked.
 var ORIENT = require(path.join(__dirname, 'orientation_check.js'));
 var BRANCH = require(path.join(__dirname, 'branch_flow_check.js'));
+var BTHEME = require(path.join(__dirname, 'board_theme_check.js'));
+var CLOCK = require(path.join(__dirname, 'chess_clock_check.js'));
 var OTREE = require(path.join(JS, 'opening-tree.js'));
 var OMET = require(path.join(JS, 'opening-metrics.js'));
 var ODOWN = require(path.join(JS, 'opening-download.js'));
@@ -179,6 +181,8 @@ record('web shell wiring', WSHELL.selfTest());
 record('trial gate invariants', TGATE.selfTest());
 record('orientation + audio wiring', ORIENT.selfTest());
 record('analysis-board variations: drawn, asked, never erased', BRANCH.selfTest());
+record('board theme: one setting, Profile, every board', BTHEME.selfTest());
+record('chess clock: both languages, replayed and driven', CLOCK.selfTest());
 record('opening-tree.selfTest', OTREE.selfTest());
 record('opening-metrics.selfTest', OMET.selfTest());
 record('opening-metrics vs RN source',

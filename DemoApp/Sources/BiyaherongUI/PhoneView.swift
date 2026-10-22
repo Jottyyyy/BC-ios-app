@@ -79,6 +79,11 @@ struct PhoneApp: View {
     /// callback was never passed — this is the destination it was waiting for.
     @StateObject private var openingStore = OpeningTreeStore()
     @State private var showOpenings = false
+    /// The Chess Clock (client round 3). FREE — the one destination besides the Analysis Board
+    /// that no trial gate stands in front of — and its preferences are app-wide, so the Home tile
+    /// can name the last control used.
+    @ObservedObject private var clockPrefs = ChessClockPrefs.shared
+    @State private var showClock = false
     /// The simulated sign-in. It gates the whole app: until it is signed in, `LoginScreen` covers
     /// every sibling below. Persisted, so this is the first screen once and not on every launch.
     /// See docs/login.md.
@@ -283,6 +288,16 @@ struct PhoneApp: View {
                     .background(CoachSelect.containerBackgroundColor)
                     .transition(.move(edge: .bottom))
                 }
+                if showClock {
+                    VStack(spacing: 0) {
+                        #if os(macOS)
+                        statusBar
+                        #endif
+                        ChessClockScreen(prefs: clockPrefs, onExit: { showClock = false })
+                    }
+                    .background(ChessClockMetrics.barFill)
+                    .transition(.move(edge: .bottom))
+                }
                 if showVideos {
                     VStack(spacing: 0) {
                         #if os(macOS)
@@ -447,6 +462,7 @@ struct PhoneApp: View {
                    subscriptionEndsAt: premium.expiresAt,
                    isColorful: homeColorful,
                    scaleBasis: basis,
+                   clockSubtitle: ChessClockStrings.homeSubtitle(clockPrefs.control),
                    // Not gated: Profile owns Sign out, and the membership banner IS the offer.
                    onAvatar: { withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                        showProfile = true
@@ -494,6 +510,13 @@ struct PhoneApp: View {
                    onPairing: gated {
                        withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
                            showPairing = true
+                       }
+                   },
+                   // NOT gated: the client made the clock free for everyone (round 3). It is
+                   // offline, it costs nothing to run, and it is a reason to open the app daily.
+                   onClock: {
+                       withAnimation(.easeInOut(duration: AnalysisTiming.screenPresentSeconds)) {
+                           showClock = true
                        }
                    },
                    // The banner has drawn "⭐ Go Premium" since the screen was written and its tap
@@ -778,6 +801,12 @@ struct ProfilePhone: View {
                     }
                 }
 
+                // Profile is where the source puts it (`profile/index.tsx:534-571`), under
+                // "Applies to all chess boards" — and it is the only place a puzzle player would
+                // look, since no solver has a settings control of its own (client round 3).
+                BoardThemePickerCard(store: BoardThemeStore.shared)
+                    .padding(.horizontal, 18)
+
                 phoneCard(PaywallStrings.premium) {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 6) {
@@ -895,6 +924,8 @@ struct ProfilePhone: View {
     /// progress straight back. Reset, then erase, then sign out.
     private func deleteAccount() {
         store.reset()
+        BoardThemeStore.shared.forget()
+        ChessClockPrefs.shared.forget()
         AccountDeletion.eraseAll()
         withAnimation(.easeInOut(duration: LoginTiming.signInFadeSeconds)) { login.signOut() }
     }

@@ -197,6 +197,101 @@
       }
     }
   },
+  "boardThemes": {
+    "_source": "BYAHERONG-COACH-FRONTEND/contexts/BoardThemeContext.tsx + app/(app)/user/profile/index.tsx (the \"Board Theme Settings\" card)",
+    "_note": "One setting for every board, saved by the app (RN: AsyncStorage \"@board_theme\"). `label` is the source's full label, swatch emoji included; the picker draws it, the Analysis menu row draws the words after the swatch.",
+    "storageKey": "@board_theme",
+    "default": "classic",
+    "themes": [
+      {
+        "key": "classic",
+        "label": "🟫 Classic Brown",
+        "light": "#F0D9B5",
+        "dark": "#B58863"
+      },
+      {
+        "key": "green",
+        "label": "🟩 Tournament Green",
+        "light": "#EEEED2",
+        "dark": "#769656"
+      },
+      {
+        "key": "blue",
+        "label": "🟦 Blue",
+        "light": "#BFD4E0",
+        "dark": "#6B8FA8"
+      }
+    ],
+    "copy": {
+      "title": "♟️ Board Theme",
+      "subtitle": "Applies to all chess boards",
+      "check": "✓"
+    },
+    "mini": {
+      "cells": 4,
+      "lightWhen": "(r + c) % 2 === 0"
+    },
+    "styles": {
+      "sectionCard": {
+        "backgroundColor": "#1A2942",
+        "borderRadius": 16,
+        "padding": 16,
+        "marginBottom": 12
+      },
+      "sectionTitle": {
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#FFFFFF",
+        "marginBottom": 4
+      },
+      "sectionSubtitle": {
+        "fontSize": 12,
+        "color": "#8BA3C7",
+        "marginBottom": 12
+      },
+      "themeOption": {
+        "flexDirection": "row",
+        "alignItems": "center",
+        "gap": 14,
+        "padding": 12,
+        "borderRadius": 12,
+        "marginTop": 8,
+        "backgroundColor": "#253552"
+      },
+      "themeOptionActive": {
+        "backgroundColor": "#1E3A5F",
+        "borderWidth": 1,
+        "borderColor": "#FDB022"
+      },
+      "miniBoard": {
+        "width": 40,
+        "height": 40,
+        "overflow": "hidden",
+        "borderRadius": 4
+      },
+      "miniRow": {
+        "flexDirection": "row"
+      },
+      "miniSquare": {
+        "width": 10,
+        "height": 10
+      },
+      "themeOptionLabel": {
+        "flex": 1,
+        "fontSize": 15,
+        "color": "#8BA3C7",
+        "fontWeight": "600"
+      },
+      "themeOptionLabelActive": {
+        "color": "#FFFFFF"
+      },
+      "themeCheckmark": {
+        "fontSize": 18,
+        "color": "#FDB022",
+        "fontWeight": "bold"
+      }
+    }
+  },
   "renderConstants": {
     "_note": "Geometry that lives inside a render function, where no StyleSheet can hold it. Each expression is flattened into signed additive terms so a consumer asserts the DIRECTION of an offset, not only its size. `squareToPixel` is included because it defines the anchor every one of these offsets is measured from — it returns the square CENTRE.",
     "squareToPixel": {

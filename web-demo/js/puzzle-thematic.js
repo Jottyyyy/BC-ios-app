@@ -241,6 +241,10 @@ var BiyaPuzzleThematic = (function () {
     }
     puzzle = r.puzzle;
     ui.rating.textContent = String(puzzle.rating);
+    // The last puzzle's suggestions go with it. The factory clears its own `engineLines` on
+    // mount, but these rows are this screen's DOM, so they sat hidden through the next puzzle and
+    // reappeared when it was solved — the round-3 leak, browser edition.
+    ui.engine.innerHTML = '';
     solver.mount(puzzle);
   }
 
