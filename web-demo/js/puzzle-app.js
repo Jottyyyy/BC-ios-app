@@ -75,6 +75,17 @@ var BiyaPuzzleApp = (function () {
     return r;
   }
 
+  /**
+   * The rated puzzle a returning player resumes, or null: a draft under 24 h whose puzzle is still
+   * in the corpus. One answer for both callers — the solver mounts it, and the hub lets it through
+   * without spending an allowance, because resuming is not a new puzzle (RN's draft path skips
+   * `canPlayPuzzle` the same way, `play-puzzle/index.tsx:205-223`).
+   */
+  function resumablePlay(at) {
+    var d = PROG.loadPlayDraft(state(), at == null ? now() : at);
+    return d ? (DATA.byId[d.puzzleId] || null) : null;
+  }
+
   function dailyPuzzle(date) { return store().daily(date || new Date()); }
 
   /** Reset everything — the demo needs a way back to day one to check the empty states. */
@@ -88,7 +99,7 @@ var BiyaPuzzleApp = (function () {
   return {
     state: state, persist: persist, store: store,
     serveRated: serveRated, serveStreak: serveStreak, serveThematic: serveThematic,
-    dailyPuzzle: dailyPuzzle, reset: reset,
+    resumablePlay: resumablePlay, dailyPuzzle: dailyPuzzle, reset: reset,
     // Exposed for the screens, so they never reach for the globals themselves and a missing
     // <script> tag fails at load rather than inside a click handler.
     PROG: PROG, STORE: STORE, DATA: DATA,

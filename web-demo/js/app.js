@@ -364,8 +364,10 @@
 
   function renderPuzzlePlayHome() {
     // The allowance is spent HERE, on the way into the solver — a failed attempt still costs a
-    // use, exactly as the original counted them.
+    // use, exactly as the original counted them. Resuming the puzzle the player backed out of is
+    // not a new puzzle, so it costs nothing and is never capped.
     BiyaPuzzleHome.render(view, function () {
+      if (BiyaPuzzleApp.resumablePlay()) { puzzleGo('puzzle-solve'); return; }
       gate(BiyaPremium.MODE.regular, ratedCapMessage(), function () { puzzleGo('puzzle-solve'); });
     }, function () { puzzleGo('puzzles'); });
   }

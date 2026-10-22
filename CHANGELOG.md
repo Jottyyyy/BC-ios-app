@@ -9,6 +9,57 @@ Each entry notes whether `web-demo/` was updated.
 
 ## [Unreleased]
 
+### 2026-10-22 (fixed) — Rated puzzles: back no longer re-rolls, Solution no longer leaks, and the new rating shows
+
+Client round 3, against the live **1.0.10 (59)**: three text reports, plus a 75 s screen recording
+(transcribed with Whisper) that added a fourth and showed a fifth nobody mentioned. Version
+**1.0.11 (60)**. Every one is a Swift-only defect: the web twin did each right from the day it was
+written, and no gate compared the two on any of them.
+
+1. **"Sa puzzle kapag nag back ka nagpapalit ng puzzle."** Backing out of a rated puzzle and
+   pressing Play served a different one — a free skip of a hard puzzle. The Core has carried the
+   24 h `PlayPuzzleDraft` since the port (spec Part 10.2, RN `play-puzzle/index.tsx:205-243`); no
+   Swift screen ever called it. Now every serve writes it, leaving refreshes it, entering resumes it
+   through `PuzzleHubStore.resumablePlay()`, and a solve clears it. A miss keeps it, as RN and the
+   web do; the repeat cannot be rated twice (`recordRatedAttempt` → `firstAttempt: false`). A
+   resume **spends no free-tier allowance** — RN's draft path skips `canPlayPuzzle` the same way.
+2. **"Click solution → next puzzle → may engine suggestion pa."** `PuzzleSolverEngine.mount()`
+   reset the board and never the panel, so the last puzzle's "Engine Suggestions" sat under every
+   following puzzle until the screen was left. Worse, `cancel()` never bumped the token, so a search
+   still inside its 3 s budget could write the old position's lines onto the new puzzle. `mount()`
+   now clears the lines, `cancel()` abandons the search — its results through the token and its
+   CPU through a `CancelToken` — and the panel draws only while `.reviewing`. Thematic shared the
+   engine and the bug; the web Thematic screen had a DOM-level cousin (hidden rows that reappeared
+   on the next solve), fixed too.
+3. **"+12" and nothing else** (video 0:44–1:12). Spec Band 4, the stats row, was never built:
+   `Your Rating {rating}` over its delta · ⏱ · `Puzzle {rating}` (RN `:900-921`). It reads the store
+   live, so it is the new rating the instant the attempt lands. The clock moved into it from the
+   header, as in the web twin.
+4. **`Accuracy 91.700000`** (seen in the video). `Text("\(acc.percent)")` on a `Double` builds a
+   `LocalizedStringKey`, which formats it `%lf`, with no `%`. Now `AnalysisTables.accuracyText` →
+   `91.7%`; theme rows carry their `%`; an empty day shows no `0`.
+5. **The empty "Your Rating" card** (seen in the video). `sparkPadding` (32) is a *width* — the
+   card's 16 + 16 — and Swift applied it as an inset on all four sides of a 52 pt box: a 0 pt chart.
+   No inset now, on the spec's `#0F1A2E`, and the card is dropped rather than drawn empty under two
+   attempts.
+
+Also: a swapped comment (Play shows **two** engine lines, Thematic three) and `PuzzleStrings.noRating`
+(`"—"`, both languages) so the Puzzle column's placeholder is not typed in either.
+
+**`web-demo/` updated**: `resumablePlay()` in `puzzle-app.js` is the one answer the solver and the
+hub's free pass share, and the Thematic rows. #2–#5 were already right in the browser.
+
+**Gates.** `replay_puzzle_vm.js` §15 (all five, in Swift: 155 → 188 decisions) and a new
+`puzzle_screen_test.js` §3d' that renders the rated web solver on a fake clock and drives it
+through back-and-re-enter, a miss, Solution, Next and a solve (494 → 517). **Mutation-proved:
+15 new mutants, 183/183 killed** — one survived the first run (`if false, let restored = …` kept
+every call in order), and the gate was tightened until it died. `js_goldens` 37,031 → 37,088.
+
+**Device checks** (no gate here can see them): back out mid-puzzle and press Play — the same
+position, and the free counter does not move · Solution then Next — no panel under the new puzzle ·
+solve one — the stats row shows the new rating beside `+N` · the hub reads `91.7%` and draws the
+line.
+
 ### 2026-10-13 (fixed) — Puzzle Turbo: the lag before the next puzzle
 
 A premium student of Deniel's: *"Hindi daw smooth, parang may lag or loading time para sa next

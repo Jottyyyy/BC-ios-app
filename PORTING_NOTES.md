@@ -5,6 +5,48 @@ and every invented constant, as required by the migration brief (§12 deliverabl
 
 ---
 
+## Rated Play: the draft, the stats row and the engine panel (2026-10-22, client round 3)
+
+Five reports against the live 1.0.10, all Swift-only — the web twin did each right from the start.
+What is recorded here is the decisions, not the fixes; `docs/puzzle-hub.md` has those.
+
+### PORTED, late: the 24 h draft — and a miss keeps it
+
+`PlayPuzzleDraft` has been in the Core since the port (spec Part 10.2, RN
+`play-puzzle/index.tsx:205-243`); no Swift screen called it. It is now written on **every serve**
+(RN writes on blur; serving-time covers the tab bar and a killed app as well as the chevron) and
+refreshed on leaving. A **solve** clears it and a **miss keeps it**, exactly as RN and the web do,
+so backing out after a wrong move brings that puzzle back. RN's version of that path is a latent
+bug — Laravel answers the second submit with 400 "already solved" and RN retries it forever
+(`puzzleCache.ts:154`). Not reproduced: `recordRatedAttempt` already returns `firstAttempt: false`
+with no change on a repeat, and the screen shows no delta for it.
+
+### DECISION: a resume spends no allowance
+
+RN's draft path skips `canPlayPuzzle` entirely (`:205-223`); our gate lives on the hub's Play
+button, upstream of the solver, so it had to be told. A resume is not a new puzzle, so the hub
+checks `resumablePlay()` **before** `gate(...)` — a free user who backs out at 5/5 can still get back
+to the puzzle they were on.
+
+### PORTED, late: Band 4, the stats row
+
+Spec Part 10.2 and RN `:900-921`: `Your Rating {rating}` + delta · ⏱ · `Puzzle {rating}`. The port
+had moved the clock into the header and kept only the delta. Every metric and string it needed
+was already extracted and unused. One string is new: `PuzzleStrings.noRating` (`"—"`), the web's
+pre-mount placeholder, so neither language types it.
+
+### FIXED: `sparkPadding` is a width, not an inset
+
+`32` is the card's 16 + 16 that the web subtracts from the chart's width. Swift applied it as
+`.padding(32)` on all four sides of a 52 pt box, which left a 0 pt chart. Under two attempts the
+card is now dropped rather than drawn empty, as the web drops it.
+
+### INVENTED: nothing
+
+Every constant used is extracted or already in `PuzzleMetrics`.
+
+---
+
 ## The paywall opens on Monthly (2026-09-10)
 
 Client: *"once clicked yung free trial dapat ang default is monthly payment hindi yearly payment."*

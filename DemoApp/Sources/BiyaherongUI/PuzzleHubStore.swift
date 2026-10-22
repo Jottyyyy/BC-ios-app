@@ -103,6 +103,19 @@ final class PuzzleHubStore: ObservableObject {
     /// Fetch a specific puzzle — the Streak anti-reroll lock's other half (Part 22.6).
     func puzzle(id: Int) -> PuzzleStore.Puzzle? { store?.puzzle(id: id) }
 
+    /// The rated puzzle a returning player resumes, or `nil`: a draft under 24 h whose puzzle is
+    /// still in the corpus. One answer for both callers — the solver mounts it, and the hub lets it
+    /// through without spending an allowance, because resuming is not a new puzzle (RN's draft path
+    /// skips `canPlayPuzzle` the same way, `play-puzzle/index.tsx:205-223`).
+    ///
+    /// Read on a COPY: `loadPlayDraft` clears an expired draft as it reads, and merely asking must
+    /// not rewrite the progress file. The next real `mutate` drops it for good.
+    func resumablePlay() -> PuzzleStore.Puzzle? {
+        var s = state
+        guard let d = PuzzleProgress.loadPlayDraft(&s, now: Self.nowMs()) else { return nil }
+        return puzzle(id: d.puzzleId)
+    }
+
     /// The one place a served candidate becomes a puzzle, and the only place `seen` is committed.
     private func serve(_ selection: PuzzleSelection.Selection) -> PuzzleStore.Puzzle? {
         guard let store, let candidate = selection.candidate else { return nil }

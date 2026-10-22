@@ -650,7 +650,7 @@ var BiyaPuzzleMetrics = (function () {
     loading: 'Loading puzzle...',
     whiteToMove: '♙ White to Move', blackToMove: '♟ Black to Move',
     solved: '✅ Solved!', wrongMove: '❌ Wrong move!', viewingSolution: '💡 Viewing Solution',
-    yourRating: 'Your Rating', clock: '⏱', puzzle: 'Puzzle', noTime: '--:--',
+    yourRating: 'Your Rating', clock: '⏱', puzzle: 'Puzzle', noTime: '--:--', noRating: '—',
     solution: 'Solution', nextPuzzle: 'Next Puzzle →', retry: '🔄 Retry',
     solutionBtn: '💡 Solution',
     analyzing: '⏳ Analyzing...', engineSuggestions: '💡 Engine Suggestions', refresh: '↻',

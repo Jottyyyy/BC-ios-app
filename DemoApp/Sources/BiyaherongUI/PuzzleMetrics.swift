@@ -1129,6 +1129,8 @@ public enum PuzzleStrings {
     public static let clock = "⏱"
     public static let puzzle = "Puzzle"
     public static let noTime = "--:--"
+    /// The Puzzle column before a puzzle is mounted — the web's `paintStats` placeholder.
+    public static let noRating = "—"
     public static let solution = "Solution"
     public static let nextPuzzle = "Next Puzzle →"
     public static let retry = "🔄 Retry"

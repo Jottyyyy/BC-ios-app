@@ -522,6 +522,28 @@ and every one of these sat on the moment Turbo swaps boards:
   hands a snapshot to a serial queue. `reset()` drains the queue, so deleting an account cannot have
   a late write put the file back.
 
+### Rated Play against the live 1.0.10 (2026-10-22)
+
+Five client reports, one from his screen recording that the text never mentioned. All five were
+Swift-only; the web twin had done each one right since it was written, and nothing compared them.
+
+| Report | What was wrong | Now |
+|---|---|---|
+| *"Kapag nag back ka nagpapalit ng puzzle"* | The Core's 24 h `PlayPuzzleDraft` was never called from Swift. Every entry served fresh, and the puzzle left was already in `seen`. | `next()` drafts every serve; `startIfNeeded()` resumes through `PuzzleHubStore.resumablePlay()`; a solve clears it, a miss keeps it. The hub lets a resume through **without spending an allowance**. |
+| *"Solution → Next Puzzle → may engine suggestion pa"* | `mount()` never cleared `engineLines`, and `cancel()` never bumped the token, so a search inside its 3 s budget could also write onto the next puzzle. | `mount()` clears the lines; `cancel()` abandons the search through a `CancelToken`; the panel draws only while `.reviewing`. Thematic shared the bug and the fix. |
+| *"+12"* but no rating | Spec Band 4, the stats row, was never built. | `Your Rating {rating}` over its delta · ⏱ · `Puzzle {rating}`, read live from the store, so it is the new rating the instant the attempt lands. The clock moved out of the header into it. |
+| `Accuracy 91.700000` | `Text("\(acc.percent)")` on a `Double` is a `LocalizedStringKey`, which formats it as `%lf`. | `AnalysisTables.accuracyText` — `91.7%`. Theme rows got their `%`; empty days show no `0`. |
+| empty "Your Rating" card | `sparkPadding` (32) was applied as an inset on all four sides of a 52 pt box. It is a **width**, the card's 16 + 16, which `card` already applies. | No inset, on `#0F1A2E`; dropped (not drawn empty) under two attempts. |
+
+`replay_puzzle_vm.js` §15 pins all five in Swift and `puzzle_screen_test.js` §3d' drives the web
+solver through back-and-re-enter, a miss, Solution, Next and a solve on a fake clock. Fifteen new
+mutants in `puzzle_core_mutation_test.js` put each one back; all die.
+
+**Device checks** (no gate here can see these): back out of a rated puzzle mid-solve and press
+Play — the same position comes back and the free-tier counter does not move · Solution, then
+Next — no Engine Suggestions under the new puzzle · solve one — the stats row reads the new rating
+beside `+N` · the hub reads `91.7%` and draws the sparkline.
+
 ### Two promotion dialogs
 
 The Analysis Board's and the hub's share a purpose and not one measurement:
